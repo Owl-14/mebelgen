@@ -1,0 +1,72 @@
+{
+  "id": "desk-workstation-sample",
+  "type": "desk_panel",
+  "title": "Рабочий стол 1800x800x750",
+  "ai": {
+    "provider": "mock/dev",
+    "model": "manual-fixture"
+  },
+  "dimensions": {
+    "widthMm": 1800,
+    "depthMm": 800,
+    "heightMm": 750
+  },
+  "geometry": {
+    "overhangMm": 25
+  },
+  "parts": {
+    "top": {
+      "label": "Столешница",
+      "material": "МДФ",
+      "thicknessMm": 50,
+      "colorSystem": "NCS",
+      "colorCode": "3000",
+      "finish": "матовое"
+    },
+    "sidePanels": {
+      "label": "Опоры",
+      "material": "МДФ",
+      "thicknessMm": 50,
+      "colorSystem": "NCS",
+      "colorCode": "3000"
+    },
+    "frontScreen": {
+      "label": "Передний экран",
+      "material": "МДФ",
+      "thicknessMm": 25,
+      "heightMm": 300,
+      "colorSystem": "NCS",
+      "colorCode": "3000"
+    },
+    "brassInserts": {
+      "material": "натуральная латунь"
+    },
+    "pcHolder": {
+      "material": "проф. труба 40x20мм, RAL 9011"
+    },
+    "cableChannel": {
+      "material": "чёрный"
+    }
+  },
+  "features": {
+    "brass": true,
+    "pcHolder": true,
+    "cableChannel": true
+  },
+  "materials": [
+    "Столешница: МДФ 50мм, NCS 3000, матовое.",
+    "Опоры: МДФ 50мм, NCS 3000.",
+    "Передний экран: МДФ 25мм, h=300мм.",
+    "Вставки: латунь.",
+    "Ножки: Валмакс h=22мм, латунь.",
+    "Подвес СБ: профтруба 40x20мм, RAL 9011.",
+    "Кабель-канал: в цвет + гибкий чёрный.",
+    "Отрыв от опор: 25мм.",
+    "*Фактические замеры обязательны."
+  ],
+  "titleBlock": {
+    "sheetName": "Рабочий стол 1800x800x750",
+    "date": "28.05.2026",
+    "manager": "Петрова А.А."
+  }
+}

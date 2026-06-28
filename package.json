@@ -1,0 +1,14 @@
+{
+  "name": "mebelgen-render-lab",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check:deps": "node -e \"import('three').then(() => console.log('three ok'))\"",
+    "pipeline:mock": "node orchestrator/pipeline.mjs --provider mock --input orchestrator/sample-inputs/desk-brief.txt --out demo/three-spike/generated/latest-spec.json",
+    "training:kabinety": "node orchestrator/import-kabinety.mjs",
+    "serve": "python3 -m http.server 4173 --bind 127.0.0.1"
+  },
+  "dependencies": {
+    "three": "^0.181.2"
+  }
+}

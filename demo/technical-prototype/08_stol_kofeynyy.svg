@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="794" height="1123" viewBox="0 0 794 1123">
+<rect x="0" y="0" width="794" height="1123" fill="#ffffff" stroke="none"/>
+<rect x="18" y="18" width="758" height="1087" fill="none" stroke="#111111" stroke-width="1.6"/>
+<text x="211.5" y="36" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="13" fill="#1a1a1a" text-anchor="middle" font-weight="bold" font-style="normal" letter-spacing="0.5">ВИД СПЕРЕДИ</text>
+<text x="582.5" y="36" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="13" fill="#1a1a1a" text-anchor="middle" font-weight="bold" font-style="normal" letter-spacing="0.5">ВИД СВЕРХУ</text>
+<rect x="58.87" y="74" width="305.26" height="305.26" rx="4" ry="4" fill="#F4F0EA" stroke="#69665F" stroke-width="1.2"/>
+<line x1="74.13" y1="76" x2="74.13" y2="377.26" stroke="#BCBAB7" stroke-width="0.6" stroke-linecap="butt"/>
+<line x1="89.4" y1="76" x2="89.4" y2="377.26" stroke="#BCBAB7" stroke-width="0.6" stroke-linecap="butt"/>
+<line x1="104.66" y1="76" x2="104.66" y2="377.26" stroke="#BCBAB7" stroke-width="0.6" stroke-linecap="butt"/>
+<line x1="119.92" y1="76" x2="119.92" y2="377.26" stroke="#BCBAB7" stroke-width="0.6" stroke-linecap="butt"/>
+<line x1="135.19" y1="76" x2="135.19" y2="377.26" stroke="#BCBAB7" stroke-width="0.6" stroke-linecap="butt"/>
+<line x1="150.45" y1="76" x2="150.45" y2="377.26" stroke="#BCBAB7" stroke-width="0.6" stroke-linecap="butt"/>
+<line x1="165.71" y1="76" x2="165.71" y2="377.26" stroke="#BCBAB7" stroke-width="0.6" stroke-linecap="butt"/>
+<line x1="180.97" y1="76" x2="180.97" y2="377.26" stroke="#BCBAB7" stroke-width="0.6" stroke-linecap="butt"/>
+<line x1="196.24" y1="76" x2="196.24" y2="377.26" stroke="#BCBAB7" stroke-width="0.6" stroke-linecap="butt"/>
+<line x1="211.5" y1="76" x2="211.5" y2="377.26" stroke="#BCBAB7" stroke-width="0.6" stroke-linecap="butt"/>
+<line x1="226.76" y1="76" x2="226.76" y2="377.26" stroke="#BCBAB7" stroke-width="0.6" stroke-linecap="butt"/>
+<line x1="242.03" y1="76" x2="242.03" y2="377.26" stroke="#BCBAB7" stroke-width="0.6" stroke-linecap="butt"/>
+<line x1="257.29" y1="76" x2="257.29" y2="377.26" stroke="#BCBAB7" stroke-width="0.6" stroke-linecap="butt"/>
+<line x1="272.55" y1="76" x2="272.55" y2="377.26" stroke="#BCBAB7" stroke-width="0.6" stroke-linecap="butt"/>
+<line x1="287.81" y1="76" x2="287.81" y2="377.26" stroke="#BCBAB7" stroke-width="0.6" stroke-linecap="butt"/>
+<line x1="303.08" y1="76" x2="303.08" y2="377.26" stroke="#BCBAB7" stroke-width="0.6" stroke-linecap="butt"/>
+<line x1="318.34" y1="76" x2="318.34" y2="377.26" stroke="#BCBAB7" stroke-width="0.6" stroke-linecap="butt"/>
+<line x1="333.6" y1="76" x2="333.6" y2="377.26" stroke="#BCBAB7" stroke-width="0.6" stroke-linecap="butt"/>
+<line x1="348.87" y1="76" x2="348.87" y2="377.26" stroke="#BCBAB7" stroke-width="0.6" stroke-linecap="butt"/>
+<line x1="58.87" y1="70" x2="58.87" y2="50" stroke="#222222" stroke-width="0.7" stroke-linecap="butt"/>
+<line x1="364.13" y1="70" x2="364.13" y2="50" stroke="#222222" stroke-width="0.7" stroke-linecap="butt"/>
+<line x1="58.87" y1="56" x2="364.13" y2="56" stroke="#222222" stroke-width="0.8" stroke-linecap="butt"/>
+<polygon points="58.87,56 64.87,54.08 64.87,57.92" fill="#222222" stroke="#222222" stroke-width="0.5"/>
+<polygon points="364.13,56 358.13,57.92 358.13,54.08" fill="#222222" stroke="#222222" stroke-width="0.5"/>
+<text x="211.5" y="52" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="12" fill="#222222" text-anchor="middle" font-weight="normal" font-style="normal">Ø400</text>
+<line x1="54.87" y1="74" x2="34.87" y2="74" stroke="#222222" stroke-width="0.7" stroke-linecap="butt"/>
+<line x1="54.87" y1="379.26" x2="34.87" y2="379.26" stroke="#222222" stroke-width="0.7" stroke-linecap="butt"/>
+<line x1="40.87" y1="74" x2="40.87" y2="379.26" stroke="#222222" stroke-width="0.8" stroke-linecap="butt"/>
+<polygon points="40.87,74 42.79,80 38.95,80" fill="#222222" stroke="#222222" stroke-width="0.5"/>
+<polygon points="40.87,379.26 38.95,373.26 42.79,373.26" fill="#222222" stroke="#222222" stroke-width="0.5"/>
+<text x="36.87" y="230.83" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="12" fill="#222222" text-anchor="end" font-weight="normal" font-style="normal">400</text>
+<circle cx="582.5" cy="226.63" r="152.63" fill="#F7F5F0" stroke="#69665F" stroke-width="1.2"/>
+<line x1="429.87" y1="58" x2="735.13" y2="58" stroke="#222222" stroke-width="0.8" stroke-linecap="butt"/>
+<polygon points="429.87,58 435.87,56.08 435.87,59.92" fill="#222222" stroke="#222222" stroke-width="0.5"/>
+<polygon points="735.13,58 729.13,59.92 729.13,56.08" fill="#222222" stroke="#222222" stroke-width="0.5"/>
+<text x="582.5" y="54" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="12" fill="#222222" text-anchor="middle" font-weight="normal" font-style="normal">Ø400</text>
+<text x="397" y="447.38" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="13" fill="#1a1a1a" text-anchor="middle" font-weight="bold" font-style="normal" letter-spacing="0.5">3D ИЗОМЕТРИЯ</text>
+<path d="M 313.94 791.10 A 83.06 47.95 0 0 0 480.06 791.10 L 480.06 599.29 A 83.06 47.95 0 0 1 313.94 599.29 Z" fill="#e9e4d7" stroke="#9a9382" stroke-width="1"/>
+<line x1="500.09" y1="823.6" x2="500.09" y2="631.79" stroke="#bdb6a4" stroke-width="0.7" stroke-linecap="butt"/>
+<line x1="511.77" y1="805.51" x2="511.77" y2="613.7" stroke="#bdb6a4" stroke-width="0.7" stroke-linecap="butt"/>
+<line x1="514.16" y1="786.26" x2="514.16" y2="594.45" stroke="#bdb6a4" stroke-width="0.7" stroke-linecap="butt"/>
+<line x1="507.05" y1="767.4" x2="507.05" y2="575.59" stroke="#bdb6a4" stroke-width="0.7" stroke-linecap="butt"/>
+<line x1="491.03" y1="750.45" x2="491.03" y2="558.64" stroke="#bdb6a4" stroke-width="0.7" stroke-linecap="butt"/>
+<line x1="467.39" y1="736.81" x2="467.39" y2="545" stroke="#bdb6a4" stroke-width="0.7" stroke-linecap="butt"/>
+<line x1="438.05" y1="727.56" x2="438.05" y2="535.75" stroke="#bdb6a4" stroke-width="0.7" stroke-linecap="butt"/>
+<line x1="405.38" y1="723.45" x2="405.38" y2="531.64" stroke="#bdb6a4" stroke-width="0.7" stroke-linecap="butt"/>
+<line x1="372.03" y1="724.83" x2="372.03" y2="533.02" stroke="#bdb6a4" stroke-width="0.7" stroke-linecap="butt"/>
+<line x1="340.71" y1="731.58" x2="340.71" y2="539.77" stroke="#bdb6a4" stroke-width="0.7" stroke-linecap="butt"/>
+<ellipse cx="397" cy="599.29" rx="83.06" ry="47.95" fill="#f3efe6" stroke="#9a9382" stroke-width="1"/>
+<circle cx="480.06" cy="551.33" r="1.7" fill="#444444" stroke="none"/>
+<polyline points="480.06,551.33 506.06,551.33 610,479.38" fill="none" stroke="#444444" stroke-width="0.7"/>
+<text x="613" y="483.23" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="11" fill="#1a1a1a" text-anchor="start" font-weight="normal" font-style="normal">МДФ</text>
+<circle cx="480.06" cy="647.24" r="1.7" fill="#444444" stroke="none"/>
+<polyline points="480.06,647.24 506.06,647.24 610,509.38" fill="none" stroke="#444444" stroke-width="0.7"/>
+<text x="613" y="506.73" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="11" fill="#1a1a1a" text-anchor="start" font-weight="normal" font-style="normal">Рифлёная поверхность</text>
+<text x="613" y="519.73" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="11" fill="#1a1a1a" text-anchor="start" font-weight="normal" font-style="normal">(флютинг)</text>
+<circle cx="480.06" cy="676.01" r="1.7" fill="#444444" stroke="none"/>
+<polyline points="480.06,676.01 506.06,676.01 610,539.38" fill="none" stroke="#444444" stroke-width="0.7"/>
+<text x="613" y="543.23" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="11" fill="#1a1a1a" text-anchor="start" font-weight="normal" font-style="normal">Цвет по согласованию</text>
+<circle cx="480.06" cy="727.8" r="1.7" fill="#444444" stroke="none"/>
+<polyline points="480.06,727.8 506.06,727.8 610,569.38" fill="none" stroke="#444444" stroke-width="0.7"/>
+<text x="613" y="566.73" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="11" fill="#1a1a1a" text-anchor="start" font-weight="normal" font-style="normal">Подпятники: фетровые, 4</text>
+<text x="613" y="579.73" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="11" fill="#1a1a1a" text-anchor="start" font-weight="normal" font-style="normal">шт.</text>
+<text x="32" y="963" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="12" fill="#1a1a1a" text-anchor="start" font-weight="bold" font-style="normal" letter-spacing="0.5">МАТЕРИАЛЫ И ОПИСАНИЕ:</text>
+<circle cx="35" cy="978.5" r="1.8" fill="#1a1a1a" stroke="none"/>
+<text x="44" y="982" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="12" fill="#444444" text-anchor="start" font-weight="normal" font-style="normal">Материал изготовления -МДФ - – цвет уточню у дизайнера, скорей</text>
+<text x="44" y="996" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="12" fill="#444444" text-anchor="start" font-weight="normal" font-style="normal">всего будет</text>
+<circle cx="35" cy="1009.5" r="1.8" fill="#1a1a1a" stroke="none"/>
+<text x="44" y="1013" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="12" fill="#444444" text-anchor="start" font-weight="normal" font-style="normal">Цвет по согласованию с заказчиком</text>
+<rect x="470" y="949" width="300" height="150" fill="#ffffff" stroke="#111111" stroke-width="1.4"/>
+<text x="620" y="982" font-family="Georgia, 'Times New Roman', serif" font-size="30" fill="#1a1a1a" text-anchor="middle" font-weight="bold" font-style="normal" letter-spacing="2">ME-RA</text>
+<text x="620" y="998.2" font-family="Georgia, 'Times New Roman', serif" font-size="11" fill="#444444" text-anchor="middle" font-weight="normal" font-style="italic">мебель.пространство.качество</text>
+<line x1="470" y1="1009" x2="770" y2="1009" stroke="#111111" stroke-width="1" stroke-linecap="butt"/>
+<text x="620" y="1029.46" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="12.5" fill="#1a1a1a" text-anchor="middle" font-weight="bold" font-style="normal">Стол кофейный Ø400x400</text>
+<line x1="470" y1="1042" x2="770" y2="1042" stroke="#111111" stroke-width="1" stroke-linecap="butt"/>
+<line x1="470" y1="1042" x2="770" y2="1042" stroke="#111111" stroke-width="0.8" stroke-linecap="butt"/>
+<line x1="596" y1="1042" x2="596" y2="1070.5" stroke="#111111" stroke-width="0.8" stroke-linecap="butt"/>
+<text x="478" y="1059.67" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="11" fill="#1a1a1a" text-anchor="start" font-weight="normal" font-style="normal">Дата:</text>
+<text x="604" y="1059.67" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="11" fill="#1a1a1a" text-anchor="start" font-weight="normal" font-style="normal">28.05.2026</text>
+<line x1="470" y1="1070.5" x2="770" y2="1070.5" stroke="#111111" stroke-width="0.8" stroke-linecap="butt"/>
+<line x1="596" y1="1070.5" x2="596" y2="1099" stroke="#111111" stroke-width="0.8" stroke-linecap="butt"/>
+<text x="478" y="1088.17" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="11" fill="#1a1a1a" text-anchor="start" font-weight="normal" font-style="normal">Руководитель:</text>
+<text x="604" y="1088.17" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="11" fill="#1a1a1a" text-anchor="start" font-weight="normal" font-style="normal">Петрова А.А.</text>
+</svg>

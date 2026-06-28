@@ -18,6 +18,7 @@ import re
 import sys
 
 from .draw.sheet import build_sheet
+from .draw.technical_sheet import build_technical_sheet
 from .model.classifier import classify
 from .parsing import parse_item, read_spec_rows
 from .parsing.image_analysis import analyze_image
@@ -67,6 +68,8 @@ def main(argv=None):
     ap.add_argument("--no-3d", action="store_true",
                     help="не запускать Blender, рисовать векторную изометрию")
     ap.add_argument("--blender", default=None, help="путь к blender.exe")
+    ap.add_argument("--style", choices=("classic", "technical"), default="classic",
+                    help="стиль листа: classic или experimental technical")
     args = ap.parse_args(argv)
 
     if not os.path.exists(args.spec):
@@ -120,7 +123,8 @@ def main(argv=None):
     svg_files = []
     for spec, base in entries:
         spec.hero_png = hero_map.get(os.path.basename(base))
-        svg = build_sheet(spec, date=args.date, manager=args.manager)
+        builder = build_technical_sheet if args.style == "technical" else build_sheet
+        svg = builder(spec, date=args.date, manager=args.manager)
         svg_path = base + ".svg"
         save_svg(svg.tostring(), svg_path)
         svg_files.append(svg_path)

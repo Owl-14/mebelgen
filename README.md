@@ -63,6 +63,25 @@ output/
   index.html          # галерея
 ```
 
+## Новый web-render pipeline
+Экспериментальный путь без Blender и без внешнего AI API:
+
+```bash
+pnpm pipeline:mock
+pnpm serve
+```
+
+Откройте:
+
+```text
+http://127.0.0.1:4173/demo/three-spike/
+```
+
+Этот прототип читает `demo/three-spike/generated/latest-spec.json`, строит
+параметрическую 3D-модель через Three.js и накладывает SVG-размеры/выноски.
+Позже вместо `mock-provider` будет подключён Gemini/OpenAI/другой AI provider,
+но контракт останется тем же: ТЗ -> `FurnitureSpec JSON` -> рендер -> review.
+
 ## Архитектура
 См. `PLAN.md` (модули и замысел) и **`DEVNOTES.md`** (журнал правок, разобранные
 ошибки и правила, чтобы их не повторять). Кратко — поток данных:

@@ -1,0 +1,85 @@
+{
+  "id": "8-stol_rabochiy_v_kabinete",
+  "type": "desk_panel",
+  "title": "Стол рабочий в кабинете 1800x800x750",
+  "ai": {
+    "provider": "parsed-doc/mock",
+    "model": "mebelgen-python-parser"
+  },
+  "dimensions": {
+    "widthMm": 1800,
+    "depthMm": 800,
+    "heightMm": 750
+  },
+  "geometry": {
+    "overhangMm": 25
+  },
+  "parts": {
+    "top": {
+      "label": "Столешница",
+      "material": "МДФ",
+      "thicknessMm": 50,
+      "colorSystem": "RAL",
+      "colorCode": "8019",
+      "finish": "матовое"
+    },
+    "sidePanels": {
+      "label": "Опоры",
+      "material": "МДФ",
+      "thicknessMm": 50,
+      "colorSystem": "RAL",
+      "colorCode": "8019"
+    },
+    "frontScreen": {
+      "label": "Передний экран",
+      "material": "МДФ",
+      "thicknessMm": 25,
+      "heightMm": 300,
+      "colorSystem": "RAL",
+      "colorCode": "8019"
+    },
+    "brassInserts": {
+      "material": "латунь"
+    },
+    "pcHolder": {
+      "material": "проф. труба 40x20мм, RAL 9011"
+    },
+    "cableChannel": {
+      "material": "чёрный"
+    }
+  },
+  "features": {
+    "brass": true,
+    "pcHolder": true,
+    "cableChannel": true,
+    "pushOpen": false,
+    "lock": false,
+    "lockRight": false,
+    "plinth": false,
+    "plinthBlack": false,
+    "shelves": 0,
+    "drawers": 0,
+    "fluted": false,
+    "feltPads": false,
+    "matteLacquer": false,
+    "rod": false,
+    "hatShelf": false,
+    "shoeShelf": false
+  },
+  "materials": [
+    "Материал изготовления: МДФ под покраску, опоры и столешница шириной 50 мм, передний экран в ц",
+    "Окраска по PPL RAL 8019",
+    "2 заглушки окрашенные по Ral в цвет стола. Кабель канал в цвет стола",
+    "Отрыв столешницы от опор 25 мм",
+    "Вставка, цвет-латунь в цвет вставок на шкафах",
+    "Гибкий кабель канал - цвет черный",
+    "Стол комплектуется навесной подставкой под системный блок – 1 шт., регулируемой в 2-х направл",
+    "Цвет навесной подставки: RAL 9011",
+    "Подвес для системного блока крепится через пластину к столешнице винтами М*6"
+  ],
+  "titleBlock": {
+    "sheetName": "Стол рабочий в кабинете 1800x800x750",
+    "date": "28.05.2026",
+    "manager": "Петрова А.А."
+  }
+}

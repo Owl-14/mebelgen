@@ -1,0 +1,54 @@
+{
+  "source": "specs.json",
+  "generatedAt": "2026-06-28T21:39:07.379Z",
+  "items": [
+    {
+      "id": "8-stol_rabochiy_v_kabinete",
+      "title": "Стол рабочий в кабинете 1800x800x750",
+      "type": "desk_panel",
+      "spec": "./generated/kabinety/stol_rabochiy_v_kabinete_1800x800x750.json"
+    },
+    {
+      "id": "7-tumba_dlya_dokumentov",
+      "title": "Тумба для документов 1100x450x750",
+      "type": "drawer_unit",
+      "spec": "./generated/kabinety/tumba_dlya_dokumentov_1100x450x750.json"
+    },
+    {
+      "id": "6-shkaf_kombinirovannyy",
+      "title": "Шкаф комбинированный 1000x400x1800",
+      "type": "wardrobe",
+      "spec": "./generated/kabinety/shkaf_kombinirovannyy_1000x400x1800.json"
+    },
+    {
+      "id": "5-shkaf_dlya_dokumentov",
+      "title": "Шкаф для документов 1000x400x1800",
+      "type": "wardrobe",
+      "spec": "./generated/kabinety/shkaf_dlya_dokumentov_1000x400x1800.json"
+    },
+    {
+      "id": "item-zhurnalnyy_stol",
+      "title": "Журнальный стол 1000x450x450",
+      "type": "coffee_rect",
+      "spec": "./generated/kabinety/zhurnalnyy_stol_1000x450x450.json"
+    },
+    {
+      "id": "item-srednyaya_tumba_tip_2",
+      "title": "Средняя тумба тип 2 800x400x900",
+      "type": "cabinet",
+      "spec": "./generated/kabinety/srednyaya_tumba_tip_2_800x400x900.json"
+    },
+    {
+      "id": "item-stol_kofeynyy_tip_1",
+      "title": "Стол кофейный тип 1 Ø500x420",
+      "type": "coffee_round",
+      "spec": "./generated/kabinety/stol_kofeynyy_tip_1_500x420.json"
+    },
+    {
+      "id": "item-stol_kofeynyy",
+      "title": "Стол кофейный Ø400x400",
+      "type": "coffee_fluted",
+      "spec": "./generated/kabinety/stol_kofeynyy_400x400.json"
+    }
+  ]
+}

@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mebelgen.local/contracts/furniture-spec.schema.json",
+  "title": "FurnitureSpec",
+  "type": "object",
+  "required": ["id", "type", "title", "dimensions", "parts", "features", "materials", "titleBlock"],
+  "properties": {
+    "id": { "type": "string" },
+    "type": {
+      "type": "string",
+      "enum": ["desk_panel", "wardrobe", "cabinet", "drawer_unit", "coffee_round", "coffee_fluted", "coffee_rect"]
+    },
+    "title": { "type": "string" },
+    "ai": {
+      "type": "object",
+      "properties": {
+        "provider": { "type": "string" },
+        "model": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "dimensions": {
+      "type": "object",
+      "required": ["widthMm", "depthMm", "heightMm"],
+      "properties": {
+        "widthMm": { "type": "number", "minimum": 1 },
+        "depthMm": { "type": "number", "minimum": 1 },
+        "heightMm": { "type": "number", "minimum": 1 },
+        "diameterMm": { "type": "number", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "geometry": {
+      "type": "object",
+      "properties": {
+        "overhangMm": { "type": "number", "minimum": 0 }
+      },
+      "additionalProperties": true
+    },
+    "parts": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "label": { "type": "string" },
+          "material": { "type": "string" },
+          "thicknessMm": { "type": "number", "minimum": 0 },
+          "heightMm": { "type": "number", "minimum": 0 },
+          "colorSystem": { "type": "string" },
+          "colorCode": { "type": "string" },
+          "finish": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "features": {
+      "type": "object",
+      "additionalProperties": { "type": ["boolean", "number", "string"] }
+    },
+    "materials": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "titleBlock": {
+      "type": "object",
+      "required": ["sheetName"],
+      "properties": {
+        "sheetName": { "type": "string" },
+        "date": { "type": "string" },
+        "manager": { "type": "string" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

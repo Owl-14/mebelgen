@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="794" height="1123" viewBox="0 0 794 1123">
+<rect x="0" y="0" width="794" height="1123" fill="#ffffff" stroke="none"/>
+<rect x="18" y="18" width="758" height="1087" fill="none" stroke="#111111" stroke-width="1.6"/>
+<text x="196.66" y="36" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="13" fill="#1a1a1a" text-anchor="middle" font-weight="bold" font-style="normal" letter-spacing="0.5">ВИД СПЕРЕДИ</text>
+<text x="582.5" y="36" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="13" fill="#1a1a1a" text-anchor="middle" font-weight="bold" font-style="normal" letter-spacing="0.5">ВНУТРЕННЕЕ НАПОЛНЕНИЕ</text>
+<rect x="62" y="425.3" width="269.32" height="20.2" fill="#F1ECE3" stroke="#69665F" stroke-width="1"/>
+<rect x="62" y="142.51" width="269.32" height="282.79" fill="#F4F0EA" stroke="#69665F" stroke-width="1.2"/>
+<line x1="189.25" y1="166.08" x2="189.25" y2="401.74" stroke="#111111" stroke-width="2.6" stroke-linecap="butt"/>
+<line x1="196.66" y1="142.51" x2="196.66" y2="425.3" stroke="#69665F" stroke-width="1" stroke-linecap="butt"/>
+<line x1="204.07" y1="166.08" x2="204.07" y2="401.74" stroke="#111111" stroke-width="2.6" stroke-linecap="butt"/>
+<circle cx="263.99" cy="294.01" r="3" fill="none" stroke="#111111" stroke-width="1"/>
+<line x1="263.99" y1="294.01" x2="263.99" y2="299.01" stroke="#111111" stroke-width="1" stroke-linecap="butt"/>
+<line x1="62" y1="138.51" x2="62" y2="112.51" stroke="#222222" stroke-width="0.7" stroke-linecap="butt"/>
+<line x1="331.32" y1="138.51" x2="331.32" y2="112.51" stroke="#222222" stroke-width="0.7" stroke-linecap="butt"/>
+<line x1="62" y1="118.51" x2="331.32" y2="118.51" stroke="#222222" stroke-width="0.8" stroke-linecap="butt"/>
+<polygon points="62,118.51 68,116.59 68,120.43" fill="#222222" stroke="#222222" stroke-width="0.5"/>
+<polygon points="331.32,118.51 325.32,120.43 325.32,116.59" fill="#222222" stroke="#222222" stroke-width="0.5"/>
+<text x="196.66" y="114.51" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="12" fill="#222222" text-anchor="middle" font-weight="normal" font-style="normal">800</text>
+<line x1="62" y1="134.51" x2="196.66" y2="134.51" stroke="#222222" stroke-width="0.8" stroke-linecap="butt"/>
+<polygon points="62,134.51 68,132.59 68,136.43" fill="#222222" stroke="#222222" stroke-width="0.5"/>
+<polygon points="196.66,134.51 190.66,136.43 190.66,132.59" fill="#222222" stroke="#222222" stroke-width="0.5"/>
+<text x="129.33" y="130.51" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="12" fill="#222222" text-anchor="middle" font-weight="normal" font-style="normal">400</text>
+<line x1="196.66" y1="134.51" x2="331.32" y2="134.51" stroke="#222222" stroke-width="0.8" stroke-linecap="butt"/>
+<polygon points="196.66,134.51 202.66,132.59 202.66,136.43" fill="#222222" stroke="#222222" stroke-width="0.5"/>
+<polygon points="331.32,134.51 325.32,136.43 325.32,132.59" fill="#222222" stroke="#222222" stroke-width="0.5"/>
+<text x="263.99" y="130.51" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="12" fill="#222222" text-anchor="middle" font-weight="normal" font-style="normal">400</text>
+<line x1="58" y1="142.51" x2="32" y2="142.51" stroke="#222222" stroke-width="0.7" stroke-linecap="butt"/>
+<line x1="58" y1="445.5" x2="32" y2="445.5" stroke="#222222" stroke-width="0.7" stroke-linecap="butt"/>
+<line x1="38" y1="142.51" x2="38" y2="445.5" stroke="#222222" stroke-width="0.8" stroke-linecap="butt"/>
+<polygon points="38,142.51 39.92,148.51 36.08,148.51" fill="#222222" stroke="#222222" stroke-width="0.5"/>
+<polygon points="38,445.5 36.08,439.5 39.92,439.5" fill="#222222" stroke="#222222" stroke-width="0.5"/>
+<text x="34" y="298.21" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="12" fill="#222222" text-anchor="end" font-weight="normal" font-style="normal">900</text>
+<line x1="335.32" y1="425.3" x2="353.32" y2="425.3" stroke="#222222" stroke-width="0.7" stroke-linecap="butt"/>
+<line x1="335.32" y1="445.5" x2="353.32" y2="445.5" stroke="#222222" stroke-width="0.7" stroke-linecap="butt"/>
+<line x1="347.32" y1="425.3" x2="347.32" y2="445.5" stroke="#222222" stroke-width="0.8" stroke-linecap="butt"/>
+<polygon points="347.32,425.3 349.24,431.3 345.4,431.3" fill="#222222" stroke="#222222" stroke-width="0.5"/>
+<polygon points="347.32,445.5 345.4,439.5 349.24,439.5" fill="#222222" stroke="#222222" stroke-width="0.5"/>
+<text x="351.32" y="439.6" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="12" fill="#222222" text-anchor="start" font-weight="normal" font-style="normal">60</text>
+<rect x="447.84" y="142.51" width="269.32" height="282.79" fill="#F7F5F0" stroke="#69665F" stroke-width="1.2"/>
+<rect x="447.84" y="425.3" width="269.32" height="20.2" fill="#F1ECE3" stroke="#69665F" stroke-width="1"/>
+<line x1="458.61" y1="283.91" x2="706.39" y2="283.91" stroke="#69665F" stroke-width="1" stroke-linecap="butt"/>
+<line x1="721.16" y1="142.51" x2="739.16" y2="142.51" stroke="#222222" stroke-width="0.7" stroke-linecap="butt"/>
+<line x1="721.16" y1="283.91" x2="739.16" y2="283.91" stroke="#222222" stroke-width="0.7" stroke-linecap="butt"/>
+<line x1="733.16" y1="142.51" x2="733.16" y2="283.91" stroke="#222222" stroke-width="0.8" stroke-linecap="butt"/>
+<polygon points="733.16,142.51 735.08,148.51 731.24,148.51" fill="#222222" stroke="#222222" stroke-width="0.5"/>
+<polygon points="733.16,283.91 731.24,277.91 735.08,277.91" fill="#222222" stroke="#222222" stroke-width="0.5"/>
+<text x="737.16" y="217.41" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="12" fill="#222222" text-anchor="start" font-weight="normal" font-style="normal">~420</text>
+<text x="397" y="501.56" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="13" fill="#1a1a1a" text-anchor="middle" font-weight="bold" font-style="normal" letter-spacing="0.5">3D ИЗОМЕТРИЯ</text>
+<polygon points="511.81,844.81 435.27,889 435.27,875.74 511.81,831.55" fill="#F1ECE3" stroke="#2c2c2c" stroke-width="1"/>
+<polygon points="282.19,800.62 435.27,889 435.27,875.74 282.19,787.36" fill="#F1ECE3" stroke="#2c2c2c" stroke-width="1"/>
+<polygon points="511.81,831.55 435.27,875.74 435.27,690.14 511.81,645.94" fill="#dcd6c6" stroke="#9a9382" stroke-width="1"/>
+<polygon points="282.19,787.36 435.27,875.74 435.27,690.14 282.19,601.75" fill="#e9e4d7" stroke="#9a9382" stroke-width="1"/>
+<polygon points="358.73,557.56 511.81,645.94 435.27,690.14 282.19,601.75" fill="#f3efe6" stroke="#9a9382" stroke-width="1"/>
+<line x1="358.73" y1="831.55" x2="358.73" y2="645.94" stroke="#69665F" stroke-width="1" stroke-linecap="butt"/>
+<circle cx="392.41" cy="758.19" r="2" fill="none" stroke="#111111" stroke-width="1"/>
+<circle cx="473.54" cy="697.87" r="1.7" fill="#444444" stroke="none"/>
+<polyline points="473.54,697.87 499.54,697.87 618,533.56" fill="none" stroke="#444444" stroke-width="0.7"/>
+<text x="621" y="537.41" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="11" fill="#1a1a1a" text-anchor="start" font-weight="normal" font-style="normal">МДФ</text>
+<circle cx="473.54" cy="743.61" r="1.7" fill="#444444" stroke="none"/>
+<polyline points="473.54,743.61 499.54,743.61 618,563.56" fill="none" stroke="#444444" stroke-width="0.7"/>
+<text x="621" y="560.91" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="11" fill="#1a1a1a" text-anchor="start" font-weight="normal" font-style="normal">Замок на правой двери,</text>
+<text x="621" y="573.91" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="11" fill="#1a1a1a" text-anchor="start" font-weight="normal" font-style="normal">чёрный</text>
+<circle cx="477.37" cy="775.21" r="1.7" fill="#444444" stroke="none"/>
+<polyline points="477.37,775.21 503.37,775.21 618,593.56" fill="none" stroke="#444444" stroke-width="0.7"/>
+<text x="621" y="590.91" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="11" fill="#1a1a1a" text-anchor="start" font-weight="normal" font-style="normal">Цоколь в цвет корпуса,</text>
+<text x="621" y="603.91" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="11" fill="#1a1a1a" text-anchor="start" font-weight="normal" font-style="normal">60 мм</text>
+<text x="32" y="963" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="12" fill="#1a1a1a" text-anchor="start" font-weight="bold" font-style="normal" letter-spacing="0.5">МАТЕРИАЛЫ И ОПИСАНИЕ:</text>
+<circle cx="35" cy="978.5" r="1.8" fill="#1a1a1a" stroke="none"/>
+<text x="44" y="982" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="12" fill="#444444" text-anchor="start" font-weight="normal" font-style="normal">Тумба выполнена: МДФ, 16 мм, цвет выбирается из палитры NSC</text>
+<circle cx="35" cy="995.5" r="1.8" fill="#1a1a1a" stroke="none"/>
+<text x="44" y="999" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="12" fill="#444444" text-anchor="start" font-weight="normal" font-style="normal">Крышка тумбы выполнена из МДФ– 25 мм</text>
+<circle cx="35" cy="1012.5" r="1.8" fill="#1a1a1a" stroke="none"/>
+<text x="44" y="1016" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="12" fill="#444444" text-anchor="start" font-weight="normal" font-style="normal">Двери накладные</text>
+<circle cx="35" cy="1029.5" r="1.8" fill="#1a1a1a" stroke="none"/>
+<text x="44" y="1033" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="12" fill="#444444" text-anchor="start" font-weight="normal" font-style="normal">Шкаф содержит в себе одну полку</text>
+<circle cx="35" cy="1046.5" r="1.8" fill="#1a1a1a" stroke="none"/>
+<text x="44" y="1050" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="12" fill="#444444" text-anchor="start" font-weight="normal" font-style="normal">Направление текстуры по длине</text>
+<circle cx="35" cy="1063.5" r="1.8" fill="#1a1a1a" stroke="none"/>
+<text x="44" y="1067" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="12" fill="#444444" text-anchor="start" font-weight="normal" font-style="normal">Ручки – профили металлические - цвет черный. L=128 мм</text>
+<circle cx="35" cy="1080.5" r="1.8" fill="#1a1a1a" stroke="none"/>
+<text x="44" y="1084" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="12" fill="#444444" text-anchor="start" font-weight="normal" font-style="normal">Замок на правой двери. Цвет замка – черный</text>
+<rect x="470" y="949" width="300" height="150" fill="#ffffff" stroke="#111111" stroke-width="1.4"/>
+<text x="620" y="982" font-family="Georgia, 'Times New Roman', serif" font-size="30" fill="#1a1a1a" text-anchor="middle" font-weight="bold" font-style="normal" letter-spacing="2">ME-RA</text>
+<text x="620" y="998.2" font-family="Georgia, 'Times New Roman', serif" font-size="11" fill="#444444" text-anchor="middle" font-weight="normal" font-style="italic">мебель.пространство.качество</text>
+<line x1="470" y1="1009" x2="770" y2="1009" stroke="#111111" stroke-width="1" stroke-linecap="butt"/>
+<text x="620" y="1029.46" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="12.5" fill="#1a1a1a" text-anchor="middle" font-weight="bold" font-style="normal">Средняя тумба тип 2 800x400x900</text>
+<line x1="470" y1="1042" x2="770" y2="1042" stroke="#111111" stroke-width="1" stroke-linecap="butt"/>
+<line x1="470" y1="1042" x2="770" y2="1042" stroke="#111111" stroke-width="0.8" stroke-linecap="butt"/>
+<line x1="596" y1="1042" x2="596" y2="1070.5" stroke="#111111" stroke-width="0.8" stroke-linecap="butt"/>
+<text x="478" y="1059.67" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="11" fill="#1a1a1a" text-anchor="start" font-weight="normal" font-style="normal">Дата:</text>
+<text x="604" y="1059.67" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="11" fill="#1a1a1a" text-anchor="start" font-weight="normal" font-style="normal">28.05.2026</text>
+<line x1="470" y1="1070.5" x2="770" y2="1070.5" stroke="#111111" stroke-width="0.8" stroke-linecap="butt"/>
+<line x1="596" y1="1070.5" x2="596" y2="1099" stroke="#111111" stroke-width="0.8" stroke-linecap="butt"/>
+<text x="478" y="1088.17" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="11" fill="#1a1a1a" text-anchor="start" font-weight="normal" font-style="normal">Руководитель:</text>
+<text x="604" y="1088.17" font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif" font-size="11" fill="#1a1a1a" text-anchor="start" font-weight="normal" font-style="normal">Петрова А.А.</text>
+</svg>

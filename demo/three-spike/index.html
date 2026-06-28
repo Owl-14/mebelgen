@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MEBELGEN Three.js Spike</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "/node_modules/three/build/three.module.js",
+          "three/addons/": "/node_modules/three/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <main class="workspace">
+      <section class="sheet" aria-label="Лист визуализации">
+        <div class="frame frame-outer"></div>
+        <div class="frame frame-inner"></div>
+
+        <section class="front-block view-block">
+          <h2>ВИД СПЕРЕДИ</h2>
+          <div class="view-surface front-surface">
+            <canvas id="front-view"></canvas>
+            <svg id="front-overlay" class="overlay front-overlay" aria-hidden="true"></svg>
+          </div>
+        </section>
+
+        <section class="iso-block view-block">
+          <h2>3D ИЗОМЕТРИЯ</h2>
+          <div class="view-surface iso-surface">
+            <canvas id="iso-view"></canvas>
+            <svg id="iso-overlay" class="overlay iso-overlay" aria-hidden="true"></svg>
+          </div>
+        </section>
+
+        <section class="materials" id="materials-list">
+          <p>Столешница: МДФ 50мм, NCS 3000, матовое.</p>
+          <p>Опоры: МДФ 50мм, NCS 3000.</p>
+          <p>Передний экран: МДФ 25мм, h=300мм.</p>
+          <p>Вставки: латунь.</p>
+          <p>Ножки: Валмакс h=22мм, латунь.</p>
+          <p>Подвес СБ: профтруба 40x20мм, RAL 9011.</p>
+          <p>Кабель-канал: в цвет + гибкий чёрный.</p>
+          <p>Отрыв от опор: 25мм.</p>
+          <p class="note">*Фактические замеры обязательны.</p>
+        </section>
+
+        <table class="title-block" aria-label="Штамп">
+          <tbody>
+            <tr><td colspan="2" class="brand">ME-RA<div>мебель.пространство.качество</div></td></tr>
+            <tr><td colspan="2" class="sheet-name" data-field="sheet-name">Рабочий стол 1800x800x750</td></tr>
+            <tr><td>Дата:</td><td data-field="date">28.05.2026</td></tr>
+            <tr><td>Руководитель:</td><td data-field="manager">Петрова А.А.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <aside class="lab-panel">
+        <div class="panel-group">
+          <h1>Three.js Spike</h1>
+          <dl>
+            <dt>Renderer</dt>
+            <dd>three@181</dd>
+            <dt>Camera</dt>
+            <dd>orthographic</dd>
+            <dt>Model</dt>
+            <dd id="model-kind">desk_panel</dd>
+            <dt>Spec</dt>
+            <dd id="spec-source">loading</dd>
+            <dt>AI</dt>
+            <dd id="ai-provider">mock/dev</dd>
+          </dl>
+        </div>
+        <div class="panel-group">
+          <label>
+            Кейс
+            <select id="case-select">
+              <option value="">latest-spec</option>
+            </select>
+          </label>
+          <label>
+            Ракурс
+            <select id="angle-select">
+              <option value="sample">Sample-like</option>
+              <option value="left">Left front</option>
+              <option value="right">Right front</option>
+            </select>
+          </label>
+          <label>
+            Контур
+            <input id="outline-toggle" type="checkbox" checked />
+          </label>
+          <label>
+            Тени
+            <input id="shadow-toggle" type="checkbox" checked />
+          </label>
+        </div>
+      </aside>
+    </main>
+    <script type="module" src="./renderer.js"></script>
+  </body>
+</html>
