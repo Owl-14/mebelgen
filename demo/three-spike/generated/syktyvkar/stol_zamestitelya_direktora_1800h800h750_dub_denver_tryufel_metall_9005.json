@@ -1,7 +1,7 @@
 {
-  "id": "syktyvkar-38-stol_direktora_2000h800h750_dub_denver_tryufel_metall_9005",
+  "id": "syktyvkar-43-stol_zamestitelya_direktora_1800h800h750_dub_denver_tryufel_metall_9005",
   "type": "desk_panel",
-  "title": "Стол директора 2000х800х750 Дуб Денвер Трюфель/Металл 9005",
+  "title": "Стол заместителя директора 1800х800х750 Дуб Денвер Трюфель/Металл 9005",
   "classification": {
     "scope": "manufactured",
     "procurementFiltered": false
@@ -12,15 +12,15 @@
   },
   "source": {
     "project": "Сыктывкар 3 часть",
-    "position": "1",
-    "drawingNumber": "38",
-    "orderCode": "НФ-00007659",
-    "quantity": 1.0,
+    "position": "5",
+    "drawingNumber": "43",
+    "orderCode": "НФ-00007663",
+    "quantity": 2.0,
     "unit": "шт",
-    "rawTitle": "Стол директора 2000х800х750 Дуб Денвер Трюфель/Металл 9005"
+    "rawTitle": "Стол заместителя директора 1800х800х750 Дуб Денвер Трюфель/Металл 9005"
   },
   "dimensions": {
-    "widthMm": 2000.0,
+    "widthMm": 1800.0,
     "depthMm": 800.0,
     "heightMm": 750.0
   },
@@ -57,8 +57,8 @@
     }
   },
   "features": {
-    "quantity": 1.0,
-    "sourceDrawing": "38",
+    "quantity": 2.0,
+    "sourceDrawing": "43",
     "sectionCount": 1,
     "metalFrame": true,
     "plinth": false,
@@ -95,7 +95,7 @@
     "*Фактические замеры обязательны."
   ],
   "titleBlock": {
-    "sheetName": "Стол директора 2000х800х750 Дуб Денвер Трюфель/Металл 9005",
+    "sheetName": "Стол заместителя директора 1800х800х750 Дуб Денвер Трюфель/Металл 9005",
     "date": "20.02.2026",
     "manager": "Петрова А.А."
   }

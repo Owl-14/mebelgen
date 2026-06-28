@@ -1,0 +1,90 @@
+{
+  "id": "syktyvkar-71-stol_dlya_ohrannika_1400h700h750_svetlo_seryy",
+  "type": "desk_panel",
+  "title": "Стол для охранника 1400х700х750 Светло-серый",
+  "classification": {
+    "scope": "manufactured",
+    "procurementFiltered": false
+  },
+  "ai": {
+    "provider": "local-importer",
+    "model": "rule-based-syktyvkar-v1"
+  },
+  "source": {
+    "project": "Сыктывкар 3 часть",
+    "position": "22",
+    "drawingNumber": "71",
+    "orderCode": "НФ-00007680",
+    "quantity": 1.0,
+    "unit": "шт",
+    "rawTitle": "Стол для охранника 1400х700х750 Светло-серый"
+  },
+  "dimensions": {
+    "widthMm": 1400.0,
+    "depthMm": 700.0,
+    "heightMm": 750.0
+  },
+  "dimensionNote": "",
+  "modules": [],
+  "geometry": {
+    "overhangMm": 25,
+    "sectionCount": 1
+  },
+  "parts": {
+    "top": {
+      "label": "Столешница",
+      "material": "ЛДСП влагост., 16 мм, Светло-серый, Egger",
+      "thicknessMm": 25,
+      "displayColor": "#d7d8d2"
+    },
+    "sidePanels": {
+      "label": "Корпус",
+      "material": "ЛДСП влагост., 16 мм, Светло-серый, Egger",
+      "thicknessMm": 16.0,
+      "displayColor": "#d7d8d2"
+    },
+    "frontScreen": {
+      "label": "Передний экран",
+      "material": "ЛДСП влагост., 16 мм, Светло-серый, Egger",
+      "thicknessMm": 16,
+      "heightMm": 300,
+      "displayColor": "#d7d8d2"
+    }
+  },
+  "features": {
+    "quantity": 1.0,
+    "sourceDrawing": "71",
+    "sectionCount": 1,
+    "metalFrame": false,
+    "plinth": false,
+    "plinthBlack": false,
+    "drawers": 0,
+    "shelves": 0,
+    "lock": false,
+    "rod": false,
+    "hatShelf": false,
+    "shoeShelf": false,
+    "modules": 0
+  },
+  "materialRefs": [
+    {
+      "query": "Светло-серый",
+      "article": "U708 ST9",
+      "label": "ЛДСП влагост., 16 мм, Светло-серый, Egger",
+      "group": "01 Листовой материал/ЛДСП/16мм",
+      "lengthMm": 2800.0,
+      "widthMm": 2070.0,
+      "thicknessMm": 16.0,
+      "unit": "кв.м."
+    }
+  ],
+  "materials": [
+    "Светло-серый: ЛДСП влагост., 16 мм, Светло-серый, Egger, 16мм",
+    "*Фактические замеры обязательны."
+  ],
+  "titleBlock": {
+    "sheetName": "Стол для охранника 1400х700х750 Светло-серый",
+    "date": "20.02.2026",
+    "manager": "Петрова А.А."
+  }
+}

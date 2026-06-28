@@ -6,6 +6,8 @@
     "check:deps": "node -e \"import('three').then(() => console.log('three ok'))\"",
     "pipeline:mock": "node orchestrator/pipeline.mjs --provider mock --input orchestrator/sample-inputs/desk-brief.txt --out demo/three-spike/generated/latest-spec.json",
     "training:kabinety": "node orchestrator/import-kabinety.mjs",
+    "training:syktyvkar": "python3 orchestrator/import-syktyvkar.py",
+    "training:all": "pnpm training:kabinety && pnpm training:syktyvkar",
     "serve": "python3 -m http.server 4173 --bind 127.0.0.1"
   },
   "dependencies": {

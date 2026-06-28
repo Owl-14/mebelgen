@@ -20,6 +20,24 @@ Run:
 pnpm pipeline:mock
 ```
 
+Training importers:
+
+```bash
+pnpm training:kabinety
+pnpm training:syktyvkar
+pnpm training:all
+```
+
+`training:syktyvkar` reads the local production artifacts supplied by the user:
+
+- `/Users/macintosheesh/Downloads/Сыктывкар 3 часть .Чертежи .zip`
+- `/Users/macintosheesh/Downloads/ТЗ мебель Коми РФ (1).doc`
+- `/Users/macintosheesh/Downloads/База материала.xlsx`
+
+It extracts the order XLSX from the ZIP, filters manufactured modular furniture
+from procurement-only items, maps material names to the material workbook, and
+writes `demo/three-spike/generated/syktyvkar/*.json`.
+
 Then open:
 
 ```text

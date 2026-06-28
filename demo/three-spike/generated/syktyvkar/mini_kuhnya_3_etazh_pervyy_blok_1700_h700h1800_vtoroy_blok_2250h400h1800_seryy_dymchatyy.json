@@ -1,0 +1,101 @@
+{
+  "id": "syktyvkar-62-mini_kuhnya_3_etazh_pervyy_blok_1700_h700h1800_vtoroy_blok_2250h400h1800_seryy_dymchatyy",
+  "type": "kitchen_run",
+  "title": "Мини кухня (3 этаж) первый блок 1700 х700х1800, второй блок 2250х400х1800 Серый Дымчатый",
+  "classification": {
+    "scope": "manufactured",
+    "procurementFiltered": false
+  },
+  "ai": {
+    "provider": "local-importer",
+    "model": "rule-based-syktyvkar-v1"
+  },
+  "source": {
+    "project": "Сыктывкар 3 часть",
+    "position": "20",
+    "drawingNumber": "62",
+    "orderCode": "НФ-00007678",
+    "quantity": 1.0,
+    "unit": "шт",
+    "rawTitle": "Мини кухня (3 этаж) первый блок 1700 х700х1800, второй блок 2250х400х1800 Серый Дымчатый"
+  },
+  "dimensions": {
+    "widthMm": 3950.0,
+    "depthMm": 700.0,
+    "heightMm": 1800.0
+  },
+  "dimensionNote": "Несколько блоков кухни объединены в общий габарит",
+  "modules": [
+    {
+      "widthMm": 1700.0,
+      "depthMm": 700.0,
+      "heightMm": 1800.0
+    },
+    {
+      "widthMm": 2250.0,
+      "depthMm": 400.0,
+      "heightMm": 1800.0
+    }
+  ],
+  "geometry": {
+    "overhangMm": 0,
+    "sectionCount": 2
+  },
+  "parts": {
+    "top": {
+      "label": "Столешница",
+      "material": "Серый Дымчатый",
+      "thicknessMm": 16,
+      "displayColor": "#a7aaa8"
+    },
+    "sidePanels": {
+      "label": "Корпус",
+      "material": "Серый Дымчатый",
+      "thicknessMm": 16,
+      "displayColor": "#a7aaa8"
+    },
+    "doors": {
+      "label": "Фасады",
+      "material": "Серый Дымчатый",
+      "count": 2,
+      "displayColor": "#a7aaa8"
+    },
+    "shelves": {
+      "label": "Полки",
+      "material": "Серый Дымчатый",
+      "count": 0
+    }
+  },
+  "features": {
+    "quantity": 1.0,
+    "sourceDrawing": "62",
+    "sectionCount": 2,
+    "metalFrame": false,
+    "plinth": true,
+    "plinthBlack": false,
+    "drawers": 0,
+    "shelves": 0,
+    "lock": false,
+    "rod": false,
+    "hatShelf": false,
+    "shoeShelf": false,
+    "modules": 2
+  },
+  "materialRefs": [
+    {
+      "query": "Серый Дымчатый",
+      "type": "unmatched",
+      "label": "Серый Дымчатый"
+    }
+  ],
+  "materials": [
+    "Материал: Серый Дымчатый",
+    "Несколько блоков кухни объединены в общий габарит",
+    "*Фактические замеры обязательны."
+  ],
+  "titleBlock": {
+    "sheetName": "Мини кухня (3 этаж) первый блок 1700 х700х1800, второй блок 2250х400х1800 Серый Дымчатый",
+    "date": "20.02.2026",
+    "manager": "Петрова А.А."
+  }
+}

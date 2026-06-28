@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { validateFurnitureSpec } from "./validate-spec.mjs";
@@ -48,7 +48,7 @@ export async function importKabinety(options = {}) {
 
   const manifest = {
     source: basename(inputPath),
-    generatedAt: new Date().toISOString(),
+    generatedAt: await sourceTimestamp(inputPath),
     items
   };
   const manifestPath = resolve(outDir, "index.json");
@@ -57,6 +57,11 @@ export async function importKabinety(options = {}) {
   const latest = await readFile(resolve(outDir, basename(firstDesk.spec)), "utf8");
   await writeFile(latestPath, latest, "utf8");
   return { items, manifestPath, latestPath };
+}
+
+async function sourceTimestamp(path) {
+  const info = await stat(path);
+  return info.mtime.toISOString();
 }
 
 function convertSpec(item) {

@@ -1,0 +1,276 @@
+{
+  "source": {
+    "zip": "/Users/macintosheesh/Downloads/Сыктывкар 3 часть .Чертежи .zip",
+    "orderWorkbook": "Сыктывкар 3 часть .Чертежи /Заказ покупателя № НФ-447 от 30.12.2025.xlsx",
+    "materialsWorkbook": "/Users/macintosheesh/Downloads/База материала.xlsx",
+    "tzDocument": "/Users/macintosheesh/Downloads/ТЗ мебель Коми РФ (1).doc"
+  },
+  "generatedAt": "2026-06-28T21:33:36.538410+00:00",
+  "items": [
+    {
+      "id": "syktyvkar-38-stol_direktora_2000h800h750_dub_denver_tryufel_metall_9005",
+      "title": "Стол директора 2000х800х750 Дуб Денвер Трюфель/Металл 9005",
+      "type": "desk_panel",
+      "scope": "manufactured",
+      "quantity": 1.0,
+      "spec": "./generated/syktyvkar/stol_direktora_2000h800h750_dub_denver_tryufel_metall_9005.json"
+    },
+    {
+      "id": "syktyvkar-39-tumba_pristavnaya_k_stolu_direktora_1000h500h750_dub_denver_tryufel",
+      "title": "Тумба приставная к столу директора 1000х500х750 Дуб Денвер Трюфель",
+      "type": "drawer_unit",
+      "scope": "manufactured",
+      "quantity": 1.0,
+      "spec": "./generated/syktyvkar/tumba_pristavnaya_k_stolu_direktora_1000h500h750_dub_denver_tryufel.json"
+    },
+    {
+      "id": "syktyvkar-44-brifing_pristavka_1000h800x750_dub_denver_tryufel_opory_9005",
+      "title": "Брифинг-приставка 1000х800x750 Дуб Денвер Трюфель/Опоры 9005",
+      "type": "desk_panel",
+      "scope": "manufactured",
+      "quantity": 1.0,
+      "spec": "./generated/syktyvkar/brifing_pristavka_1000h800x750_dub_denver_tryufel_opory_9005.json"
+    },
+    {
+      "id": "syktyvkar-41-stol_dlya_peregovorov_v_kabinete_direktora_1200h1200h750_dub_denver_tryufel",
+      "title": "Стол для переговоров в кабинете директора 1200х1200х750 Дуб Денвер Трюфель",
+      "type": "desk_panel",
+      "scope": "manufactured",
+      "quantity": 1.0,
+      "spec": "./generated/syktyvkar/stol_dlya_peregovorov_v_kabinete_direktora_1200h1200h750_dub_denver_tryufel.json"
+    },
+    {
+      "id": "syktyvkar-43-stol_zamestitelya_direktora_1800h800h750_dub_denver_tryufel_metall_9005",
+      "title": "Стол заместителя директора 1800х800х750 Дуб Денвер Трюфель/Металл 9005",
+      "type": "desk_panel",
+      "scope": "manufactured",
+      "quantity": 2.0,
+      "spec": "./generated/syktyvkar/stol_zamestitelya_direktora_1800h800h750_dub_denver_tryufel_metall_9005.json"
+    },
+    {
+      "id": "syktyvkar-6-brifing_pristavka_k_stolu_zam_direktora_1000h800x750_dub_denver_tryufel_opory_9005",
+      "title": "Брифинг-приставка к столу зам. директора 1000х800x750 Дуб Денвер Трюфель/Опоры 9005",
+      "type": "desk_panel",
+      "scope": "manufactured",
+      "quantity": 2.0,
+      "spec": "./generated/syktyvkar/brifing_pristavka_k_stolu_zam_direktora_1000h800x750_dub_denver_tryufel_opory_9005.json"
+    },
+    {
+      "id": "syktyvkar-45-tumba_pristavnaya_k_stolu_zam_direktora_1000h500h750_dub_denver_tryufel",
+      "title": "Тумба приставная к столу зам. директора 1000х500х750 Дуб Денвер Трюфель",
+      "type": "drawer_unit",
+      "scope": "manufactured",
+      "quantity": 2.0,
+      "spec": "./generated/syktyvkar/tumba_pristavnaya_k_stolu_zam_direktora_1000h500h750_dub_denver_tryufel.json"
+    },
+    {
+      "id": "syktyvkar-46-shkaf_dlya_dokumentov_zam_direktora_1000h400h1800_dub_denver_tryufel",
+      "title": "Шкаф для документов зам. директора 1000х400х1800 Дуб Денвер Трюфель",
+      "type": "cabinet",
+      "scope": "manufactured",
+      "quantity": 3.0,
+      "spec": "./generated/syktyvkar/shkaf_dlya_dokumentov_zam_direktora_1000h400h1800_dub_denver_tryufel.json"
+    },
+    {
+      "id": "syktyvkar-47-shkaf_garderobnyy_zam_direktora_1000h400h1800_dub_denver_tryufel",
+      "title": "Шкаф гардеробный зам.директора 1000х400х1800 Дуб Денвер Трюфель",
+      "type": "wardrobe",
+      "scope": "manufactured",
+      "quantity": 3.0,
+      "spec": "./generated/syktyvkar/shkaf_garderobnyy_zam_direktora_1000h400h1800_dub_denver_tryufel.json"
+    },
+    {
+      "id": "syktyvkar-48-shkaf_kombinirovannyy_direktor_1000h400h1817_dub_denver_tryufel",
+      "title": "Шкаф комбинированный – директор 1000х400х1817 Дуб Денвер Трюфель",
+      "type": "cabinet",
+      "scope": "manufactured",
+      "quantity": 1.0,
+      "spec": "./generated/syktyvkar/shkaf_kombinirovannyy_direktor_1000h400h1817_dub_denver_tryufel.json"
+    },
+    {
+      "id": "syktyvkar-11-shkaf_pod_miniholodilnik_750h750h950_dub_denver_tryufel",
+      "title": "Шкаф под минихолодильник 750х750х950 Дуб Денвер Трюфель",
+      "type": "cabinet",
+      "scope": "manufactured",
+      "quantity": 1.0,
+      "spec": "./generated/syktyvkar/shkaf_pod_miniholodilnik_750h750h950_dub_denver_tryufel.json"
+    },
+    {
+      "id": "syktyvkar-50-sistema_vstroennyh_garderobnyh_shkafov_4000h600h1800_belo_seryy",
+      "title": "Система встроенных гардеробных шкафов 4000х600х1800 Бело-серый",
+      "type": "built_in_run",
+      "scope": "manufactured",
+      "quantity": 1.0,
+      "spec": "./generated/syktyvkar/sistema_vstroennyh_garderobnyh_shkafov_4000h600h1800_belo_seryy.json"
+    },
+    {
+      "id": "syktyvkar-52-stol_dlya_bolshoy_peregovornoy_2000h900h750_dub_denver_tryufel_opory_9005",
+      "title": "Стол для большой переговорной 2000х900х750 Дуб Денвер Трюфель/Опоры 9005",
+      "type": "desk_panel",
+      "scope": "manufactured",
+      "quantity": 1.0,
+      "spec": "./generated/syktyvkar/stol_dlya_bolshoy_peregovornoy_2000h900h750_dub_denver_tryufel_opory_9005.json"
+    },
+    {
+      "id": "syktyvkar-53-tumba_dlya_bolshoy_peregovornoy_800x400x900_dub_denver_tryufel",
+      "title": "Тумба для большой переговорной 800x400x900 Дуб Денвер Трюфель",
+      "type": "drawer_unit",
+      "scope": "manufactured",
+      "quantity": 1.0,
+      "spec": "./generated/syktyvkar/tumba_dlya_bolshoy_peregovornoy_800x400x900_dub_denver_tryufel.json"
+    },
+    {
+      "id": "syktyvkar-15-zona_referentov_3200x2400x1200_belo_seraya",
+      "title": "Зона референтов 3200x2400x1200 Бело-серая",
+      "type": "built_in_run",
+      "scope": "manufactured",
+      "quantity": 1.0,
+      "spec": "./generated/syktyvkar/zona_referentov_3200x2400x1200_belo_seraya.json"
+    },
+    {
+      "id": "syktyvkar-55-sistema_vstroennyh_shkafov_v_zone_referentov_3118h600h1800_belo_seraya",
+      "title": "Система встроенных шкафов в зоне референтов 3118х600х1800 Бело-серая",
+      "type": "built_in_run",
+      "scope": "manufactured",
+      "quantity": 1.0,
+      "spec": "./generated/syktyvkar/sistema_vstroennyh_shkafov_v_zone_referentov_3118h600h1800_belo_seraya.json"
+    },
+    {
+      "id": "syktyvkar-59-tumby_v_prezidium_900h300h800_svetlo_serye",
+      "title": "Тумбы в президиум 900х300х800 Светло-серые",
+      "type": "drawer_unit",
+      "scope": "manufactured",
+      "quantity": 3.0,
+      "spec": "./generated/syktyvkar/tumby_v_prezidium_900h300h800_svetlo_serye.json"
+    },
+    {
+      "id": "syktyvkar-60-tribuna_500h400h1200_oniks_seryy",
+      "title": "Трибуна 500х400х1200 Оникс Серый",
+      "type": "lectern",
+      "scope": "manufactured",
+      "quantity": 1.0,
+      "spec": "./generated/syktyvkar/tribuna_500h400h1200_oniks_seryy.json"
+    },
+    {
+      "id": "syktyvkar-61-kuhnya_2_etazh_5650h1579h1800_seryy_ugol",
+      "title": "Кухня (2 этаж) 5650х1579х1800 Серый уголь",
+      "type": "kitchen_run",
+      "scope": "manufactured",
+      "quantity": 1.0,
+      "spec": "./generated/syktyvkar/kuhnya_2_etazh_5650h1579h1800_seryy_ugol.json"
+    },
+    {
+      "id": "syktyvkar-62-mini_kuhnya_3_etazh_pervyy_blok_1700_h700h1800_vtoroy_blok_2250h400h1800_seryy_dymchatyy",
+      "title": "Мини кухня (3 этаж) первый блок 1700 х700х1800, второй блок 2250х400х1800 Серый Дымчатый",
+      "type": "kitchen_run",
+      "scope": "manufactured",
+      "quantity": 1.0,
+      "spec": "./generated/syktyvkar/mini_kuhnya_3_etazh_pervyy_blok_1700_h700h1800_vtoroy_blok_2250h400h1800_seryy_dymchatyy.json"
+    },
+    {
+      "id": "syktyvkar-69-stol_dlya_korrespondencii_800h500h550_svetlo_seryy",
+      "title": "Стол для корреспонденции 800х500х550 Светло-серый",
+      "type": "desk_panel",
+      "scope": "manufactured",
+      "quantity": 1.0,
+      "spec": "./generated/syktyvkar/stol_dlya_korrespondencii_800h500h550_svetlo_seryy.json"
+    },
+    {
+      "id": "syktyvkar-71-stol_dlya_ohrannika_1400h700h750_svetlo_seryy",
+      "title": "Стол для охранника 1400х700х750 Светло-серый",
+      "type": "desk_panel",
+      "scope": "manufactured",
+      "quantity": 1.0,
+      "spec": "./generated/syktyvkar/stol_dlya_ohrannika_1400h700h750_svetlo_seryy.json"
+    },
+    {
+      "id": "syktyvkar-72-tumba_podkatnaya_400x450h580_svetlo_seraya",
+      "title": "Тумба подкатная 400x450х580 Светло-серая",
+      "type": "drawer_unit",
+      "scope": "manufactured",
+      "quantity": 1.0,
+      "spec": "./generated/syktyvkar/tumba_podkatnaya_400x450h580_svetlo_seraya.json"
+    },
+    {
+      "id": "syktyvkar-73-stoleshnica_s_obramleniem_dlya_lotka_500_1500h300h750_1100_dub_kendal",
+      "title": "Столешница с обрамлением для лотка 500-1500х300х750/1100 Дуб Кендал",
+      "type": "countertop",
+      "scope": "manufactured",
+      "quantity": 2.0,
+      "spec": "./generated/syktyvkar/stoleshnica_s_obramleniem_dlya_lotka_500_1500h300h750_1100_dub_kendal.json"
+    }
+  ],
+  "skipped": [],
+  "trainingContext": {
+    "manufacturedHeadingCount": 56,
+    "procurementHeadingCount": 10,
+    "headingSamples": [
+      "Стулья в переговорную",
+      "Стулья для посетителей",
+      "Стол письменный тип 1",
+      "Стол письменный тип 2",
+      "Стол письменный тип 3",
+      "Тумба приставная (правая/левая)",
+      "Тумба подкатная",
+      "Шкаф для документов тип 1",
+      "Шкаф для документов тип 2",
+      "Шкаф комбинированный",
+      "Шкаф гардеробный тип 1",
+      "Шкаф гардеробный тип 2",
+      "Тумба под принтер тип 1",
+      "Тумба под принтер тип 2",
+      "Шкаф гардеробный для ниши 1",
+      "Шкаф гардеробный для ниши 2",
+      "Шкаф гардеробный для ниши 3",
+      "Стол для переговоров тип 6",
+      "Стол переговорный тип 4",
+      "Стол директора",
+      "Тумба приставная к столу директора",
+      "Брифинг-приставка",
+      "Стол для переговоров в кабинете директора",
+      "Диван в комнату отдыха директора",
+      "Стол заместителя директора",
+      "Брифинг-приставка к столу зам. директора",
+      "Тумба приставная к столу зам. директора",
+      "Шкаф для документов - замдиректора",
+      "Шкаф гардеробный - замдиректор",
+      "Шкаф под минихолодильник",
+      "Система встроенных гардеробных шкафов",
+      "Стол для большой переговорной",
+      "Тумба для большой переговорной",
+      "Система встроенных шкафов в зоне референтов",
+      "Диван в приемную",
+      "Тумбы в президиум",
+      "Кухня (2 этаж)",
+      "Мини кухня (3 этаж)",
+      "Столик в приемную журнальный",
+      "Кресло сотрудника",
+      "Кресло руководителя",
+      "Стулья приставные",
+      "Стол обеденный",
+      "Стулья для столовой",
+      "Стол для корреспонденции",
+      "Диван на входную зону",
+      "Стол для охранника",
+      "Столешница с обрамлением для лотка",
+      "Кресло офисное работника тип 1",
+      "Тумба приставная тип 1",
+      "Стол рабочий тип 1",
+      "Шкаф комбинированный (светлый / темный)",
+      "Столешница в кабине клиента тип 1",
+      "Столешница в кабине клиента тип 2",
+      "Стол угловой с полкой для документов",
+      "Шкаф для одежды",
+      "Шкаф-купе для документов средний",
+      "Шкаф для документов высокий",
+      "Диван для зоны ожидания 2 секц.",
+      "Стол подкатной для обслуживания маломобильных групп населения",
+      "Стол для заполнения документов",
+      "Стол руководителя тип 1 (тёмный)",
+      "Тумба приставная тип 2 (тёмный)",
+      "Стол переговорный тип 5",
+      "Шкаф навесной",
+      "СтолбецРазработал"
+    ]
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "id": "syktyvkar-60-tribuna_500h400h1200_oniks_seryy",
+  "type": "lectern",
+  "title": "Трибуна 500х400х1200 Оникс Серый",
+  "classification": {
+    "scope": "manufactured",
+    "procurementFiltered": false
+  },
+  "ai": {
+    "provider": "local-importer",
+    "model": "rule-based-syktyvkar-v1"
+  },
+  "source": {
+    "project": "Сыктывкар 3 часть",
+    "position": "18",
+    "drawingNumber": "60",
+    "orderCode": "НФ-00007676",
+    "quantity": 1.0,
+    "unit": "шт",
+    "rawTitle": "Трибуна 500х400х1200 Оникс Серый"
+  },
+  "dimensions": {
+    "widthMm": 500.0,
+    "depthMm": 400.0,
+    "heightMm": 1200.0
+  },
+  "dimensionNote": "",
+  "modules": [],
+  "geometry": {
+    "overhangMm": 0,
+    "sectionCount": 1
+  },
+  "parts": {
+    "top": {
+      "label": "Корпус / фасады",
+      "material": "ЛДСП, 16 мм, Оникс серый, Egger",
+      "thicknessMm": 16.0,
+      "displayColor": "#8c8d8b"
+    },
+    "sidePanels": {
+      "label": "Корпус",
+      "material": "ЛДСП, 16 мм, Оникс серый, Egger",
+      "thicknessMm": 16.0,
+      "displayColor": "#8c8d8b"
+    }
+  },
+  "features": {
+    "quantity": 1.0,
+    "sourceDrawing": "60",
+    "sectionCount": 1,
+    "metalFrame": false,
+    "plinth": true,
+    "plinthBlack": false,
+    "drawers": 0,
+    "shelves": 0,
+    "lock": false,
+    "rod": false,
+    "hatShelf": false,
+    "shoeShelf": false,
+    "modules": 0
+  },
+  "materialRefs": [
+    {
+      "query": "Оникс Серый",
+      "article": "U960 ST9",
+      "label": "ЛДСП, 16 мм, Оникс серый, Egger",
+      "group": "01 Листовой материал/ЛДСП/16мм",
+      "lengthMm": 2800.0,
+      "widthMm": 2070.0,
+      "thicknessMm": 16.0,
+      "unit": "кв.м."
+    }
+  ],
+  "materials": [
+    "Оникс Серый: ЛДСП, 16 мм, Оникс серый, Egger, 16мм",
+    "*Фактические замеры обязательны."
+  ],
+  "titleBlock": {
+    "sheetName": "Трибуна 500х400х1200 Оникс Серый",
+    "date": "20.02.2026",
+    "manager": "Петрова А.А."
+  }
+}

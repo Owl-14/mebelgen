@@ -1,7 +1,7 @@
 {
-  "id": "syktyvkar-38-stol_direktora_2000h800h750_dub_denver_tryufel_metall_9005",
+  "id": "syktyvkar-44-brifing_pristavka_1000h800x750_dub_denver_tryufel_opory_9005",
   "type": "desk_panel",
-  "title": "Стол директора 2000х800х750 Дуб Денвер Трюфель/Металл 9005",
+  "title": "Брифинг-приставка 1000х800x750 Дуб Денвер Трюфель/Опоры 9005",
   "classification": {
     "scope": "manufactured",
     "procurementFiltered": false
@@ -12,15 +12,15 @@
   },
   "source": {
     "project": "Сыктывкар 3 часть",
-    "position": "1",
-    "drawingNumber": "38",
-    "orderCode": "НФ-00007659",
+    "position": "3",
+    "drawingNumber": "44",
+    "orderCode": "НФ-00007661",
     "quantity": 1.0,
     "unit": "шт",
-    "rawTitle": "Стол директора 2000х800х750 Дуб Денвер Трюфель/Металл 9005"
+    "rawTitle": "Брифинг-приставка 1000х800x750 Дуб Денвер Трюфель/Опоры 9005"
   },
   "dimensions": {
-    "widthMm": 2000.0,
+    "widthMm": 1000.0,
     "depthMm": 800.0,
     "heightMm": 750.0
   },
@@ -58,7 +58,7 @@
   },
   "features": {
     "quantity": 1.0,
-    "sourceDrawing": "38",
+    "sourceDrawing": "44",
     "sectionCount": 1,
     "metalFrame": true,
     "plinth": false,
@@ -95,7 +95,7 @@
     "*Фактические замеры обязательны."
   ],
   "titleBlock": {
-    "sheetName": "Стол директора 2000х800х750 Дуб Денвер Трюфель/Металл 9005",
+    "sheetName": "Брифинг-приставка 1000х800x750 Дуб Денвер Трюфель/Опоры 9005",
     "date": "20.02.2026",
     "manager": "Петрова А.А."
   }

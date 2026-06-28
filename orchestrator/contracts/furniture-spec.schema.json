@@ -8,7 +8,19 @@
     "id": { "type": "string" },
     "type": {
       "type": "string",
-      "enum": ["desk_panel", "wardrobe", "cabinet", "drawer_unit", "coffee_round", "coffee_fluted", "coffee_rect"]
+      "enum": [
+        "desk_panel",
+        "wardrobe",
+        "cabinet",
+        "drawer_unit",
+        "coffee_round",
+        "coffee_fluted",
+        "coffee_rect",
+        "built_in_run",
+        "kitchen_run",
+        "countertop",
+        "lectern"
+      ]
     },
     "title": { "type": "string" },
     "ai": {
@@ -60,6 +72,21 @@
     "materials": {
       "type": "array",
       "items": { "type": "string" }
+    },
+    "materialRefs": {
+      "type": "array",
+      "items": { "type": "object", "additionalProperties": true }
+    },
+    "modules": {
+      "type": "array",
+      "items": { "type": "object", "additionalProperties": true }
+    },
+    "classification": {
+      "type": "object",
+      "properties": {
+        "scope": { "type": "string", "enum": ["manufactured", "procurement", "unknown"] }
+      },
+      "additionalProperties": true
     },
     "titleBlock": {
       "type": "object",

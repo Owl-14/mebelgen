@@ -1,7 +1,7 @@
 {
-  "id": "syktyvkar-38-stol_direktora_2000h800h750_dub_denver_tryufel_metall_9005",
+  "id": "syktyvkar-41-stol_dlya_peregovorov_v_kabinete_direktora_1200h1200h750_dub_denver_tryufel",
   "type": "desk_panel",
-  "title": "Стол директора 2000х800х750 Дуб Денвер Трюфель/Металл 9005",
+  "title": "Стол для переговоров в кабинете директора 1200х1200х750 Дуб Денвер Трюфель",
   "classification": {
     "scope": "manufactured",
     "procurementFiltered": false
@@ -12,16 +12,16 @@
   },
   "source": {
     "project": "Сыктывкар 3 часть",
-    "position": "1",
-    "drawingNumber": "38",
-    "orderCode": "НФ-00007659",
+    "position": "4",
+    "drawingNumber": "41",
+    "orderCode": "НФ-00007662",
     "quantity": 1.0,
     "unit": "шт",
-    "rawTitle": "Стол директора 2000х800х750 Дуб Денвер Трюфель/Металл 9005"
+    "rawTitle": "Стол для переговоров в кабинете директора 1200х1200х750 Дуб Денвер Трюфель"
   },
   "dimensions": {
-    "widthMm": 2000.0,
-    "depthMm": 800.0,
+    "widthMm": 1200.0,
+    "depthMm": 1200.0,
     "heightMm": 750.0
   },
   "dimensionNote": "",
@@ -49,20 +49,15 @@
       "thicknessMm": 16,
       "heightMm": 300,
       "displayColor": "#b09673"
-    },
-    "metalFrame": {
-      "label": "Металлокаркас / опоры",
-      "material": "RAL 9005",
-      "displayColor": "#111111"
     }
   },
   "features": {
     "quantity": 1.0,
-    "sourceDrawing": "38",
+    "sourceDrawing": "41",
     "sectionCount": 1,
-    "metalFrame": true,
+    "metalFrame": false,
     "plinth": false,
-    "plinthBlack": true,
+    "plinthBlack": false,
     "drawers": 0,
     "shelves": 0,
     "lock": false,
@@ -81,21 +76,14 @@
       "widthMm": 2070.0,
       "thicknessMm": 16.0,
       "unit": "кв.м."
-    },
-    {
-      "query": "RAL 9005",
-      "type": "color",
-      "code": "RAL 9005",
-      "label": "RAL 9005"
     }
   ],
   "materials": [
     "Дуб Денвер Трюфель: ЛДСП, 16 мм, Дуб Денвер трюфель, Egger, 16мм",
-    "Металл / опоры: RAL 9005",
     "*Фактические замеры обязательны."
   ],
   "titleBlock": {
-    "sheetName": "Стол директора 2000х800х750 Дуб Денвер Трюфель/Металл 9005",
+    "sheetName": "Стол для переговоров в кабинете директора 1200х1200х750 Дуб Денвер Трюфель",
     "date": "20.02.2026",
     "manager": "Петрова А.А."
   }

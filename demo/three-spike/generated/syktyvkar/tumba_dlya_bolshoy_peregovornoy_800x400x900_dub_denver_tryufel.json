@@ -1,7 +1,7 @@
 {
-  "id": "syktyvkar-38-stol_direktora_2000h800h750_dub_denver_tryufel_metall_9005",
-  "type": "desk_panel",
-  "title": "Стол директора 2000х800х750 Дуб Денвер Трюфель/Металл 9005",
+  "id": "syktyvkar-53-tumba_dlya_bolshoy_peregovornoy_800x400x900_dub_denver_tryufel",
+  "type": "drawer_unit",
+  "title": "Тумба для большой переговорной 800x400x900 Дуб Денвер Трюфель",
   "classification": {
     "scope": "manufactured",
     "procurementFiltered": false
@@ -12,29 +12,29 @@
   },
   "source": {
     "project": "Сыктывкар 3 часть",
-    "position": "1",
-    "drawingNumber": "38",
-    "orderCode": "НФ-00007659",
+    "position": "14",
+    "drawingNumber": "53",
+    "orderCode": "НФ-00007672",
     "quantity": 1.0,
     "unit": "шт",
-    "rawTitle": "Стол директора 2000х800х750 Дуб Денвер Трюфель/Металл 9005"
+    "rawTitle": "Тумба для большой переговорной 800x400x900 Дуб Денвер Трюфель"
   },
   "dimensions": {
-    "widthMm": 2000.0,
-    "depthMm": 800.0,
-    "heightMm": 750.0
+    "widthMm": 800.0,
+    "depthMm": 400.0,
+    "heightMm": 900.0
   },
   "dimensionNote": "",
   "modules": [],
   "geometry": {
-    "overhangMm": 25,
+    "overhangMm": 0,
     "sectionCount": 1
   },
   "parts": {
     "top": {
-      "label": "Столешница",
+      "label": "Корпус / фасады",
       "material": "ЛДСП, 16 мм, Дуб Денвер трюфель, Egger",
-      "thicknessMm": 25,
+      "thicknessMm": 16.0,
       "displayColor": "#b09673"
     },
     "sidePanels": {
@@ -43,29 +43,26 @@
       "thicknessMm": 16.0,
       "displayColor": "#b09673"
     },
-    "frontScreen": {
-      "label": "Передний экран",
-      "material": "ЛДСП, 16 мм, Дуб Денвер трюфель, Egger",
-      "thicknessMm": 16,
-      "heightMm": 300,
-      "displayColor": "#b09673"
+    "drawers": {
+      "label": "Ящики",
+      "count": 3,
+      "material": "ЛДСП, 16 мм, Дуб Денвер трюфель, Egger"
     },
-    "metalFrame": {
-      "label": "Металлокаркас / опоры",
-      "material": "RAL 9005",
-      "displayColor": "#111111"
+    "wheels": {
+      "label": "Колесные опоры",
+      "material": "черные"
     }
   },
   "features": {
     "quantity": 1.0,
-    "sourceDrawing": "38",
+    "sourceDrawing": "53",
     "sectionCount": 1,
-    "metalFrame": true,
-    "plinth": false,
-    "plinthBlack": true,
-    "drawers": 0,
+    "metalFrame": false,
+    "plinth": true,
+    "plinthBlack": false,
+    "drawers": 3,
     "shelves": 0,
-    "lock": false,
+    "lock": true,
     "rod": false,
     "hatShelf": false,
     "shoeShelf": false,
@@ -81,21 +78,14 @@
       "widthMm": 2070.0,
       "thicknessMm": 16.0,
       "unit": "кв.м."
-    },
-    {
-      "query": "RAL 9005",
-      "type": "color",
-      "code": "RAL 9005",
-      "label": "RAL 9005"
     }
   ],
   "materials": [
     "Дуб Денвер Трюфель: ЛДСП, 16 мм, Дуб Денвер трюфель, Egger, 16мм",
-    "Металл / опоры: RAL 9005",
     "*Фактические замеры обязательны."
   ],
   "titleBlock": {
-    "sheetName": "Стол директора 2000х800х750 Дуб Денвер Трюфель/Металл 9005",
+    "sheetName": "Тумба для большой переговорной 800x400x900 Дуб Денвер Трюфель",
     "date": "20.02.2026",
     "manager": "Петрова А.А."
   }

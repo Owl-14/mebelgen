@@ -70,14 +70,15 @@ async function setupCaseSelect(activePath) {
   const select = document.querySelector("#case-select");
   if (!select) return;
   try {
-    const response = await fetch("./generated/kabinety/index.json", { cache: "no-store" });
-    if (!response.ok) return;
-    const manifest = await response.json();
-    const items = Array.isArray(manifest.items) ? manifest.items : [];
+    const manifests = await Promise.all([
+      loadManifest("./generated/kabinety/index.json", "Кабинеты"),
+      loadManifest("./generated/syktyvkar/index.json", "Сыктывкар"),
+    ]);
+    const items = manifests.flatMap((manifest) => manifest.items);
     if (!items.length) return;
     select.replaceChildren(
       option("", "latest-spec"),
-      ...items.map((item) => option(item.spec, item.title)),
+      ...items.map((item) => option(item.spec, `${item.group}: ${item.title}`)),
     );
     const normalizedActive = normalizePath(activePath);
     const active = items.find((item) => normalizePath(item.spec) === normalizedActive);
@@ -91,6 +92,16 @@ async function setupCaseSelect(activePath) {
   } catch {
     // The training manifest appears after running pnpm training:kabinety.
   }
+}
+
+async function loadManifest(path, group) {
+  const response = await fetch(path, { cache: "no-store" });
+  if (!response.ok) return { items: [] };
+  const manifest = await response.json();
+  const items = Array.isArray(manifest.items) ? manifest.items : [];
+  return {
+    items: items.map((item) => ({ ...item, group })),
+  };
 }
 
 function normalizeFurnitureSpec(raw) {
@@ -114,6 +125,7 @@ function normalizeFurnitureSpec(raw) {
   return {
     sourcePath: raw.__sourcePath || "",
     type: raw.type || "desk_panel",
+    modules: Array.isArray(raw.modules) ? raw.modules : [],
     width: widthMm / 1000,
     depth: depthMm / 1000,
     height: heightMm / 1000,
@@ -159,6 +171,9 @@ function normalizeFurnitureSpec(raw) {
       rod: Boolean(features.rod),
       hatShelf: Boolean(features.hatShelf),
       shoeShelf: Boolean(features.shoeShelf),
+      sectionCount: Number(features.sectionCount || geometry.sectionCount || 0),
+      metalFrame: Boolean(features.metalFrame),
+      modules: Number(features.modules || (Array.isArray(raw.modules) ? raw.modules.length : 0)),
     },
     titleBlock: raw.titleBlock || {},
     materials: Array.isArray(raw.materials) ? raw.materials : [],
@@ -240,6 +255,10 @@ function createRenderer(canvas, overlay, mode) {
 
 function buildFurnitureModel(mode) {
   if (spec.type === "desk_panel") return buildDeskModel();
+  if (spec.type === "built_in_run") return buildBuiltInRunModel();
+  if (spec.type === "kitchen_run") return buildKitchenRunModel();
+  if (spec.type === "countertop") return buildCountertopModel();
+  if (spec.type === "lectern") return buildLecternModel();
   if (spec.type === "drawer_unit") return buildDrawerUnitModel();
   if (spec.type === "coffee_round" || spec.type === "coffee_fluted") return buildCoffeeRoundModel();
   if (spec.type === "coffee_rect") return buildCoffeeRectModel();
@@ -397,6 +416,159 @@ function buildCaseGoodModel(mode) {
   addOutlines(group);
   group.position.y = -H / 2;
   return group;
+}
+
+function buildBuiltInRunModel() {
+  const group = new THREE.Group();
+  group.name = "built_in_run";
+  const { matTop, matSide, matScreen, matBlack } = createMaterials();
+  const W = spec.width;
+  const D = spec.depth;
+  const H = spec.height;
+  const th = clamp(spec.side || 0.016, 0.014, 0.03);
+  const sections = Math.max(2, Math.min(12, Number(spec.features.sectionCount || Math.round(W / 0.5))));
+  const sectionW = W / sections;
+  const plinthH = 0.07;
+  const bodyH = H - plinthH;
+
+  addBox(group, { name: "back", size: [W, bodyH, 0.014], pos: [0, plinthH + bodyH / 2, D / 2 - 0.007], material: matScreen, radius: 0.001 });
+  addBox(group, { name: "top", size: [W, th, D], pos: [0, H - th / 2, 0], material: matTop, radius: 0.002 });
+  addBox(group, { name: "bottom", size: [W, th, D], pos: [0, plinthH + th / 2, 0], material: matSide, radius: 0.002 });
+  for (let i = 0; i <= sections; i += 1) {
+    const x = -W / 2 + i * sectionW;
+    addBox(group, { name: "vertical-partition", size: [th, bodyH, D], pos: [x, plinthH + bodyH / 2, 0], material: matSide, radius: 0.001 });
+  }
+  for (let i = 0; i < sections; i += 1) {
+    const cx = -W / 2 + sectionW * (i + 0.5);
+    addBox(group, {
+      name: "door",
+      size: [sectionW - th * 1.5, bodyH * 0.72, 0.018],
+      pos: [cx, plinthH + bodyH * 0.48, -D / 2 - 0.012],
+      material: matTop,
+      radius: 0.002,
+    });
+    if (i % 2 === 0) {
+      addBox(group, {
+        name: "wardrobe-rail",
+        size: [0.018, bodyH * 0.34, 0.014],
+        pos: [cx + sectionW * 0.28, plinthH + bodyH * 0.48, -D / 2 - 0.024],
+        material: matBlack,
+        radius: 0.003,
+      });
+    }
+    for (const y of [plinthH + bodyH * 0.22, plinthH + bodyH * 0.78]) {
+      addBox(group, {
+        name: "shelf",
+        size: [sectionW - th * 2, th, D * 0.82],
+        pos: [cx, y, 0.02],
+        material: matSide,
+        radius: 0.001,
+      });
+    }
+  }
+  addBox(group, { name: "plinth", size: [W, plinthH, D * 0.94], pos: [0, plinthH / 2, 0.02], material: spec.features.plinthBlack ? matBlack : matSide, radius: 0.002 });
+
+  addOutlines(group);
+  group.position.y = -H / 2;
+  return group;
+}
+
+function buildKitchenRunModel() {
+  const group = new THREE.Group();
+  group.name = "kitchen_run";
+  const { matTop, matSide, matScreen, matBlack } = createMaterials();
+  const W = spec.width;
+  const D = Math.min(spec.depth, 0.72);
+  const H = spec.height;
+  const th = clamp(spec.side || 0.016, 0.014, 0.03);
+  const modules = kitchenModules(W);
+  const baseH = Math.min(0.86, H * 0.52);
+  const plinthH = 0.09;
+  const counterTh = 0.04;
+  const wallH = Math.min(0.58, H * 0.34);
+  const wallY = Math.min(H - wallH / 2, 1.45);
+
+  addBox(group, { name: "countertop", size: [W + 0.04, counterTh, D + 0.04], pos: [0, baseH + counterTh / 2, -0.02], material: matTop, radius: 0.006 });
+  let cursor = -W / 2;
+  modules.forEach((module, index) => {
+    const mw = module.widthMm / 1000;
+    const cx = cursor + mw / 2;
+    addBox(group, { name: "base-cabinet", size: [mw - 0.006, baseH - plinthH, D], pos: [cx, plinthH + (baseH - plinthH) / 2, 0], material: matSide, radius: 0.002 });
+    addBox(group, { name: "base-front", size: [mw - 0.014, baseH * 0.58, 0.018], pos: [cx, plinthH + baseH * 0.36, -D / 2 - 0.012], material: matTop, radius: 0.002 });
+    if (index % 3 === 1) {
+      addBox(group, { name: "drawer-pull", size: [mw * 0.42, 0.018, 0.012], pos: [cx, plinthH + baseH * 0.58, -D / 2 - 0.028], material: matBlack, radius: 0.003 });
+    }
+    if (index < modules.length - 1) {
+      addBox(group, { name: "module-seam", size: [0.006, baseH - plinthH, 0.012], pos: [cursor + mw, plinthH + (baseH - plinthH) / 2, -D / 2 - 0.022], material: matBlack, radius: 0.001 });
+    }
+    cursor += mw;
+  });
+  addBox(group, { name: "plinth", size: [W, plinthH, D * 0.92], pos: [0, plinthH / 2, 0.02], material: spec.features.plinthBlack ? matBlack : matSide, radius: 0.002 });
+
+  cursor = -W / 2;
+  modules.forEach((module, index) => {
+    if (index % 4 === 3) {
+      cursor += module.widthMm / 1000;
+      return;
+    }
+    const mw = module.widthMm / 1000;
+    const cx = cursor + mw / 2;
+    addBox(group, { name: "wall-cabinet", size: [mw - 0.012, wallH, D * 0.46], pos: [cx, wallY, -D * 0.16], material: matScreen, radius: 0.002 });
+    addBox(group, { name: "wall-front", size: [mw - 0.02, wallH * 0.82, 0.016], pos: [cx, wallY, -D * 0.39], material: matTop, radius: 0.002 });
+    cursor += mw;
+  });
+
+  addOutlines(group);
+  group.position.y = -H / 2;
+  return group;
+}
+
+function buildCountertopModel() {
+  const group = new THREE.Group();
+  group.name = "countertop";
+  const { matTop, matSide, matBrass } = createMaterials();
+  const W = spec.width;
+  const D = spec.depth;
+  const H = spec.height;
+  const topTh = clamp(spec.top || 0.04, 0.025, 0.07);
+
+  addBox(group, { name: "countertop", size: [W, topTh, D], pos: [0, H - topTh / 2, 0], material: matTop, radius: 0.008 });
+  for (const x of [-W / 2 + 0.055, W / 2 - 0.055]) {
+    addBox(group, { name: "side-support", size: [0.05, H - topTh, D * 0.82], pos: [x, (H - topTh) / 2, 0], material: matSide, radius: 0.002 });
+  }
+  addBox(group, { name: "front-frame", size: [W, 0.026, 0.018], pos: [0, H - topTh - 0.018, -D / 2 - 0.012], material: matBrass, radius: 0.002 });
+  addOutlines(group);
+  group.position.y = -H / 2;
+  return group;
+}
+
+function buildLecternModel() {
+  const group = new THREE.Group();
+  group.name = "lectern";
+  const { matTop, matSide, matBlack } = createMaterials();
+  const W = spec.width;
+  const D = spec.depth;
+  const H = spec.height;
+  const topTh = clamp(spec.top || 0.025, 0.018, 0.05);
+  addBox(group, { name: "lectern-body", size: [W, H - topTh, D], pos: [0, (H - topTh) / 2, 0], material: matSide, radius: 0.006 });
+  const top = addBox(group, { name: "lectern-top", size: [W * 1.08, topTh, D * 1.08], pos: [0, H - topTh / 2, -0.02], material: matTop, radius: 0.006 });
+  top.rotation.x = -0.08;
+  addBox(group, { name: "front-panel", size: [W * 0.78, H * 0.56, 0.018], pos: [0, H * 0.42, -D / 2 - 0.012], material: matTop, radius: 0.004 });
+  addBox(group, { name: "plinth", size: [W * 1.05, 0.04, D * 0.92], pos: [0, 0.02, 0], material: matBlack, radius: 0.004 });
+  addOutlines(group);
+  group.position.y = -H / 2;
+  return group;
+}
+
+function kitchenModules(widthMeters) {
+  if (spec.modules.length) {
+    return spec.modules.map((module) => ({
+      widthMm: Number(module.widthMm || 600),
+    }));
+  }
+  const count = Math.max(3, Math.min(12, Number(spec.features.sectionCount || Math.round((widthMeters * 1000) / 600))));
+  const widthMm = (widthMeters * 1000) / count;
+  return Array.from({ length: count }, () => ({ widthMm }));
 }
 
 function buildDrawerUnitModel() {
@@ -704,13 +876,27 @@ function createMaterials() {
 
 function colorForSpec() {
   const allParts = Object.values(furnitureSpec.parts || {});
+  const displayColor = allParts.find((part) => part?.displayColor)?.displayColor;
+  const parsed = parseHexColor(displayColor);
+  if (parsed) return parsed;
   const code = String(allParts.find((part) => part?.colorCode)?.colorCode || "").toUpperCase();
   const system = String(allParts.find((part) => part?.colorSystem)?.colorSystem || "").toUpperCase();
+  const materialText = allParts.map((part) => `${part?.material || ""} ${part?.label || ""}`).join(" ").toLowerCase();
+  if (materialText.includes("дуб денвер")) return 0xb09673;
+  if (materialText.includes("светло-сер")) return 0xd7d8d2;
+  if (materialText.includes("серый уголь")) return 0x575b5d;
+  if (materialText.includes("бело-сер")) return 0xe3e1dc;
   if (system === "RAL" && code === "8019") return 0x403936;
+  if (system === "RAL" && code === "9005") return 0x111111;
   if (system === "RAL" && code === "9011") return 0x111111;
   if (system === "NCS" && code.includes("3000")) return 0xf0eadf;
   if (system === "NCS" && code.includes("2000")) return 0xf3f1e9;
   return 0xeee6d7;
+}
+
+function parseHexColor(value) {
+  const match = String(value || "").match(/^#?([0-9a-f]{6})$/i);
+  return match ? Number.parseInt(match[1], 16) : null;
 }
 
 function lightenColor(color, factor) {
@@ -812,7 +998,7 @@ function addOutlines(group) {
 function buildShadowPlane() {
   const group = new THREE.Group();
   const shadow = new THREE.Mesh(
-    new THREE.PlaneGeometry(2.25, 1.12),
+    new THREE.PlaneGeometry(Math.max(2.25, spec.width * 1.18), Math.max(1.12, spec.depth * 1.18)),
     new THREE.ShadowMaterial({ opacity: 0.18 }),
   );
   shadow.name = "contact-shadow";
@@ -835,7 +1021,8 @@ function fitCamera(camera, aspect, mode) {
     camera.lookAt(0, -0.02, 0);
   } else {
     const openWardrobePad = spec.type === "wardrobe" ? 1.18 : 1;
-    const span = Math.max(2.8, spec.width * 1.55, spec.height * aspect * 1.18) * openWardrobePad;
+    const runPad = spec.type === "built_in_run" || spec.type === "kitchen_run" ? 1.08 : 1;
+    const span = Math.max(2.8, spec.width * 1.55, spec.height * aspect * 1.18) * openWardrobePad * runPad;
     camera.left = -span / 2;
     camera.right = span / 2;
     camera.top = span / aspect / 2;
@@ -1081,7 +1268,7 @@ function shouldShowPrimaryOnIso() {
 }
 
 function shouldShowFeatureOnFront() {
-  return spec.type === "drawer_unit" || spec.type === "cabinet";
+  return ["drawer_unit", "cabinet", "built_in_run", "kitchen_run", "countertop", "lectern"].includes(spec.type);
 }
 
 function shouldShowFeatureOnIso() {
@@ -1104,8 +1291,20 @@ function primaryCalloutLines() {
   if (spec.type === "wardrobe" || spec.type === "cabinet") {
     return ["Корпус и фасады", top[1] || "МДФ"];
   }
+  if (spec.type === "built_in_run") {
+    return ["Система шкафов", top[1] || "ЛДСП, модульная линия"];
+  }
+  if (spec.type === "kitchen_run") {
+    return ["Кухонные модули", top[1] || "ЛДСП, фасады и корпус"];
+  }
   if (spec.type === "drawer_unit") {
     return ["Столешница / корпус", top[1] || "МДФ"];
+  }
+  if (spec.type === "countertop") {
+    return ["Столешница", top[1] || "материал по ТЗ"];
+  }
+  if (spec.type === "lectern") {
+    return ["Корпус трибуны", top[1] || "ЛДСП"];
   }
   return top;
 }
@@ -1119,6 +1318,18 @@ function featureCalloutLines() {
     if (spec.features.rod) return ["Внутреннее наполнение", "штанга, полки, обувная полка"];
     if (spec.features.shelves) return ["Полки", `${spec.features.shelves} шт., регулируемые`];
     return ["Двери", parts.doors?.material || "push-to-open"];
+  }
+  if (spec.type === "built_in_run") {
+    return ["Секции", `${spec.features.sectionCount || 2} модулей, фасады по ширине`];
+  }
+  if (spec.type === "kitchen_run") {
+    return ["Модули", `${spec.features.sectionCount || spec.modules.length || 3} секций, верх/низ`];
+  }
+  if (spec.type === "countertop") {
+    return ["Обрамление", "видимая рамка / опоры по ТЗ"];
+  }
+  if (spec.type === "lectern") {
+    return ["Фронтальная панель", "накладная, в цвет корпуса"];
   }
   if (spec.type === "coffee_fluted") {
     return ["Поверхность", "рифлёные вертикальные канелюры"];
@@ -1134,6 +1345,7 @@ function lowerCalloutLines() {
   if (spec.features.plinth || spec.features.plinthBlack) {
     return ["Цоколь", spec.features.plinthBlack ? "чёрный матовый" : "в цвет корпуса"];
   }
+  if (spec.features.metalFrame) return ["Опоры", "металл RAL 9005"];
   if (spec.features.feltPads) return ["Подпятники", "фетровые"];
   return [];
 }

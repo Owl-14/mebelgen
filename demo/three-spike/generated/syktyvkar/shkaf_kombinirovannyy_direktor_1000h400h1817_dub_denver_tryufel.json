@@ -1,7 +1,7 @@
 {
-  "id": "syktyvkar-38-stol_direktora_2000h800h750_dub_denver_tryufel_metall_9005",
-  "type": "desk_panel",
-  "title": "Стол директора 2000х800х750 Дуб Денвер Трюфель/Металл 9005",
+  "id": "syktyvkar-48-shkaf_kombinirovannyy_direktor_1000h400h1817_dub_denver_tryufel",
+  "type": "cabinet",
+  "title": "Шкаф комбинированный – директор 1000х400х1817 Дуб Денвер Трюфель",
   "classification": {
     "scope": "manufactured",
     "procurementFiltered": false
@@ -12,29 +12,29 @@
   },
   "source": {
     "project": "Сыктывкар 3 часть",
-    "position": "1",
-    "drawingNumber": "38",
-    "orderCode": "НФ-00007659",
+    "position": "10",
+    "drawingNumber": "48",
+    "orderCode": "НФ-00007668",
     "quantity": 1.0,
     "unit": "шт",
-    "rawTitle": "Стол директора 2000х800х750 Дуб Денвер Трюфель/Металл 9005"
+    "rawTitle": "Шкаф комбинированный – директор 1000х400х1817 Дуб Денвер Трюфель"
   },
   "dimensions": {
-    "widthMm": 2000.0,
-    "depthMm": 800.0,
-    "heightMm": 750.0
+    "widthMm": 1000.0,
+    "depthMm": 400.0,
+    "heightMm": 1817.0
   },
   "dimensionNote": "",
   "modules": [],
   "geometry": {
-    "overhangMm": 25,
-    "sectionCount": 1
+    "overhangMm": 0,
+    "sectionCount": 2
   },
   "parts": {
     "top": {
-      "label": "Столешница",
+      "label": "Корпус / фасады",
       "material": "ЛДСП, 16 мм, Дуб Денвер трюфель, Egger",
-      "thicknessMm": 25,
+      "thicknessMm": 16.0,
       "displayColor": "#b09673"
     },
     "sidePanels": {
@@ -43,29 +43,28 @@
       "thicknessMm": 16.0,
       "displayColor": "#b09673"
     },
-    "frontScreen": {
-      "label": "Передний экран",
+    "doors": {
+      "label": "Фасады",
       "material": "ЛДСП, 16 мм, Дуб Денвер трюфель, Egger",
-      "thicknessMm": 16,
-      "heightMm": 300,
+      "count": 2,
       "displayColor": "#b09673"
     },
-    "metalFrame": {
-      "label": "Металлокаркас / опоры",
-      "material": "RAL 9005",
-      "displayColor": "#111111"
+    "shelves": {
+      "label": "Полки",
+      "material": "ЛДСП, 16 мм, Дуб Денвер трюфель, Egger",
+      "count": 4
     }
   },
   "features": {
     "quantity": 1.0,
-    "sourceDrawing": "38",
-    "sectionCount": 1,
-    "metalFrame": true,
-    "plinth": false,
-    "plinthBlack": true,
+    "sourceDrawing": "48",
+    "sectionCount": 2,
+    "metalFrame": false,
+    "plinth": true,
+    "plinthBlack": false,
     "drawers": 0,
-    "shelves": 0,
-    "lock": false,
+    "shelves": 4,
+    "lock": true,
     "rod": false,
     "hatShelf": false,
     "shoeShelf": false,
@@ -81,21 +80,14 @@
       "widthMm": 2070.0,
       "thicknessMm": 16.0,
       "unit": "кв.м."
-    },
-    {
-      "query": "RAL 9005",
-      "type": "color",
-      "code": "RAL 9005",
-      "label": "RAL 9005"
     }
   ],
   "materials": [
     "Дуб Денвер Трюфель: ЛДСП, 16 мм, Дуб Денвер трюфель, Egger, 16мм",
-    "Металл / опоры: RAL 9005",
     "*Фактические замеры обязательны."
   ],
   "titleBlock": {
-    "sheetName": "Стол директора 2000х800х750 Дуб Денвер Трюфель/Металл 9005",
+    "sheetName": "Шкаф комбинированный – директор 1000х400х1817 Дуб Денвер Трюфель",
     "date": "20.02.2026",
     "manager": "Петрова А.А."
   }
