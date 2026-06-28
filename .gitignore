@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*._auto.docx
+*.egg-info/
+.venv/
+.env
+.env.*
+*.log
+
+# кэш медиа при повторном парсинге docx (исходники в input_specs/)
+**/media_rows/
