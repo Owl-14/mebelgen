@@ -1,0 +1,267 @@
+{
+  "project_name": "Шкаф 700×400×500",
+  "furniture_type": "шкаф",
+  "overall_dimensions": {
+    "width": 700,
+    "depth": 400,
+    "height": 500,
+    "tolerance": 5
+  },
+  "materials": {
+    "board_material": "ЛДСП",
+    "board_thickness": 16,
+    "back_wall_material": "ЛДСП",
+    "edge_band_thickness": 0.4,
+    "color": "по согласованию",
+    "color_code": ""
+  },
+  "sections": [
+    {
+      "id": "main",
+      "type": "door",
+      "dimensions": { "width": 668, "height": 468, "depth": 368, "estimated": false },
+      "elements": [
+        "shelf_1",
+        "shelf_2",
+        "shelf_3",
+        "shelf_4",
+        "shelf_5",
+        "shelf_6",
+        "door_1"
+      ]
+    }
+  ],
+  "panels": [
+    {
+      "name": "Дно",
+      "type": "bottom",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": { "width": 700, "height": 400 },
+      "placement": { "x1": 0, "x2": 700, "y1": 0, "y2": 16, "z1": 0, "z2": 400 },
+      "position": { "x": 0, "y": 0, "z": 0 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "edge_banding": { "top": 0.4, "bottom": 0, "left": 0.4, "right": 0.4 },
+      "estimated": false
+    },
+    {
+      "name": "Крышка",
+      "type": "top",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": { "width": 700, "height": 400 },
+      "placement": { "x1": 0, "x2": 700, "y1": 484, "y2": 500, "z1": 0, "z2": 400 },
+      "position": { "x": 0, "y": 484, "z": 0 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "edge_banding": { "top": 0.4, "bottom": 0.4, "left": 0.4, "right": 0.4 },
+      "estimated": false
+    },
+    {
+      "name": "Боковина левая",
+      "type": "side_left",
+      "basis_orientation": "vertical",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": { "width": 400, "height": 468 },
+      "placement": { "x1": 0, "x2": 16, "y1": 16, "y2": 484, "z1": 0, "z2": 400 },
+      "position": { "x": 0, "y": 16, "z": 0 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "edge_banding": { "top": 0.4, "bottom": 0.4, "left": 0.4, "right": 0.4 },
+      "estimated": false
+    },
+    {
+      "name": "Боковина правая",
+      "type": "side_right",
+      "basis_orientation": "vertical",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": { "width": 400, "height": 468 },
+      "placement": { "x1": 684, "x2": 700, "y1": 16, "y2": 484, "z1": 0, "z2": 400 },
+      "position": { "x": 684, "y": 16, "z": 0 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "edge_banding": { "top": 0.4, "bottom": 0.4, "left": 0.4, "right": 0.4 },
+      "estimated": false
+    },
+    {
+      "name": "Задняя стенка",
+      "type": "back",
+      "basis_orientation": "front",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": { "width": 668, "height": 468 },
+      "placement": { "x1": 16, "x2": 684, "y1": 16, "y2": 484, "z1": 384, "z2": 400 },
+      "position": { "x": 16, "y": 16, "z": 384 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "edge_banding": { "top": 0.4, "bottom": 0.4, "left": 0.4, "right": 0.4 },
+      "estimated": false
+    },
+    {
+      "name": "Полка 1",
+      "type": "shelf",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": { "width": 668, "height": 368 },
+      "placement": { "x1": 16, "x2": 684, "y1": 69, "y2": 85, "z1": 16, "z2": 384 },
+      "position": { "x": 16, "y": 69, "z": 16 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "edge_banding": { "top": 0.4, "bottom": 0.4, "left": 0.4, "right": 0.4 },
+      "estimated": false,
+      "section_id": "main"
+    },
+    {
+      "name": "Полка 2",
+      "type": "shelf",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": { "width": 668, "height": 368 },
+      "placement": { "x1": 16, "x2": 684, "y1": 138, "y2": 154, "z1": 16, "z2": 384 },
+      "position": { "x": 16, "y": 138, "z": 16 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "edge_banding": { "top": 0.4, "bottom": 0.4, "left": 0.4, "right": 0.4 },
+      "estimated": false,
+      "section_id": "main"
+    },
+    {
+      "name": "Полка 3",
+      "type": "shelf",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": { "width": 668, "height": 368 },
+      "placement": { "x1": 16, "x2": 684, "y1": 207, "y2": 223, "z1": 16, "z2": 384 },
+      "position": { "x": 16, "y": 207, "z": 16 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "edge_banding": { "top": 0.4, "bottom": 0.4, "left": 0.4, "right": 0.4 },
+      "estimated": false,
+      "section_id": "main"
+    },
+    {
+      "name": "Полка 4",
+      "type": "shelf",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": { "width": 668, "height": 368 },
+      "placement": { "x1": 16, "x2": 684, "y1": 276, "y2": 292, "z1": 16, "z2": 384 },
+      "position": { "x": 16, "y": 276, "z": 16 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "edge_banding": { "top": 0.4, "bottom": 0.4, "left": 0.4, "right": 0.4 },
+      "estimated": false,
+      "section_id": "main"
+    },
+    {
+      "name": "Полка 5",
+      "type": "shelf",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": { "width": 668, "height": 368 },
+      "placement": { "x1": 16, "x2": 684, "y1": 345, "y2": 361, "z1": 16, "z2": 384 },
+      "position": { "x": 16, "y": 345, "z": 16 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "edge_banding": { "top": 0.4, "bottom": 0.4, "left": 0.4, "right": 0.4 },
+      "estimated": false,
+      "section_id": "main"
+    },
+    {
+      "name": "Полка 6",
+      "type": "shelf",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": { "width": 668, "height": 368 },
+      "placement": { "x1": 16, "x2": 684, "y1": 414, "y2": 430, "z1": 16, "z2": 384 },
+      "position": { "x": 16, "y": 414, "z": 16 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "edge_banding": { "top": 0.4, "bottom": 0.4, "left": 0.4, "right": 0.4 },
+      "estimated": false,
+      "section_id": "main"
+    },
+    {
+      "name": "Фасад двери",
+      "type": "door_front",
+      "basis_orientation": "front",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": { "width": 696, "height": 464 },
+      "placement": { "x1": 2, "x2": 698, "y1": 18, "y2": 482, "z1": 0, "z2": 16 },
+      "position": { "x": 2, "y": 18, "z": 0 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "edge_banding": { "top": 0.4, "bottom": 0.4, "left": 0.4, "right": 0.4 },
+      "estimated": false,
+      "section_id": "main"
+    }
+  ],
+  "drawers": [],
+  "doors": [
+    {
+      "id": "door_1",
+      "type": "распашная",
+      "hinges": "накладные",
+      "lock": false,
+      "dimensions": { "width": 696, "height": 464 },
+      "position": { "x": 2, "y": 18, "z": 0 },
+      "estimated": false
+    }
+  ],
+  "hardware": {
+    "handles": {
+      "type": "ручка",
+      "material": "металл",
+      "color": "по согласованию",
+      "size": 128,
+      "count": 1,
+      "offset_from_top": 32,
+      "furniture_encoded": ""
+    },
+    "legs": {
+      "type": "нет",
+      "adjustable": false,
+      "color": "—",
+      "height": 0,
+      "count": 0
+    }
+  },
+  "carcass_calculation": {
+    "board_thickness": 16,
+    "leg_height": 0,
+    "W": 700,
+    "D": 400,
+    "H": 500,
+    "internal_height": "484 - 16 = 468",
+    "shelf_count": 6,
+    "shelf_gap_formula": "(468 - 6*T) / 7 = 372/7 ≈ 53 мм между уровнями",
+    "shelf_y_levels": "69, 138, 207, 276, 345, 414 (низ каждой полки)",
+    "door_facade": "x 2..698, y 18..482, z 0..16, gap 2",
+    "shelf_depth_z": "16..384 (368 мм)"
+  },
+  "constraints": {
+    "default_gap": 2,
+    "drawer_gap": 2,
+    "door_gap": 2,
+    "back_wall_offset": 16,
+    "construction": "top_bottom_over_sides",
+    "shelf_front_inset": 0
+  },
+  "basis_mapping": {
+    "coordinate_system": "basis_mebelshik",
+    "units": "mm",
+    "ready_for_import": true,
+    "placement_required": true
+  },
+  "warnings": [
+    "6 стационарных полок, без выдвижных ящиков.",
+    "Петли и присадка — вручную в БАЗИС (Установка дверей) или после hardware.hinges в скрипте.",
+    "Ручка: 1 шт. на фасад (offset_from_top 32 мм).",
+    "Цвет ЛДСП не задан — указать в materials перед производством."
+  ],
+  "estimated_values": [
+    "materials.color",
+    "hardware.handles — тип и encoded",
+    "shelf spacing округлено до 53 мм"
+  ]
+}
