@@ -694,9 +694,17 @@ function buildDrawerUnitModel() {
     lock.position.set(W / 2 - drawerW / 2, H * 0.48, -D / 2 - 0.027);
     group.add(lock);
   }
-  addBox(group, { name: "plinth", size: [drawerW, plinthH, D * 0.92], pos: [W / 2 - drawerW / 2, plinthH / 2, 0.02], material: matSide, radius: 0.002 });
   if (spec.features.wheels) {
+    addBox(group, {
+      name: "bottom-rail",
+      size: [W * 0.82, 0.018, D * 0.82],
+      pos: [0, 0.009, 0.02],
+      material: matEdge,
+      radius: 0.002,
+    });
     addCasters(group, { W, D, matBlack, matBlackSoft });
+  } else {
+    addBox(group, { name: "plinth", size: [drawerW, plinthH, D * 0.92], pos: [W / 2 - drawerW / 2, plinthH / 2, 0.02], material: matSide, radius: 0.002 });
   }
 
   addOutlines(group);
@@ -944,24 +952,24 @@ function addShoes(parent, { x, y, z, material }) {
 }
 
 function addCasters(parent, { W, D, matBlack, matBlackSoft }) {
-  const insetX = Math.min(0.075, W * 0.18);
-  const insetZ = Math.min(0.075, D * 0.18);
+  const insetX = Math.min(0.058, W * 0.16);
+  const insetZ = Math.min(0.058, D * 0.16);
   for (const x of [-W / 2 + insetX, W / 2 - insetX]) {
     for (const z of [-D / 2 + insetZ, D / 2 - insetZ]) {
       addBox(parent, {
-        name: "caster-fork",
-        size: [0.038, 0.024, 0.022],
-        pos: [x, 0.012, z],
+        name: "caster-plate",
+        size: [0.048, 0.006, 0.036],
+        pos: [x, 0.006, z],
         material: matBlackSoft,
-        radius: 0.004,
+        radius: 0.002,
       });
-      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.019, 0.018, 24), matBlack);
-      wheel.name = "caster-wheel";
-      wheel.rotation.x = Math.PI / 2;
-      wheel.position.set(x, -0.006, z);
-      wheel.castShadow = true;
-      wheel.receiveShadow = true;
-      parent.add(wheel);
+      addBox(parent, {
+        name: "caster-wheel",
+        size: [0.03, 0.024, 0.024],
+        pos: [x, -0.007, z],
+        material: matBlack,
+        radius: 0.01,
+      });
     }
   }
 }
@@ -1302,8 +1310,8 @@ function fitCamera(camera, aspect, mode, model) {
 function frontCameraDirection() {
   const wideRun = ["built_in_run", "kitchen_run"].includes(spec.type) || spec.width / Math.max(spec.depth, 0.1) > 3.2;
   const tallCase = ["wardrobe", "cabinet"].includes(spec.type) && spec.height > 1.4;
-  const yaw = wideRun ? 0.07 : tallCase ? 0.1 : 0.16;
-  const lift = wideRun ? 0.1 : tallCase ? 0.13 : 0.22;
+  const yaw = wideRun ? 0.012 : tallCase ? 0.004 : 0.028;
+  const lift = wideRun ? 0.06 : tallCase ? 0.025 : 0.135;
   return new THREE.Vector3(yaw, lift, 1);
 }
 
@@ -1491,7 +1499,7 @@ function genericFrontOverlay(P, view) {
   const leftBottom = P(-W / 2, 0, -D / 2);
   const bodyPoint = P(-W * 0.2, H * 0.68, -D / 2);
   const featurePoint = P(W * 0.26, H * 0.5, -D / 2);
-  const lowerPoint = P(W * 0.18, H * 0.12, -D / 2);
+  const lowerPoint = spec.features.wheels ? P(-W * 0.32, H * 0.055, -D / 2) : P(W * 0.18, H * 0.12, -D / 2);
   const widthY = clamp(leftTop.y - 30, 16, Math.max(17, leftTop.y - 18));
   const heightX = clamp(leftTop.x - 68, 34, Math.max(35, leftTop.x - 24));
   const calloutItems = [];
@@ -1555,6 +1563,7 @@ function genericIsoOverlay(P, view) {
     <g class="dim">
       ${dimAlong(topA, topB, -26, spec.labels.width, "iso-arrow")}
       ${dimAlong(topB, depthB, -22, spec.labels.depth, "iso-arrow")}
+      ${shelfSpacingDims(P, { W, D, H })}
     </g>
     <g class="callout">
       ${stackedCallouts(calloutItems, view, { yMin: 42, yMax: view.height - 36, gap: 10 })}
@@ -1592,6 +1601,26 @@ function wardrobeIsoOverlay(P, view) {
       )}
     </g>
   `;
+}
+
+function shelfSpacingDims(P, { W, D, H }) {
+  const shouldShow = spec.features.shelves || spec.features.rod || spec.features.hatShelf || spec.features.shoeShelf;
+  if (!shouldShow || H < 1.1) return "";
+  const plinthH = H > 1.2 ? 0.07 : 0.08;
+  const spaces = Math.max(2, Math.min(5, Number(spec.features.shelves || 4) + 1));
+  const innerTop = H - 0.08;
+  const innerBottom = plinthH + 0.06;
+  const spacing = (innerTop - innerBottom) / spaces;
+  const x = -W * 0.43;
+  const z = -D * 0.18;
+  const out = [];
+  for (let i = 0; i < spaces; i += 1) {
+    const a = P(x, innerTop - i * spacing, z);
+    const b = P(x, innerTop - (i + 1) * spacing, z);
+    const xDim = Math.max(30, Math.min(a.x, b.x) - 24);
+    out.push(dimV(a.y, b.y, a.x, xDim, `~${formatMm(spacing * 1000)}`, "iso-arrow", "left"));
+  }
+  return out.join("");
 }
 
 function shouldShowPrimaryOnFront() {
