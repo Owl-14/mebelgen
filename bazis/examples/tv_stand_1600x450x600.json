@@ -1,0 +1,723 @@
+{
+  "project_name": "Тумба под ТВ 1600×450×600 (2 двери + 2 ящика)",
+  "furniture_type": "тумба",
+  "overall_dimensions": {
+    "width": 1600,
+    "depth": 450,
+    "height": 600,
+    "tolerance": 5
+  },
+  "materials": {
+    "board_material": "ЛДСП",
+    "board_thickness": 16,
+    "back_wall_material": "ДВП",
+    "edge_band_thickness": 0.4,
+    "color": "по согласованию",
+    "color_code": ""
+  },
+  "sections": [
+    {
+      "id": "left_door",
+      "type": "door",
+      "dimensions": {
+        "width": 414,
+        "height": 430,
+        "depth": 400,
+        "estimated": true
+      },
+      "elements": [
+        "Полка левая",
+        "Дверь левая"
+      ]
+    },
+    {
+      "id": "center_drawers",
+      "type": "drawer_stack",
+      "dimensions": {
+        "width": 708,
+        "height": 430,
+        "depth": 400,
+        "estimated": true
+      },
+      "elements": [
+        "Фасад ящик 1",
+        "Фасад ящик 2"
+      ]
+    },
+    {
+      "id": "right_door",
+      "type": "door",
+      "dimensions": {
+        "width": 414,
+        "height": 430,
+        "depth": 400,
+        "estimated": true
+      },
+      "elements": [
+        "Полка правая",
+        "Дверь правая"
+      ]
+    }
+  ],
+  "panels": [
+    {
+      "name": "Крышка",
+      "type": "top",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 40,
+      "dimensions": {
+        "width": 1600,
+        "height": 450
+      },
+      "placement": {
+        "x1": 0,
+        "x2": 1600,
+        "y1": 560,
+        "y2": 600,
+        "z1": -50,
+        "z2": 400
+      },
+      "position": {
+        "x": 0,
+        "y": 560,
+        "z": -50
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
+      "estimated": true
+    },
+    {
+      "name": "Цоколь (условный)",
+      "type": "plinth",
+      "basis_orientation": "front",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 1600,
+        "height": 114
+      },
+      "placement": {
+        "x1": 0,
+        "x2": 1600,
+        "y1": 0,
+        "y2": 114,
+        "z1": 0,
+        "z2": 16
+      },
+      "position": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0,
+        "bottom": 0,
+        "left": 0,
+        "right": 0
+      },
+      "estimated": true
+    },
+    {
+      "name": "Дно",
+      "type": "bottom",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 1600,
+        "height": 400
+      },
+      "placement": {
+        "x1": 0,
+        "x2": 1600,
+        "y1": 114,
+        "y2": 130,
+        "z1": 0,
+        "z2": 396.8
+      },
+      "position": {
+        "x": 0,
+        "y": 114,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0,
+        "bottom": 0,
+        "left": 0.4,
+        "right": 0.4
+      },
+      "estimated": true
+    },
+    {
+      "name": "Боковина левая",
+      "type": "side_left",
+      "basis_orientation": "vertical",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 400,
+        "height": 430
+      },
+      "placement": {
+        "x1": 0,
+        "x2": 16,
+        "y1": 130,
+        "y2": 560,
+        "z1": 0,
+        "z2": 396.8
+      },
+      "position": {
+        "x": 0,
+        "y": 130,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0,
+        "left": 0.4,
+        "right": 0
+      },
+      "estimated": true
+    },
+    {
+      "name": "Перегородка левая",
+      "type": "vertical_partition",
+      "basis_orientation": "vertical",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 400,
+        "height": 430
+      },
+      "placement": {
+        "x1": 430,
+        "x2": 446,
+        "y1": 130,
+        "y2": 560,
+        "z1": 0,
+        "z2": 396.8
+      },
+      "position": {
+        "x": 430,
+        "y": 130,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0,
+        "bottom": 0,
+        "left": 0,
+        "right": 0
+      },
+      "estimated": true
+    },
+    {
+      "name": "Перегородка правая",
+      "type": "vertical_partition",
+      "basis_orientation": "vertical",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 400,
+        "height": 430
+      },
+      "placement": {
+        "x1": 1154,
+        "x2": 1170,
+        "y1": 130,
+        "y2": 560,
+        "z1": 0,
+        "z2": 396.8
+      },
+      "position": {
+        "x": 1154,
+        "y": 130,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0,
+        "bottom": 0,
+        "left": 0,
+        "right": 0
+      },
+      "estimated": true
+    },
+    {
+      "name": "Боковина правая",
+      "type": "side_right",
+      "basis_orientation": "vertical",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 400,
+        "height": 430
+      },
+      "placement": {
+        "x1": 1584,
+        "x2": 1600,
+        "y1": 130,
+        "y2": 560,
+        "z1": 0,
+        "z2": 396.8
+      },
+      "position": {
+        "x": 1584,
+        "y": 130,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0,
+        "left": 0,
+        "right": 0.4
+      },
+      "estimated": true
+    },
+    {
+      "name": "Задняя стенка",
+      "type": "back",
+      "basis_orientation": "front",
+      "material": "ДВП",
+      "thickness": 3.2,
+      "dimensions": {
+        "width": 1568,
+        "height": 430
+      },
+      "placement": {
+        "x1": 16,
+        "x2": 1584,
+        "y1": 130,
+        "y2": 560,
+        "z1": 396.8,
+        "z2": 400
+      },
+      "position": {
+        "x": 16,
+        "y": 130,
+        "z": 396.8
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0,
+        "bottom": 0,
+        "left": 0,
+        "right": 0
+      },
+      "estimated": true
+    },
+    {
+      "name": "Полка левая",
+      "type": "shelf",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 414,
+        "height": 400
+      },
+      "placement": {
+        "x1": 16,
+        "x2": 430,
+        "y1": 345,
+        "y2": 361,
+        "z1": 0,
+        "z2": 396.8
+      },
+      "position": {
+        "x": 16,
+        "y": 345,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
+      "estimated": true,
+      "section_id": "left_door"
+    },
+    {
+      "name": "Полка правая",
+      "type": "shelf",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 414,
+        "height": 400
+      },
+      "placement": {
+        "x1": 1170,
+        "x2": 1584,
+        "y1": 345,
+        "y2": 361,
+        "z1": 0,
+        "z2": 396.8
+      },
+      "position": {
+        "x": 1170,
+        "y": 345,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
+      "estimated": true,
+      "section_id": "right_door"
+    },
+    {
+      "name": "Дверь левая",
+      "type": "door_front",
+      "basis_orientation": "front",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 410,
+        "height": 426
+      },
+      "placement": {
+        "x1": 18,
+        "x2": 428,
+        "y1": 132,
+        "y2": 558,
+        "z1": -16.0,
+        "z2": 0
+      },
+      "position": {
+        "x": 18,
+        "y": 132,
+        "z": -16.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
+      "estimated": true,
+      "section_id": "left_door"
+    },
+    {
+      "name": "Дверь правая",
+      "type": "door_front",
+      "basis_orientation": "front",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 410,
+        "height": 426
+      },
+      "placement": {
+        "x1": 1172,
+        "x2": 1582,
+        "y1": 132,
+        "y2": 558,
+        "z1": -16.0,
+        "z2": 0
+      },
+      "position": {
+        "x": 1172,
+        "y": 132,
+        "z": -16.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
+      "estimated": true,
+      "section_id": "right_door"
+    },
+    {
+      "name": "Фасад ящик 1",
+      "type": "drawer_front",
+      "basis_orientation": "front",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 704,
+        "height": 212
+      },
+      "placement": {
+        "x1": 448,
+        "x2": 1152,
+        "y1": 132,
+        "y2": 344,
+        "z1": 0,
+        "z2": 16
+      },
+      "position": {
+        "x": 448,
+        "y": 132,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
+      "estimated": true,
+      "section_id": "center_drawers"
+    },
+    {
+      "name": "Фасад ящик 2",
+      "type": "drawer_front",
+      "basis_orientation": "front",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 704,
+        "height": 212
+      },
+      "placement": {
+        "x1": 448,
+        "x2": 1152,
+        "y1": 346,
+        "y2": 558,
+        "z1": 0,
+        "z2": 16
+      },
+      "position": {
+        "x": 448,
+        "y": 346,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
+      "estimated": true,
+      "section_id": "center_drawers"
+    }
+  ],
+  "drawers": [
+    {
+      "id": "drawer_1",
+      "count": 1,
+      "guide_type": "шариковые",
+      "soft_close": false,
+      "lock": false,
+      "dimensions": {
+        "width": 708,
+        "height": 180,
+        "depth": 400
+      },
+      "position": {
+        "x": 446,
+        "y": 132,
+        "z": 16
+      },
+      "estimated": true
+    },
+    {
+      "id": "drawer_2",
+      "count": 1,
+      "guide_type": "шариковые",
+      "soft_close": false,
+      "lock": false,
+      "dimensions": {
+        "width": 708,
+        "height": 180,
+        "depth": 400
+      },
+      "position": {
+        "x": 446,
+        "y": 346,
+        "z": 16
+      },
+      "estimated": true
+    }
+  ],
+  "doors": [
+    {
+      "id": "door_left",
+      "type": "распашная",
+      "hinges": "регулируемые",
+      "lock": false,
+      "dimensions": {
+        "width": 410,
+        "height": 426
+      },
+      "position": {
+        "x": 18,
+        "y": 132,
+        "z": 0
+      },
+      "estimated": true
+    },
+    {
+      "id": "door_right",
+      "type": "распашная",
+      "hinges": "регулируемые",
+      "lock": false,
+      "dimensions": {
+        "width": 410,
+        "height": 426
+      },
+      "position": {
+        "x": 1172,
+        "y": 132,
+        "z": 0
+      },
+      "estimated": true
+    }
+  ],
+  "hardware": {
+    "handles": {
+      "type": "ручка-скоба",
+      "material": "металл",
+      "color": "—",
+      "size": 128,
+      "count": 4,
+      "offset_from_top": 40,
+      "furniture_encoded": ""
+    },
+    "drawer_guides": {
+      "type": "направляющие",
+      "length_mm": 400,
+      "soft_close": false,
+      "cabinet_left_panel": "Перегородка левая",
+      "cabinet_right_panel": "Перегородка правая",
+      "furniture_encoded": ""
+    },
+    "legs": {
+      "type": "цоколь",
+      "adjustable": false,
+      "color": "—",
+      "height": 114,
+      "count": 0
+    },
+    "locks": []
+  },
+  "constraints": {
+    "default_gap": 2,
+    "drawer_gap": 2,
+    "door_gap": 2,
+    "back_wall_offset": 3.2,
+    "construction": "tumba_tv_2doors_2drawers",
+    "carcass_depth": 400,
+    "top_overhang_front": 50,
+    "top_thickness": 40,
+    "plinth_height": 114
+  },
+  "basis_mapping": {
+    "coordinate_system": "basis_mebelshik",
+    "units": "mm",
+    "ready_for_import": true,
+    "placement_required": true
+  },
+  "warnings": [
+    "Толщина столешницы и свес по глубине не подписаны: принято top_thickness=40 и свес 50 мм вперёд (estimated).",
+    "Глубина корпуса по боковому виду 400, глубина столешницы 450 (по чертежу).",
+    "Высоты фасадов ящиков рассчитаны по фасадной полосе (2 ящика, gap=2); размеры 180 на чертеже трактованы как ориентиры (estimated).",
+    "Цоколь показан на чертеже, смоделирован условной фронт-панелью на Y=0..114 (для визуализации)."
+  ],
+  "estimated_values": [
+    "materials.board_thickness",
+    "materials.back_wall_material",
+    "constraints.top_thickness",
+    "constraints.top_overhang_front",
+    "constraints.plinth_height",
+    "panels[0].estimated",
+    "panels[1].estimated",
+    "drawers[].dimensions",
+    "doors[].dimensions"
+  ],
+  "carcass_calculation": {
+    "W": 1600,
+    "D_top": 450,
+    "D_carcass": 400,
+    "H": 600,
+    "T": 16,
+    "T_back": 3.2,
+    "top_thickness": 40,
+    "plinth_height": 114,
+    "body_y": "y_bottom=114..130, y_sides=130..560, y_top=560..600",
+    "x_layout": "16 + 414 + 16 + 708 + 16 + 414 + 16 = 1600 (4 вертикали по 16)",
+    "facade_z": "z 0..16, корпусные панели z 0..396.8, задник z 396.8..400",
+    "door_x": "left 18..428, right 1172..1582 (inset doors, gap=2)",
+    "drawer_x": "center 448..1152 (gap=2 внутри проёма 446..1154)",
+    "shelf_y": "полки в боковых секциях приняты y 345..361 (estimated)"
+  }
+}
