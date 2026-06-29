@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "paramspec-v1",
+  "project_name": "Тумба 404×490×674 (3 ящика + верхняя ниша)",
+  "furniture_type": "тумба",
+  "archetype": "drawer_unit",
+  "dimensions": { "width": 404, "depth": 490, "height": 674, "tolerance": 3 },
+  "materials": {
+    "board_thickness": 16,
+    "back_thickness": 3.2,
+    "board_material": "ЛДСП",
+    "back_material": "ДВП",
+    "edge_band_thickness": 0.4,
+    "color": "по согласованию",
+    "color_code": ""
+  },
+  "legs": { "type": "колёса (ролики)", "height": 0 },
+  "gaps": { "facade": 2, "default": 2 },
+  "sections": [
+    {
+      "id": "drawer_stack",
+      "kind": "drawers",
+      "drawers": 3,
+      "front_bottom": 68,
+      "drawer_heights": [156, 156, 155],
+      "open_top": true,
+      "guide_gap": 14.5,
+      "box_z1": 16,
+      "box_depth": 428,
+      "box_y_offset": 16,
+      "box_height": 81,
+      "box_back_thickness": 16,
+      "box_bottom_thickness": 16
+    }
+  ],
+  "hardware": {
+    "handles": { "type": "ручка-скоба", "material": "металл", "color": "—", "size": 128, "count": 3, "offset_from_top": 40, "furniture_encoded": "" },
+    "drawer_guides": { "type": "направляющие", "length_mm": 450, "soft_close": false, "cabinet_left_panel": "Боковина левая", "cabinet_right_panel": "Боковина правая", "furniture_encoded": "" }
+  },
+  "warnings": ["Толщины приняты T=16, задник ДВП 3.2 (estimated).", "Размеры коробов ящиков оценочные."],
+  "estimated_values": ["materials.board_thickness", "drawer box params", "hardware sizes"]
+}

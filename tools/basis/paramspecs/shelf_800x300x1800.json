@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "paramspec-v1",
+  "project_name": "Стеллаж 800×300×1800",
+  "furniture_type": "стеллаж",
+  "archetype": "shelving",
+  "dimensions": { "width": 800, "depth": 300, "height": 1800, "tolerance": 5 },
+  "materials": {
+    "board_thickness": 16,
+    "back_thickness": 16,
+    "board_material": "ЛДСП",
+    "back_material": "ЛДСП",
+    "edge_band_thickness": 0.4,
+    "color": "по согласованию",
+    "color_code": ""
+  },
+  "legs": { "type": "опоры регулируемые", "height": 0 },
+  "gaps": { "facade": 2, "default": 2 },
+  "sections": [
+    { "id": "main", "kind": "shelves", "shelves": 5 }
+  ],
+  "hardware": {
+    "handles": { "type": "нет", "material": "—", "color": "—", "size": 0, "count": 0, "offset_from_top": 0, "furniture_encoded": "" }
+  },
+  "warnings": ["Открытый стеллаж, 5 полок равномерно."],
+  "estimated_values": ["materials.color"]
+}

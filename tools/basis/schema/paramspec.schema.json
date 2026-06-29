@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bazis-converter.local/schema/paramspec.schema.json",
+  "title": "BasisParamSpec",
+  "description": "Высокоуровневое описание изделия параметрами (без координат). По нему генератор архетипа строит project.json с panels[].",
+  "type": "object",
+  "required": ["schemaVersion", "project_name", "archetype", "dimensions", "materials"],
+  "additionalProperties": true,
+  "properties": {
+    "schemaVersion": { "const": "paramspec-v1" },
+    "project_name": { "type": "string", "minLength": 1 },
+    "furniture_type": { "type": "string" },
+    "archetype": {
+      "type": "string",
+      "enum": ["corpus", "shelving", "drawer_unit", "door_unit", "cabinet", "wardrobe", "desk", "table", "composite"]
+    },
+    "dimensions": {
+      "type": "object",
+      "required": ["width", "depth", "height"],
+      "additionalProperties": false,
+      "properties": {
+        "width": { "type": "number", "exclusiveMinimum": 0 },
+        "depth": { "type": "number", "exclusiveMinimum": 0 },
+        "height": { "type": "number", "exclusiveMinimum": 0 },
+        "depth_carcass": { "type": "number", "exclusiveMinimum": 0 },
+        "tolerance": { "type": "number" }
+      }
+    },
+    "materials": {
+      "type": "object",
+      "required": ["board_thickness"],
+      "additionalProperties": false,
+      "properties": {
+        "board_thickness": { "type": "number", "exclusiveMinimum": 0 },
+        "back_thickness": { "type": "number", "exclusiveMinimum": 0 },
+        "board_material": { "type": "string" },
+        "back_material": { "type": "string" },
+        "edge_band_thickness": { "type": "number", "minimum": 0 },
+        "color": { "type": "string" },
+        "color_code": { "type": "string" }
+      }
+    },
+    "legs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": { "type": "string" },
+        "height": { "type": "number", "minimum": 0 },
+        "adjustable": { "type": "boolean" },
+        "color": { "type": "string" },
+        "count": { "type": "integer", "minimum": 0 },
+        "as_panel": { "type": "boolean", "description": "Моделировать цоколь отдельной панелью 0..height" }
+      }
+    },
+    "gaps": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "facade": { "type": "number", "minimum": 0 },
+        "default": { "type": "number", "minimum": 0 }
+      }
+    },
+    "sections": {
+      "type": "array",
+      "description": "Колонки по ширине (слева направо). Внутри — вертикальное содержимое.",
+      "items": {
+        "type": "object",
+        "required": ["kind"],
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": "string" },
+          "kind": {
+            "type": "string",
+            "enum": ["shelves", "drawers", "open", "door"]
+          },
+          "width_share": { "type": "number", "exclusiveMinimum": 0, "description": "Доля ширины (по умолчанию делится поровну)" },
+          "shelves": { "type": "integer", "minimum": 0 },
+          "shelf_levels": { "type": "array", "items": { "type": "number" }, "description": "Явные уровни низа полок по Y (если заданы — важнее count)" },
+          "drawers": { "type": "integer", "minimum": 0 },
+          "drawer_heights": { "type": "array", "items": { "type": "number" }, "description": "Явные высоты фасадов ящиков (иначе делятся поровну)" },
+          "door": { "type": "integer", "minimum": 0, "maximum": 2 },
+          "door_inset": { "type": "boolean", "description": "true — врезная в проём, false — накладная" },
+          "open_top_height": { "type": "number", "minimum": 0, "description": "Высота верхней открытой ниши над содержимым (с полкой-отбивкой)" }
+        }
+      }
+    },
+    "hardware": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "handles": { "type": "object" },
+        "drawer_guides": { "type": "object" },
+        "hinges": { "type": "object" },
+        "locks": { "type": "array" }
+      }
+    },
+    "features": { "type": "array", "items": { "type": "string" } },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "estimated_values": { "type": "array", "items": { "type": "string" } }
+  }
+}

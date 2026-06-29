@@ -1,0 +1,213 @@
+{
+  "project_name": "Стойка охраны",
+  "furniture_type": "стойка",
+  "overall_dimensions": {
+    "width": 1700,
+    "depth": 800,
+    "height": 1300,
+    "tolerance": 10
+  },
+  "materials": {
+    "board_material": "ЛДСП",
+    "board_thickness": 16,
+    "back_wall_material": "ЛДСП",
+    "edge_band_thickness": 0.4,
+    "color": "Серый (комбинированный U 960 / U 708)",
+    "color_code": "U 960 ST9 / U 708 ST9"
+  },
+  "sections": [
+    {
+      "id": "front_counter",
+      "type": "counter",
+      "dimensions": { "width": 1700, "height": 1200, "depth": 300, "estimated": true },
+      "elements": ["front_left_panel", "front_mid_panel", "front_right_panel", "top_client"]
+    },
+    {
+      "id": "operator_area",
+      "type": "workspace",
+      "dimensions": { "width": 1000, "height": 650, "depth": 800, "estimated": true },
+      "elements": ["worktop_operator"]
+    }
+  ],
+  "panels": [
+    {
+      "name": "Дно",
+      "type": "bottom",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": { "width": 1700, "height": 800 },
+      "placement": { "x1": 0, "x2": 1700, "y1": 100, "y2": 116, "z1": 0, "z2": 800 },
+      "position": { "x": 0, "y": 100, "z": 0 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "edge_banding": { "top": 0.4, "bottom": 0, "left": 0.4, "right": 0.4 },
+      "estimated": false
+    },
+    {
+      "name": "Боковина левая",
+      "type": "side_left",
+      "basis_orientation": "vertical",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": { "width": 800, "height": 1168 },
+      "placement": { "x1": 0, "x2": 16, "y1": 116, "y2": 1284, "z1": 0, "z2": 800 },
+      "position": { "x": 0, "y": 116, "z": 0 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "edge_banding": { "top": 0.4, "bottom": 0.4, "left": 0.4, "right": 0.4 },
+      "estimated": false
+    },
+    {
+      "name": "Боковина правая",
+      "type": "side_right",
+      "basis_orientation": "vertical",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": { "width": 800, "height": 1168 },
+      "placement": { "x1": 1684, "x2": 1700, "y1": 116, "y2": 1284, "z1": 0, "z2": 800 },
+      "position": { "x": 1684, "y": 116, "z": 0 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "edge_banding": { "top": 0.4, "bottom": 0.4, "left": 0.4, "right": 0.4 },
+      "estimated": false
+    },
+    {
+      "name": "Задняя стенка",
+      "type": "back",
+      "basis_orientation": "front",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": { "width": 1668, "height": 1168 },
+      "placement": { "x1": 16, "x2": 1684, "y1": 116, "y2": 1284, "z1": 784, "z2": 800 },
+      "position": { "x": 16, "y": 116, "z": 784 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "edge_banding": { "top": 0.4, "bottom": 0.4, "left": 0.4, "right": 0.4 },
+      "estimated": true
+    },
+    {
+      "name": "Столешница оператора (внутренняя 1000)",
+      "type": "shelf",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП U 708 ST9 (светло-серый)",
+      "thickness": 16,
+      "dimensions": { "width": 1000, "height": 800 },
+      "placement": { "x1": 350, "x2": 1350, "y1": 734, "y2": 750, "z1": 0, "z2": 800 },
+      "position": { "x": 350, "y": 734, "z": 0 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "edge_banding": { "top": 0.4, "bottom": 0.4, "left": 0.4, "right": 0.4 },
+      "estimated": false,
+      "section_id": "operator_area"
+    },
+    {
+      "name": "Крышка верхняя (клиентская 300)",
+      "type": "top",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": { "width": 1700, "height": 300 },
+      "placement": { "x1": 0, "x2": 1700, "y1": 1284, "y2": 1300, "z1": 0, "z2": 300 },
+      "position": { "x": 0, "y": 1284, "z": 0 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "edge_banding": { "top": 0.4, "bottom": 0.4, "left": 0.4, "right": 0.4 },
+      "estimated": true,
+      "section_id": "front_counter"
+    },
+    {
+      "name": "Фасад верхний левый (350, U960)",
+      "type": "front_panel",
+      "basis_orientation": "front",
+      "material": "ЛДСП U 960 ST9 (Оникс серый)",
+      "thickness": 16,
+      "dimensions": { "width": 350, "height": 534 },
+      "placement": { "x1": 0, "x2": 350, "y1": 750, "y2": 1284, "z1": 0, "z2": 16 },
+      "position": { "x": 0, "y": 750, "z": 0 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "edge_banding": { "top": 0.4, "bottom": 0.4, "left": 0.4, "right": 0.4 },
+      "estimated": true,
+      "section_id": "front_counter"
+    },
+    {
+      "name": "Фасад верхний средний (1000, U708)",
+      "type": "front_panel",
+      "basis_orientation": "front",
+      "material": "ЛДСП U 708 ST9 (светло-серый)",
+      "thickness": 16,
+      "dimensions": { "width": 1000, "height": 534 },
+      "placement": { "x1": 350, "x2": 1350, "y1": 750, "y2": 1284, "z1": 0, "z2": 16 },
+      "position": { "x": 350, "y": 750, "z": 0 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "edge_banding": { "top": 0.4, "bottom": 0.4, "left": 0.4, "right": 0.4 },
+      "estimated": false,
+      "section_id": "front_counter"
+    },
+    {
+      "name": "Фасад верхний правый (350, U960)",
+      "type": "front_panel",
+      "basis_orientation": "front",
+      "material": "ЛДСП U 960 ST9 (Оникс серый)",
+      "thickness": 16,
+      "dimensions": { "width": 350, "height": 534 },
+      "placement": { "x1": 1350, "x2": 1700, "y1": 750, "y2": 1284, "z1": 0, "z2": 16 },
+      "position": { "x": 1350, "y": 750, "z": 0 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "edge_banding": { "top": 0.4, "bottom": 0.4, "left": 0.4, "right": 0.4 },
+      "estimated": true,
+      "section_id": "front_counter"
+    }
+  ],
+  "drawers": [],
+  "doors": [],
+  "hardware": {
+    "handles": {
+      "type": "нет",
+      "material": "—",
+      "color": "—",
+      "size": 0,
+      "count": 0,
+      "offset_from_top": 0,
+      "furniture_encoded": ""
+    },
+    "legs": {
+      "type": "цоколь металл (хром)",
+      "adjustable": false,
+      "color": "хром",
+      "height": 100,
+      "count": 1
+    }
+  },
+  "carcass_calculation": {
+    "board_thickness": 16,
+    "leg_height": 100,
+    "quantity_units": 2,
+    "overall": "W=1700, D=800, H=1300",
+    "tz_depth_height_interpretation": "1700×(300)800×1300(750): верхняя надстройка глубина 300, высота рабочей столешницы 750",
+    "front_color_split": "350 + 1000 + 350 по X (U960 / U708 / U960)",
+    "operator_worktop": "x 350..1350 (1000), y 734..750 (высота 750), z 0..800",
+    "upper_counter": "верхняя крышка y 1284..1300, z 0..300; верхний фасад y 750..1284, z 0..16",
+    "back_panel": "z 784..800 (ЛДСП 16)"
+  },
+  "constraints": {
+    "default_gap": 2,
+    "drawer_gap": 2,
+    "door_gap": 2,
+    "back_wall_offset": 16,
+    "construction": "top_bottom_over_sides"
+  },
+  "basis_mapping": {
+    "coordinate_system": "basis_mebelshik",
+    "units": "mm",
+    "ready_for_import": true,
+    "placement_required": true
+  },
+  "warnings": [
+    "Количество изделий по ТЗ: 2 шт. (в JSON — одна модель; в БАЗИС скопировать второй экземпляр).",
+    "RTK008G: 2 заглушки Ø60 в рабочей столешнице — пока только заметка (без отверстий и без фурнитуры).",
+    "Кабель-канал — пока только заметка (без фурнитуры).",
+    "В ТЗ смешанные цвета (U960/U708) — скрипт импорта применяет MaterialName из materials.color_code; при необходимости доработать скрипт для panel.material."
+  ],
+  "estimated_values": [
+    "sections[*].dimensions",
+    "panels[Задняя стенка].estimated",
+    "panels[Крышка верхняя (клиентская 300)].estimated",
+    "interpretation of (300)800 and 1300(750)"
+  ]
+}
+

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "paramspec-v1",
+  "project_name": "Стол письменный 1400×700×750",
+  "furniture_type": "стол",
+  "archetype": "desk",
+  "dimensions": { "width": 1400, "depth": 700, "height": 750, "tolerance": 5 },
+  "materials": { "board_thickness": 25, "back_thickness": 25, "board_material": "ЛДСП", "edge_band_thickness": 2, "color": "по согласованию", "color_code": "" },
+  "legs": { "type": "боковины", "height": 0 },
+  "apron": true,
+  "apron_height": 120,
+  "warnings": ["Столешница 25 мм на боковых опорах + задняя царга."],
+  "estimated_values": ["materials.color"]
+}

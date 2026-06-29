@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "paramspec-v1",
+  "project_name": "Комбинированный модуль (2 блока)",
+  "furniture_type": "комбинированное",
+  "archetype": "composite",
+  "dimensions": { "width": 2100, "depth": 600, "height": 800, "tolerance": 5 },
+  "materials": { "board_thickness": 16, "back_thickness": 16, "board_material": "ЛДСП", "edge_band_thickness": 0.4, "color": "по согласованию", "color_code": "" },
+  "blocks": [
+    {
+      "name": "Левый блок",
+      "origin": { "x": 0, "z": 0 },
+      "spec": {
+        "schemaVersion": "paramspec-v1", "project_name": "Левый блок", "archetype": "drawer_unit",
+        "dimensions": { "width": 1400, "depth": 600, "height": 800 },
+        "materials": { "board_thickness": 16, "back_thickness": 16, "board_material": "ЛДСП" },
+        "legs": { "type": "нет", "height": 0 },
+        "sections": [{ "id": "d", "kind": "drawers", "drawers": 3, "open_top": false }]
+      }
+    },
+    {
+      "name": "Правый блок",
+      "origin": { "x": 1400, "z": 0 },
+      "spec": {
+        "schemaVersion": "paramspec-v1", "project_name": "Правый блок", "archetype": "shelving",
+        "dimensions": { "width": 700, "depth": 600, "height": 800 },
+        "materials": { "board_thickness": 16, "back_thickness": 16, "board_material": "ЛДСП" },
+        "legs": { "type": "нет", "height": 0 },
+        "sections": [{ "id": "s", "kind": "shelves", "shelves": 2 }]
+      }
+    }
+  ],
+  "warnings": ["Композиция: левый блок-комод (3 ящика) + правый блок-стеллаж, встык по X."],
+  "estimated_values": ["materials.color"]
+}

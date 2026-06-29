@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "paramspec-v1",
+  "project_name": "Кашпо-стеллаж 3000×500×1000",
+  "furniture_type": "стеллаж",
+  "archetype": "cabinet",
+  "dimensions": { "width": 3000, "depth": 500, "height": 1000, "tolerance": 5 },
+  "materials": { "board_thickness": 16, "back_thickness": 16, "board_material": "ЛДСП", "back_material": "ЛДСП", "edge_band_thickness": 0.4, "color": "по согласованию", "color_code": "" },
+  "legs": { "type": "регулируемые опоры пластиковые", "height": 100 },
+  "gaps": { "facade": 2, "default": 2 },
+  "interior_z_front": 16,
+  "sections": [
+    { "id": "s1", "kind": "shelves", "shelf_levels": [650], "shelf_label": "Полка под вкладную 650 1" },
+    { "id": "s2", "kind": "shelves", "shelf_levels": [650], "shelf_label": "Полка под вкладную 650 2" },
+    { "id": "s3", "kind": "shelves", "shelf_levels": [650], "shelf_label": "Полка под вкладную 650 3" },
+    { "id": "s4", "kind": "shelves", "shelf_levels": [650], "shelf_label": "Полка под вкладную 650 4" },
+    { "id": "s5", "kind": "shelves", "shelf_levels": [650], "shelf_label": "Полка под вкладную 650 5" }
+  ],
+  "hardware": { "handles": { "type": "нет", "material": "—", "color": "—", "size": 0, "count": 0, "offset_from_top": 0, "furniture_encoded": "" } },
+  "warnings": ["5 секций под вкладные кашпо, полка на отметке 650."],
+  "estimated_values": ["materials.color"]
+}
