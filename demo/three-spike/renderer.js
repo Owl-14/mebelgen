@@ -173,6 +173,7 @@ function normalizeFurnitureSpec(raw) {
       plinthBlack: Boolean(features.plinthBlack),
       shelves: Number(features.shelves || 0),
       drawers: Number(features.drawers || 0),
+      wheels: Boolean(features.wheels || parts.wheels || /подкатн|кол[её]с/i.test(`${raw.title || ""} ${raw.name || ""}`)),
       fluted: Boolean(features.fluted),
       feltPads: Boolean(features.feltPads),
       matteLacquer: Boolean(features.matteLacquer),
@@ -252,6 +253,10 @@ function createRenderer(canvas, overlay, mode) {
   const fill = new THREE.DirectionalLight(0xf6ead6, 1.15);
   fill.position.set(-2.4, 1.8, -2.0);
   scene.add(fill);
+
+  const rim = new THREE.DirectionalLight(0xffffff, mode === "front" ? 0.72 : 0.42);
+  rim.position.set(-1.6, 2.7, -2.2);
+  scene.add(rim);
 
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 10);
 
@@ -641,7 +646,7 @@ function kitchenModules(widthMeters) {
 function buildDrawerUnitModel() {
   const group = new THREE.Group();
   group.name = "drawer_unit";
-  const { matTop, matSide, matEdge, matBlack } = createMaterials();
+  const { matTop, matSide, matEdge, matBlack, matBlackSoft } = createMaterials();
   const W = spec.width;
   const D = spec.depth;
   const H = spec.height;
@@ -655,6 +660,15 @@ function buildDrawerUnitModel() {
 
   addBox(group, { name: "top", size: [W, topTh, D], pos: [0, H - topTh / 2, 0], material: matTop, radius: 0.006 });
   addBox(group, { name: "top-front-edge", size: [W - 0.01, topTh * 0.58, 0.012], pos: [0, H - topTh / 2, -D / 2 - 0.006], material: matEdge, radius: 0.002 });
+  for (const x of [-W / 2 + 0.006, W / 2 - 0.006]) {
+    addBox(group, {
+      name: "top-side-edge",
+      size: [0.01, topTh * 0.48, D * 0.92],
+      pos: [x, H - topTh / 2, 0],
+      material: matEdge,
+      radius: 0.001,
+    });
+  }
   addBox(group, { name: "left-side", size: [side, bodyH, D], pos: [-W / 2 + side / 2, plinthH + bodyH / 2, 0], material: matSide, radius: 0.002 });
   addBox(group, { name: "right-side", size: [side, bodyH, D], pos: [W / 2 - side / 2, plinthH + bodyH / 2, 0], material: matSide, radius: 0.002 });
   addBox(group, { name: "drawer-side", size: [side, bodyH, D], pos: [W / 2 - drawerW - side / 2, plinthH + bodyH / 2, 0], material: matSide, radius: 0.002 });
@@ -681,6 +695,9 @@ function buildDrawerUnitModel() {
     group.add(lock);
   }
   addBox(group, { name: "plinth", size: [drawerW, plinthH, D * 0.92], pos: [W / 2 - drawerW / 2, plinthH / 2, 0.02], material: matSide, radius: 0.002 });
+  if (spec.features.wheels) {
+    addCasters(group, { W, D, matBlack, matBlackSoft });
+  }
 
   addOutlines(group);
   group.position.y = -H / 2;
@@ -923,6 +940,29 @@ function addShoes(parent, { x, y, z, material }) {
       radius: 0.018,
     });
     shoe.rotation.y = offset < 0 ? -0.1 : 0.1;
+  }
+}
+
+function addCasters(parent, { W, D, matBlack, matBlackSoft }) {
+  const insetX = Math.min(0.075, W * 0.18);
+  const insetZ = Math.min(0.075, D * 0.18);
+  for (const x of [-W / 2 + insetX, W / 2 - insetX]) {
+    for (const z of [-D / 2 + insetZ, D / 2 - insetZ]) {
+      addBox(parent, {
+        name: "caster-fork",
+        size: [0.038, 0.024, 0.022],
+        pos: [x, 0.012, z],
+        material: matBlackSoft,
+        radius: 0.004,
+      });
+      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.019, 0.018, 24), matBlack);
+      wheel.name = "caster-wheel";
+      wheel.rotation.x = Math.PI / 2;
+      wheel.position.set(x, -0.006, z);
+      wheel.castShadow = true;
+      wheel.receiveShadow = true;
+      parent.add(wheel);
+    }
   }
 }
 
@@ -1239,7 +1279,7 @@ function fitCamera(camera, aspect, mode, model) {
   const target = center.clone();
   const distance = Math.max(4, diagonal * 2.8);
   const directions = {
-    front: new THREE.Vector3(0, 0.02, 1),
+    front: frontCameraDirection(),
     sample: new THREE.Vector3(-1.35, 0.78, -1.55),
     left: new THREE.Vector3(-1.45, 0.82, -1.35),
     right: new THREE.Vector3(1.45, 0.82, -1.35),
@@ -1257,6 +1297,14 @@ function fitCamera(camera, aspect, mode, model) {
 
   fitCameraToBox(camera, box, Math.max(aspect, 0.1), mode);
   camera.updateProjectionMatrix();
+}
+
+function frontCameraDirection() {
+  const wideRun = ["built_in_run", "kitchen_run"].includes(spec.type) || spec.width / Math.max(spec.depth, 0.1) > 3.2;
+  const tallCase = ["wardrobe", "cabinet"].includes(spec.type) && spec.height > 1.4;
+  const yaw = wideRun ? 0.07 : tallCase ? 0.1 : 0.16;
+  const lift = wideRun ? 0.1 : tallCase ? 0.13 : 0.22;
+  return new THREE.Vector3(yaw, lift, 1);
 }
 
 function modelBounds(model) {
@@ -1281,7 +1329,7 @@ function fitCameraToBox(camera, box, aspect, mode) {
   const maxY = Math.max(...ys);
   const boxWidth = Math.max(maxX - minX, 0.2);
   const boxHeight = Math.max(maxY - minY, 0.2);
-  const pad = mode === "front" ? 1.48 : 1.26;
+  const pad = mode === "front" ? 1.56 : 1.26;
   let viewWidth = Math.max(boxWidth * pad, boxHeight * aspect * pad, 1.32);
   let viewHeight = viewWidth / aspect;
 
@@ -1628,6 +1676,7 @@ function featureCalloutLines() {
 }
 
 function lowerCalloutLines() {
+  if (spec.features.wheels) return ["Колесные опоры", "чёрные, скрытые"];
   if (spec.features.brass) return ["Вставки", "латунь"];
   if (spec.features.plinth || spec.features.plinthBlack) {
     return ["Цоколь", spec.features.plinthBlack ? "чёрный матовый" : "в цвет корпуса"];
