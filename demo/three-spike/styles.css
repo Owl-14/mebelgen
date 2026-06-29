@@ -1,12 +1,14 @@
 :root {
   color-scheme: light;
-  --paper: #ffffff;
-  --ink: #161616;
-  --soft: #565656;
-  --line: #171717;
-  --cream: #eee8dc;
-  --warm: #d8cfbd;
-  --brass: #caa647;
+  --paper: #fffdfa;
+  --ink: #171512;
+  --soft: #5d5a53;
+  --line: #27231d;
+  --line-soft: #b9b0a2;
+  --cream: #f2ece1;
+  --warm: #d7c9b4;
+  --brass: #b99043;
+  --accent: #7f705d;
   --panel: #f3f4f6;
 }
 
@@ -39,19 +41,26 @@ body {
   overflow: hidden;
 }
 
+.sheet-accent {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 10px;
+  background: linear-gradient(180deg, #342d24 0%, #9a865f 54%, #d7c49b 100%);
+}
+
 .frame {
   position: absolute;
   pointer-events: none;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-soft);
 }
 
 .frame-outer {
-  inset: 14px;
-  border-width: 2px;
+  inset: 18px 16px 18px 22px;
+  border-width: 1.5px;
 }
 
 .frame-inner {
-  inset: 23px;
+  inset: 29px 27px 27px 34px;
 }
 
 .view-block {
@@ -64,8 +73,9 @@ body {
   margin: 0;
   text-align: center;
   font-size: 16px;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0;
+  color: #24211c;
 }
 
 .front-block {
@@ -92,11 +102,6 @@ body {
   inset: 0;
 }
 
-.front-surface canvas {
-  top: 44px;
-  height: 282px;
-}
-
 .iso-block {
   top: 458px;
   height: 360px;
@@ -121,7 +126,7 @@ body {
 .callout path {
   fill: none;
   stroke: var(--line);
-  stroke-width: 1;
+  stroke-width: 1.05;
   stroke-linecap: square;
   stroke-linejoin: round;
 }
@@ -132,15 +137,16 @@ body {
   fill: var(--line);
   dominant-baseline: middle;
   paint-order: stroke;
-  stroke: #fff;
+  stroke: var(--paper);
   stroke-linejoin: round;
   stroke-width: 4px;
 }
 
 .callout text {
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.2;
-  stroke-width: 3px;
+  stroke-width: 2.6px;
+  fill: #26221b;
 }
 
 .callout .dot {
@@ -153,9 +159,12 @@ body {
   position: absolute;
   left: 58px;
   bottom: 85px;
-  width: 382px;
+  width: 392px;
+  padding-left: 16px;
+  border-left: 3px solid var(--warm);
   font-size: 13px;
   line-height: 1.42;
+  color: #24211c;
 }
 
 .materials p {
@@ -178,7 +187,7 @@ body {
 }
 
 .title-block td {
-  border: 1px solid #222;
+  border: 1px solid #373026;
   padding: 6px 9px;
   vertical-align: middle;
 }
@@ -186,17 +195,18 @@ body {
 .title-block .brand {
   height: 62px;
   text-align: center;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 31px;
-  font-weight: 700;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 30px;
+  font-weight: 800;
   line-height: 1;
+  color: #171512;
 }
 
 .title-block .brand div {
   margin-top: 6px;
-  font-size: 12px;
-  font-style: italic;
-  font-weight: 400;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--soft);
 }
 
 .title-block .sheet-name {
