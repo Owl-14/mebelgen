@@ -36,6 +36,28 @@ def callout(svg, target_x, target_y, text, side="right", text_x=None, text_y=Non
                  family=config.FONT_SANS)
 
 
+def callout_column(svg, items, side, label_x, top, bottom,
+                   color=config.COL_INK_SOFT, size=config.FS_CALLOUT, max_chars=22, gap=6):
+    """Колонка выносок на одной стороне без наложений.
+
+    items: список dict {target_x, target_y, text}. Высоты считаются по числу строк,
+    позиции по Y раздвигаются аллокатором (draw/layout.stack), затем рисуются.
+    Возвращает число оставшихся пересечений (0 — идеально), для самопроверки.
+    """
+    from .layout import Label, overlaps, stack
+
+    labels = []
+    for it in items:
+        n = len(_wrap(it["text"], max_chars))
+        labels.append(Label(target_y=it["target_y"], height=n * (size + 2) + 4, payload=it))
+    stack(labels, top, bottom, gap=gap)
+    for lab in labels:
+        it = lab.payload
+        callout(svg, it["target_x"], it["target_y"], it["text"], side=side,
+                text_x=label_x, text_y=lab.y, color=color, size=size, max_chars=max_chars)
+    return overlaps(labels)
+
+
 def _wrap(text, max_chars):
     words = text.split()
     lines, cur = [], ""
