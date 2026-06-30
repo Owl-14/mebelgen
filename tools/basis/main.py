@@ -192,11 +192,23 @@ def cmd_cutting(args: argparse.Namespace) -> int:
 
 
 def cmd_materials(args: argparse.Namespace) -> int:
-    from src.materials import check_project_materials, load_catalog
+    from src.materials import check_project_materials, load_base, load_catalog, search_base
 
     cat = load_catalog()
     n = sum(len(cat.get(k, [])) for k in ("boards", "backs", "edges", "hardware"))
-    print(f"Каталог: {n} позиций (boards/backs/edges/hardware).")
+    print(f"Каталог (курируемый): {n} позиций (boards/backs/edges/hardware).")
+    base = load_base()
+    if base.get("count"):
+        cats = ", ".join(f"{k}: {v}" for k, v in base.get("categories", {}).items())
+        print(f"База производства: {base['count']} позиций, {len(base.get('groups', {}))} групп.")
+        print(f"  Категории — {cats}")
+    if args.search:
+        res = search_base(args.search, category=args.category, limit=args.limit)
+        print(f"\nПоиск «{args.search}»" + (f" в «{args.category}»" if args.category else "") + f": {len(res)} (показано до {args.limit})")
+        for x in res:
+            dims = "×".join(str(x[k]) for k in ("length", "width", "thickness") if x.get(k))
+            cost = f"{x['cost']}₽/{x.get('unit','')}" if x.get("cost") else ""
+            print(f"  [{x.get('article','')}] {x.get('name','')}  {dims}  {cost}".rstrip())
     if args.check:
         project = json.loads(Path(args.check).read_text(encoding="utf-8"))
         notes = check_project_materials(project)
@@ -405,8 +417,11 @@ def main() -> int:
     p_cut.add_argument("args", nargs="*", help="id заказа/модели; для upload: orderId file")
     p_cut.set_defaults(func=cmd_cutting)
 
-    p_mat = sub.add_parser("materials", help="Каталог материалов; --check сверить материалы проекта")
+    p_mat = sub.add_parser("materials", help="Каталог + база производства; --search поиск, --check сверка проекта")
     p_mat.add_argument("--check", help="project.json для сверки материалов с каталогом")
+    p_mat.add_argument("--search", help="поиск по базе производства (имя/артикул/группа)")
+    p_mat.add_argument("--category", help="ограничить поиск категорией (напр. «Фурнитура», «Листовой материал»)")
+    p_mat.add_argument("--limit", type=int, default=25, help="сколько результатов поиска показать")
     p_mat.set_defaults(func=cmd_materials)
 
     p_orc = sub.add_parser(

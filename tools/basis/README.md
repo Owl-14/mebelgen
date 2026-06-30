@@ -13,30 +13,55 @@ pip install -r requirements.txt
 copy .env.example .env        # вписать OPENAI_API_KEY (для convert)
 ```
 
+## Конвейер
+
+```
+ТЗ (фото/текст/чертёж)
+  → [LLM]  извлечение высокоуровневого ParamSpec (без координат)
+  → [КОД]  генератор архетипа → project.json (panels[] с placement)
+  → [ВАЛИДАТОРЫ] схема + геометрия + согласованность
+  → сборка модели:  импортёр в Мебельщике (надёжно)  ИЛИ  облако .cfrn→.b3d (device-independent)
+```
+Координаты считает детерминированный код, не модель (см. [RULES.md](RULES.md)).
+
 ## Команды
 
 ```bash
 # ТЗ-изображение → JSON (Vision, нужен OPENAI_API_KEY)
 python main.py convert spec.png -o projects/<project>.json
 
+# ParamSpec → project.json (детерминированный генератор архетипа)
+python main.py generate          paramspecs/<spec>.json -o projects/<project>.json
+
 # Проверки
 python main.py validate          projects/<project>.json [--geometry]
 python main.py check-geometry     projects/<project>.json        # пересечения панелей
 python main.py check-consistency  projects/<project>.json        # placement↔dimensions↔габарит
-python main.py check-consistency  projects/<project>.json --fix-dimensions
+python main.py finish             projects/<project>.json        # схема + геометрия + авторазделение полок
+python main.py orchestrate        paramspecs/<spec>.json         # generate → валидаторы → авторемонт → само-ревью
 
-# Полный этап проверки (схема + геометрия + авторазделение полок)
-python main.py finish             projects/<project>.json
+# Материалы (курируемый каталог + производственная база ≈5000 позиций)
+python main.py materials                                          # статистика
+python main.py materials --search "Дуб Вотан" --category "Листовой материал"
+python main.py materials --check projects/<project>.json          # сверка материалов проекта
+
+# Сборка нативной модели .b3d через облако БАЗИС (device-independent, ПЛАТНО ~10₽/операция)
+python main.py build-b3d         projects/<project>.json -o out.b3d
+python main.py cloud info | list | model-convert … | drawing-convert …
 ```
 
 ## Структура
 
 ```
-src/         конвертер (Vision), валидатор схемы, geometry_check, consistency_check
-schema/      furniture.schema.json — контракт JSON
-prompts/     системный промпт для convert
+src/         конвертер (Vision), генераторы (src/generators/), валидаторы (schema/geometry/consistency),
+             materials.py, cfrn.py (.cfrn для облака), cloud_api.py / cloud_cutting.py, orchestrator.py
+schema/      furniture.schema.json, paramspec.schema.json — контракты JSON
+prompts/     системные промпты (convert, извлечение ParamSpec)
+paramspecs/  входные ParamSpec-примеры (в т.ч. tz_*)
 projects/    готовые проекты-примеры (.json)
-scripts/     ImportFurnitureFromJSON.js — импорт JSON в БАЗИС
+materials/   catalog.json (курируемый) + baza_materiala.json (база ≈5000) + source/ (сырой xlsx)
+scripts/     ImportFurnitureFromJSON.js (импорт в БАЗИС) + import_materials_base.py (xlsx→json)
+rules/       core.md + правила по архетипам (источник истины для генераторов)
 ```
 
 ## Импорт в БАЗИС
@@ -50,9 +75,27 @@ scripts/     ImportFurnitureFromJSON.js — импорт JSON в БАЗИС
 (если `count > 0`). Направляющие/петли — когда подключён каталог поставщика, иначе
 мастерами БАЗИС «Установка ящиков/дверей». Подробнее о фурнитуре — [../../docs/BASIS_AUTOMATION.md](../../docs/BASIS_AUTOMATION.md).
 
+## Сборка .b3d через облако (device-independent)
+
+Без десктопа: `project.json → src/cfrn.py собирает .cfrn → облако `model-convert
+CfrnToB3d` → нативный `.b3d`. Команда `build-b3d`. Каждая конвертация платная (~10₽,
+нужен `BAZIS_API_KEY`). Раскладка деталей в `.cfrn` сверена с эталоном родного шкафа
+БАЗИС (контур horizont `{x:ширина, y:глубина}`, привязка по задней грани `z2`) —
+модель собирается корректно. Просмотр результата — `D:\bazis\viewer.exe` (БАЗИС-Просмотр 3D).
+
+## Материалы
+
+Два слоя: курируемый `materials/catalog.json` (типовые позиции по умолчанию) и
+производственная база `materials/baza_materiala.json` (≈5000 реальных позиций с
+артикулами/ценами/размерами, импорт из xlsx через `scripts/import_materials_base.py`).
+Поиск реальных позиций — `python main.py materials --search "<запрос>"`. API в
+`src/materials.py`: `load_base / search_base / find_board`. Сверка точных имён БАЗИС
+(`basisName`) — при доступной лицензии (AKD-12).
+
 ## Переменные окружения
 
 | Переменная | Описание |
 |---|---|
 | `OPENAI_API_KEY` | ключ OpenAI (для `convert`) |
 | `OPENAI_MODEL` | модель, по умолчанию `gpt-4o` |
+| `BAZIS_API_KEY` | ключ БАЗИС-Облака (для `build-b3d`, `cloud`, раскрой) |
