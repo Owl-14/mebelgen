@@ -1,0 +1,266 @@
+{
+  "openapi": "3.0.4",
+  "info": {
+    "title": "Bazis Cloud Tasks API",
+    "version": "v1"
+  },
+  "paths": {
+    "/api-cloud-tasks-public/tasks": {
+      "get": {
+        "tags": [
+          "Tasks"
+        ],
+        "parameters": [
+          {
+            "name": "PageSize",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 15
+            }
+          },
+          {
+            "name": "PageIndex",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "description": "Enum values:0 = Created, 1 = Running, 2 = Success, 3 = Failed",
+            "schema": {
+              "$ref": "#/components/schemas/CloudTaskStateEnum"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "description": "Enum values:0 = ExecuteClientScript, 1 = DrawingConvertation, 2 = Model3DConvertation",
+            "schema": {
+              "$ref": "#/components/schemas/CloudTaskTypeEnum"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api-cloud-tasks-public/tasks/{id}": {
+      "get": {
+        "tags": [
+          "Tasks"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Tasks"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api-cloud-tasks-public/tasks/drawing-convert": {
+      "post": {
+        "tags": [
+          "Tasks"
+        ],
+        "parameters": [
+          {
+            "name": "format",
+            "in": "query",
+            "description": "Enum values:0 = Pdf, 1 = Jpeg, 2 = Wmf, 3 = Svg",
+            "schema": {
+              "$ref": "#/components/schemas/DrawingConvertFormatEnum"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "drawings": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    }
+                  }
+                }
+              },
+              "encoding": {
+                "drawings": {
+                  "style": "form"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api-cloud-tasks-public/tasks/model-convert": {
+      "post": {
+        "tags": [
+          "Tasks"
+        ],
+        "parameters": [
+          {
+            "name": "convertType",
+            "in": "query",
+            "description": "Enum values:0 = B3dToCfrn, 1 = CfrnToB3d",
+            "schema": {
+              "$ref": "#/components/schemas/Model3DConvertTypeEnum"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "models": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    }
+                  }
+                }
+              },
+              "encoding": {
+                "models": {
+                  "style": "form"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api-cloud-tasks-public/tasks/{id}/download-result": {
+      "get": {
+        "tags": [
+          "Tasks"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CloudTaskStateEnum": {
+        "enum": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "type": "integer",
+        "description": "Enum values:0 = Created, 1 = Running, 2 = Success, 3 = Failed",
+        "format": "int32"
+      },
+      "CloudTaskTypeEnum": {
+        "enum": [
+          0,
+          1,
+          2
+        ],
+        "type": "integer",
+        "description": "Enum values:0 = ExecuteClientScript, 1 = DrawingConvertation, 2 = Model3DConvertation",
+        "format": "int32"
+      },
+      "DrawingConvertFormatEnum": {
+        "enum": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "type": "integer",
+        "description": "Enum values:0 = Pdf, 1 = Jpeg, 2 = Wmf, 3 = Svg",
+        "format": "int32"
+      },
+      "Model3DConvertTypeEnum": {
+        "enum": [
+          0,
+          1
+        ],
+        "type": "integer",
+        "description": "Enum values:0 = B3dToCfrn, 1 = CfrnToB3d",
+        "format": "int32"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Tasks"
+    }
+  ]
+}
