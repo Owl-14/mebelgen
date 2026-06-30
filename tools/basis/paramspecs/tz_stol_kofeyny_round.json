@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "paramspec-v1",
+  "project_name": "Стол кофейный тип 1 (Ø500×420)",
+  "furniture_type": "стол",
+  "archetype": "round_table",
+  "dimensions": { "width": 500, "depth": 500, "height": 420, "tolerance": 10 },
+  "materials": { "board_thickness": 25, "board_material": "МДФ", "edge_band_thickness": 2, "color": "по согласованию", "color_code": "" },
+  "legs": { "type": "пьедестал", "height": 0 },
+  "top_thickness": 50,
+  "pedestal_diameter": 280,
+  "base": true,
+  "base_thickness": 25,
+  "base_diameter": 360,
+  "warnings": ["Круглая столешница Ø500, толщина 50; цилиндрический пьедестал Ø280 на диске-основании Ø360.", "Прозрачный матовый лак, фетровые подпятники.", "Импортёр БАЗИС строит прямоугольные панели — круг/цилиндр требуют поддержки контура (AKD-42)."],
+  "estimated_values": ["pedestal_diameter", "base_diameter", "color"]
+}

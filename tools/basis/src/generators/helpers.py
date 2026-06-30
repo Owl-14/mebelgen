@@ -26,6 +26,8 @@ def panel(
     edges: float = 0.4,
     estimated: bool = False,
     section_id: str | None = None,
+    shape: str | None = None,
+    radius: float | None = None,
 ) -> dict[str, Any]:
     x1, x2 = x
     y1, y2 = y
@@ -47,6 +49,10 @@ def panel(
     }
     if section_id:
         p["section_id"] = section_id
+    if shape:
+        p["shape"] = shape
+    if radius is not None:
+        p["radius"] = _r(radius)
     return p
 
 
