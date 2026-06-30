@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "paramspec-v1",
+  "project_name": "Стол кофейный куб 400×400×400",
+  "furniture_type": "стол",
+  "archetype": "corpus",
+  "dimensions": { "width": 400, "depth": 400, "height": 400, "tolerance": 5 },
+  "materials": { "board_thickness": 16, "back_thickness": 16, "board_material": "МДФ под покраску", "edge_band_thickness": 2, "color": "по согласованию", "color_code": "" },
+  "legs": { "type": "нет", "height": 0 },
+  "warnings": ["Куб-стол: закрытый короб 400×400×400."],
+  "estimated_values": ["color", "thickness"]
+}

@@ -121,6 +121,17 @@ def cmd_check_geometry(args: argparse.Namespace) -> int:
     return 0 if report["ok"] else 2
 
 
+def cmd_ingest(args: argparse.Namespace) -> int:
+    from src.feedback import record_pair
+
+    spec = json.loads(Path(args.paramspec).read_text(encoding="utf-8"))
+    project = json.loads(Path(args.project).read_text(encoding="utf-8"))
+    path = record_pair(spec, project, source_tz=args.tz or "")
+    n = len(list(path.parent.glob("*.json")))
+    print(f"Записана обучающая пара: {path}  (всего в датасете: {n})")
+    return 0
+
+
 def cmd_generate(args: argparse.Namespace) -> int:
     from src.paramspec import validate_paramspec
     from src.generators import generate_from_paramspec
@@ -278,6 +289,15 @@ def main() -> int:
     p_gen.add_argument("paramspec", help="Путь к ParamSpec JSON (paramspecs/<x>.json)")
     p_gen.add_argument("-o", "--output", help="Куда писать project.json (по умолчанию projects/<имя>)")
     p_gen.set_defaults(func=cmd_generate)
+
+    p_ing = sub.add_parser(
+        "ingest",
+        help="Записать принятый проект как обучающую пару (ParamSpec→project) в dataset/",
+    )
+    p_ing.add_argument("--paramspec", required=True, help="ParamSpec, по которому строили")
+    p_ing.add_argument("--project", required=True, help="Принятый/исправленный project.json")
+    p_ing.add_argument("--tz", help="Текст исходного ТЗ (опционально)")
+    p_ing.set_defaults(func=cmd_ingest)
 
     p_cons = sub.add_parser(
         "check-consistency",

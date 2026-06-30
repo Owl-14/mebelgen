@@ -59,6 +59,20 @@ def find_similar(query: dict[str, Any], k: int = 3, *, examples_dir: Path | None
     return [c for sc, c in ranked[:k] if sc > 0]
 
 
+def diverse_examples(k: int = 3, *, examples_dir: Path | None = None) -> list[dict[str, Any]]:
+    """До K примеров разных архетипов (для few-shot без конкретного запроса)."""
+    seen: set[str] = set()
+    out: list[dict[str, Any]] = []
+    for ex in _load(examples_dir or EXAMPLES_DIR):
+        a = ex.get("archetype")
+        if a and a not in seen:
+            seen.add(a)
+            out.append(ex)
+        if len(out) >= k:
+            break
+    return out
+
+
 def as_prompt_block(examples: list[dict[str, Any]]) -> str:
     """Подмешиваемый в промпт блок few-shot примеров (компактно)."""
     if not examples:

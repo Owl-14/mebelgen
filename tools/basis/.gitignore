@@ -5,3 +5,6 @@ __pycache__/
 venv/
 output/
 *.log
+
+# Накапливаемые обучающие пары (AKD-35)
+dataset/

@@ -55,6 +55,8 @@ class FurnitureConverter:
         model: str | None = None,
         prompt_path: Path | None = None,
         schema_path: Path | None = None,
+        use_examples: bool = True,
+        example_count: int = 3,
     ) -> None:
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
         if not self.api_key:
@@ -65,6 +67,8 @@ class FurnitureConverter:
         self.model = model or os.environ.get("OPENAI_MODEL", "gpt-4o")
         self.prompt_path = prompt_path
         self.schema_path = schema_path or DEFAULT_SCHEMA_PATH
+        self.use_examples = use_examples          # few-shot подмешивание (AKD-33)
+        self.example_count = example_count
         from openai import OpenAI  # ленивый импорт: нужен только для OpenAI-провайдера
         self.client = OpenAI(api_key=self.api_key)
 
@@ -139,6 +143,12 @@ class FurnitureConverter:
         )
         if extra_instructions.strip():
             user_text += f"\n\nДополнительные указания:\n{extra_instructions.strip()}"
+
+        if self.use_examples:
+            from .examples import as_prompt_block, diverse_examples
+            block = as_prompt_block(diverse_examples(self.example_count))
+            if block:
+                user_text += "\n\n" + block
 
         mime, b64 = _encode_image(image_path)
         response = self.client.chat.completions.create(
