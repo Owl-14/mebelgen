@@ -9,8 +9,8 @@
 drawing-convert. Значит запустить клиентский скрипт через публичное облако нельзя;
 скрипт-импорт выполняется в десктопном БАЗИС.
 
-Ключ: env BAZIS_API_KEY. Заголовок ключа уточнить в диалоге «API Key» на Swagger
-(по умолчанию X-Api-Key; переопределяется BAZIS_API_KEY_HEADER).
+Ключ: env BAZIS_API_KEY. Заголовок — `apiKey` (подтверждено в
+/openapi-tasks/swagger/api-key.js); переопределяется BAZIS_API_KEY_HEADER.
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ class CloudTasksClient:
                  key_header: str | None = None) -> None:
         self.api_key = api_key or os.environ.get("BAZIS_API_KEY")
         self.base = (base_url or BASE_URL).rstrip("/")
-        self.key_header = key_header or os.environ.get("BAZIS_API_KEY_HEADER", "X-Api-Key")
+        self.key_header = key_header or os.environ.get("BAZIS_API_KEY_HEADER", "apiKey")
 
     def _headers(self) -> dict[str, str]:
         if not self.api_key:
