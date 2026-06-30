@@ -1,0 +1,90 @@
+{
+  "id": "syktyvkar-41-stol_dlya_peregovorov_v_kabinete_direktora_1200h1200h750_dub_denver_tryufel",
+  "type": "desk_panel",
+  "title": "Стол для переговоров в кабинете директора 1200х1200х750 Дуб Денвер Трюфель",
+  "classification": {
+    "scope": "manufactured",
+    "procurementFiltered": false
+  },
+  "ai": {
+    "provider": "local-importer",
+    "model": "rule-based-syktyvkar-v1"
+  },
+  "source": {
+    "project": "Сыктывкар 3 часть",
+    "position": "4",
+    "drawingNumber": "41",
+    "orderCode": "НФ-00007662",
+    "quantity": 1.0,
+    "unit": "шт",
+    "rawTitle": "Стол для переговоров в кабинете директора 1200х1200х750 Дуб Денвер Трюфель"
+  },
+  "dimensions": {
+    "widthMm": 1200.0,
+    "depthMm": 1200.0,
+    "heightMm": 750.0
+  },
+  "dimensionNote": "",
+  "modules": [],
+  "geometry": {
+    "overhangMm": 25,
+    "sectionCount": 1
+  },
+  "parts": {
+    "top": {
+      "label": "Столешница",
+      "material": "ЛДСП, 16 мм, Дуб Денвер трюфель, Egger",
+      "thicknessMm": 25,
+      "displayColor": "#b09673"
+    },
+    "sidePanels": {
+      "label": "Корпус",
+      "material": "ЛДСП, 16 мм, Дуб Денвер трюфель, Egger",
+      "thicknessMm": 16.0,
+      "displayColor": "#b09673"
+    },
+    "frontScreen": {
+      "label": "Передний экран",
+      "material": "ЛДСП, 16 мм, Дуб Денвер трюфель, Egger",
+      "thicknessMm": 16,
+      "heightMm": 300,
+      "displayColor": "#b09673"
+    }
+  },
+  "features": {
+    "quantity": 1.0,
+    "sourceDrawing": "41",
+    "sectionCount": 1,
+    "metalFrame": false,
+    "plinth": false,
+    "plinthBlack": false,
+    "drawers": 0,
+    "shelves": 0,
+    "lock": false,
+    "rod": false,
+    "hatShelf": false,
+    "shoeShelf": false,
+    "modules": 0
+  },
+  "materialRefs": [
+    {
+      "query": "Дуб Денвер Трюфель",
+      "article": "H1399 ST10",
+      "label": "ЛДСП, 16 мм, Дуб Денвер трюфель, Egger",
+      "group": "01 Листовой материал/ЛДСП/16мм",
+      "lengthMm": 2800.0,
+      "widthMm": 2070.0,
+      "thicknessMm": 16.0,
+      "unit": "кв.м."
+    }
+  ],
+  "materials": [
+    "Дуб Денвер Трюфель: ЛДСП, 16 мм, Дуб Денвер трюфель, Egger, 16мм",
+    "*Фактические замеры обязательны."
+  ],
+  "titleBlock": {
+    "sheetName": "Стол для переговоров в кабинете директора 1200х1200х750 Дуб Денвер Трюфель",
+    "date": "20.02.2026",
+    "manager": "Петрова А.А."
+  }
+}

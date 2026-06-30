@@ -1,0 +1,94 @@
+{
+  "id": "syktyvkar-61-kuhnya_2_etazh_5650h1579h1800_seryy_ugol",
+  "type": "kitchen_run",
+  "title": "Кухня (2 этаж) 5650х1579х1800 Серый уголь",
+  "classification": {
+    "scope": "manufactured",
+    "procurementFiltered": false
+  },
+  "ai": {
+    "provider": "local-importer",
+    "model": "rule-based-syktyvkar-v1"
+  },
+  "source": {
+    "project": "Сыктывкар 3 часть",
+    "position": "19",
+    "drawingNumber": "61",
+    "orderCode": "НФ-00007677",
+    "quantity": 1.0,
+    "unit": "шт",
+    "rawTitle": "Кухня (2 этаж) 5650х1579х1800 Серый уголь"
+  },
+  "dimensions": {
+    "widthMm": 5650.0,
+    "depthMm": 1579.0,
+    "heightMm": 1800.0
+  },
+  "dimensionNote": "",
+  "modules": [],
+  "geometry": {
+    "overhangMm": 0,
+    "sectionCount": 9
+  },
+  "parts": {
+    "top": {
+      "label": "Столешница",
+      "material": "ЛДСП, 16 мм, Серый уголь, Egger",
+      "thicknessMm": 16.0,
+      "displayColor": "#575b5d"
+    },
+    "sidePanels": {
+      "label": "Корпус",
+      "material": "ЛДСП, 16 мм, Серый уголь, Egger",
+      "thicknessMm": 16.0,
+      "displayColor": "#575b5d"
+    },
+    "doors": {
+      "label": "Фасады",
+      "material": "ЛДСП, 16 мм, Серый уголь, Egger",
+      "count": 9,
+      "displayColor": "#575b5d"
+    },
+    "shelves": {
+      "label": "Полки",
+      "material": "ЛДСП, 16 мм, Серый уголь, Egger",
+      "count": 0
+    }
+  },
+  "features": {
+    "quantity": 1.0,
+    "sourceDrawing": "61",
+    "sectionCount": 9,
+    "metalFrame": false,
+    "plinth": true,
+    "plinthBlack": true,
+    "drawers": 0,
+    "shelves": 0,
+    "lock": false,
+    "rod": false,
+    "hatShelf": false,
+    "shoeShelf": false,
+    "modules": 0
+  },
+  "materialRefs": [
+    {
+      "query": "Серый уголь",
+      "article": "U968 ST9",
+      "label": "ЛДСП, 16 мм, Серый уголь, Egger",
+      "group": "01 Листовой материал/ЛДСП/16мм",
+      "lengthMm": 2800.0,
+      "widthMm": 2070.0,
+      "thicknessMm": 16.0,
+      "unit": "кв.м."
+    }
+  ],
+  "materials": [
+    "Серый уголь: ЛДСП, 16 мм, Серый уголь, Egger, 16мм",
+    "*Фактические замеры обязательны."
+  ],
+  "titleBlock": {
+    "sheetName": "Кухня (2 этаж) 5650х1579х1800 Серый уголь",
+    "date": "20.02.2026",
+    "manager": "Петрова А.А."
+  }
+}

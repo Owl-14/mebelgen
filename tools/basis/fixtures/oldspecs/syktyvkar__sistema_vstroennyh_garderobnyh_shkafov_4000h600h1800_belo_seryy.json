@@ -1,0 +1,94 @@
+{
+  "id": "syktyvkar-50-sistema_vstroennyh_garderobnyh_shkafov_4000h600h1800_belo_seryy",
+  "type": "built_in_run",
+  "title": "Система встроенных гардеробных шкафов 4000х600х1800 Бело-серый",
+  "classification": {
+    "scope": "manufactured",
+    "procurementFiltered": false
+  },
+  "ai": {
+    "provider": "local-importer",
+    "model": "rule-based-syktyvkar-v1"
+  },
+  "source": {
+    "project": "Сыктывкар 3 часть",
+    "position": "12",
+    "drawingNumber": "50",
+    "orderCode": "НФ-00007670",
+    "quantity": 1.0,
+    "unit": "шт",
+    "rawTitle": "Система встроенных гардеробных шкафов 4000х600х1800 Бело-серый"
+  },
+  "dimensions": {
+    "widthMm": 4000.0,
+    "depthMm": 600.0,
+    "heightMm": 1800.0
+  },
+  "dimensionNote": "",
+  "modules": [],
+  "geometry": {
+    "overhangMm": 0,
+    "sectionCount": 8
+  },
+  "parts": {
+    "top": {
+      "label": "Корпус / фасады",
+      "material": "ЛДСП, 16 мм, Бело-серый, Egger",
+      "thicknessMm": 16.0,
+      "displayColor": "#e3e1dc"
+    },
+    "sidePanels": {
+      "label": "Корпус",
+      "material": "ЛДСП, 16 мм, Бело-серый, Egger",
+      "thicknessMm": 16.0,
+      "displayColor": "#e3e1dc"
+    },
+    "doors": {
+      "label": "Фасады",
+      "material": "ЛДСП, 16 мм, Бело-серый, Egger",
+      "count": 8,
+      "displayColor": "#e3e1dc"
+    },
+    "shelves": {
+      "label": "Полки",
+      "material": "ЛДСП, 16 мм, Бело-серый, Egger",
+      "count": 4
+    }
+  },
+  "features": {
+    "quantity": 1.0,
+    "sourceDrawing": "50",
+    "sectionCount": 8,
+    "metalFrame": false,
+    "plinth": true,
+    "plinthBlack": false,
+    "drawers": 0,
+    "shelves": 4,
+    "lock": false,
+    "rod": true,
+    "hatShelf": true,
+    "shoeShelf": true,
+    "modules": 0
+  },
+  "materialRefs": [
+    {
+      "query": "Бело-серый",
+      "article": "U775 ST9",
+      "label": "ЛДСП, 16 мм, Бело-серый, Egger",
+      "group": "01 Листовой материал/ЛДСП/16мм",
+      "lengthMm": 2800.0,
+      "widthMm": 2070.0,
+      "thicknessMm": 16.0,
+      "unit": "кв.м."
+    }
+  ],
+  "materials": [
+    "Бело-серый: ЛДСП, 16 мм, Бело-серый, Egger, 16мм",
+    "*Фактические замеры обязательны."
+  ],
+  "titleBlock": {
+    "sheetName": "Система встроенных гардеробных шкафов 4000х600х1800 Бело-серый",
+    "date": "20.02.2026",
+    "manager": "Петрова А.А."
+  }
+}

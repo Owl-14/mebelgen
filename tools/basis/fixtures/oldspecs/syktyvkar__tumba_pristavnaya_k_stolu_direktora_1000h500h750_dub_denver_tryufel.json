@@ -1,0 +1,92 @@
+{
+  "id": "syktyvkar-39-tumba_pristavnaya_k_stolu_direktora_1000h500h750_dub_denver_tryufel",
+  "type": "drawer_unit",
+  "title": "Тумба приставная к столу директора 1000х500х750 Дуб Денвер Трюфель",
+  "classification": {
+    "scope": "manufactured",
+    "procurementFiltered": false
+  },
+  "ai": {
+    "provider": "local-importer",
+    "model": "rule-based-syktyvkar-v1"
+  },
+  "source": {
+    "project": "Сыктывкар 3 часть",
+    "position": "2",
+    "drawingNumber": "39",
+    "orderCode": "НФ-00007660",
+    "quantity": 1.0,
+    "unit": "шт",
+    "rawTitle": "Тумба приставная к столу директора 1000х500х750 Дуб Денвер Трюфель"
+  },
+  "dimensions": {
+    "widthMm": 1000.0,
+    "depthMm": 500.0,
+    "heightMm": 750.0
+  },
+  "dimensionNote": "",
+  "modules": [],
+  "geometry": {
+    "overhangMm": 0,
+    "sectionCount": 1
+  },
+  "parts": {
+    "top": {
+      "label": "Корпус / фасады",
+      "material": "ЛДСП, 16 мм, Дуб Денвер трюфель, Egger",
+      "thicknessMm": 16.0,
+      "displayColor": "#b09673"
+    },
+    "sidePanels": {
+      "label": "Корпус",
+      "material": "ЛДСП, 16 мм, Дуб Денвер трюфель, Egger",
+      "thicknessMm": 16.0,
+      "displayColor": "#b09673"
+    },
+    "drawers": {
+      "label": "Ящики",
+      "count": 3,
+      "material": "ЛДСП, 16 мм, Дуб Денвер трюфель, Egger"
+    },
+    "wheels": {
+      "label": "Колесные опоры",
+      "material": "черные"
+    }
+  },
+  "features": {
+    "quantity": 1.0,
+    "sourceDrawing": "39",
+    "sectionCount": 1,
+    "metalFrame": false,
+    "plinth": true,
+    "plinthBlack": false,
+    "drawers": 3,
+    "shelves": 0,
+    "lock": true,
+    "rod": false,
+    "hatShelf": false,
+    "shoeShelf": false,
+    "modules": 0
+  },
+  "materialRefs": [
+    {
+      "query": "Дуб Денвер Трюфель",
+      "article": "H1399 ST10",
+      "label": "ЛДСП, 16 мм, Дуб Денвер трюфель, Egger",
+      "group": "01 Листовой материал/ЛДСП/16мм",
+      "lengthMm": 2800.0,
+      "widthMm": 2070.0,
+      "thicknessMm": 16.0,
+      "unit": "кв.м."
+    }
+  ],
+  "materials": [
+    "Дуб Денвер Трюфель: ЛДСП, 16 мм, Дуб Денвер трюфель, Egger, 16мм",
+    "*Фактические замеры обязательны."
+  ],
+  "titleBlock": {
+    "sheetName": "Тумба приставная к столу директора 1000х500х750 Дуб Денвер Трюфель",
+    "date": "20.02.2026",
+    "manager": "Петрова А.А."
+  }
+}
