@@ -29,10 +29,16 @@ def _r(v: float) -> float:
 
 
 def _contour(orient: str, sx: float, sy: float, sz: float) -> dict[str, float]:
+    # Контур и трансляция сверены с ЭТАЛОНОМ РОДНОГО шкафа БАЗИС (Мебельщик →
+    # экспорт .cfrn, AutoSave18), который облако пересобирает корректно. Это
+    # ground-truth, под который должен попадать наш .cfrn для верного импорта:
+    #   vertical : {x: глубина(sz), y: высота(sy)},  trans.z = z1
+    #   horizont : {x: ширина(sx),  y: глубина(sz)},  trans.z = z2  (см. _z_for)
+    #   front    : {x: ширина(sx),  y: высота(sy)},   trans.z = z1
     if orient in ("vertical",):
         return {"x": _r(sz), "y": _r(sy)}
     if orient in ("horizont", "horizontal"):
-        return {"x": _r(sz), "y": _r(sx)}
+        return {"x": _r(sx), "y": _r(sz)}
     return {"x": _r(sx), "y": _r(sy)}            # front
 
 
@@ -71,7 +77,9 @@ def project_to_cfrn_json(project: dict[str, Any]) -> dict[str, Any]:
             "clippedSourceContour": {"size": cont, "pos": {"x": 0, "y": 0}},
             "fullProductContour": {"size": cont, "pos": {"x": 0, "y": 0}},
         })
-        children.append({"tableIndex": idx, "matrix": _matrix(orient, pl["x1"], pl["y1"], pl["z1"])})
+        # горизонталь: контур растёт в −Z от точки привязки → привязка по задней грани z2
+        tz = pl["z2"] if orient in ("horizont", "horizontal") else pl["z1"]
+        children.append({"tableIndex": idx, "matrix": _matrix(orient, pl["x1"], pl["y1"], tz)})
 
     return {
         "model": {"tableIndex": -1, "objs": [{"tableIndex": 0, "objs": children}]},
