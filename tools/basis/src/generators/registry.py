@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from . import cabinet, composite, corpus, desk, door_unit, drawer_unit, shelving
+from . import cabinet, composite, corpus, desk, door_unit, drawer_unit, round_table, shelving
 
 _REGISTRY: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "corpus": corpus.generate,
@@ -15,6 +15,7 @@ _REGISTRY: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "wardrobe": cabinet.generate,
     "desk": desk.generate,
     "table": desk.generate,
+    "round_table": round_table.generate,
     "composite": composite.generate,
 }
 

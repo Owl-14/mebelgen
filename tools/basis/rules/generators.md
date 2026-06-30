@@ -36,6 +36,13 @@
 ## desk / table
 `top_overhang` (свес столешницы), `apron` (задняя царга), `apron_height`.
 
+## round_table
+Круглый стол на пьедестале. `dimensions.width = depth = диаметр`. Поля:
+`top_thickness`, `pedestal_diameter`, `base` (диск-основание), `base_thickness`,
+`base_diameter`. Панели несут `shape` (circle|cylinder) + `radius`; `placement` —
+габаритный бокс (квадрат×высота). Физическая сборка в БАЗИС требует поддержки
+контура в импортёре (AKD-42).
+
 ## composite
 `blocks[]`: `{name, origin:{x,z}, spec: <вложенный ParamSpec>}`. Генератор строит
 каждый блок и сдвигает на origin. Вложенность — один уровень.

@@ -183,6 +183,11 @@
           "type": "string",
           "enum": ["horizont", "vertical", "front"]
         },
+        "shape": {
+          "type": "string",
+          "enum": ["rect", "circle", "cylinder"]
+        },
+        "radius": { "type": "number", "exclusiveMinimum": 0 },
         "placement": {
           "type": "object",
           "required": ["x1", "x2", "y1", "y2", "z1", "z2"],

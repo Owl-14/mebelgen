@@ -12,7 +12,7 @@
     "furniture_type": { "type": "string" },
     "archetype": {
       "type": "string",
-      "enum": ["corpus", "shelving", "drawer_unit", "door_unit", "cabinet", "wardrobe", "desk", "table", "composite"]
+      "enum": ["corpus", "shelving", "drawer_unit", "door_unit", "cabinet", "wardrobe", "desk", "table", "round_table", "composite"]
     },
     "dimensions": {
       "type": "object",
