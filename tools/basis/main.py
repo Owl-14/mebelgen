@@ -121,6 +121,28 @@ def cmd_check_geometry(args: argparse.Namespace) -> int:
     return 0 if report["ok"] else 2
 
 
+def cmd_cloud(args: argparse.Namespace) -> int:
+    from src.cloud_api import (CloudTasksClient, DRAWING_FORMAT, MODEL_CONVERT, api_overview)
+
+    if args.op == "info":
+        print(api_overview())
+        return 0
+    c = CloudTasksClient()
+    if args.op == "list":
+        print(json.dumps(c.list_tasks(), ensure_ascii=False, indent=2))
+    elif args.op == "status":
+        print(json.dumps(c.get_task(int(args.args[0])), ensure_ascii=False, indent=2))
+    elif args.op == "poll":
+        print(json.dumps(c.poll(int(args.args[0])), ensure_ascii=False, indent=2))
+    elif args.op == "download":
+        print("Сохранено:", c.download_result(int(args.args[0]), args.output or "result.bin"))
+    elif args.op == "model-convert":
+        print(json.dumps(c.model_convert(args.args, MODEL_CONVERT[args.type]), ensure_ascii=False, indent=2))
+    elif args.op == "drawing-convert":
+        print(json.dumps(c.drawing_convert(args.args, DRAWING_FORMAT[args.format]), ensure_ascii=False, indent=2))
+    return 0
+
+
 def cmd_materials(args: argparse.Namespace) -> int:
     from src.materials import check_project_materials, load_catalog
 
@@ -315,6 +337,14 @@ def main() -> int:
     p_gen.add_argument("paramspec", help="Путь к ParamSpec JSON (paramspecs/<x>.json)")
     p_gen.add_argument("-o", "--output", help="Куда писать project.json (по умолчанию projects/<имя>)")
     p_gen.set_defaults(func=cmd_generate)
+
+    p_cloud = sub.add_parser("cloud", help="БАЗИС-Облако Tasks API (env BAZIS_API_KEY; 'cloud info' без ключа)")
+    p_cloud.add_argument("op", choices=["info", "list", "status", "poll", "download", "model-convert", "drawing-convert"])
+    p_cloud.add_argument("args", nargs="*", help="id или файлы")
+    p_cloud.add_argument("-o", "--output", help="куда сохранить результат")
+    p_cloud.add_argument("--type", choices=["b3d-to-cfrn", "cfrn-to-b3d"], help="для model-convert")
+    p_cloud.add_argument("--format", choices=["pdf", "jpeg", "wmf", "svg"], help="для drawing-convert")
+    p_cloud.set_defaults(func=cmd_cloud)
 
     p_mat = sub.add_parser("materials", help="Каталог материалов; --check сверить материалы проекта")
     p_mat.add_argument("--check", help="project.json для сверки материалов с каталогом")
