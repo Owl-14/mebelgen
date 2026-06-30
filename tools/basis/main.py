@@ -121,6 +121,19 @@ def cmd_check_geometry(args: argparse.Namespace) -> int:
     return 0 if report["ok"] else 2
 
 
+def cmd_build_b3d(args: argparse.Namespace) -> int:
+    from src.build_b3d import build_b3d, build_b3d_from_paramspec
+
+    data = json.loads(Path(args.input).read_text(encoding="utf-8"))
+    out = args.output or str(Path(args.input).with_suffix(".b3d"))
+    if data.get("schemaVersion") == "paramspec-v1":
+        res = build_b3d_from_paramspec(data, out)
+    else:
+        res = build_b3d(data, out)
+    print(f"Готов .b3d: {res['b3d']}  ({res['bytes']} байт, task {res['task_id']})")
+    return 0
+
+
 def cmd_cloud(args: argparse.Namespace) -> int:
     from src.cloud_api import (CloudTasksClient, DRAWING_FORMAT, MODEL_CONVERT, api_overview)
 
@@ -372,6 +385,11 @@ def main() -> int:
     p_gen.add_argument("paramspec", help="Путь к ParamSpec JSON (paramspecs/<x>.json)")
     p_gen.add_argument("-o", "--output", help="Куда писать project.json (по умолчанию projects/<имя>)")
     p_gen.set_defaults(func=cmd_generate)
+
+    p_b3d = sub.add_parser("build-b3d", help="ParamSpec/project → .cfrn → облако → нативный .b3d (ПЛАТНО ~10₽, env BAZIS_API_KEY)")
+    p_b3d.add_argument("input", help="ParamSpec или project.json")
+    p_b3d.add_argument("-o", "--output", help="Путь к .b3d (по умолчанию рядом с входом)")
+    p_b3d.set_defaults(func=cmd_build_b3d)
 
     p_cloud = sub.add_parser("cloud", help="БАЗИС-Облако Tasks API (env BAZIS_API_KEY; 'cloud info' без ключа)")
     p_cloud.add_argument("op", choices=["info", "list", "status", "poll", "download", "model-convert", "drawing-convert"])
