@@ -1,0 +1,81 @@
+{
+  "id": "6-shkaf_kombinirovannyy",
+  "type": "wardrobe",
+  "title": "Шкаф комбинированный 1000x400x1800",
+  "ai": {
+    "provider": "parsed-doc/mock",
+    "model": "mebelgen-python-parser"
+  },
+  "dimensions": {
+    "widthMm": 1000,
+    "depthMm": 400,
+    "heightMm": 1800
+  },
+  "geometry": {
+    "overhangMm": 0
+  },
+  "parts": {
+    "top": {
+      "label": "Корпус / столешница",
+      "material": "МДФ",
+      "thicknessMm": 18,
+      "colorSystem": "RAL",
+      "colorCode": "8019",
+      "finish": "матовое"
+    },
+    "sidePanels": {
+      "label": "Корпус",
+      "material": "МДФ",
+      "thicknessMm": 18,
+      "colorSystem": "RAL",
+      "colorCode": "8019"
+    },
+    "doors": {
+      "label": "Двери",
+      "material": "push-to-open",
+      "count": 2
+    },
+    "plinth": {
+      "label": "Цоколь",
+      "material": "чёрный матовый",
+      "heightMm": 70
+    },
+    "brassInserts": {
+      "material": "латунная Т-вставка"
+    },
+    "rod": {
+      "label": "Штанга",
+      "material": "выдвижная"
+    }
+  },
+  "features": {
+    "brass": true,
+    "pcHolder": false,
+    "cableChannel": false,
+    "pushOpen": true,
+    "lock": true,
+    "lockRight": true,
+    "plinth": true,
+    "plinthBlack": true,
+    "shelves": 0,
+    "drawers": 0,
+    "fluted": false,
+    "feltPads": false,
+    "matteLacquer": false,
+    "rod": true,
+    "hatShelf": true,
+    "shoeShelf": true
+  },
+  "materials": [
+    "Материал изготовления: МДФ под покраску в цвет стола PPL RAL 8019",
+    "матовый. Латунная вставка по периметру шкафа",
+    "Шкаф комплектуется выдвижной штангой, полкой для шапки, полкой для обуви-глубина 300 мм. + ре",
+    "Пуш открывание. Замок на правой двери, цвет черный. Цоколь, цвет черный. Деление секций симме",
+    "*Фактические замеры обязательны."
+  ],
+  "titleBlock": {
+    "sheetName": "Шкаф комбинированный 1000x400x1800",
+    "date": "28.05.2026",
+    "manager": "Петрова А.А."
+  }
+}

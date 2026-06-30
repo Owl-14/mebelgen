@@ -1,0 +1,92 @@
+{
+  "id": "syktyvkar-72-tumba_podkatnaya_400x450h580_svetlo_seraya",
+  "type": "drawer_unit",
+  "title": "Тумба подкатная 400x450х580 Светло-серая",
+  "classification": {
+    "scope": "manufactured",
+    "procurementFiltered": false
+  },
+  "ai": {
+    "provider": "local-importer",
+    "model": "rule-based-syktyvkar-v1"
+  },
+  "source": {
+    "project": "Сыктывкар 3 часть",
+    "position": "23",
+    "drawingNumber": "72",
+    "orderCode": "НФ-00007681",
+    "quantity": 1.0,
+    "unit": "шт",
+    "rawTitle": "Тумба подкатная 400x450х580 Светло-серая"
+  },
+  "dimensions": {
+    "widthMm": 400.0,
+    "depthMm": 450.0,
+    "heightMm": 580.0
+  },
+  "dimensionNote": "",
+  "modules": [],
+  "geometry": {
+    "overhangMm": 0,
+    "sectionCount": 1
+  },
+  "parts": {
+    "top": {
+      "label": "Корпус / фасады",
+      "material": "ЛДСП 16мм Дуб Вотан",
+      "thicknessMm": 16.0,
+      "displayColor": "#eee6d7"
+    },
+    "sidePanels": {
+      "label": "Корпус",
+      "material": "ЛДСП 16мм Дуб Вотан",
+      "thicknessMm": 16.0,
+      "displayColor": "#eee6d7"
+    },
+    "drawers": {
+      "label": "Ящики",
+      "count": 3,
+      "material": "ЛДСП 16мм Дуб Вотан"
+    },
+    "wheels": {
+      "label": "Колесные опоры",
+      "material": "черные"
+    }
+  },
+  "features": {
+    "quantity": 1.0,
+    "sourceDrawing": "72",
+    "sectionCount": 1,
+    "metalFrame": false,
+    "plinth": true,
+    "plinthBlack": false,
+    "drawers": 3,
+    "shelves": 0,
+    "lock": true,
+    "rod": false,
+    "hatShelf": false,
+    "shoeShelf": false,
+    "modules": 0
+  },
+  "materialRefs": [
+    {
+      "query": "ЛДСП",
+      "article": "U2167 PR",
+      "label": "ЛДСП 16мм Дуб Вотан",
+      "group": "01 Листовой материал/ЛДСП/16мм",
+      "lengthMm": 2750.0,
+      "widthMm": 1830.0,
+      "thicknessMm": 16.0,
+      "unit": "кв. м"
+    }
+  ],
+  "materials": [
+    "ЛДСП: ЛДСП 16мм Дуб Вотан, 16мм",
+    "*Фактические замеры обязательны."
+  ],
+  "titleBlock": {
+    "sheetName": "Тумба подкатная 400x450х580 Светло-серая",
+    "date": "20.02.2026",
+    "manager": "Петрова А.А."
+  }
+}

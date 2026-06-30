@@ -1,0 +1,62 @@
+{
+  "id": "item-zhurnalnyy_stol",
+  "type": "coffee_rect",
+  "title": "Журнальный стол 1000x450x450",
+  "ai": {
+    "provider": "parsed-doc/mock",
+    "model": "mebelgen-python-parser"
+  },
+  "dimensions": {
+    "widthMm": 1000,
+    "depthMm": 450,
+    "heightMm": 450
+  },
+  "geometry": {
+    "overhangMm": 0
+  },
+  "parts": {
+    "top": {
+      "label": "Столешница",
+      "material": "МДФ",
+      "thicknessMm": 50,
+      "colorSystem": "RAL",
+      "colorCode": "8019",
+      "finish": "матовое"
+    },
+    "sidePanels": {
+      "label": "Корпус",
+      "material": "МДФ",
+      "thicknessMm": 18,
+      "colorSystem": "RAL",
+      "colorCode": "8019"
+    }
+  },
+  "features": {
+    "brass": false,
+    "pcHolder": false,
+    "cableChannel": false,
+    "pushOpen": false,
+    "lock": false,
+    "lockRight": false,
+    "plinth": false,
+    "plinthBlack": false,
+    "shelves": 0,
+    "drawers": 0,
+    "fluted": false,
+    "feltPads": false,
+    "matteLacquer": false,
+    "rod": false,
+    "hatShelf": false,
+    "shoeShelf": false
+  },
+  "materials": [
+    "Материал изготовления: МДФ под покраску цвет PPL RAL 8019",
+    "столешница 50 мм",
+    "*Фактические замеры обязательны."
+  ],
+  "titleBlock": {
+    "sheetName": "Журнальный стол 1000x450x450",
+    "date": "28.05.2026",
+    "manager": "Петрова А.А."
+  }
+}

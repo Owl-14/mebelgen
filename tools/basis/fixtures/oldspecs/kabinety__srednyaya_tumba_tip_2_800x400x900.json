@@ -1,0 +1,83 @@
+{
+  "id": "item-srednyaya_tumba_tip_2",
+  "type": "cabinet",
+  "title": "Средняя тумба тип 2 800x400x900",
+  "ai": {
+    "provider": "parsed-doc/mock",
+    "model": "mebelgen-python-parser"
+  },
+  "dimensions": {
+    "widthMm": 800,
+    "depthMm": 400,
+    "heightMm": 900
+  },
+  "geometry": {
+    "overhangMm": 0
+  },
+  "parts": {
+    "top": {
+      "label": "Корпус / столешница",
+      "material": "МДФ",
+      "thicknessMm": 18,
+      "colorSystem": "",
+      "colorCode": "",
+      "finish": "матовое"
+    },
+    "sidePanels": {
+      "label": "Корпус",
+      "material": "МДФ",
+      "thicknessMm": 18,
+      "colorSystem": "",
+      "colorCode": ""
+    },
+    "doors": {
+      "label": "Двери",
+      "material": "накладные",
+      "count": 2
+    },
+    "plinth": {
+      "label": "Цоколь",
+      "material": "в цвет корпуса",
+      "heightMm": 80
+    },
+    "shelves": {
+      "label": "Полки",
+      "count": 1,
+      "material": "МДФ"
+    }
+  },
+  "features": {
+    "brass": false,
+    "pcHolder": false,
+    "cableChannel": false,
+    "pushOpen": false,
+    "lock": true,
+    "lockRight": true,
+    "plinth": false,
+    "plinthBlack": false,
+    "shelves": 1,
+    "drawers": 0,
+    "fluted": false,
+    "feltPads": false,
+    "matteLacquer": false,
+    "rod": false,
+    "hatShelf": false,
+    "shoeShelf": false
+  },
+  "materials": [
+    "Тумба выполнена: МДФ, 16 мм, цвет выбирается из палитры NSC",
+    "Крышка тумбы выполнена из МДФ– 25 мм",
+    "Двери накладные",
+    "Шкаф содержит в себе одну полку",
+    "Направление текстуры по длине",
+    "Ручки – профили металлические - цвет черный. L=128 мм",
+    "Замок на правой двери. Цвет замка – черный",
+    "Регулируемые опоры",
+    "*Фактические замеры обязательны."
+  ],
+  "titleBlock": {
+    "sheetName": "Средняя тумба тип 2 800x400x900",
+    "date": "28.05.2026",
+    "manager": "Петрова А.А."
+  }
+}

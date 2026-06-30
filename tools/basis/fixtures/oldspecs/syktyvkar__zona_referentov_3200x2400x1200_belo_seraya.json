@@ -1,0 +1,94 @@
+{
+  "id": "syktyvkar-15-zona_referentov_3200x2400x1200_belo_seraya",
+  "type": "built_in_run",
+  "title": "Зона референтов 3200x2400x1200 Бело-серая",
+  "classification": {
+    "scope": "manufactured",
+    "procurementFiltered": false
+  },
+  "ai": {
+    "provider": "local-importer",
+    "model": "rule-based-syktyvkar-v1"
+  },
+  "source": {
+    "project": "Сыктывкар 3 часть",
+    "position": "15",
+    "drawingNumber": "",
+    "orderCode": "НФ-00007673",
+    "quantity": 1.0,
+    "unit": "шт",
+    "rawTitle": "Зона референтов 3200x2400x1200 Бело-серая"
+  },
+  "dimensions": {
+    "widthMm": 3200.0,
+    "depthMm": 2400.0,
+    "heightMm": 1200.0
+  },
+  "dimensionNote": "",
+  "modules": [],
+  "geometry": {
+    "overhangMm": 0,
+    "sectionCount": 6
+  },
+  "parts": {
+    "top": {
+      "label": "Корпус / фасады",
+      "material": "ЛДСП 16мм Дуб Вотан",
+      "thicknessMm": 16.0,
+      "displayColor": "#eee6d7"
+    },
+    "sidePanels": {
+      "label": "Корпус",
+      "material": "ЛДСП 16мм Дуб Вотан",
+      "thicknessMm": 16.0,
+      "displayColor": "#eee6d7"
+    },
+    "doors": {
+      "label": "Фасады",
+      "material": "ЛДСП 16мм Дуб Вотан",
+      "count": 6,
+      "displayColor": "#eee6d7"
+    },
+    "shelves": {
+      "label": "Полки",
+      "material": "ЛДСП 16мм Дуб Вотан",
+      "count": 4
+    }
+  },
+  "features": {
+    "quantity": 1.0,
+    "sourceDrawing": "",
+    "sectionCount": 6,
+    "metalFrame": false,
+    "plinth": true,
+    "plinthBlack": false,
+    "drawers": 0,
+    "shelves": 4,
+    "lock": false,
+    "rod": false,
+    "hatShelf": false,
+    "shoeShelf": false,
+    "modules": 0
+  },
+  "materialRefs": [
+    {
+      "query": "ЛДСП",
+      "article": "U2167 PR",
+      "label": "ЛДСП 16мм Дуб Вотан",
+      "group": "01 Листовой материал/ЛДСП/16мм",
+      "lengthMm": 2750.0,
+      "widthMm": 1830.0,
+      "thicknessMm": 16.0,
+      "unit": "кв. м"
+    }
+  ],
+  "materials": [
+    "ЛДСП: ЛДСП 16мм Дуб Вотан, 16мм",
+    "*Фактические замеры обязательны."
+  ],
+  "titleBlock": {
+    "sheetName": "Зона референтов 3200x2400x1200 Бело-серая",
+    "date": "20.02.2026",
+    "manager": "Петрова А.А."
+  }
+}

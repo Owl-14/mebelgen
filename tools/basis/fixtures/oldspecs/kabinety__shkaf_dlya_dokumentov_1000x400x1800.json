@@ -1,0 +1,82 @@
+{
+  "id": "5-shkaf_dlya_dokumentov",
+  "type": "wardrobe",
+  "title": "Шкаф для документов 1000x400x1800",
+  "ai": {
+    "provider": "parsed-doc/mock",
+    "model": "mebelgen-python-parser"
+  },
+  "dimensions": {
+    "widthMm": 1000,
+    "depthMm": 400,
+    "heightMm": 1800
+  },
+  "geometry": {
+    "overhangMm": 0
+  },
+  "parts": {
+    "top": {
+      "label": "Корпус / столешница",
+      "material": "МДФ",
+      "thicknessMm": 18,
+      "colorSystem": "RAL",
+      "colorCode": "8019",
+      "finish": "матовое"
+    },
+    "sidePanels": {
+      "label": "Корпус",
+      "material": "МДФ",
+      "thicknessMm": 18,
+      "colorSystem": "RAL",
+      "colorCode": "8019"
+    },
+    "doors": {
+      "label": "Двери",
+      "material": "push-to-open",
+      "count": 2
+    },
+    "plinth": {
+      "label": "Цоколь",
+      "material": "чёрный матовый",
+      "heightMm": 70
+    },
+    "brassInserts": {
+      "material": "латунная Т-вставка"
+    },
+    "shelves": {
+      "label": "Полки",
+      "count": 4,
+      "material": "МДФ"
+    }
+  },
+  "features": {
+    "brass": true,
+    "pcHolder": false,
+    "cableChannel": false,
+    "pushOpen": true,
+    "lock": true,
+    "lockRight": true,
+    "plinth": true,
+    "plinthBlack": true,
+    "shelves": 4,
+    "drawers": 0,
+    "fluted": false,
+    "feltPads": false,
+    "matteLacquer": false,
+    "rod": false,
+    "hatShelf": false,
+    "shoeShelf": false
+  },
+  "materials": [
+    "Материал изготовления: МДФ под покраску в цвет стола PPL RAL 8019",
+    "матовый. Латунная вставка по периметру шкафа",
+    "Полки имеют возможность регулироваться по высоте, 4 шт",
+    "Пуш открывание. Замок на правой двери, цвет черный. Цоколь, цвет черный. Деление секций симме",
+    "*Фактические замеры обязательны."
+  ],
+  "titleBlock": {
+    "sheetName": "Шкаф для документов 1000x400x1800",
+    "date": "28.05.2026",
+    "manager": "Петрова А.А."
+  }
+}

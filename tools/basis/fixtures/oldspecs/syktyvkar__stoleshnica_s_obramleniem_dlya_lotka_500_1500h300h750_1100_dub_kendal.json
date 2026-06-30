@@ -1,0 +1,90 @@
+{
+  "id": "syktyvkar-73-stoleshnica_s_obramleniem_dlya_lotka_500_1500h300h750_1100_dub_kendal",
+  "type": "countertop",
+  "title": "Столешница с обрамлением для лотка 500-1500х300х750/1100 Дуб Кендал",
+  "classification": {
+    "scope": "manufactured",
+    "procurementFiltered": false
+  },
+  "ai": {
+    "provider": "local-importer",
+    "model": "rule-based-syktyvkar-v1"
+  },
+  "source": {
+    "project": "Сыктывкар 3 часть",
+    "position": "24",
+    "drawingNumber": "73",
+    "orderCode": "НФ-00007682",
+    "quantity": 2.0,
+    "unit": "шт",
+    "rawTitle": "Столешница с обрамлением для лотка 500-1500х300х750/1100 Дуб Кендал"
+  },
+  "dimensions": {
+    "widthMm": 1500.0,
+    "depthMm": 300.0,
+    "heightMm": 1100.0
+  },
+  "dimensionNote": "",
+  "modules": [],
+  "geometry": {
+    "overhangMm": 25,
+    "sectionCount": 1
+  },
+  "parts": {
+    "top": {
+      "label": "Столешница",
+      "material": "ЛДСП, 16 мм, Дуб Кендал коньяк, Egger",
+      "thicknessMm": 25,
+      "displayColor": "#c2a675"
+    },
+    "sidePanels": {
+      "label": "Корпус",
+      "material": "ЛДСП, 16 мм, Дуб Кендал коньяк, Egger",
+      "thicknessMm": 16.0,
+      "displayColor": "#c2a675"
+    },
+    "frontScreen": {
+      "label": "Передний экран",
+      "material": "ЛДСП, 16 мм, Дуб Кендал коньяк, Egger",
+      "thicknessMm": 16,
+      "heightMm": 300,
+      "displayColor": "#c2a675"
+    }
+  },
+  "features": {
+    "quantity": 2.0,
+    "sourceDrawing": "73",
+    "sectionCount": 1,
+    "metalFrame": false,
+    "plinth": false,
+    "plinthBlack": false,
+    "drawers": 0,
+    "shelves": 0,
+    "lock": false,
+    "rod": false,
+    "hatShelf": false,
+    "shoeShelf": false,
+    "modules": 0
+  },
+  "materialRefs": [
+    {
+      "query": "Дуб Кендал",
+      "article": "H3398 ST12",
+      "label": "ЛДСП, 16 мм, Дуб Кендал коньяк, Egger",
+      "group": "01 Листовой материал/ЛДСП/16мм",
+      "lengthMm": 2800.0,
+      "widthMm": 2070.0,
+      "thicknessMm": 16.0,
+      "unit": "кв.м."
+    }
+  ],
+  "materials": [
+    "Дуб Кендал: ЛДСП, 16 мм, Дуб Кендал коньяк, Egger, 16мм",
+    "*Фактические замеры обязательны."
+  ],
+  "titleBlock": {
+    "sheetName": "Столешница с обрамлением для лотка 500-1500х300х750/1100 Дуб Кендал",
+    "date": "20.02.2026",
+    "manager": "Петрова А.А."
+  }
+}

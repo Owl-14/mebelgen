@@ -1,0 +1,102 @@
+{
+  "id": "syktyvkar-52-stol_dlya_bolshoy_peregovornoy_2000h900h750_dub_denver_tryufel_opory_9005",
+  "type": "desk_panel",
+  "title": "Стол для большой переговорной 2000х900х750 Дуб Денвер Трюфель/Опоры 9005",
+  "classification": {
+    "scope": "manufactured",
+    "procurementFiltered": false
+  },
+  "ai": {
+    "provider": "local-importer",
+    "model": "rule-based-syktyvkar-v1"
+  },
+  "source": {
+    "project": "Сыктывкар 3 часть",
+    "position": "13",
+    "drawingNumber": "52",
+    "orderCode": "НФ-00007671",
+    "quantity": 1.0,
+    "unit": "шт",
+    "rawTitle": "Стол для большой переговорной 2000х900х750 Дуб Денвер Трюфель/Опоры 9005"
+  },
+  "dimensions": {
+    "widthMm": 2000.0,
+    "depthMm": 900.0,
+    "heightMm": 750.0
+  },
+  "dimensionNote": "",
+  "modules": [],
+  "geometry": {
+    "overhangMm": 25,
+    "sectionCount": 1
+  },
+  "parts": {
+    "top": {
+      "label": "Столешница",
+      "material": "ЛДСП, 16 мм, Дуб Денвер трюфель, Egger",
+      "thicknessMm": 25,
+      "displayColor": "#b09673"
+    },
+    "sidePanels": {
+      "label": "Корпус",
+      "material": "ЛДСП, 16 мм, Дуб Денвер трюфель, Egger",
+      "thicknessMm": 16.0,
+      "displayColor": "#b09673"
+    },
+    "frontScreen": {
+      "label": "Передний экран",
+      "material": "ЛДСП, 16 мм, Дуб Денвер трюфель, Egger",
+      "thicknessMm": 16,
+      "heightMm": 300,
+      "displayColor": "#b09673"
+    },
+    "metalFrame": {
+      "label": "Металлокаркас / опоры",
+      "material": "RAL 9005",
+      "displayColor": "#111111"
+    }
+  },
+  "features": {
+    "quantity": 1.0,
+    "sourceDrawing": "52",
+    "sectionCount": 1,
+    "metalFrame": true,
+    "plinth": false,
+    "plinthBlack": true,
+    "drawers": 0,
+    "shelves": 0,
+    "lock": false,
+    "rod": false,
+    "hatShelf": false,
+    "shoeShelf": false,
+    "modules": 0
+  },
+  "materialRefs": [
+    {
+      "query": "Дуб Денвер Трюфель",
+      "article": "H1399 ST10",
+      "label": "ЛДСП, 16 мм, Дуб Денвер трюфель, Egger",
+      "group": "01 Листовой материал/ЛДСП/16мм",
+      "lengthMm": 2800.0,
+      "widthMm": 2070.0,
+      "thicknessMm": 16.0,
+      "unit": "кв.м."
+    },
+    {
+      "query": "RAL 9005",
+      "type": "color",
+      "code": "RAL 9005",
+      "label": "RAL 9005"
+    }
+  ],
+  "materials": [
+    "Дуб Денвер Трюфель: ЛДСП, 16 мм, Дуб Денвер трюфель, Egger, 16мм",
+    "Металл / опоры: RAL 9005",
+    "*Фактические замеры обязательны."
+  ],
+  "titleBlock": {
+    "sheetName": "Стол для большой переговорной 2000х900х750 Дуб Денвер Трюфель/Опоры 9005",
+    "date": "20.02.2026",
+    "manager": "Петрова А.А."
+  }
+}

@@ -1,0 +1,94 @@
+{
+  "id": "syktyvkar-48-shkaf_kombinirovannyy_direktor_1000h400h1817_dub_denver_tryufel",
+  "type": "cabinet",
+  "title": "Шкаф комбинированный – директор 1000х400х1817 Дуб Денвер Трюфель",
+  "classification": {
+    "scope": "manufactured",
+    "procurementFiltered": false
+  },
+  "ai": {
+    "provider": "local-importer",
+    "model": "rule-based-syktyvkar-v1"
+  },
+  "source": {
+    "project": "Сыктывкар 3 часть",
+    "position": "10",
+    "drawingNumber": "48",
+    "orderCode": "НФ-00007668",
+    "quantity": 1.0,
+    "unit": "шт",
+    "rawTitle": "Шкаф комбинированный – директор 1000х400х1817 Дуб Денвер Трюфель"
+  },
+  "dimensions": {
+    "widthMm": 1000.0,
+    "depthMm": 400.0,
+    "heightMm": 1817.0
+  },
+  "dimensionNote": "",
+  "modules": [],
+  "geometry": {
+    "overhangMm": 0,
+    "sectionCount": 2
+  },
+  "parts": {
+    "top": {
+      "label": "Корпус / фасады",
+      "material": "ЛДСП, 16 мм, Дуб Денвер трюфель, Egger",
+      "thicknessMm": 16.0,
+      "displayColor": "#b09673"
+    },
+    "sidePanels": {
+      "label": "Корпус",
+      "material": "ЛДСП, 16 мм, Дуб Денвер трюфель, Egger",
+      "thicknessMm": 16.0,
+      "displayColor": "#b09673"
+    },
+    "doors": {
+      "label": "Фасады",
+      "material": "ЛДСП, 16 мм, Дуб Денвер трюфель, Egger",
+      "count": 2,
+      "displayColor": "#b09673"
+    },
+    "shelves": {
+      "label": "Полки",
+      "material": "ЛДСП, 16 мм, Дуб Денвер трюфель, Egger",
+      "count": 4
+    }
+  },
+  "features": {
+    "quantity": 1.0,
+    "sourceDrawing": "48",
+    "sectionCount": 2,
+    "metalFrame": false,
+    "plinth": true,
+    "plinthBlack": false,
+    "drawers": 0,
+    "shelves": 4,
+    "lock": true,
+    "rod": false,
+    "hatShelf": false,
+    "shoeShelf": false,
+    "modules": 0
+  },
+  "materialRefs": [
+    {
+      "query": "Дуб Денвер Трюфель",
+      "article": "H1399 ST10",
+      "label": "ЛДСП, 16 мм, Дуб Денвер трюфель, Egger",
+      "group": "01 Листовой материал/ЛДСП/16мм",
+      "lengthMm": 2800.0,
+      "widthMm": 2070.0,
+      "thicknessMm": 16.0,
+      "unit": "кв.м."
+    }
+  ],
+  "materials": [
+    "Дуб Денвер Трюфель: ЛДСП, 16 мм, Дуб Денвер трюфель, Egger, 16мм",
+    "*Фактические замеры обязательны."
+  ],
+  "titleBlock": {
+    "sheetName": "Шкаф комбинированный – директор 1000х400х1817 Дуб Денвер Трюфель",
+    "date": "20.02.2026",
+    "manager": "Петрова А.А."
+  }
+}
