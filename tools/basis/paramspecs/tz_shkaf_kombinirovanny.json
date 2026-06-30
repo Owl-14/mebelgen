@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "paramspec-v1",
+  "project_name": "Шкаф комбинированный 1000×400×1800",
+  "furniture_type": "шкаф",
+  "archetype": "wardrobe",
+  "dimensions": { "width": 1000, "depth": 400, "height": 1800, "tolerance": 5 },
+  "materials": { "board_thickness": 25, "back_thickness": 16, "board_material": "МДФ под покраску матовый", "back_material": "ДВП", "edge_band_thickness": 0.4, "color": "RAL 8019", "color_code": "PPL RAL 8019" },
+  "legs": { "type": "цоколь", "height": 60, "as_panel": true, "color": "чёрный" },
+  "gaps": { "facade": 2, "default": 2 },
+  "interior_z_front": 25,
+  "sections": [
+    { "id": "left", "kind": "door", "shelves": 1, "shelf_levels": [1480], "shelf_label": "Полка для шапки", "door": 1, "door_name": "Дверь левая" },
+    { "id": "right", "kind": "door", "shelves": 3, "shelf_levels": [360, 800, 1200], "shelf_label": "Полка правая", "door": 1, "door_name": "Дверь правая" }
+  ],
+  "hardware": {
+    "handles": { "type": "push-to-open", "material": "—", "color": "—", "size": 0, "count": 0, "offset_from_top": 0, "furniture_encoded": "" },
+    "locks": [{ "type": "замок", "color": "чёрный", "target": "Дверь правая" }]
+  },
+  "features": ["выдвижная штанга (левая секция)", "полка для обуви глубина 300", "латунная вставка по периметру", "симметричное деление секций", "push_open", "коврик резиновый чёрный"],
+  "warnings": ["Симметричные секции: левая — штанга + полка для шапки; правая — полки (обувь и пр.). Штанга — фурнитура, в геометрию панелей не входит.", "Push-to-open: ручки не ставятся; замок на правой двери."],
+  "estimated_values": ["board_thickness", "legs.height", "уровни полок"]
+}
