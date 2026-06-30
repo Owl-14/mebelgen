@@ -121,6 +121,14 @@ def cmd_check_geometry(args: argparse.Namespace) -> int:
     return 0 if report["ok"] else 2
 
 
+def cmd_orchestrate(args: argparse.Namespace) -> int:
+    from src.orchestrator import orchestrate_file
+
+    res = orchestrate_file(args.paramspec, args.output)
+    print(res.report())
+    return 0 if res.ok else 2
+
+
 def cmd_ingest(args: argparse.Namespace) -> int:
     from src.feedback import record_pair
 
@@ -289,6 +297,14 @@ def main() -> int:
     p_gen.add_argument("paramspec", help="Путь к ParamSpec JSON (paramspecs/<x>.json)")
     p_gen.add_argument("-o", "--output", help="Куда писать project.json (по умолчанию projects/<имя>)")
     p_gen.set_defaults(func=cmd_generate)
+
+    p_orc = sub.add_parser(
+        "orchestrate",
+        help="ParamSpec → генерация → валидаторы → авторемонт → само-ревью (единый прогон)",
+    )
+    p_orc.add_argument("paramspec", help="Путь к ParamSpec JSON")
+    p_orc.add_argument("-o", "--output", help="Куда писать project.json (по умолчанию projects/<имя>)")
+    p_orc.set_defaults(func=cmd_orchestrate)
 
     p_ing = sub.add_parser(
         "ingest",
