@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "paramspec-v1",
+  "project_name": "Тумба для документов 1100×450×750",
+  "furniture_type": "тумба",
+  "archetype": "drawer_unit",
+  "dimensions": { "width": 1100, "depth": 450, "height": 750, "tolerance": 5 },
+  "materials": { "board_thickness": 25, "back_thickness": 16, "board_material": "МДФ под покраску", "back_material": "ДВП", "edge_band_thickness": 0.4, "color": "RAL 8019", "color_code": "PPL RAL 8019" },
+  "legs": { "type": "цоколь", "height": 60, "as_panel": true },
+  "gaps": { "facade": 2, "default": 2 },
+  "sections": [
+    { "id": "drawers", "kind": "drawers", "drawers": 3 }
+  ],
+  "hardware": {
+    "handles": { "type": "push-to-open", "material": "—", "color": "—", "size": 0, "count": 0, "offset_from_top": 0, "furniture_encoded": "" },
+    "locks": [{ "type": "центральный замок", "color": "—", "target": "Фасад ящик 1" }]
+  },
+  "features": ["push_open", "central_lock"],
+  "warnings": ["3 выдвижных ящика; столешница по ТЗ 50 мм (генератор строит крышку 25 — уточнить).", "Открывание push-to-open: ручки не ставятся."],
+  "estimated_values": ["legs.height", "drawer box params"]
+}

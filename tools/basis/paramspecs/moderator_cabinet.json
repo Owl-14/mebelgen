@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "paramspec-v1",
+  "project_name": "Тумба модератора 1000×400×750",
+  "furniture_type": "тумба",
+  "archetype": "cabinet",
+  "dimensions": { "width": 1000, "depth": 400, "height": 750, "tolerance": 5 },
+  "materials": { "board_thickness": 16, "back_thickness": 16, "board_material": "ЛДСП", "back_material": "ЛДСП", "edge_band_thickness": 0.4, "color": "по согласованию", "color_code": "" },
+  "legs": { "type": "регулируемые опоры", "height": 38 },
+  "gaps": { "facade": 2, "default": 2 },
+  "interior_z_front": 16,
+  "sections": [
+    {
+      "id": "left_drawers", "kind": "drawers", "width_share": 333, "drawers": 3,
+      "front_bottom": 56, "drawer_heights": [224, 224, 224],
+      "guide_gap": 16, "box_z1": 20, "box_depth": 350, "box_y_offset": 2, "box_height": 196,
+      "box_back_thickness": 16, "box_bottom_thickness": 16, "box_bottom_mode": "under", "box_sides_on_bottom": true
+    },
+    { "id": "middle", "kind": "open", "width_share": 270, "shelf_levels": [270], "shelf_label": "Полка средняя секция" },
+    { "id": "right", "kind": "door", "width_share": 333, "shelf_levels": [270], "shelf_label": "Полка правая секция", "door": 1, "door_name": "Фасад двери" }
+  ],
+  "hardware": {
+    "handles": { "type": "ручка", "material": "металл", "color": "по согласованию", "size": 128, "count": 4, "offset_from_top": 32, "furniture_encoded": "" },
+    "drawer_guides": { "type": "направляющие", "length_mm": 350, "soft_close": true, "cabinet_left_panel": "Боковина левая", "cabinet_right_panel": "Перегородка 1", "furniture_encoded": "" }
+  },
+  "warnings": ["Левая секция — 3 ящика, средняя открытая с полкой, правая с дверью и полкой."],
+  "estimated_values": ["materials.color", "drawer box params"]
+}

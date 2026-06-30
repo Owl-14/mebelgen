@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "paramspec-v1",
+  "project_name": "Стол рабочий в кабинете 1800×800×750",
+  "furniture_type": "стол",
+  "archetype": "desk",
+  "dimensions": { "width": 1800, "depth": 800, "height": 750, "tolerance": 5 },
+  "materials": { "board_thickness": 50, "board_material": "МДФ под покраску", "edge_band_thickness": 2, "color": "RAL 8019", "color_code": "PPL RAL 8019" },
+  "legs": { "type": "боковые опоры 50 мм", "height": 0 },
+  "apron": true,
+  "apron_height": 300,
+  "features": ["передний экран H300 в цвет стола", "латунная вставка", "отрыв столешницы от опор 25", "навесная подставка под системный блок RAL 9011"],
+  "warnings": ["Столешница и опоры 50 мм; передний экран 300 мм (царга). Латунные вставки и подвес под системный блок — отдельная фурнитура, в геометрию не входят."],
+  "estimated_values": ["крепление подвеса"]
+}

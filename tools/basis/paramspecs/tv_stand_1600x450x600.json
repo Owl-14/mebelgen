@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "paramspec-v1",
+  "project_name": "ТВ-стенд 1600×450×600 (цоколь)",
+  "furniture_type": "тумба",
+  "archetype": "cabinet",
+  "dimensions": { "width": 1600, "depth": 450, "height": 600, "tolerance": 5 },
+  "materials": { "board_thickness": 16, "back_thickness": 3.2, "board_material": "ЛДСП", "back_material": "ДВП", "edge_band_thickness": 0.4, "color": "по согласованию", "color_code": "" },
+  "legs": { "type": "цоколь", "height": 114, "as_panel": true },
+  "socle_full": true,
+  "gaps": { "facade": 2, "default": 2 },
+  "interior_z_front": 16,
+  "sections": [
+    { "id": "left", "kind": "door", "width_share": 414, "shelf_levels": [345], "shelf_label": "Полка левая", "door": 1, "door_name": "Дверь левая", "door_z": "front" },
+    { "id": "middle", "kind": "drawers", "width_share": 708, "drawers": 2, "front_bottom": 132, "drawer_heights": [212, 212], "boxes": false },
+    { "id": "right", "kind": "door", "width_share": 414, "shelf_levels": [345], "shelf_label": "Полка правая", "door": 1, "door_name": "Дверь правая", "door_z": "front" }
+  ],
+  "hardware": {
+    "handles": { "type": "ручка", "material": "металл", "color": "—", "size": 128, "count": 4, "offset_from_top": 32, "furniture_encoded": "" }
+  },
+  "warnings": ["Цоколь 114 мм отдельной панелью; двери вынесены вперёд (z -T..0); центральная секция — 2 фасада без коробов."],
+  "estimated_values": ["materials.color"]
+}

@@ -1,0 +1,46 @@
+"""Генератор door_unit: короб + полки + распашной фасад (1 или 2 двери)."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from .base import read_carcass
+from .corpus import carcass_calc, cavity_section
+from .helpers import build_project, carcass, overlay_door, panel, shelf_levels, shelves
+
+
+def generate(spec: dict[str, Any]) -> dict[str, Any]:
+    c = read_carcass(spec)
+    section = (spec.get("sections") or [{"kind": "door", "door": 1}])[0]
+    panels = carcass(c.W, c.D, c.H, c.T, c.T_back, c.Hleg, c.mat, c.mat_back,
+                     leg_as_panel=c.leg_as_panel, leg_type=c.leg_type)
+
+    if section.get("shelves"):
+        levels = section.get("shelf_levels") or shelf_levels(c.Hleg + c.T, c.H - c.T, section["shelves"], c.T)
+        panels += shelves(levels, c.W, c.D, c.T, c.T_back, c.mat, "main")
+
+    ndoor = section.get("door", 1)
+    g = c.gap
+    y1, y2 = c.Hleg + c.T + g, c.H - c.T - g
+    doors_meta: list[dict[str, Any]] = []
+    if ndoor == 2:
+        mid = c.W / 2
+        panels.append(overlay_door(c.W, c.H, c.T, c.Hleg, g, c.mat, "main", "Фасад левый",
+                                   x1=g, x2=mid - g / 2, y1=y1, y2=y2))
+        panels.append(overlay_door(c.W, c.H, c.T, c.Hleg, g, c.mat, "main", "Фасад правый",
+                                   x1=mid + g / 2, x2=c.W - g, y1=y1, y2=y2))
+        doors_meta = [{"id": "door_1", "type": "распашная", "hinges": "накладные", "lock": False,
+                       "dimensions": {"width": round(mid - g / 2 - g, 2), "height": y2 - y1},
+                       "position": {"x": g, "y": y1, "z": 0}, "estimated": False},
+                      {"id": "door_2", "type": "распашная", "hinges": "накладные", "lock": False,
+                       "dimensions": {"width": round(c.W - g - (mid + g / 2), 2), "height": y2 - y1},
+                       "position": {"x": mid + g / 2, "y": y1, "z": 0}, "estimated": False}]
+    elif ndoor == 1:
+        panels.append(overlay_door(c.W, c.H, c.T, c.Hleg, g, c.mat, "main", y1=y1, y2=y2))
+        doors_meta = [{"id": "door_1", "type": "распашная", "hinges": "накладные", "lock": False,
+                       "dimensions": {"width": c.W - 2 * g, "height": y2 - y1},
+                       "position": {"x": g, "y": y1, "z": 0}, "estimated": False}]
+
+    sec = [cavity_section(c, [p["name"] for p in panels], stype="door")]
+    cc = carcass_calc(c)
+    return build_project(spec, panels, sections=sec, doors=doors_meta, carcass_calc=cc)

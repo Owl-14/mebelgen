@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "paramspec-v1",
+  "project_name": "Тумба под оргтехнику 1200×350×740",
+  "furniture_type": "тумба",
+  "archetype": "cabinet",
+  "dimensions": { "width": 1200, "depth": 270, "height": 740, "tolerance": 5 },
+  "materials": { "board_thickness": 22, "back_thickness": 3.2, "board_material": "ЛДСП", "back_material": "ДВП", "edge_band_thickness": 0.4, "color": "по согласованию", "color_code": "" },
+  "legs": { "type": "регулируемые опоры", "height": 0 },
+  "gaps": { "facade": 2, "default": 2 },
+  "interior_z_front": 0,
+  "top_overhang": [-80, 270],
+  "sections": [
+    { "id": "left", "kind": "door", "width_share": 1, "shelf_levels": [362], "shelf_label": "Полка левая", "door": 1, "door_name": "Дверь левая", "door_below_shelf": true },
+    { "id": "right", "kind": "door", "width_share": 1, "shelf_levels": [362], "shelf_label": "Полка правая", "door": 1, "door_name": "Дверь правая", "door_below_shelf": true }
+  ],
+  "hardware": {
+    "handles": { "type": "ручка", "material": "металл", "color": "—", "size": 128, "count": 2, "offset_from_top": 32, "furniture_encoded": "" }
+  },
+  "warnings": ["ЛДСП 22 мм; столешница со свесом вперёд (z -80..270); двойная глубина 350/270; верх открыт, двери закрывают низ."],
+  "estimated_values": ["materials.color"]
+}

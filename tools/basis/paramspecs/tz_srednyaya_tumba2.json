@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "paramspec-v1",
+  "project_name": "Средняя тумба тип 2 (800×400×900)",
+  "furniture_type": "тумба",
+  "archetype": "door_unit",
+  "dimensions": { "width": 800, "depth": 400, "height": 900, "tolerance": 10 },
+  "materials": { "board_thickness": 16, "back_thickness": 16, "board_material": "МДФ", "back_material": "ДВП", "edge_band_thickness": 0.4, "color": "по палитре NSC", "color_code": "" },
+  "legs": { "type": "регулируемые опоры", "height": 0 },
+  "gaps": { "facade": 2, "default": 2 },
+  "sections": [
+    { "id": "main", "kind": "door", "shelves": 1, "shelf_label": "Полка", "door": 2 }
+  ],
+  "hardware": {
+    "handles": { "type": "профиль металлический", "material": "металл", "color": "чёрный", "size": 128, "count": 2, "offset_from_top": 32, "furniture_encoded": "" },
+    "locks": [{ "type": "замок", "color": "чёрный", "target": "Дверь правая" }]
+  },
+  "features": ["направление текстуры по длине"],
+  "warnings": ["Двери накладные (2 шт.), одна полка; крышка по ТЗ 25 мм (корпус 16).", "Ручки-профиль 128 мм чёрные; замок на правой двери."],
+  "estimated_values": ["color"]
+}
