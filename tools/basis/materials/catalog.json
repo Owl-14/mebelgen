@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "material-catalog-v1",
+  "note": "Справочник материалов/фурнитуры со стабильными id. basisName — кандидат точного имени из базы БАЗИС (MatBase): подтвердить/поправить при доступной лицензии (AKD-12). Посев из ТЗ input_specs/ и типовых позиций.",
+  "boards": [
+    { "id": "ldsp16", "basisName": "ЛДСП 16", "thickness": 16, "kind": "board", "note": "корпусная плита по умолчанию" },
+    { "id": "ldsp25", "basisName": "ЛДСП 25", "thickness": 25, "kind": "board" },
+    { "id": "mdf16", "basisName": "МДФ 16 под покраску", "thickness": 16, "kind": "board" },
+    { "id": "mdf25_ral8019", "basisName": "МДФ 25 под покраску", "thickness": 25, "kind": "board", "color": "RAL 8019", "color_code": "PPL RAL 8019", "finish": "матовый" },
+    { "id": "mdf50_ral8019", "basisName": "МДФ 50 под покраску", "thickness": 50, "kind": "board", "color": "RAL 8019", "color_code": "PPL RAL 8019", "note": "столешницы/опоры" }
+  ],
+  "backs": [
+    { "id": "dvp3", "basisName": "ДВП 3.2", "thickness": 3.2, "kind": "back" },
+    { "id": "ldsp16_back", "basisName": "ЛДСП 16", "thickness": 16, "kind": "back" }
+  ],
+  "edges": [
+    { "id": "edge04_ral8019", "basisName": "Кромка ABS 0.4 RAL 8019", "thickness": 0.4, "kind": "edge", "color": "RAL 8019" },
+    { "id": "edge2_ral8019", "basisName": "Кромка ABS 2.0 RAL 8019", "thickness": 2.0, "kind": "edge", "color": "RAL 8019" }
+  ],
+  "hardware": [
+    { "id": "handle_skoba_128_black", "basisName": "Ручка-скоба 128 чёрная", "kind": "handle", "size": 128, "color": "чёрный" },
+    { "id": "handle_profile_128_black", "basisName": "Ручка-профиль 128 чёрная", "kind": "handle", "size": 128, "color": "чёрный" },
+    { "id": "push_open", "basisName": "Push-to-open", "kind": "opening", "note": "толкатель, без ручки" },
+    { "id": "guide_ball_350", "basisName": "Направляющая шариковая 350", "kind": "drawer_guide", "length_mm": 350 },
+    { "id": "guide_ball_450_sc", "basisName": "Направляющая шариковая 450 доводчик", "kind": "drawer_guide", "length_mm": 450, "soft_close": true },
+    { "id": "hinge_overlay", "basisName": "Петля накладная", "kind": "hinge" },
+    { "id": "lock_central_black", "basisName": "Замок центральный чёрный", "kind": "lock", "color": "чёрный" },
+    { "id": "legs_adjustable", "basisName": "Опора регулируемая", "kind": "leg" },
+    { "id": "socle", "basisName": "Цоколь (панель в цвет)", "kind": "leg" }
+  ]
+}

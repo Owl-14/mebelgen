@@ -77,6 +77,12 @@ def self_review(project: dict[str, Any]) -> list[str]:
     ev = project.get("estimated_values") or []
     if ev:
         out.append("Оценочные значения: " + ", ".join(map(str, ev)) + ".")
+
+    try:
+        from .materials import check_project_materials
+        out += check_project_materials(project)
+    except (OSError, ValueError):
+        pass
     return out
 
 

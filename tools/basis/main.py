@@ -121,6 +121,24 @@ def cmd_check_geometry(args: argparse.Namespace) -> int:
     return 0 if report["ok"] else 2
 
 
+def cmd_materials(args: argparse.Namespace) -> int:
+    from src.materials import check_project_materials, load_catalog
+
+    cat = load_catalog()
+    n = sum(len(cat.get(k, [])) for k in ("boards", "backs", "edges", "hardware"))
+    print(f"Каталог: {n} позиций (boards/backs/edges/hardware).")
+    if args.check:
+        project = json.loads(Path(args.check).read_text(encoding="utf-8"))
+        notes = check_project_materials(project)
+        if not notes:
+            print("Материалы проекта сопоставлены с каталогом — замечаний нет.")
+        else:
+            print("Замечания по материалам:")
+            for x in notes:
+                print(f"  • {x}")
+    return 0
+
+
 def cmd_orchestrate(args: argparse.Namespace) -> int:
     from src.orchestrator import orchestrate_file
 
@@ -297,6 +315,10 @@ def main() -> int:
     p_gen.add_argument("paramspec", help="Путь к ParamSpec JSON (paramspecs/<x>.json)")
     p_gen.add_argument("-o", "--output", help="Куда писать project.json (по умолчанию projects/<имя>)")
     p_gen.set_defaults(func=cmd_generate)
+
+    p_mat = sub.add_parser("materials", help="Каталог материалов; --check сверить материалы проекта")
+    p_mat.add_argument("--check", help="project.json для сверки материалов с каталогом")
+    p_mat.set_defaults(func=cmd_materials)
 
     p_orc = sub.add_parser(
         "orchestrate",
