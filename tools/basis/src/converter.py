@@ -7,9 +7,10 @@ import re
 from pathlib import Path
 from typing import Any
 
-from openai import OpenAI
-
 from .validate import validate_furniture
+
+# openai — лишь ОДИН из поставщиков ParamSpec. Основной путь
+# (paramspec → generate → валидаторы) его не требует, поэтому импорт ленивый.
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_PROMPT_PATH = ROOT / "prompts" / "system_prompt.txt"
@@ -64,6 +65,7 @@ class FurnitureConverter:
         self.model = model or os.environ.get("OPENAI_MODEL", "gpt-4o")
         self.prompt_path = prompt_path
         self.schema_path = schema_path or DEFAULT_SCHEMA_PATH
+        from openai import OpenAI  # ленивый импорт: нужен только для OpenAI-провайдера
         self.client = OpenAI(api_key=self.api_key)
 
     def convert(

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "paramspec-v1",
+  "project_name": "Журнальный стол 1000×450×450",
+  "furniture_type": "стол",
+  "archetype": "table",
+  "dimensions": { "width": 1000, "depth": 450, "height": 450, "tolerance": 5 },
+  "materials": { "board_thickness": 50, "board_material": "МДФ под покраску", "edge_band_thickness": 2, "color": "RAL 8019", "color_code": "PPL RAL 8019" },
+  "legs": { "type": "боковины", "height": 0 },
+  "apron": false,
+  "warnings": ["Столешница 50 мм на боковых опорах; простой журнальный стол."],
+  "estimated_values": ["конструкция опор"]
+}
