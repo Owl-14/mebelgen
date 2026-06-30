@@ -111,3 +111,12 @@ def orchestrate_file(paramspec_path: str | Path, out_path: str | Path | None = N
     spec = json.loads(p.read_text(encoding="utf-8"))
     out = Path(out_path) if out_path else p.parent.parent / "projects" / p.name
     return orchestrate(spec, out_path=out, min_volume=min_volume)
+
+
+def orchestrate_source(source: Any, out_path: Path, *, provider: Any = None,
+                       provider_name: str | None = None, min_volume: float = 1.0) -> OrchestratorResult:
+    """Полный путь: source (ТЗ/изображение/ParamSpec) → провайдер → ParamSpec → orchestrate."""
+    from .providers import get_provider
+    prov = provider or get_provider(provider_name)
+    spec = prov.extract(source)
+    return orchestrate(spec, out_path=Path(out_path), min_volume=min_volume)
