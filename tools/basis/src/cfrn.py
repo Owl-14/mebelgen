@@ -148,6 +148,7 @@ def project_to_cfrn_json(project: dict[str, Any]) -> dict[str, Any]:
 
     table: dict[str, Any] = {"materials": materials, "objects": objects}
     _encode_drilling(project, objects, children, table)
+    _encode_catalog_hardware(project, materials, objects, children, table)
     return {
         "model": {"tableIndex": -1, "objs": [{"tableIndex": 0, "objs": children}]},
         "table": table,
@@ -187,7 +188,68 @@ def _encode_drilling(project: dict[str, Any], objects: list[dict[str, Any]],
                     "triangleData": [], "holes": holes})
     children.append({"tableIndex": idx, "matrix": _matrix("front", 0, 0, 0)})
     table["holes"] = catalog
-    table["triangles"] = []
+    table.setdefault("triangles", [])
+
+
+# поворот экземпляра фурнитуры на фронте (из эталона: нормаль наружу, −Z)
+_HW_ROT = [-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -1, 0]
+
+
+def _encode_catalog_hardware(project: dict[str, Any], materials: list[dict[str, Any]],
+                             objects: list[dict[str, Any]], children: list[dict[str, Any]],
+                             table: dict[str, Any]) -> None:
+    """КАТАЛОЖНАЯ фурнитура в .cfrn (эксперимент, включается project['catalog_hardware']).
+
+    Схема эталона native_cabinet.cfrn: .cfrn НЕ хранит меш — только ссылку:
+      objType:5 {materialIndex, triangleData: <индекс в table.triangles>, holes} +
+      table.triangles ["<имя из каталога БАЗИС>.obj"] + матрица экземпляра.
+    БАЗИС резолвит меш по ИМЕНИ из своего каталога при импорте. Требование: имя
+    должно существовать в каталоге БАЗИС (иначе объект без геометрии)."""
+    cfg = project.get("catalog_hardware")
+    if not cfg:
+        return
+    # имя каталожной ручки: явное из конфига или из material_refs.handles
+    name = None
+    if isinstance(cfg, dict):
+        name = cfg.get("handle_name")
+    if not name:
+        r = (project.get("material_refs") or {}).get("handles") or {}
+        c = r.get("candidates")
+        if isinstance(c, list) and c and isinstance(c[0], dict):
+            name = c[0].get("name")
+    if not name:
+        return
+    # материал ручки (name+art) — найти или добавить
+    mi = next((i for i, m in enumerate(materials) if m.get("name") == name), None)
+    if mi is None:
+        mi = len(materials)
+        entry = {"name": name}
+        if isinstance(cfg, dict) and cfg.get("art"):
+            entry["art"] = str(cfg["art"])
+        materials.append(entry)
+    tri = table.setdefault("triangles", [])
+    obj_name = f"{name}.obj"
+    ti = tri.index(obj_name) if obj_name in tri else (tri.append(obj_name) or len(tri) - 1)
+    # один объект-ручка, экземпляры матрицами (как 4 ручки в эталоне)
+    oi = len(objects)
+    objects.append({"objType": 5, "materialIndex": mi, "triangleData": ti, "holes": []})
+    # точки ручек: ящик — центр X у верхней кромки; дверь — у кромки открывания
+    handles = (project.get("hardware") or {}).get("handles") or {}
+    off = float(handles.get("offset_from_top", 40))
+    for p in project.get("panels", []):
+        pl = p.get("placement")
+        t = p.get("type")
+        if not pl or t not in ("drawer_front", "door_front"):
+            continue
+        zf = min(pl["z1"], pl["z2"])                       # внешняя плоскость фасада
+        if t == "drawer_front":
+            hx, hy = (pl["x1"] + pl["x2"]) / 2, pl["y2"] - off
+        else:
+            nm = str(p.get("name", "")).lower()
+            hx = pl["x1"] + 40 if "прав" in nm else pl["x2"] - 40
+            hy = (pl["y1"] + pl["y2"]) / 2
+        children.append({"tableIndex": oi,
+                         "matrix": _HW_ROT + [_r(hx), _r(hy), _r(zf), 1]})
 
 
 def project_to_cfrn_bytes(project: dict[str, Any]) -> bytes:
