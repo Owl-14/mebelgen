@@ -14,12 +14,21 @@ import json
 import zipfile
 from typing import Any
 
+from .hardware import compute_drilling
+
 # row-major 3×3 повороты по ориентации (из реального .cfrn БАЗИС-Облака)
 _ROT = {
     "vertical": [[0, 0, 1], [0, 1, 0], [-1, 0, 0]],
     "horizont": [[1, 0, 0], [0, 0, -1], [0, 1, 0]],
     "horizontal": [[1, 0, 0], [0, 0, -1], [0, 1, 0]],
     "front": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+}
+
+# (axis, dir) → единичный вектор сверления (в мировых осях)
+_DRILL_VEC = {
+    ("x", 1): {"x": 1, "y": 0, "z": 0}, ("x", -1): {"x": -1, "y": 0, "z": 0},
+    ("y", 1): {"x": 0, "y": 1, "z": 0}, ("y", -1): {"x": 0, "y": -1, "z": 0},
+    ("z", 1): {"x": 0, "y": 0, "z": 1}, ("z", -1): {"x": 0, "y": 0, "z": -1},
 }
 
 
@@ -137,11 +146,48 @@ def project_to_cfrn_json(project: dict[str, Any]) -> dict[str, Any]:
         tx = pl["x2"] if orient == "vertical" else pl["x1"]
         children.append({"tableIndex": idx, "matrix": _matrix(orient, tx, pl["y1"], tz)})
 
+    table: dict[str, Any] = {"materials": materials, "objects": objects}
+    _encode_drilling(project, objects, children, table)
     return {
         "model": {"tableIndex": -1, "objs": [{"tableIndex": 0, "objs": children}]},
-        "table": {"materials": materials, "objects": objects},
+        "table": table,
         "modelParams": {"name": name},
     }
+
+
+def _encode_drilling(project: dict[str, Any], objects: list[dict[str, Any]],
+                     children: list[dict[str, Any]], table: dict[str, Any]) -> None:
+    """Присадки под фурнитуру (AKD-88) в .cfrn — по схеме эталона native_cabinet.cfrn:
+    каталог `table.holes` [{depth,diameter,drillMode}] + объект `objType 5` с
+    `holes:[{pos,dir,infoIndex}]` и матрицей. 3D-меш фурнитуры (triangleData) НЕ
+    строим — он берётся из каталога БАЗИС (десктоп-импортёр AKD-14).
+
+    Присадки считает hardware.compute_drilling по геометрии. Ошибка расчёта не должна
+    ломать сборку .cfrn — тогда модель просто идёт без присадок."""
+    try:
+        drill = compute_drilling(project)
+    except Exception:
+        return
+    if not drill:
+        return
+    catalog: list[dict[str, Any]] = []
+    index: dict[tuple[float, float, int], int] = {}
+    holes: list[dict[str, Any]] = []
+    for h in drill:
+        key = (_r(h["depth"]), _r(h["diameter"]), 1)   # drillMode 1 — как в эталоне
+        if key not in index:
+            index[key] = len(catalog)
+            catalog.append({"depth": key[0], "diameter": key[1], "drillMode": key[2]})
+        vec = _DRILL_VEC.get((h["axis"], int(h["dir"])), {"x": 0, "y": 0, "z": -1})
+        holes.append({"pos": {"x": _r(h["x"]), "y": _r(h["y"]), "z": _r(h["z"])},
+                      "dir": vec, "infoIndex": index[key]})
+    idx = len(objects)
+    # один служебный объект-«фурнитура» держит все присадки (pos = мировые, матрица 1)
+    objects.append({"objType": 5, "name": "Присадки", "materialIndex": 0,
+                    "triangleData": [], "holes": holes})
+    children.append({"tableIndex": idx, "matrix": _matrix("front", 0, 0, 0)})
+    table["holes"] = catalog
+    table["triangles"] = []
 
 
 def project_to_cfrn_bytes(project: dict[str, Any]) -> bytes:
@@ -169,6 +215,8 @@ def cfrn_world_boxes(project: dict[str, Any]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for nd in nodes:
         g = tobjs[nd["tableIndex"]]
+        if "contour" not in g:      # objType 5 (присадки) — не панель, пропускаем
+            continue
         sz = g["contour"]["size"]
         th = g.get("thickness", 16)
         M = nd["matrix"]
@@ -180,6 +228,55 @@ def cfrn_world_boxes(project: dict[str, Any]) -> list[dict[str, Any]]:
         out.append({"name": g.get("name"), "x1": min(xs), "x2": max(xs),
                     "y1": min(ys), "y2": max(ys), "z1": min(zs), "z2": max(zs)})
     return out
+
+
+def cfrn_holes(project: dict[str, Any]) -> list[dict[str, Any]]:
+    """Мировые присадки, реконструированные ИЗ .cfrn (матрица объекта objType 5 +
+    локальные pos отверстий + каталог table.holes). Для сверки с compute_drilling."""
+    d = project_to_cfrn_json(project)
+    tobjs = d["table"]["objects"]
+    nodes = d["model"]["objs"][0]["objs"]
+    catalog = d["table"].get("holes", [])
+    node = next((n for n in nodes if tobjs[n["tableIndex"]].get("objType") == 5), None)
+    if node is None:
+        return []
+    M = node["matrix"]
+    obj = tobjs[node["tableIndex"]]
+
+    def xf(p: dict[str, float]) -> tuple[float, float, float]:
+        px, py, pz = p["x"], p["y"], p["z"]
+        return (px * M[0] + py * M[4] + pz * M[8] + M[12],
+                px * M[1] + py * M[5] + pz * M[9] + M[13],
+                px * M[2] + py * M[6] + pz * M[10] + M[14])
+
+    out: list[dict[str, Any]] = []
+    for h in obj.get("holes", []):
+        w = xf(h["pos"])
+        cat = catalog[h["infoIndex"]] if h["infoIndex"] < len(catalog) else {}
+        out.append({"x": w[0], "y": w[1], "z": w[2], "dir": h["dir"],
+                    "diameter": cat.get("diameter"), "depth": cat.get("depth")})
+    return out
+
+
+def check_cfrn_holes(project: dict[str, Any], *, tol: float = 0.5) -> list[str]:
+    """Сверяет присадки, закодированные в .cfrn, с compute_drilling (позиция,
+    диаметр, глубина). Пусто = кодирование присадок корректно. Наличие присадок в
+    самом .b3d подтверждается обратной выгрузкой b3d→cfrn из облака (round-trip)."""
+    src = compute_drilling(project)
+    enc = cfrn_holes(project)
+    issues: list[str] = []
+    if len(src) != len(enc):
+        issues.append(f"число присадок: compute={len(src)} ≠ .cfrn={len(enc)}")
+        return issues
+    for s, e in zip(src, enc):
+        if abs(s["x"] - e["x"]) > tol or abs(s["y"] - e["y"]) > tol or abs(s["z"] - e["z"]) > tol:
+            issues.append(
+                f"{s['purpose']}: .cfrn ({e['x']:.1f},{e['y']:.1f},{e['z']:.1f}) "
+                f"≠ compute ({s['x']},{s['y']},{s['z']})")
+        elif s["diameter"] != e["diameter"] or s["depth"] != e["depth"]:
+            issues.append(f"{s['purpose']}: Ø/глубина .cfrn ({e['diameter']}/{e['depth']}) "
+                          f"≠ compute ({s['diameter']}/{s['depth']})")
+    return issues
 
 
 def check_cfrn_encoding(project: dict[str, Any], *, tol: float = 0.5) -> list[str]:
