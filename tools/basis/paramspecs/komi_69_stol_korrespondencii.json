@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "paramspec-v1",
+  "project_name": "Стол для корреспонденции 800×500×550",
+  "furniture_type": "стол",
+  "archetype": "desk",
+  "dimensions": {
+    "width": 800,
+    "depth": 500,
+    "height": 550,
+    "tolerance": 10
+  },
+  "materials": {
+    "board_thickness": 16,
+    "board_material": "ЛДСП",
+    "color": "Светло-серый",
+    "color_code": "U708 ST9"
+  },
+  "frame": "metal",
+  "legs": {
+    "type": "металлокаркас RAL9005, труба 40×40",
+    "height": 534
+  },
+  "sections": [],
+  "hardware": {
+    "handles": {
+      "type": "нет",
+      "count": 0
+    }
+  },
+  "features": [
+    "металлокаркас RAL9005 40×40"
+  ],
+  "warnings": [
+    "Столешница 16 мм на металлокаркасе."
+  ],
+  "estimated_values": []
+}

@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "paramspec-v1",
+  "project_name": "Стол для охранника 1400×700×750",
+  "furniture_type": "стол",
+  "archetype": "desk",
+  "dimensions": {
+    "width": 1400,
+    "depth": 700,
+    "height": 750,
+    "tolerance": 10
+  },
+  "materials": {
+    "board_thickness": 16,
+    "board_material": "ЛДСП",
+    "color": "Светло-серый",
+    "color_code": "U708 ST9"
+  },
+  "frame": "metal",
+  "legs": {
+    "type": "металлокаркас RAL9005, труба 40×40",
+    "height": 734
+  },
+  "sections": [],
+  "hardware": {
+    "handles": {
+      "type": "нет",
+      "count": 0
+    }
+  },
+  "features": [
+    "металлокаркас RAL9005 40×40",
+    "горизонтальный кабель-канал"
+  ],
+  "warnings": [
+    "Столешница 16 мм на металлокаркасе."
+  ],
+  "estimated_values": []
+}
