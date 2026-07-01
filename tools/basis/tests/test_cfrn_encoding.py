@@ -20,8 +20,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from src.cfrn import check_cfrn_encoding                       # noqa: E402
+from src.cfrn import check_cfrn_encoding, check_cfrn_holes     # noqa: E402
 from src.generators import generate_from_paramspec             # noqa: E402
+from src.materials import resolve_project_materials            # noqa: E402
 from src.oldspec import old_to_paramspec                       # noqa: E402
 
 PARAMSPECS = sorted((ROOT / "paramspecs").glob("*.json"))
@@ -56,3 +57,15 @@ def test_oldspec_cfrn_encoding_matches_placement():
         if issues:
             bad[f.name] = issues[:3]
     assert not bad, f"кодирование .cfrn ≠ placement:\n" + json.dumps(bad, ensure_ascii=False, indent=2)
+
+
+def test_paramspec_cfrn_holes_match_drilling():
+    """Присадки, закодированные в .cfrn, должны совпадать с compute_drilling
+    по координатам/диаметру/глубине (кодирование objType 5 + table.holes)."""
+    bad = {}
+    for name, pr in _paramspec_projects():
+        pr["material_refs"] = resolve_project_materials(pr)   # чтобы фурнитура резолвилась
+        issues = check_cfrn_holes(pr)
+        if issues:
+            bad[name] = issues[:3]
+    assert not bad, "присадки .cfrn ≠ compute_drilling:\n" + json.dumps(bad, ensure_ascii=False, indent=2)
