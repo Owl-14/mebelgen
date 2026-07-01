@@ -1,0 +1,72 @@
+{
+  "schemaVersion": "paramspec-v1",
+  "project_name": "Шкаф комбинированный 1000×400×1817 (директор)",
+  "furniture_type": "шкаф комбинированный",
+  "archetype": "cabinet",
+  "dimensions": {
+    "width": 1000,
+    "depth": 400,
+    "height": 1817,
+    "tolerance": 10
+  },
+  "materials": {
+    "board_thickness": 16,
+    "board_material": "ЛДСП",
+    "back_material": "ЛДСП",
+    "back_thickness": 16,
+    "color": "Дуб Денвер трюфель",
+    "color_code": "Н 1399 ST 10"
+  },
+  "legs": {
+    "type": "регулируемые опоры",
+    "height": 100,
+    "adjustable": true,
+    "color": "чёрный"
+  },
+  "sections": [
+    {
+      "id": "docs",
+      "kind": "door",
+      "shelves": 4,
+      "shelf_label": "Полка документы",
+      "door": 1,
+      "door_name": "Дверь документы"
+    },
+    {
+      "id": "wardrobe",
+      "kind": "door",
+      "shelf_levels": [
+        1617,
+        1701
+      ],
+      "shelf_label": "Полка гардероб",
+      "door": 1,
+      "door_name": "Дверь гардероб"
+    }
+  ],
+  "hardware": {
+    "handles": {
+      "type": "ручка-профиль",
+      "material": "металл",
+      "color": "чёрный",
+      "size": 224,
+      "count": 2,
+      "offset_from_top": 40
+    },
+    "locks": [
+      {
+        "type": "замок на правую дверь",
+        "color": "чёрный",
+        "target": "right_door"
+      }
+    ]
+  },
+  "features": [
+    "штанга выдвижная в секции гардероба",
+    "шпингалет"
+  ],
+  "warnings": [
+    "Секция гардероба: штанга (фича) + 2 полки сверху. Секция документов: 4 полки."
+  ],
+  "estimated_values": []
+}

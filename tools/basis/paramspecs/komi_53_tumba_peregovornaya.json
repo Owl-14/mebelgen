@@ -1,0 +1,64 @@
+{
+  "schemaVersion": "paramspec-v1",
+  "project_name": "Тумба для большой переговорной 800×400×900",
+  "furniture_type": "тумба",
+  "archetype": "door_unit",
+  "dimensions": {
+    "width": 800,
+    "depth": 400,
+    "height": 900,
+    "tolerance": 10
+  },
+  "materials": {
+    "board_thickness": 16,
+    "board_material": "ЛДСП",
+    "back_material": "ЛДСП",
+    "back_thickness": 16,
+    "color": "Дуб Денвер трюфель",
+    "color_code": "Н 1399 ST 10"
+  },
+  "legs": {
+    "type": "регулируемые опоры",
+    "height": 100,
+    "adjustable": true,
+    "color": "чёрный"
+  },
+  "sections": [
+    {
+      "id": "main",
+      "kind": "door",
+      "shelves": 1,
+      "shelf_label": "Полка",
+      "door": 2,
+      "door_name": [
+        "Дверь левая",
+        "Дверь правая"
+      ]
+    }
+  ],
+  "hardware": {
+    "handles": {
+      "type": "ручка-профиль",
+      "material": "металл",
+      "color": "чёрный",
+      "size": 128,
+      "count": 2,
+      "offset_from_top": 40
+    },
+    "locks": [
+      {
+        "type": "замок на правую дверь",
+        "color": "чёрный",
+        "target": "right_door"
+      }
+    ]
+  },
+  "features": [
+    "крышка 32 мм",
+    "кромка лава серая u741 st9"
+  ],
+  "warnings": [
+    "Крышка 32 мм (корпус 16) — упрощено. 1 полка."
+  ],
+  "estimated_values": []
+}

@@ -1,0 +1,84 @@
+{
+  "schemaVersion": "paramspec-v1",
+  "project_name": "Тумба приставная к столу 1000×500×750",
+  "furniture_type": "тумба приставная",
+  "archetype": "cabinet",
+  "dimensions": {
+    "width": 1000,
+    "depth": 500,
+    "height": 750,
+    "tolerance": 10
+  },
+  "materials": {
+    "board_thickness": 16,
+    "board_material": "ЛДСП",
+    "back_material": "ЛДСП",
+    "back_thickness": 16,
+    "color": "Дуб Денвер трюфель",
+    "color_code": "Н 1399 ST 10"
+  },
+  "legs": {
+    "type": "регулируемые опоры",
+    "height": 0,
+    "adjustable": true,
+    "color": "чёрный"
+  },
+  "sections": [
+    {
+      "id": "drawers",
+      "kind": "drawers",
+      "drawers": 3,
+      "front_bottom": true
+    },
+    {
+      "id": "open",
+      "kind": "open",
+      "shelves": 2,
+      "shelf_label": "Полка открытая"
+    },
+    {
+      "id": "door",
+      "kind": "door",
+      "shelves": 2,
+      "shelf_label": "Полка закрытая",
+      "door": 1,
+      "door_name": "Дверца"
+    }
+  ],
+  "hardware": {
+    "handles": {
+      "type": "ручка-профиль",
+      "material": "металл",
+      "color": "чёрный",
+      "size": 128,
+      "count": 4,
+      "offset_from_top": 40
+    },
+    "drawer_guides": {
+      "type": "шариковые",
+      "length_mm": 450,
+      "soft_close": false
+    },
+    "locks": [
+      {
+        "type": "центральный замок на ящики",
+        "color": "чёрный",
+        "target": "drawers"
+      },
+      {
+        "type": "замок на дверцу",
+        "color": "чёрный",
+        "target": "door"
+      }
+    ]
+  },
+  "features": [
+    "столешница 25 мм",
+    "регулируемые опоры"
+  ],
+  "warnings": [
+    "Столешница 25 мм (корпус 16) — упрощено до 16, уточнить. 3 секции: ящики / открытые полки / закрытая дверца.",
+    "Опоры регулируемые заданы как фурнитура без геом. подъёма (генератор cabinet: короб ящика не учитывает legs.height — отдельный баг)."
+  ],
+  "estimated_values": []
+}

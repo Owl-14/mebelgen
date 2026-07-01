@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "paramspec-v1",
+  "project_name": "Тумба в президиум 900×300×800",
+  "furniture_type": "тумба",
+  "archetype": "shelving",
+  "dimensions": {
+    "width": 900,
+    "depth": 300,
+    "height": 800,
+    "tolerance": 10
+  },
+  "materials": {
+    "board_thickness": 16,
+    "board_material": "ЛДСП",
+    "color": "Светло-серый",
+    "color_code": "U708 ST9"
+  },
+  "legs": {
+    "type": "нет",
+    "height": 0,
+    "adjustable": false
+  },
+  "sections": [
+    {
+      "id": "main",
+      "kind": "shelves",
+      "shelves": 1,
+      "shelf_label": "Полка"
+    }
+  ],
+  "hardware": {
+    "handles": {
+      "type": "нет",
+      "count": 0
+    }
+  },
+  "features": [
+    "задняя стенка открыта",
+    "высота 670 по подлокотнику кресла"
+  ],
+  "warnings": [
+    "Задняя стенка отсутствует (открыта). Высота 800/670 — взято 800."
+  ],
+  "estimated_values": []
+}

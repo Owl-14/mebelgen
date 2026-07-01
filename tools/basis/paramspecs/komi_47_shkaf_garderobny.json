@@ -1,0 +1,70 @@
+{
+  "schemaVersion": "paramspec-v1",
+  "project_name": "Шкаф гардеробный 1000×400×1800 (зам. директора)",
+  "furniture_type": "шкаф гардеробный",
+  "archetype": "door_unit",
+  "dimensions": {
+    "width": 1000,
+    "depth": 400,
+    "height": 1800,
+    "tolerance": 10
+  },
+  "materials": {
+    "board_thickness": 16,
+    "board_material": "ЛДСП",
+    "back_material": "ЛДСП",
+    "back_thickness": 16,
+    "color": "Дуб Денвер трюфель",
+    "color_code": "Н 1399 ST 10"
+  },
+  "legs": {
+    "type": "регулируемые опоры",
+    "height": 100,
+    "adjustable": true,
+    "color": "чёрный"
+  },
+  "sections": [
+    {
+      "id": "main",
+      "kind": "door",
+      "shelf_levels": [
+        316,
+        1600,
+        1684
+      ],
+      "shelf_label": "Полка",
+      "door": 2,
+      "door_name": [
+        "Дверь левая",
+        "Дверь правая"
+      ]
+    }
+  ],
+  "hardware": {
+    "handles": {
+      "type": "ручка-профиль",
+      "material": "металл",
+      "color": "чёрный",
+      "size": 224,
+      "count": 2,
+      "offset_from_top": 40
+    },
+    "locks": [
+      {
+        "type": "замок на правую дверь",
+        "color": "чёрный",
+        "target": "right_door"
+      }
+    ]
+  },
+  "features": [
+    "штанга выдвижная",
+    "полка для обуви (глубина 300)",
+    "резиновый коврик",
+    "шпингалет"
+  ],
+  "warnings": [
+    "Штанга и полка обуви 300 мм — фурнитура/фича (не корпусные полки на всю глубину). Полки: 2 сверху + полка обуви снизу."
+  ],
+  "estimated_values": []
+}
