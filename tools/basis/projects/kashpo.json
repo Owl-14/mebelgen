@@ -1,96 +1,84 @@
 {
-  "project_name": "Кашпо",
-  "furniture_type": "кашпо",
+  "project_name": "Кашпо-стеллаж 3000×500×1000",
+  "furniture_type": "стеллаж",
   "overall_dimensions": {
     "width": 3000,
     "depth": 500,
     "height": 1000,
-    "tolerance": 10
+    "tolerance": 5
   },
   "materials": {
     "board_material": "ЛДСП",
     "board_thickness": 16,
     "back_wall_material": "ЛДСП",
     "edge_band_thickness": 0.4,
-    "color": "Дуб Кендал",
-    "color_code": "H3170"
+    "color": "Белый",
+    "color_code": ""
   },
   "sections": [
     {
-      "id": "bay_1",
-      "type": "open_niche",
+      "id": "s1",
+      "type": "shelves",
       "dimensions": {
         "width": 581,
-        "height": 534,
+        "height": 868,
         "depth": 468,
         "estimated": false
       },
       "elements": [
-        "partition_1"
+        "Полка под вкладную 650 1 (s1)"
       ]
     },
     {
-      "id": "bay_2",
-      "type": "open_niche",
+      "id": "s2",
+      "type": "shelves",
       "dimensions": {
         "width": 581,
-        "height": 534,
+        "height": 868,
         "depth": 468,
         "estimated": false
       },
       "elements": [
-        "partition_2"
+        "Полка под вкладную 650 2 (s2)"
       ]
     },
     {
-      "id": "bay_3",
-      "type": "open_niche",
+      "id": "s3",
+      "type": "shelves",
       "dimensions": {
         "width": 581,
-        "height": 534,
+        "height": 868,
         "depth": 468,
         "estimated": false
       },
       "elements": [
-        "partition_3"
+        "Полка под вкладную 650 3 (s3)"
       ]
     },
     {
-      "id": "bay_4",
-      "type": "open_niche",
+      "id": "s4",
+      "type": "shelves",
       "dimensions": {
         "width": 581,
-        "height": 534,
+        "height": 868,
         "depth": 468,
         "estimated": false
       },
       "elements": [
-        "partition_4"
+        "Полка под вкладную 650 4 (s4)"
       ]
     },
     {
-      "id": "bay_5",
-      "type": "open_niche",
+      "id": "s5",
+      "type": "shelves",
       "dimensions": {
         "width": 580,
-        "height": 534,
-        "depth": 468,
-        "estimated": false
-      },
-      "elements": []
-    },
-    {
-      "id": "planter_upper",
-      "type": "open_planter",
-      "dimensions": {
-        "width": 2968,
-        "height": 318,
+        "height": 868,
         "depth": 468,
         "estimated": false
       },
       "elements": [
-        "shelf_liner_650",
-        "plastic_liner_note"
+        "Полка под вкладную 650 5 (s5)"
       ]
     }
   ],
@@ -125,7 +113,7 @@
       },
       "edge_banding": {
         "top": 0.4,
-        "bottom": 0,
+        "bottom": 0.4,
         "left": 0.4,
         "right": 0.4
       },
@@ -240,154 +228,6 @@
       "estimated": false
     },
     {
-      "name": "Перегородка 1",
-      "type": "vertical_partition",
-      "basis_orientation": "vertical",
-      "material": "ЛДСП",
-      "thickness": 16,
-      "dimensions": {
-        "width": 468,
-        "height": 868
-      },
-      "placement": {
-        "x1": 597,
-        "x2": 613,
-        "y1": 116,
-        "y2": 984,
-        "z1": 16,
-        "z2": 484
-      },
-      "position": {
-        "x": 597,
-        "y": 116,
-        "z": 16
-      },
-      "rotation": {
-        "x": 0,
-        "y": 0,
-        "z": 0
-      },
-      "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
-      },
-      "estimated": false,
-      "section_id": "bay_1"
-    },
-    {
-      "name": "Перегородка 2",
-      "type": "vertical_partition",
-      "basis_orientation": "vertical",
-      "material": "ЛДСП",
-      "thickness": 16,
-      "dimensions": {
-        "width": 468,
-        "height": 868
-      },
-      "placement": {
-        "x1": 1194,
-        "x2": 1210,
-        "y1": 116,
-        "y2": 984,
-        "z1": 16,
-        "z2": 484
-      },
-      "position": {
-        "x": 1194,
-        "y": 116,
-        "z": 16
-      },
-      "rotation": {
-        "x": 0,
-        "y": 0,
-        "z": 0
-      },
-      "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
-      },
-      "estimated": false,
-      "section_id": "bay_2"
-    },
-    {
-      "name": "Перегородка 3",
-      "type": "vertical_partition",
-      "basis_orientation": "vertical",
-      "material": "ЛДСП",
-      "thickness": 16,
-      "dimensions": {
-        "width": 468,
-        "height": 868
-      },
-      "placement": {
-        "x1": 1791,
-        "x2": 1807,
-        "y1": 116,
-        "y2": 984,
-        "z1": 16,
-        "z2": 484
-      },
-      "position": {
-        "x": 1791,
-        "y": 116,
-        "z": 16
-      },
-      "rotation": {
-        "x": 0,
-        "y": 0,
-        "z": 0
-      },
-      "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
-      },
-      "estimated": false,
-      "section_id": "bay_3"
-    },
-    {
-      "name": "Перегородка 4",
-      "type": "vertical_partition",
-      "basis_orientation": "vertical",
-      "material": "ЛДСП",
-      "thickness": 16,
-      "dimensions": {
-        "width": 468,
-        "height": 868
-      },
-      "placement": {
-        "x1": 2388,
-        "x2": 2404,
-        "y1": 116,
-        "y2": 984,
-        "z1": 16,
-        "z2": 484
-      },
-      "position": {
-        "x": 2388,
-        "y": 116,
-        "z": 16
-      },
-      "rotation": {
-        "x": 0,
-        "y": 0,
-        "z": 0
-      },
-      "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
-      },
-      "estimated": false,
-      "section_id": "bay_4"
-    },
-    {
       "name": "Задняя стенка",
       "type": "back",
       "basis_orientation": "front",
@@ -424,26 +264,26 @@
       "estimated": false
     },
     {
-      "name": "Полка под вкладную 650 1",
-      "type": "shelf",
-      "basis_orientation": "horizont",
+      "name": "Перегородка 1",
+      "type": "vertical_partition",
+      "basis_orientation": "vertical",
       "material": "ЛДСП",
       "thickness": 16,
       "dimensions": {
-        "width": 581.0,
-        "height": 468
+        "width": 468,
+        "height": 868
       },
       "placement": {
-        "x1": 16.0,
-        "x2": 597.0,
-        "y1": 650,
-        "y2": 666,
+        "x1": 597,
+        "x2": 613,
+        "y1": 116,
+        "y2": 984,
         "z1": 16,
         "z2": 484
       },
       "position": {
-        "x": 16.0,
-        "y": 650,
+        "x": 597,
+        "y": 116,
         "z": 16
       },
       "rotation": {
@@ -457,30 +297,29 @@
         "left": 0.4,
         "right": 0.4
       },
-      "estimated": false,
-      "section_id": "planter_upper"
+      "estimated": false
     },
     {
-      "name": "Полка под вкладную 650 2",
-      "type": "shelf",
-      "basis_orientation": "horizont",
+      "name": "Перегородка 2",
+      "type": "vertical_partition",
+      "basis_orientation": "vertical",
       "material": "ЛДСП",
       "thickness": 16,
       "dimensions": {
-        "width": 581.0,
-        "height": 468
+        "width": 468,
+        "height": 868
       },
       "placement": {
-        "x1": 613.0,
-        "x2": 1194.0,
-        "y1": 650,
-        "y2": 666,
+        "x1": 1194,
+        "x2": 1210,
+        "y1": 116,
+        "y2": 984,
         "z1": 16,
         "z2": 484
       },
       "position": {
-        "x": 613.0,
-        "y": 650,
+        "x": 1194,
+        "y": 116,
         "z": 16
       },
       "rotation": {
@@ -494,30 +333,29 @@
         "left": 0.4,
         "right": 0.4
       },
-      "estimated": false,
-      "section_id": "planter_upper"
+      "estimated": false
     },
     {
-      "name": "Полка под вкладную 650 3",
-      "type": "shelf",
-      "basis_orientation": "horizont",
+      "name": "Перегородка 3",
+      "type": "vertical_partition",
+      "basis_orientation": "vertical",
       "material": "ЛДСП",
       "thickness": 16,
       "dimensions": {
-        "width": 581.0,
-        "height": 468
+        "width": 468,
+        "height": 868
       },
       "placement": {
-        "x1": 1210.0,
-        "x2": 1791.0,
-        "y1": 650,
-        "y2": 666,
+        "x1": 1791,
+        "x2": 1807,
+        "y1": 116,
+        "y2": 984,
         "z1": 16,
         "z2": 484
       },
       "position": {
-        "x": 1210.0,
-        "y": 650,
+        "x": 1791,
+        "y": 116,
         "z": 16
       },
       "rotation": {
@@ -531,30 +369,29 @@
         "left": 0.4,
         "right": 0.4
       },
-      "estimated": false,
-      "section_id": "planter_upper"
+      "estimated": false
     },
     {
-      "name": "Полка под вкладную 650 4",
-      "type": "shelf",
-      "basis_orientation": "horizont",
+      "name": "Перегородка 4",
+      "type": "vertical_partition",
+      "basis_orientation": "vertical",
       "material": "ЛДСП",
       "thickness": 16,
       "dimensions": {
-        "width": 581.0,
-        "height": 468
+        "width": 468,
+        "height": 868
       },
       "placement": {
-        "x1": 1807.0,
-        "x2": 2388.0,
-        "y1": 650,
-        "y2": 666,
+        "x1": 2388,
+        "x2": 2404,
+        "y1": 116,
+        "y2": 984,
         "z1": 16,
         "z2": 484
       },
       "position": {
-        "x": 1807.0,
-        "y": 650,
+        "x": 2388,
+        "y": 116,
         "z": 16
       },
       "rotation": {
@@ -568,29 +405,28 @@
         "left": 0.4,
         "right": 0.4
       },
-      "estimated": false,
-      "section_id": "planter_upper"
+      "estimated": false
     },
     {
-      "name": "Полка под вкладную 650 5",
+      "name": "Полка под вкладную 650 1 (s1)",
       "type": "shelf",
       "basis_orientation": "horizont",
       "material": "ЛДСП",
       "thickness": 16,
       "dimensions": {
-        "width": 580.0,
+        "width": 581,
         "height": 468
       },
       "placement": {
-        "x1": 2404.0,
-        "x2": 2984.0,
+        "x1": 16,
+        "x2": 597,
         "y1": 650,
         "y2": 666,
         "z1": 16,
         "z2": 484
       },
       "position": {
-        "x": 2404.0,
+        "x": 16,
         "y": 650,
         "z": 16
       },
@@ -606,7 +442,155 @@
         "right": 0.4
       },
       "estimated": false,
-      "section_id": "planter_upper"
+      "section_id": "s1"
+    },
+    {
+      "name": "Полка под вкладную 650 2 (s2)",
+      "type": "shelf",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 581,
+        "height": 468
+      },
+      "placement": {
+        "x1": 613,
+        "x2": 1194,
+        "y1": 650,
+        "y2": 666,
+        "z1": 16,
+        "z2": 484
+      },
+      "position": {
+        "x": 613,
+        "y": 650,
+        "z": 16
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
+      "estimated": false,
+      "section_id": "s2"
+    },
+    {
+      "name": "Полка под вкладную 650 3 (s3)",
+      "type": "shelf",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 581,
+        "height": 468
+      },
+      "placement": {
+        "x1": 1210,
+        "x2": 1791,
+        "y1": 650,
+        "y2": 666,
+        "z1": 16,
+        "z2": 484
+      },
+      "position": {
+        "x": 1210,
+        "y": 650,
+        "z": 16
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
+      "estimated": false,
+      "section_id": "s3"
+    },
+    {
+      "name": "Полка под вкладную 650 4 (s4)",
+      "type": "shelf",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 581,
+        "height": 468
+      },
+      "placement": {
+        "x1": 1807,
+        "x2": 2388,
+        "y1": 650,
+        "y2": 666,
+        "z1": 16,
+        "z2": 484
+      },
+      "position": {
+        "x": 1807,
+        "y": 650,
+        "z": 16
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
+      "estimated": false,
+      "section_id": "s4"
+    },
+    {
+      "name": "Полка под вкладную 650 5 (s5)",
+      "type": "shelf",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 580,
+        "height": 468
+      },
+      "placement": {
+        "x1": 2404,
+        "x2": 2984,
+        "y1": 650,
+        "y2": 666,
+        "z1": 16,
+        "z2": 484
+      },
+      "position": {
+        "x": 2404,
+        "y": 650,
+        "z": 16
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
+      "estimated": false,
+      "section_id": "s5"
     }
   ],
   "drawers": [],
@@ -623,33 +607,18 @@
     },
     "legs": {
       "type": "регулируемые опоры пластиковые",
-      "adjustable": true,
-      "color": "пластик",
+      "adjustable": false,
+      "color": "—",
       "height": 100,
-      "count": 4
+      "count": 0
     }
-  },
-  "carcass_calculation": {
-    "board_thickness": 16,
-    "leg_height": 100,
-    "quantity_units": 2,
-    "section_count": 5,
-    "section_width_formula": "(W - 2*T - 4*T) / 5 = (3000 - 32 - 64) / 5 = 580.8 → 581+581+581+581+580",
-    "shelf_y_from_floor": 650,
-    "shelf_y_placement": "y1=650, y2=666 (низ полки 650 мм от пола, ТЗ)",
-    "lower_niche_height": "650 - 116 = 534 (от верха дна до низа полки)",
-    "upper_planter_height": "984 - 666 = 318 (горшок H=300 по ТЗ)",
-    "internal_depth_z": "16..484 (полка и перегородки), задняя 484..500",
-    "pot_tz_mm": "300 x 280 x 600 (H x W x L)",
-    "pot_depth_warning": "L=600 > D=500 — уточнить у заказчика"
   },
   "constraints": {
     "default_gap": 2,
     "drawer_gap": 2,
     "door_gap": 2,
     "back_wall_offset": 16,
-    "construction": "top_bottom_over_sides",
-    "shelf_front_inset": 0
+    "construction": "top_bottom_over_sides"
   },
   "basis_mapping": {
     "coordinate_system": "basis_mebelshik",
@@ -658,17 +627,58 @@
     "placement_required": true
   },
   "warnings": [
-    "Количество изделий по ТЗ: 2 шт. (в JSON — одна модель; копировать проект дважды или зеркалировать в БАЗИС).",
-    "Высота опор Hleg=100 мм — по чертежу, в ТЗ не указана (estimated).",
-    "Горшок 600 мм по длине не помещается в глубину корпуса 500 мм — проверить ориентацию/вкладную.",
-    "Пластиковая вкладная для горшков — не моделируется (нет в каталоге); полка ЛДСП на Y=650.",
-    "Нижние 5 ниш открыты (без фасадов); верхняя зона открыта под горшки.",
-    "Ручки и направляющие не требуются по ТЗ."
+    "5 секций под вкладные кашпо, полка на отметке 650.",
+    "Цвет/декор в ТЗ не указан — принят дефолт «Белый» (ЛДСП), подтвердить с заказчиком."
   ],
   "estimated_values": [
-    "materials — точная декорация H3170 в базе БАЗИС",
-    "hardware.legs.height",
-    "overall_dimensions — допуск ±10 по ТЗ",
-    "pot fit vs depth 500"
-  ]
+    "materials.color"
+  ],
+  "carcass_calculation": {
+    "W": 3000,
+    "D": 500,
+    "H": 1000,
+    "T": 16,
+    "T_back": 16,
+    "Hleg": 100,
+    "construction": "top_bottom_over_sides",
+    "inner_width": "W - 2*T = 2968",
+    "side_y": "116..984",
+    "columns": [
+      {
+        "x": [
+          16,
+          597
+        ],
+        "kind": "shelves"
+      },
+      {
+        "x": [
+          613,
+          1194
+        ],
+        "kind": "shelves"
+      },
+      {
+        "x": [
+          1210,
+          1791
+        ],
+        "kind": "shelves"
+      },
+      {
+        "x": [
+          1807,
+          2388
+        ],
+        "kind": "shelves"
+      },
+      {
+        "x": [
+          2404,
+          2984
+        ],
+        "kind": "shelves"
+      }
+    ]
+  }
 }

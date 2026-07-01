@@ -19,14 +19,31 @@
     {
       "id": "front_counter",
       "type": "counter",
-      "dimensions": { "width": 1700, "height": 1200, "depth": 300, "estimated": true },
-      "elements": ["front_left_panel", "front_mid_panel", "front_right_panel", "top_client"]
+      "dimensions": {
+        "width": 1700,
+        "height": 1200,
+        "depth": 300,
+        "estimated": true
+      },
+      "elements": [
+        "front_left_panel",
+        "front_mid_panel",
+        "front_right_panel",
+        "top_client"
+      ]
     },
     {
       "id": "operator_area",
       "type": "workspace",
-      "dimensions": { "width": 1000, "height": 650, "depth": 800, "estimated": true },
-      "elements": ["worktop_operator"]
+      "dimensions": {
+        "width": 1000,
+        "height": 650,
+        "depth": 800,
+        "estimated": true
+      },
+      "elements": [
+        "worktop_operator"
+      ]
     }
   ],
   "panels": [
@@ -36,11 +53,34 @@
       "basis_orientation": "horizont",
       "material": "ЛДСП",
       "thickness": 16,
-      "dimensions": { "width": 1700, "height": 800 },
-      "placement": { "x1": 0, "x2": 1700, "y1": 100, "y2": 116, "z1": 0, "z2": 800 },
-      "position": { "x": 0, "y": 100, "z": 0 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 0.4, "bottom": 0, "left": 0.4, "right": 0.4 },
+      "dimensions": {
+        "width": 1700,
+        "height": 800
+      },
+      "placement": {
+        "x1": 0,
+        "x2": 1700,
+        "y1": 100,
+        "y2": 116,
+        "z1": 0,
+        "z2": 800
+      },
+      "position": {
+        "x": 0,
+        "y": 100,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0,
+        "left": 0.4,
+        "right": 0.4
+      },
       "estimated": false
     },
     {
@@ -49,11 +89,34 @@
       "basis_orientation": "vertical",
       "material": "ЛДСП",
       "thickness": 16,
-      "dimensions": { "width": 800, "height": 1168 },
-      "placement": { "x1": 0, "x2": 16, "y1": 116, "y2": 1284, "z1": 0, "z2": 800 },
-      "position": { "x": 0, "y": 116, "z": 0 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 0.4, "bottom": 0.4, "left": 0.4, "right": 0.4 },
+      "dimensions": {
+        "width": 800,
+        "height": 1168
+      },
+      "placement": {
+        "x1": 0,
+        "x2": 16,
+        "y1": 116,
+        "y2": 1284,
+        "z1": 0,
+        "z2": 800
+      },
+      "position": {
+        "x": 0,
+        "y": 116,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
       "estimated": false
     },
     {
@@ -62,11 +125,34 @@
       "basis_orientation": "vertical",
       "material": "ЛДСП",
       "thickness": 16,
-      "dimensions": { "width": 800, "height": 1168 },
-      "placement": { "x1": 1684, "x2": 1700, "y1": 116, "y2": 1284, "z1": 0, "z2": 800 },
-      "position": { "x": 1684, "y": 116, "z": 0 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 0.4, "bottom": 0.4, "left": 0.4, "right": 0.4 },
+      "dimensions": {
+        "width": 800,
+        "height": 1168
+      },
+      "placement": {
+        "x1": 1684,
+        "x2": 1700,
+        "y1": 116,
+        "y2": 1284,
+        "z1": 0,
+        "z2": 800
+      },
+      "position": {
+        "x": 1684,
+        "y": 116,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
       "estimated": false
     },
     {
@@ -75,11 +161,34 @@
       "basis_orientation": "front",
       "material": "ЛДСП",
       "thickness": 16,
-      "dimensions": { "width": 1668, "height": 1168 },
-      "placement": { "x1": 16, "x2": 1684, "y1": 116, "y2": 1284, "z1": 784, "z2": 800 },
-      "position": { "x": 16, "y": 116, "z": 784 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 0.4, "bottom": 0.4, "left": 0.4, "right": 0.4 },
+      "dimensions": {
+        "width": 1668,
+        "height": 1168
+      },
+      "placement": {
+        "x1": 16,
+        "x2": 1684,
+        "y1": 116,
+        "y2": 1284,
+        "z1": 784,
+        "z2": 800
+      },
+      "position": {
+        "x": 16,
+        "y": 116,
+        "z": 784
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
       "estimated": true
     },
     {
@@ -88,11 +197,34 @@
       "basis_orientation": "horizont",
       "material": "ЛДСП U 708 ST9 (светло-серый)",
       "thickness": 16,
-      "dimensions": { "width": 1000, "height": 800 },
-      "placement": { "x1": 350, "x2": 1350, "y1": 734, "y2": 750, "z1": 0, "z2": 800 },
-      "position": { "x": 350, "y": 734, "z": 0 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 0.4, "bottom": 0.4, "left": 0.4, "right": 0.4 },
+      "dimensions": {
+        "width": 1000,
+        "height": 784
+      },
+      "placement": {
+        "x1": 350,
+        "x2": 1350,
+        "y1": 734,
+        "y2": 750,
+        "z1": 0,
+        "z2": 784
+      },
+      "position": {
+        "x": 350,
+        "y": 734,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
       "estimated": false,
       "section_id": "operator_area"
     },
@@ -102,11 +234,34 @@
       "basis_orientation": "horizont",
       "material": "ЛДСП",
       "thickness": 16,
-      "dimensions": { "width": 1700, "height": 300 },
-      "placement": { "x1": 0, "x2": 1700, "y1": 1284, "y2": 1300, "z1": 0, "z2": 300 },
-      "position": { "x": 0, "y": 1284, "z": 0 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 0.4, "bottom": 0.4, "left": 0.4, "right": 0.4 },
+      "dimensions": {
+        "width": 1700,
+        "height": 300
+      },
+      "placement": {
+        "x1": 0,
+        "x2": 1700,
+        "y1": 1284,
+        "y2": 1300,
+        "z1": 0,
+        "z2": 300
+      },
+      "position": {
+        "x": 0,
+        "y": 1284,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
       "estimated": true,
       "section_id": "front_counter"
     },
@@ -116,11 +271,34 @@
       "basis_orientation": "front",
       "material": "ЛДСП U 960 ST9 (Оникс серый)",
       "thickness": 16,
-      "dimensions": { "width": 350, "height": 534 },
-      "placement": { "x1": 0, "x2": 350, "y1": 750, "y2": 1284, "z1": 0, "z2": 16 },
-      "position": { "x": 0, "y": 750, "z": 0 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 0.4, "bottom": 0.4, "left": 0.4, "right": 0.4 },
+      "dimensions": {
+        "width": 350,
+        "height": 534
+      },
+      "placement": {
+        "x1": 0,
+        "x2": 350,
+        "y1": 750,
+        "y2": 1284,
+        "z1": -16,
+        "z2": 0
+      },
+      "position": {
+        "x": 0,
+        "y": 750,
+        "z": -16
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
       "estimated": true,
       "section_id": "front_counter"
     },
@@ -130,11 +308,34 @@
       "basis_orientation": "front",
       "material": "ЛДСП U 708 ST9 (светло-серый)",
       "thickness": 16,
-      "dimensions": { "width": 1000, "height": 534 },
-      "placement": { "x1": 350, "x2": 1350, "y1": 750, "y2": 1284, "z1": 0, "z2": 16 },
-      "position": { "x": 350, "y": 750, "z": 0 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 0.4, "bottom": 0.4, "left": 0.4, "right": 0.4 },
+      "dimensions": {
+        "width": 1000,
+        "height": 534
+      },
+      "placement": {
+        "x1": 350,
+        "x2": 1350,
+        "y1": 750,
+        "y2": 1284,
+        "z1": -16,
+        "z2": 0
+      },
+      "position": {
+        "x": 350,
+        "y": 750,
+        "z": -16
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
       "estimated": false,
       "section_id": "front_counter"
     },
@@ -144,11 +345,34 @@
       "basis_orientation": "front",
       "material": "ЛДСП U 960 ST9 (Оникс серый)",
       "thickness": 16,
-      "dimensions": { "width": 350, "height": 534 },
-      "placement": { "x1": 1350, "x2": 1700, "y1": 750, "y2": 1284, "z1": 0, "z2": 16 },
-      "position": { "x": 1350, "y": 750, "z": 0 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 0.4, "bottom": 0.4, "left": 0.4, "right": 0.4 },
+      "dimensions": {
+        "width": 350,
+        "height": 534
+      },
+      "placement": {
+        "x1": 1350,
+        "x2": 1700,
+        "y1": 750,
+        "y2": 1284,
+        "z1": -16,
+        "z2": 0
+      },
+      "position": {
+        "x": 1350,
+        "y": 750,
+        "z": -16
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
       "estimated": true,
       "section_id": "front_counter"
     }
@@ -210,4 +434,3 @@
     "interpretation of (300)800 and 1300(750)"
   ]
 }
-

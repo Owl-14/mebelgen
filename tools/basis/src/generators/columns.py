@@ -49,10 +49,8 @@ def shelves_in_column(cx1, cx2, levels, T, z1, z2, mat, sid, label) -> list[dict
 
 
 def door_in_column(cx1, cx2, y1, y2, T, mat, sid, name, *, z_mode="overlay") -> dict[str, Any]:
-    if z_mode == "front":          # вынесена вперёд: z -T..0
-        z = (-T, 0)
-    else:                          # накладная/врезная по фасадной плоскости: 0..T
-        z = (0, T)
+    # накладной фасад — ПЕРЕД корпусом (z −T..0), иначе врезается в боковину/дно.
+    z = (0, T) if z_mode == "inset" else (-T, 0)
     return panel(name, "door_front", "front", (cx1, cx2), (y1, y2), z,
                  thickness=T, material=mat, section_id=sid)
 
@@ -69,6 +67,10 @@ def drawer_stack(cx1, cx2, fb, heights, gap, p, T, mat, sid, prefix) -> tuple[li
     box_back = p.get("box_back_thickness", T)
     box_bot = p.get("box_bottom_thickness", T)
     bottom_mode = p.get("box_bottom_mode", "between")   # between | under
+    # короб (с задней стенкой) не должен заходить в задник корпуса
+    back_limit = p.get("back_limit")
+    if back_limit is not None and box_z1 + box_depth + box_back > back_limit:
+        box_depth = max(50, back_limit - box_z1 - box_back)
     boxes = p.get("boxes", True)
     fx1 = cx1 + gap                                      # врезной фасад в проём колонки
     fx2 = cx2 - gap
@@ -76,7 +78,7 @@ def drawer_stack(cx1, cx2, fb, heights, gap, p, T, mat, sid, prefix) -> tuple[li
     for k, h in enumerate(heights, start=1):
         fy1, fy2 = y, y + h
         nm = f"{prefix}Фасад ящик {k}" if prefix else f"Фасад ящик {k}"
-        panels.append(panel(nm, "drawer_front", "front", (fx1, fx2), (fy1, fy2), (0, T),
+        panels.append(panel(nm, "drawer_front", "front", (fx1, fx2), (fy1, fy2), (-T, 0),
                             thickness=T, material=mat, section_id=sid, estimated=True))
         sides_on_bottom = p.get("box_sides_on_bottom", False)
         bxl1 = cx1 + guide_gap
