@@ -287,6 +287,14 @@ def cmd_viewer(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_studio(args: argparse.Namespace) -> int:
+    from src.studio import run_studio
+
+    run_studio(args.input, port=args.port, out_dir=args.out,
+               open_browser=not args.no_open)
+    return 0
+
+
 def cmd_techview(args: argparse.Namespace) -> int:
     from src.techview import build_techview_svg
 
@@ -554,6 +562,13 @@ def main() -> int:
     p_view.add_argument("-o", "--output", help="Путь к .html (по умолчанию рядом с входом)")
     p_view.add_argument("--no-holes", action="store_true", help="Не показывать присадки")
     p_view.set_defaults(func=cmd_viewer)
+
+    p_st = sub.add_parser("studio", help="Локальный редактор-предпросмотр: правки ParamSpec с живым 3D, проверками и BOM — без облака (AKD-94)")
+    p_st.add_argument("input", help="ParamSpec (.json)")
+    p_st.add_argument("--port", type=int, default=8765)
+    p_st.add_argument("--out", help="Каталог для сохранений (по умолчанию рядом со спекой)")
+    p_st.add_argument("--no-open", action="store_true", help="Не открывать браузер")
+    p_st.set_defaults(func=cmd_studio)
 
     p_tv = sub.add_parser("techview", help="ParamSpec/project → чертёж SVG (фронт+бок, размерки/выноски без пересечений)")
     p_tv.add_argument("input", help="ParamSpec или project.json")
