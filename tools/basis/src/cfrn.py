@@ -129,9 +129,13 @@ def project_to_cfrn_json(project: dict[str, Any]) -> dict[str, Any]:
             "clippedSourceContour": {"size": cont, "pos": {"x": 0, "y": 0}},
             "fullProductContour": {"size": cont, "pos": {"x": 0, "y": 0}},
         })
-        # горизонталь: контур растёт в −Z от точки привязки → привязка по задней грани z2
+        # компенсация направления выдавливания толщины от точки привязки:
+        #   горизонталь — контур растёт в −Z → привязка по задней грани z2;
+        #   вертикаль   — толщина растёт в −X → привязка по правой грани x2
+        # (иначе панель уезжает на толщину: боковина x[0,16] кодируется как x[-16,0]).
         tz = pl["z2"] if orient in ("horizont", "horizontal") else pl["z1"]
-        children.append({"tableIndex": idx, "matrix": _matrix(orient, pl["x1"], pl["y1"], tz)})
+        tx = pl["x2"] if orient == "vertical" else pl["x1"]
+        children.append({"tableIndex": idx, "matrix": _matrix(orient, tx, pl["y1"], tz)})
 
     return {
         "model": {"tableIndex": -1, "objs": [{"tableIndex": 0, "objs": children}]},
@@ -146,3 +150,64 @@ def project_to_cfrn_bytes(project: dict[str, Any]) -> bytes:
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("file.json", data)
     return buf.getvalue()
+
+
+def cfrn_world_boxes(project: dict[str, Any]) -> list[dict[str, Any]]:
+    """Мировые AABB панелей, реконструированные ИЗ матриц .cfrn — как их строит
+    БАЗИС при сборке .b3d. Позволяет проверить кодирование, а не только placement
+    (совпадает с обратной выгрузкой b3d→cfrn из облака до миллиметра)."""
+    d = project_to_cfrn_json(project)
+    tobjs = d["table"]["objects"]
+    nodes = d["model"]["objs"][0]["objs"]
+
+    def xf(M: list[float], p: tuple[float, float, float]) -> tuple[float, float, float]:
+        px, py, pz = p
+        return (px * M[0] + py * M[4] + pz * M[8] + M[12],
+                px * M[1] + py * M[5] + pz * M[9] + M[13],
+                px * M[2] + py * M[6] + pz * M[10] + M[14])
+
+    out: list[dict[str, Any]] = []
+    for nd in nodes:
+        g = tobjs[nd["tableIndex"]]
+        sz = g["contour"]["size"]
+        th = g.get("thickness", 16)
+        M = nd["matrix"]
+        corners = [(x, y, z) for x in (0, sz["x"]) for y in (0, sz["y"]) for z in (0, th)]
+        ws = [xf(M, c) for c in corners]
+        xs = [w[0] for w in ws]
+        ys = [w[1] for w in ws]
+        zs = [w[2] for w in ws]
+        out.append({"name": g.get("name"), "x1": min(xs), "x2": max(xs),
+                    "y1": min(ys), "y2": max(ys), "z1": min(zs), "z2": max(zs)})
+    return out
+
+
+def check_cfrn_encoding(project: dict[str, Any], *, tol: float = 0.5) -> list[str]:
+    """Сверяет мировые AABB из .cfrn с placement и ловит пересечения на уровне
+    кодирования (толщина панели должна выдавливаться в нужную сторону). Пусто = ок.
+
+    Именно этот класс багов placement-чек НЕ видит: placement может быть корректен,
+    а матрица .cfrn — уводить деталь на толщину, создавая нахлёсты в самом .b3d."""
+    boxes = cfrn_world_boxes(project)
+    panels = [p for p in project.get("panels", []) if p.get("placement")]
+    issues: list[str] = []
+    for p, b in zip(panels, boxes):
+        pl = p["placement"]
+        for ax in ("x", "y", "z"):
+            if abs(b[ax + "1"] - pl[ax + "1"]) > tol or abs(b[ax + "2"] - pl[ax + "2"]) > tol:
+                issues.append(
+                    f"{p.get('name')}: .cfrn {ax}[{b[ax+'1']:.1f},{b[ax+'2']:.1f}] "
+                    f"≠ placement {ax}[{pl[ax+'1']},{pl[ax+'2']}]")
+    n = len(boxes)
+    for i in range(n):
+        a = boxes[i]
+        for j in range(i + 1, n):
+            c = boxes[j]
+            ox = min(a["x2"], c["x2"]) - max(a["x1"], c["x1"])
+            oy = min(a["y2"], c["y2"]) - max(a["y1"], c["y1"])
+            oz = min(a["z2"], c["z2"]) - max(a["z1"], c["z1"])
+            if ox > tol and oy > tol and oz > tol:
+                issues.append(
+                    f"пересечение в .cfrn: {a['name']} × {c['name']} "
+                    f"на {ox:.1f}×{oy:.1f}×{oz:.1f} мм")
+    return issues
