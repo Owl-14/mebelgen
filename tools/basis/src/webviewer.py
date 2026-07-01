@@ -51,13 +51,23 @@ def _holes(project: dict[str, Any]) -> list[dict[str, Any]]:
         return []
 
 
+def _hardware(project: dict[str, Any]) -> list[dict[str, Any]]:
+    """Видимые детали механизмов: направляющие, петли (hardware_geometry)."""
+    try:
+        from .hardware_geometry import compute_hardware_geometry
+        return compute_hardware_geometry(project)
+    except Exception:
+        return []
+
+
 def project_to_viewer_html(project: dict[str, Any], *, title: str | None = None,
                            include_holes: bool = True) -> str:
     """HTML со встроенным three.js-просмотром модели в правильной (правосторонней) системе."""
     name = title or project.get("project_name") or project.get("furniture_type") or "Модель"
     panels = _panels(project)
     holes = _holes(project) if include_holes else []
-    payload = {"panels": panels, "colors": _COLORS, "holes": holes}
+    payload = {"panels": panels, "colors": _COLORS, "holes": holes,
+               "hardware": _hardware(project)}
     return _TEMPLATE.replace("__NAME__", _esc(name)).replace("__DATA__", json.dumps(payload, ensure_ascii=False))
 
 
@@ -85,7 +95,8 @@ _TEMPLATE = r"""<!DOCTYPE html>
   &nbsp;<span class="k" style="background:#2fa84f"></span>Y — высота
   &nbsp;<span class="k" style="background:#3b82f6"></span>Z — глубина (на зрителя)<br>
   <label><input type="checkbox" id="toggleHoles" checked> показывать присадки</label><br>
-  <label><input type="checkbox" id="toggleXray"> прозрачный режим (присадки внутри)</label>
+  <label><input type="checkbox" id="toggleHw" checked> фурнитура (направляющие, петли)</label><br>
+  <label><input type="checkbox" id="toggleXray"> прозрачный режим (механизмы внутри)</label>
 </div>
 <div id="hint">ЛКМ — вращать · колесо — зум · ПКМ — панорама</div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -93,6 +104,7 @@ _TEMPLATE = r"""<!DOCTYPE html>
 <script>
 const DATA = __DATA__;
 const PANELS = DATA.panels, COLORS = DATA.colors, HOLES = DATA.holes || [];
+const HW = DATA.hardware || [];
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xeceff3);
@@ -121,7 +133,23 @@ PANELS.forEach((p,i)=>{
       new THREE.LineBasicMaterial({color:0x5a4326}));
   e.position.copy(mesh.position); scene.add(e);
 });
-// прозрачный режим: детали полупрозрачны, присадки видно насквозь (в т.ч. внутренние)
+// фурнитура: направляющие и петли — реальные детали механизмов (металлик)
+const hwGroup=new THREE.Group();
+HW.forEach(h=>{
+  const w=Math.max(h.x2-h.x1,1), hh=Math.max(h.y2-h.y1,1), d=Math.max(h.z2-h.z1,1);
+  const m=new THREE.Mesh(new THREE.BoxGeometry(w,hh,d),
+      new THREE.MeshLambertMaterial({color:h.color||'#8f969e'}));
+  m.position.set(TX((h.x1+h.x2)/2), TY((h.y1+h.y2)/2), TZ((h.z1+h.z2)/2));
+  hwGroup.add(m);
+  const e=new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry),
+      new THREE.LineBasicMaterial({color:0x4a5057}));
+  e.position.copy(m.position); hwGroup.add(e);
+});
+scene.add(hwGroup);
+document.getElementById('toggleHw').addEventListener('change',e=>{hwGroup.visible=e.target.checked;});
+
+// прозрачный режим: детали полупрозрачны — видно присадки и МЕХАНИЗМЫ внутри
+// (фурнитура остаётся непрозрачной, направляющие/петли читаются сквозь корпус)
 document.getElementById('toggleXray').addEventListener('change',e=>{
   const on=e.target.checked;
   panelMats.forEach(m=>{m.transparent=on; m.opacity=on?0.20:1.0; m.depthWrite=!on; m.needsUpdate=true;});

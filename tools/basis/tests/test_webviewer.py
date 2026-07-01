@@ -29,6 +29,7 @@ def test_viewer_html_for_all_paramspecs():
         html = project_to_viewer_html(pr)
         # HTML валиден по-минимуму и несёт данные всех панелей + правостороннее преобразование
         if not (html.startswith("<!DOCTYPE html>") and "OrbitControls" in html
-                and "bb.z1 - z" in html and html.count('"x1"') == len(pr.get("panels", []))):
+                and "bb.z1 - z" in html
+                and html.count('"type"') == len(pr.get("panels", []))):
             bad.append(f.name)
     assert not bad, f"просмотр не собрался/неполон: {bad}"
