@@ -22,9 +22,10 @@ from pathlib import Path
 from typing import Any
 
 from .hardware import compute_drilling, drilling_summary
+from .techview import build_techview_svg
 from .webviewer import project_to_viewer_html
 
-RENDERER_VERSION = "1"      # ↑ при изменении вёрстки/рендерера листа
+RENDERER_VERSION = "2"      # ↑ при изменении вёрстки/рендерера листа (2: чертёж AKD-7/8)
 
 STATUS_ORDER = ["draft", "review", "approved", "production"]
 STATUS_RU = {
@@ -148,13 +149,24 @@ def build_approval_html(project: dict[str, Any], *, version: int, status: str,
         f'<tr><td>{_e(k)}</td><td class="num">{v}</td></tr>' for k, v in s["drilling"]) \
         or '<tr><td colspan="2" class="muted">—</td></tr>'
 
+    # технический чертёж (AKD-7/8); при сбое лист остаётся без карточки чертежа
+    try:
+        tv_svg, tv_issues = build_techview_svg(project)
+        techview = tv_svg if not tv_issues else ""
+    except Exception:
+        techview = ""
+    techview_card = (
+        '<div class="card" style="margin-top:16px"><h2>Чертёж (фронт · бок)</h2>'
+        f'<div class="body" style="overflow-x:auto">{techview}</div></div>') if techview else ""
+
     return _SHEET_TEMPLATE.format(
         name=_e(s["name"]), badge=badge, version=version, created=_e(created_iso),
         dim=_e(dim_str), decor=_e(s["decor"]), thickness=_e(s["thickness"]),
         back=_e(s["back"]), edge=_e(s["edge"]),
         n_panels=s["n_panels"], n_holes=s["n_holes"],
         bom_rows=bom_rows, panel_rows=panel_rows, drill_rows=drill_rows,
-        viewer_srcdoc=viewer_doc, renderer=RENDERER_VERSION)
+        viewer_srcdoc=viewer_doc, renderer=RENDERER_VERSION,
+        techview_card=techview_card)
 
 
 # ------------------------------------------------------------------ версии/снапшот
@@ -321,6 +333,8 @@ _SHEET_TEMPLATE = r"""<!DOCTYPE html>
       </div>
     </div>
   </div>
+
+  {techview_card}
 
   <div class="grid" style="margin-top:16px">
     <div class="card">

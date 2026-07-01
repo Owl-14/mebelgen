@@ -287,6 +287,28 @@ def cmd_viewer(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_techview(args: argparse.Namespace) -> int:
+    from src.techview import build_techview_svg
+
+    data = json.loads(Path(args.input).read_text(encoding="utf-8"))
+    if data.get("schemaVersion") == "paramspec-v1":
+        from src.generators import generate_from_paramspec
+        project = generate_from_paramspec(data)
+    else:
+        project = data
+    svg, issues = build_techview_svg(project)
+    out = Path(args.output) if args.output else Path(args.input).with_suffix(".techview.svg")
+    out.write_text(svg, encoding="utf-8")
+    print(f"Чертёж (фронт+бок): {out}")
+    if issues:
+        print(f"ПРОБЛЕМЫ РАСКЛАДКИ ({len(issues)}):")
+        for i in issues:
+            print("  ✗", i)
+        return 2
+    print("Раскладка чистая: пересечений подписей нет, всё в рамке.")
+    return 0
+
+
 def cmd_deliver(args: argparse.Namespace) -> int:
     from datetime import datetime
     from src.delivery import create_delivery
@@ -532,6 +554,11 @@ def main() -> int:
     p_view.add_argument("-o", "--output", help="Путь к .html (по умолчанию рядом с входом)")
     p_view.add_argument("--no-holes", action="store_true", help="Не показывать присадки")
     p_view.set_defaults(func=cmd_viewer)
+
+    p_tv = sub.add_parser("techview", help="ParamSpec/project → чертёж SVG (фронт+бок, размерки/выноски без пересечений)")
+    p_tv.add_argument("input", help="ParamSpec или project.json")
+    p_tv.add_argument("-o", "--output", help="Путь к .svg (по умолчанию рядом с входом)")
+    p_tv.set_defaults(func=cmd_techview)
 
     p_del = sub.add_parser("deliver", help="Веб-доставка: лист согласования (3D+спека) + версия + PDF/PNG (AKD-15)")
     p_del.add_argument("input", help="ParamSpec или project.json")
