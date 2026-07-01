@@ -84,7 +84,8 @@ _TEMPLATE = r"""<!DOCTYPE html>
   <span class="k" style="background:#e5484d"></span>X — ширина
   &nbsp;<span class="k" style="background:#2fa84f"></span>Y — высота
   &nbsp;<span class="k" style="background:#3b82f6"></span>Z — глубина (на зрителя)<br>
-  <label><input type="checkbox" id="toggleHoles" checked> показывать присадки</label>
+  <label><input type="checkbox" id="toggleHoles" checked> показывать присадки</label><br>
+  <label><input type="checkbox" id="toggleXray"> прозрачный режим (присадки внутри)</label>
 </div>
 <div id="hint">ЛКМ — вращать · колесо — зум · ПКМ — панорама</div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -105,15 +106,23 @@ const W=bb.x1-bb.x0, H=bb.y1-bb.y0, D=bb.z1-bb.z0, R=Math.max(W,H,D);
 // левосторонняя БАЗИС → правосторонняя three.js, угол модели в (0,0,0)
 const TX = x => x - bb.x0, TY = y => y - bb.y0, TZ = z => bb.z1 - z;
 
+const panelMats=[];   // материалы деталей — для прозрачного (рентген) режима
 PANELS.forEach(p=>{
   const w=Math.max(p.x2-p.x1,1), h=Math.max(p.y2-p.y1,1), d=Math.max(p.z2-p.z1,1);
   const geo=new THREE.BoxGeometry(w,h,d);
-  const mesh=new THREE.Mesh(geo,new THREE.MeshLambertMaterial({color:COLORS[p.type]||'#c9a06a'}));
+  const mat=new THREE.MeshLambertMaterial({color:COLORS[p.type]||'#c9a06a', side:THREE.DoubleSide});
+  panelMats.push(mat);
+  const mesh=new THREE.Mesh(geo,mat);
   mesh.position.set(TX((p.x1+p.x2)/2), TY((p.y1+p.y2)/2), TZ((p.z1+p.z2)/2));
   scene.add(mesh);
   const e=new THREE.LineSegments(new THREE.EdgesGeometry(geo),
       new THREE.LineBasicMaterial({color:0x5a4326}));
   e.position.copy(mesh.position); scene.add(e);
+});
+// прозрачный режим: детали полупрозрачны, присадки видно насквозь (в т.ч. внутренние)
+document.getElementById('toggleXray').addEventListener('change',e=>{
+  const on=e.target.checked;
+  panelMats.forEach(m=>{m.transparent=on; m.opacity=on?0.20:1.0; m.depthWrite=!on; m.needsUpdate=true;});
 });
 
 // присадки (то, что БАЗИС-Просмотр прячет): маленькие метки в точках сверления
@@ -135,8 +144,14 @@ const d1=new THREE.DirectionalLight(0xffffff,0.55); d1.position.set(1,2,2); scen
 const d2=new THREE.DirectionalLight(0xffffff,0.30); d2.position.set(-2,1,-1); scene.add(d2);
 
 const center=new THREE.Vector3(W/2, H/2, D/2);
-const camera=new THREE.PerspectiveCamera(42, innerWidth/innerHeight, 1, R*50);
-camera.position.set(center.x + R*0.95, center.y + R*0.65, center.z + R*1.4);
+const FOV=42;
+const camera=new THREE.PerspectiveCamera(FOV, innerWidth/innerHeight, 1, R*50);
+// вписать модель: дистанция по габаритной сфере и вертикальному/горизонтальному FOV
+const sphere=0.5*Math.sqrt(W*W+H*H+D*D);
+const vfov=FOV*Math.PI/180, hfov=2*Math.atan(Math.tan(vfov/2)*innerWidth/innerHeight);
+const dist=sphere/Math.sin(Math.min(vfov,hfov)/2)*1.12;
+const dir=new THREE.Vector3(0.62,0.42,0.92); dir.normalize().multiplyScalar(dist);
+camera.position.copy(center).add(dir);
 const renderer=new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(devicePixelRatio);
 document.body.appendChild(renderer.domElement);
