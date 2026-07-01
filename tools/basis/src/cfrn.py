@@ -50,9 +50,59 @@ def _matrix(orient: str, x1: float, y1: float, z1: float) -> list[float]:
             _r(x1), _r(y1), _r(z1), 1]
 
 
+_GENERIC_COLOR = ("соглас", "уточн", "не задан", "любой")
+
+
+def _board_material_name(m: dict[str, Any]) -> str:
+    """Имя материала плиты в формате БАЗИС: «Декор (Код)», иначе тип плиты."""
+    color = str(m.get("color", "")).strip()
+    code = str(m.get("color_code", "")).strip()
+    board = (str(m.get("board_material", "")).strip() or "ЛДСП")
+    generic = (not color) or any(w in color.lower() for w in _GENERIC_COLOR) or color in ("—", "-")
+    if not generic:
+        return f"{color} ({code})" if code else color
+    return board
+
+
+def _hardware_entries(project: dict[str, Any]) -> list[dict[str, Any]]:
+    """Фурнитура из material_refs → записи материала с артикулом (как в родном .cfrn)."""
+    refs = project.get("material_refs") or {}
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for slot in ("handles", "drawer_guides", "hinges", "legs", "locks"):
+        r = refs.get(slot)
+        if not isinstance(r, dict) or not r.get("resolved"):
+            continue
+        cand = None
+        c = r.get("candidates")
+        if isinstance(c, list) and c and isinstance(c[0], dict):
+            cand = c[0]
+        elif r.get("name"):
+            cand = {"name": r.get("name"), "article": r.get("article")}
+        if not cand or not cand.get("name") or cand["name"] in seen:
+            continue
+        seen.add(cand["name"])
+        entry = {"name": cand["name"]}
+        if cand.get("article"):
+            entry["art"] = str(cand["article"])
+        out.append(entry)
+    return out
+
+
 def project_to_cfrn_json(project: dict[str, Any]) -> dict[str, Any]:
     name = project.get("project_name", "model")
-    materials = [{"name": project.get("materials", {}).get("board_material", "ЛДСП")}]
+    m = project.get("materials", {}) or {}
+
+    # 0 = плита (реальный декор), 1 = задник (если материал отличается)
+    board_name = _board_material_name(m)
+    materials: list[dict[str, Any]] = [{"name": board_name}]
+    back_raw = str(m.get("back_wall_material", "")).strip()
+    back_idx = 0
+    if back_raw and back_raw.lower() not in board_name.lower():
+        materials.append({"name": back_raw})
+        back_idx = len(materials) - 1
+    materials += _hardware_entries(project)   # фурнитура с артикулами (spec)
+
     objects: list[dict[str, Any]] = [{"objType": 7, "name": name, "isAssemblyUnit": False}]
     children: list[dict[str, Any]] = []
 
@@ -63,11 +113,13 @@ def project_to_cfrn_json(project: dict[str, Any]) -> dict[str, Any]:
         orient = str(p.get("basis_orientation") or "front").lower()
         sx, sy, sz = pl["x2"] - pl["x1"], pl["y2"] - pl["y1"], pl["z2"] - pl["z1"]
         cont = _contour(orient, sx, sy, sz)
+        pname = str(p.get("name", "")).lower()
+        mi = back_idx if ("задн" in pname or p.get("type") == "back") else 0
         idx = len(objects)
         objects.append({
             "objType": 2,
             "name": p.get("name", f"panel_{idx}"),
-            "materialIndex": 0,
+            "materialIndex": mi,
             "materialWidth": 0,
             "contour": {"size": cont, "pos": {"x": 0, "y": 0}},
             "thickness": _r(p.get("thickness", 16)),
