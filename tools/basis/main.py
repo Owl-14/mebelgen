@@ -287,6 +287,32 @@ def cmd_viewer(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_deliver(args: argparse.Namespace) -> int:
+    from datetime import datetime
+    from src.delivery import create_delivery
+
+    spec = json.loads(Path(args.input).read_text(encoding="utf-8"))
+    if spec.get("schemaVersion") == "paramspec-v1":
+        from src.generators import generate_from_paramspec
+        from src.materials import resolve_project_materials
+        project = generate_from_paramspec(spec)
+        try:
+            project["material_refs"] = resolve_project_materials(project)
+        except Exception:
+            pass
+    else:
+        project = spec
+    created = datetime.now().isoformat(timespec="seconds")
+    res = create_delivery(spec, project, out_root=args.out, created_iso=created,
+                          version=args.version, status=args.status, export=not args.no_export)
+    print(f"Лист согласования v{res['version']} · статус: {res['status']}")
+    print(f"  страница: {res['page']}")
+    print(f"  PDF:      {res['pdf'] or '(экспорт недоступен — печать из браузера)'}")
+    print(f"  PNG:      {res['png'] or '(экспорт недоступен)'}")
+    print(f"  снапшот:  {res['dir']}  (spec.json воспроизводит лист)")
+    return 0
+
+
 def cmd_orchestrate(args: argparse.Namespace) -> int:
     from src.orchestrator import orchestrate_file
 
@@ -506,6 +532,15 @@ def main() -> int:
     p_view.add_argument("-o", "--output", help="Путь к .html (по умолчанию рядом с входом)")
     p_view.add_argument("--no-holes", action="store_true", help="Не показывать присадки")
     p_view.set_defaults(func=cmd_viewer)
+
+    p_del = sub.add_parser("deliver", help="Веб-доставка: лист согласования (3D+спека) + версия + PDF/PNG (AKD-15)")
+    p_del.add_argument("input", help="ParamSpec или project.json")
+    p_del.add_argument("--out", default="out", help="Корень для deliveries/ (по умолчанию ./out)")
+    p_del.add_argument("--status", default="draft", choices=["draft", "review", "approved", "production"],
+                       help="Статус согласования")
+    p_del.add_argument("--version", type=int, help="Номер версии (по умолчанию авто-инкремент)")
+    p_del.add_argument("--no-export", action="store_true", help="Без PDF/PNG (только страница)")
+    p_del.set_defaults(func=cmd_deliver)
 
     p_orc = sub.add_parser(
         "orchestrate",
