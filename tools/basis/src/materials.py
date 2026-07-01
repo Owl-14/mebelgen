@@ -285,7 +285,7 @@ def resolve_project_materials(project: dict[str, Any], base: dict[str, Any] | No
         refs["handles"] = _handle_shortlist(h, base)
     if hw.get("drawer_guides"):
         refs["drawer_guides"] = _guides_shortlist(hw["drawer_guides"], base)
-    if project.get("doors"):
+    if project.get("doors") or hw.get("hinges"):
         refs["hinges"] = shortlist("Петли", ["петля"], label="петля", base=base)
     legs = hw.get("legs") or {}
     if (legs.get("count") or 0) > 0 and str(legs.get("type", "")).lower() not in ("нет", "—", ""):

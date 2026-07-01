@@ -31,4 +31,9 @@ def get_generator(archetype: str) -> Callable[[dict[str, Any]], dict[str, Any]]:
 
 
 def generate_from_paramspec(spec: dict[str, Any]) -> dict[str, Any]:
+    # Дозаполнить материалы/фурнитуру детерминированной политикой (AKD-76):
+    # из одного ТЗ должна собираться полная модель, без пропусков.
+    from ..materials_policy import apply_material_policy
+
+    spec = apply_material_policy(spec)
     return get_generator(spec["archetype"])(spec)

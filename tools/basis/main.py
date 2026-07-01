@@ -282,6 +282,10 @@ def cmd_generate(args: argparse.Namespace) -> int:
         return 1
 
     project = generate_from_paramspec(spec)
+    # Полный проект из одного ТЗ: политика материалов уже применена в генераторе,
+    # здесь привязываем к реальным позициям базы (AKD-76 + AKD-11).
+    from src.materials import resolve_project_materials
+    project["material_refs"] = resolve_project_materials(project)
 
     out = Path(args.output) if args.output else spec_path.parent.parent / "projects" / spec_path.name
     out.parent.mkdir(parents=True, exist_ok=True)
