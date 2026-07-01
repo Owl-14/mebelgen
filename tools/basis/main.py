@@ -209,6 +209,29 @@ def cmd_materials(args: argparse.Namespace) -> int:
             dims = "×".join(str(x[k]) for k in ("length", "width", "thickness") if x.get(k))
             cost = f"{x['cost']}₽/{x.get('unit','')}" if x.get("cost") else ""
             print(f"  [{x.get('article','')}] {x.get('name','')}  {dims}  {cost}".rstrip())
+    if args.resolve:
+        from src.materials import resolve_project_materials
+        p = Path(args.resolve)
+        project = json.loads(p.read_text(encoding="utf-8"))
+        refs = resolve_project_materials(project)
+        print(f"\nПодбор реальных позиций базы для {p.name}:")
+        for slot, r in refs.items():
+            if not r.get("resolved"):
+                print(f"  ✗ {slot}: НЕ сопоставлено — {r.get('reason')}"
+                      + (f" (кандидаты: {', '.join(r['candidates'])})" if r.get("candidates") else ""))
+            elif "candidates" in r and isinstance(r["candidates"], list) and r["candidates"] and isinstance(r["candidates"][0], dict):
+                print(f"  ~ {slot}: шорт-лист (группа «{r['group']}»):")
+                for c in r["candidates"]:
+                    print(f"      [{c.get('article','')}] {c.get('name','')}"
+                          + (f"  {c['cost']}₽" if c.get("cost") else ""))
+            else:
+                print(f"  ✓ {slot}: [{r.get('article','')}] {r.get('name','')}"
+                      + (f"  {r['cost']}₽/{r.get('unit','')}" if r.get("cost") else "")
+                      + f"  ({r.get('confidence')})")
+        if args.write:
+            project["material_refs"] = refs
+            p.write_text(json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8")
+            print(f"\nЗаписано material_refs в {p}")
     if args.check:
         project = json.loads(Path(args.check).read_text(encoding="utf-8"))
         notes = check_project_materials(project)
@@ -422,6 +445,8 @@ def main() -> int:
     p_mat.add_argument("--search", help="поиск по базе производства (имя/артикул/группа)")
     p_mat.add_argument("--category", help="ограничить поиск категорией (напр. «Фурнитура», «Листовой материал»)")
     p_mat.add_argument("--limit", type=int, default=25, help="сколько результатов поиска показать")
+    p_mat.add_argument("--resolve", help="project.json → подобрать реальные позиции базы (material_refs)")
+    p_mat.add_argument("--write", action="store_true", help="записать material_refs обратно в project.json (с --resolve)")
     p_mat.set_defaults(func=cmd_materials)
 
     p_orc = sub.add_parser(

@@ -97,7 +97,12 @@
     },
     "warnings": { "type": "array", "items": { "type": "string" } },
     "estimated_values": { "type": "array", "items": { "type": "string" } },
-    "carcass_calculation": { "type": "object" }
+    "carcass_calculation": { "type": "object" },
+    "material_refs": {
+      "type": "object",
+      "description": "Ссылки на реальные позиции производственной базы (materials/baza_materiala.json), заполняется resolve-материалов (materials --resolve). Не влияет на геометрию.",
+      "additionalProperties": true
+    }
   },
   "$defs": {
     "section": {

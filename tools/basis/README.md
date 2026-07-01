@@ -43,6 +43,7 @@ python main.py orchestrate        paramspecs/<spec>.json         # generate → 
 # Материалы (курируемый каталог + производственная база ≈5000 позиций)
 python main.py materials                                          # статистика
 python main.py materials --search "Дуб Вотан" --category "Листовой материал"
+python main.py materials --resolve projects/<project>.json [--write]   # подбор реальных позиций → material_refs
 python main.py materials --check projects/<project>.json          # сверка материалов проекта
 
 # Сборка нативной модели .b3d через облако БАЗИС (device-independent, ПЛАТНО ~10₽/операция)
@@ -89,8 +90,14 @@ CfrnToB3d` → нативный `.b3d`. Команда `build-b3d`. Каждая
 производственная база `materials/baza_materiala.json` (≈5000 реальных позиций с
 артикулами/ценами/размерами, импорт из xlsx через `scripts/import_materials_base.py`).
 Поиск реальных позиций — `python main.py materials --search "<запрос>"`. API в
-`src/materials.py`: `load_base / search_base / find_board`. Сверка точных имён БАЗИС
-(`basisName`) — при доступной лицензии (AKD-12).
+`src/materials.py`: `load_base / search_base / find_board`.
+
+**Подбор для проекта** — `materials --resolve project.json [--write]`: заполняет
+`material_refs` реальными позициями. Плита/задник/кромка — одна позиция (по толщине,
+коду декора или цвету); фурнитура (ручки/направляющие/петли/опоры/замки) — шорт-лист
+кандидатов из нужной группы (конкретный артикул выбирает технолог). Слабое совпадение
+не подменяется вслепую — помечается `resolved:false` с кандидатами. Сверка точных имён
+БАЗИС (`basisName`) — при доступной лицензии (AKD-12).
 
 ## Переменные окружения
 

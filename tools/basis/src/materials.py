@@ -130,3 +130,166 @@ def find_board(thickness: float | None = None, query: str | None = None,
     # дешевле — выше; неизвестная/нулевая цена уходит в конец
     res.sort(key=lambda x: (x["cost"] if isinstance(x.get("cost"), (int, float)) and x["cost"] > 0 else 1e9))
     return res
+
+
+# --- Резолв материалов проекта в реальные позиции базы (material_refs, AKD-11) ---
+# Плита/задник/кромка детерминированы (толщина+цвет) → одна позиция. Фурнитура
+# имеет сотни вариантов на тип → отдаём шорт-лист реальных кандидатов из нужной
+# группы, не выбирая артикул принудительно (это делает технолог/каталог БАЗИС).
+
+_GENERIC_COLOR = ("соглас", "уточн", "не задан", "любой", "по цвету")
+
+
+def _is_generic_color(color: str | None) -> bool:
+    c = (color or "").strip().lower()
+    return (not c) or c in ("—", "-", "n/a", "нет") or any(w in c for w in _GENERIC_COLOR)
+
+
+def _ref(item: dict[str, Any], match: str, confidence: str) -> dict[str, Any]:
+    return {"resolved": True, "id": item.get("id"), "article": item.get("article"),
+            "name": item.get("name"), "cost": item.get("cost"), "unit": item.get("unit"),
+            "group": item.get("group"), "match": match, "confidence": confidence}
+
+
+def _unresolved(query: str, reason: str, candidates: Any = ()) -> dict[str, Any]:
+    return {"resolved": False, "query": query, "reason": reason,
+            "candidates": [c.get("name") for c in list(candidates)[:3]]}
+
+
+_BOARD_KINDS = ("ЛДСП", "МДФ", "ХДФ", "ДСП", "ДВП")
+
+
+def _norm_code(s: Any) -> str:
+    return "".join(str(s).split()).upper()
+
+
+def resolve_board_ref(thickness: float | None, color: str | None = None,
+                      color_code: str | None = None, base: dict[str, Any] | None = None) -> dict[str, Any]:
+    if thickness is None:
+        return _unresolved("плита", "не задана толщина плиты")
+    boards = [b for b in find_board(thickness=thickness, base=base)
+              if any(k in str(b.get("name", "")) for k in _BOARD_KINDS)]
+    if not boards:
+        return _unresolved(f"плита {thickness} мм", f"нет плиты {thickness} мм в базе")
+    # 1) точный код декора (артикул/обозначение/имя), пробелонезависимо
+    if color_code and str(color_code).strip():
+        code = _norm_code(color_code)
+        for b in boards:
+            hay = _norm_code(f"{b.get('article','')} {b.get('designation','')} {b.get('name','')}")
+            if code in hay:
+                return _ref(b, f"код декора {color_code}", "high")
+    # 2) цвет не задан → дефолтная (дешёвая) плита нужной толщины
+    if _is_generic_color(color):
+        return _ref(boards[0], "по толщине (цвет не задан → дефолт: дешевле)", "low")
+    # 3) по названию цвета/декора
+    cl = color.strip().lower()
+    matched = [b for b in boards if cl in str(b.get("name", "")).lower()]
+    if matched:
+        return _ref(matched[0], "толщина + цвет", "high")
+    return _unresolved(f"плита {thickness} мм «{color}»" + (f" (код {color_code})" if color_code else ""),
+                       "не найдено по цвету/коду — подтвердить вручную", boards)
+
+
+def resolve_back_ref(back_material: str | None, base: dict[str, Any] | None = None) -> dict[str, Any]:
+    m = (back_material or "").lower()
+    if "двп" in m or "хдф" in m:
+        c = [x for x in base_items(category="Листовой материал", base=base)
+             if any(k in str(x.get("name", "")) for k in ("ДВП", "ХДФ"))]
+        c.sort(key=lambda x: (x.get("thickness") or 99, x.get("cost") or 1e9))
+        return _ref(c[0], "задник ДВП/ХДФ", "medium") if c else _unresolved(back_material or "задник", "ДВП/ХДФ не найдены")
+    if "лдсп" in m or "дсп" in m:
+        return resolve_board_ref(16, None, base=base)
+    return _unresolved(back_material or "задник", "тип задней стенки не распознан")
+
+
+def resolve_edge_ref(thickness: float | None, color: str | None = None,
+                     base: dict[str, Any] | None = None) -> dict[str, Any]:
+    if not thickness:
+        return _unresolved("кромка", "не задана толщина кромки")
+    cand = [x for x in base_items(category="Кромочные материалы", base=base)
+            if x.get("thickness") and abs(float(x["thickness"]) - float(thickness)) < 0.3]
+    cand.sort(key=lambda x: (x.get("cost") or 1e9))
+    if not cand:
+        return _unresolved(f"кромка {thickness} мм", "кромка такой толщины не найдена")
+    if not _is_generic_color(color):
+        cl = color.strip().lower()
+        col = [x for x in cand if cl in str(x.get("name", "")).lower()]
+        if col:
+            return _ref(col[0], "толщина + цвет", "high")
+    return _ref(cand[0], "по толщине (в цвет плиты)", "low")
+
+
+def shortlist(group_substr: str, tokens: list[Any], *, limit: int = 5, label: str = "",
+              base: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Шорт-лист реальных позиций фурнитуры из группы, ранжированных по совпадению
+    токенов (тип/размер/длина), затем по цене. Артикул не выбирается принудительно."""
+    items = base_items(group_substr=group_substr, base=base)
+    toks = [str(t).lower() for t in tokens if t not in (None, "", 0)]
+
+    def score(x: dict[str, Any]) -> int:
+        name = str(x.get("name", "")).lower()
+        return sum(1 for t in toks if t in name)
+
+    ranked = sorted(items, key=lambda x: (-score(x), x.get("cost") if isinstance(x.get("cost"), (int, float)) and x["cost"] > 0 else 1e9))
+    hit = [x for x in ranked if score(x) > 0]
+    top = (hit or ranked)[:limit]
+    return {
+        "resolved": bool(top),
+        "group": group_substr,
+        "matched_tokens": toks,
+        "note": "шорт-лист реальных позиций базы; конкретный артикул выбирает технолог/каталог БАЗИС",
+        "candidates": [{"article": x.get("article"), "name": x.get("name"), "cost": x.get("cost")} for x in top],
+    } if top else _unresolved(label or group_substr, f"в группе «{group_substr}» нет позиций")
+
+
+def _handle_shortlist(h: dict[str, Any], base: dict[str, Any] | None) -> dict[str, Any]:
+    t = str(h.get("type", "")).lower()
+    kw = "скоб" if "скоб" in t else "профил" if "профил" in t else "кнопк" if "кнопк" in t \
+        else "рейлинг" if "рейлинг" in t else ""
+    return shortlist("Ручк", [kw, h.get("size")], label="ручка", base=base)
+
+
+def _guides_shortlist(g: dict[str, Any], base: dict[str, Any] | None) -> dict[str, Any]:
+    t = str(g.get("type", "")).lower()
+    length = g.get("length_mm")
+    if "шарик" in t:
+        return shortlist("Шариковые направляющие", [length], label="направляющая шариковая", base=base)
+    kw = "метабокс" if "метабокс" in t else "тандем" if "тандем" in t else "роликов" if "ролик" in t else ""
+    return shortlist("выдвижения", [kw, length, "довод" if g.get("soft_close") else ""],
+                     label="направляющие", base=base)
+
+
+def _legs_shortlist(legs: dict[str, Any], base: dict[str, Any] | None) -> dict[str, Any]:
+    t = str(legs.get("type", "")).lower()
+    if "колёс" in t or "колес" in t or "ролик" in t:
+        return shortlist("Опоры колесные", [], label="опора колёсная", base=base)
+    if legs.get("adjustable") or "регулир" in t:
+        return shortlist("Опоры регулируемые", [], label="опора регулируемая", base=base)
+    return shortlist("Опоры", [], label="опора", base=base)
+
+
+def resolve_project_materials(project: dict[str, Any], base: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Сопоставить материалы/фурнитуру проекта с реальными позициями базы.
+    Плита/задник/кромка — одна позиция (по толщине+цвету), фурнитура — шорт-лист."""
+    base = base or load_base()
+    m = project.get("materials", {}) or {}
+    hw = project.get("hardware", {}) or {}
+    refs: dict[str, Any] = {
+        "board": resolve_board_ref(m.get("board_thickness"), m.get("color"), m.get("color_code"), base=base),
+        "back": resolve_back_ref(m.get("back_wall_material"), base=base),
+    }
+    if m.get("edge_band_thickness"):
+        refs["edge"] = resolve_edge_ref(m.get("edge_band_thickness"), m.get("color"), base=base)
+    h = hw.get("handles") or {}
+    if (h.get("count") or 0) > 0 and str(h.get("type", "")).lower() not in ("нет", "—", ""):
+        refs["handles"] = _handle_shortlist(h, base)
+    if hw.get("drawer_guides"):
+        refs["drawer_guides"] = _guides_shortlist(hw["drawer_guides"], base)
+    if project.get("doors"):
+        refs["hinges"] = shortlist("Петли", ["петля"], label="петля", base=base)
+    legs = hw.get("legs") or {}
+    if (legs.get("count") or 0) > 0 and str(legs.get("type", "")).lower() not in ("нет", "—", ""):
+        refs["legs"] = _legs_shortlist(legs, base)
+    if hw.get("locks"):
+        refs["locks"] = shortlist("Замки", ["замок"], label="замок", base=base)
+    return refs
