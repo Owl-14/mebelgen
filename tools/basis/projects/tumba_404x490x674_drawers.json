@@ -1,42 +1,48 @@
 {
   "project_name": "Тумба 404×490×674 (3 ящика + верхняя ниша)",
   "furniture_type": "тумба",
-  "overall_dimensions": { "width": 404, "depth": 490, "height": 674, "tolerance": 3 },
+  "overall_dimensions": {
+    "width": 404,
+    "depth": 490,
+    "height": 674,
+    "tolerance": 3
+  },
   "materials": {
     "board_material": "ЛДСП",
     "board_thickness": 16,
     "back_wall_material": "ДВП",
     "edge_band_thickness": 0.4,
-    "color": "по согласованию",
+    "color": "Белый",
     "color_code": ""
   },
   "sections": [
     {
-      "id": "top_open",
-      "type": "open",
-      "dimensions": { "width": 368, "height": 117, "depth": 474, "estimated": false },
-      "elements": ["Ниша верх (полезный объём)"]
-    },
-    {
       "id": "drawer_stack",
       "type": "drawer_stack",
-      "dimensions": { "width": 372, "height": 471, "depth": 444, "estimated": true },
+      "dimensions": {
+        "width": 372,
+        "height": 471,
+        "depth": 428,
+        "estimated": true
+      },
       "elements": [
         "Фасад ящик 1",
         "Фасад ящик 2",
-        "Фасад ящик 3",
-        "Ящик 1 дно",
-        "Ящик 1 боковина левая",
-        "Ящик 1 боковина правая",
-        "Ящик 1 задняя",
-        "Ящик 2 дно",
-        "Ящик 2 боковина левая",
-        "Ящик 2 боковина правая",
-        "Ящик 2 задняя",
-        "Ящик 3 дно",
-        "Ящик 3 боковина левая",
-        "Ящик 3 боковина правая",
-        "Ящик 3 задняя"
+        "Фасад ящик 3"
+      ]
+    },
+    {
+      "id": "top_open",
+      "type": "open",
+      "dimensions": {
+        "width": 372,
+        "height": 103,
+        "depth": 486.8,
+        "estimated": true
+      },
+      "elements": [
+        "Ниша верх",
+        "Полка под нишей"
       ]
     }
   ],
@@ -47,11 +53,34 @@
       "basis_orientation": "horizont",
       "material": "ЛДСП",
       "thickness": 16,
-      "dimensions": { "width": 404, "height": 490 },
-      "placement": { "x1": 0, "x2": 404, "y1": 0, "y2": 16, "z1": 0, "z2": 490 },
-      "position": { "x": 0, "y": 0, "z": 0 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 0.4, "bottom": 0, "left": 0.4, "right": 0.4 },
+      "dimensions": {
+        "width": 404,
+        "height": 490
+      },
+      "placement": {
+        "x1": 0,
+        "x2": 404,
+        "y1": 0,
+        "y2": 16,
+        "z1": 0,
+        "z2": 490
+      },
+      "position": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
       "estimated": false
     },
     {
@@ -60,11 +89,34 @@
       "basis_orientation": "horizont",
       "material": "ЛДСП",
       "thickness": 16,
-      "dimensions": { "width": 404, "height": 490 },
-      "placement": { "x1": 0, "x2": 404, "y1": 658, "y2": 674, "z1": 0, "z2": 490 },
-      "position": { "x": 0, "y": 658, "z": 0 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 0.4, "bottom": 0.4, "left": 0.4, "right": 0.4 },
+      "dimensions": {
+        "width": 404,
+        "height": 490
+      },
+      "placement": {
+        "x1": 0,
+        "x2": 404,
+        "y1": 658,
+        "y2": 674,
+        "z1": 0,
+        "z2": 490
+      },
+      "position": {
+        "x": 0,
+        "y": 658,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
       "estimated": false
     },
     {
@@ -73,11 +125,34 @@
       "basis_orientation": "vertical",
       "material": "ЛДСП",
       "thickness": 16,
-      "dimensions": { "width": 490, "height": 642 },
-      "placement": { "x1": 0, "x2": 16, "y1": 16, "y2": 658, "z1": 0, "z2": 490 },
-      "position": { "x": 0, "y": 16, "z": 0 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 0.4, "bottom": 0.4, "left": 0.4, "right": 0 },
+      "dimensions": {
+        "width": 490,
+        "height": 642
+      },
+      "placement": {
+        "x1": 0,
+        "x2": 16,
+        "y1": 16,
+        "y2": 658,
+        "z1": 0,
+        "z2": 490
+      },
+      "position": {
+        "x": 0,
+        "y": 16,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
       "estimated": false
     },
     {
@@ -86,11 +161,34 @@
       "basis_orientation": "vertical",
       "material": "ЛДСП",
       "thickness": 16,
-      "dimensions": { "width": 490, "height": 642 },
-      "placement": { "x1": 388, "x2": 404, "y1": 16, "y2": 658, "z1": 0, "z2": 490 },
-      "position": { "x": 388, "y": 16, "z": 0 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 0.4, "bottom": 0.4, "left": 0, "right": 0.4 },
+      "dimensions": {
+        "width": 490,
+        "height": 642
+      },
+      "placement": {
+        "x1": 388,
+        "x2": 404,
+        "y1": 16,
+        "y2": 658,
+        "z1": 0,
+        "z2": 490
+      },
+      "position": {
+        "x": 388,
+        "y": 16,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
       "estimated": false
     },
     {
@@ -99,82 +197,107 @@
       "basis_orientation": "front",
       "material": "ДВП",
       "thickness": 3.2,
-      "dimensions": { "width": 372, "height": 642 },
-      "placement": { "x1": 16, "x2": 388, "y1": 16, "y2": 658, "z1": 486.8, "z2": 490 },
-      "position": { "x": 16, "y": 16, "z": 486.8 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 0, "bottom": 0, "left": 0, "right": 0 },
-      "estimated": true
+      "dimensions": {
+        "width": 372,
+        "height": 642
+      },
+      "placement": {
+        "x1": 16,
+        "x2": 388,
+        "y1": 16,
+        "y2": 658,
+        "z1": 486.8,
+        "z2": 490
+      },
+      "position": {
+        "x": 16,
+        "y": 16,
+        "z": 486.8
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
+      "estimated": false
     },
-    {
-      "name": "Полка под нишей",
-      "type": "shelf",
-      "basis_orientation": "horizont",
-      "material": "ЛДСП",
-      "thickness": 16,
-      "dimensions": { "width": 372, "height": 486.8 },
-      "placement": { "x1": 16, "x2": 388, "y1": 539, "y2": 555, "z1": 0, "z2": 486.8 },
-      "position": { "x": 16, "y": 539, "z": 0 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 0.4, "bottom": 0.4, "left": 0.4, "right": 0.4 },
-      "estimated": true,
-      "section_id": "top_open"
-    },
-
     {
       "name": "Фасад ящик 1",
       "type": "drawer_front",
       "basis_orientation": "front",
       "material": "ЛДСП",
       "thickness": 16,
-      "dimensions": { "width": 368, "height": 156 },
-      "placement": { "x1": 18, "x2": 386, "y1": 68, "y2": 224, "z1": 0, "z2": 16 },
-      "position": { "x": 18, "y": 68, "z": 0 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 0.4, "bottom": 0.4, "left": 0.4, "right": 0.4 },
+      "dimensions": {
+        "width": 368,
+        "height": 156
+      },
+      "placement": {
+        "x1": 18,
+        "x2": 386,
+        "y1": 68,
+        "y2": 224,
+        "z1": -16,
+        "z2": 0
+      },
+      "position": {
+        "x": 18,
+        "y": 68,
+        "z": -16
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
       "estimated": true,
       "section_id": "drawer_stack"
     },
-    {
-      "name": "Фасад ящик 2",
-      "type": "drawer_front",
-      "basis_orientation": "front",
-      "material": "ЛДСП",
-      "thickness": 16,
-      "dimensions": { "width": 368, "height": 156 },
-      "placement": { "x1": 18, "x2": 386, "y1": 226, "y2": 382, "z1": 0, "z2": 16 },
-      "position": { "x": 18, "y": 226, "z": 0 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 0.4, "bottom": 0.4, "left": 0.4, "right": 0.4 },
-      "estimated": true,
-      "section_id": "drawer_stack"
-    },
-    {
-      "name": "Фасад ящик 3",
-      "type": "drawer_front",
-      "basis_orientation": "front",
-      "material": "ЛДСП",
-      "thickness": 16,
-      "dimensions": { "width": 368, "height": 155 },
-      "placement": { "x1": 18, "x2": 386, "y1": 384, "y2": 539, "z1": 0, "z2": 16 },
-      "position": { "x": 18, "y": 384, "z": 0 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 0.4, "bottom": 0.4, "left": 0.4, "right": 0.4 },
-      "estimated": true,
-      "section_id": "drawer_stack"
-    },
-
     {
       "name": "Ящик 1 дно",
       "type": "drawer_bottom",
       "basis_orientation": "horizont",
       "material": "ЛДСП",
       "thickness": 16,
-      "dimensions": { "width": 311, "height": 428 },
-      "placement": { "x1": 46.5, "x2": 357.5, "y1": 84, "y2": 100, "z1": 16, "z2": 444 },
-      "position": { "x": 46.5, "y": 84, "z": 16 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 0, "bottom": 0, "left": 0, "right": 0 },
+      "dimensions": {
+        "width": 311,
+        "height": 428
+      },
+      "placement": {
+        "x1": 46.5,
+        "x2": 357.5,
+        "y1": 84,
+        "y2": 100,
+        "z1": 16,
+        "z2": 444
+      },
+      "position": {
+        "x": 46.5,
+        "y": 84,
+        "z": 16
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
       "estimated": true,
       "section_id": "drawer_stack"
     },
@@ -184,11 +307,34 @@
       "basis_orientation": "vertical",
       "material": "ЛДСП",
       "thickness": 16,
-      "dimensions": { "width": 428, "height": 81 },
-      "placement": { "x1": 30.5, "x2": 46.5, "y1": 84, "y2": 165, "z1": 16, "z2": 444 },
-      "position": { "x": 30.5, "y": 84, "z": 16 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 0, "bottom": 0, "left": 0, "right": 0 },
+      "dimensions": {
+        "width": 428,
+        "height": 81
+      },
+      "placement": {
+        "x1": 30.5,
+        "x2": 46.5,
+        "y1": 84,
+        "y2": 165,
+        "z1": 16,
+        "z2": 444
+      },
+      "position": {
+        "x": 30.5,
+        "y": 84,
+        "z": 16
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
       "estimated": true,
       "section_id": "drawer_stack"
     },
@@ -198,11 +344,34 @@
       "basis_orientation": "vertical",
       "material": "ЛДСП",
       "thickness": 16,
-      "dimensions": { "width": 428, "height": 81 },
-      "placement": { "x1": 357.5, "x2": 373.5, "y1": 84, "y2": 165, "z1": 16, "z2": 444 },
-      "position": { "x": 357.5, "y": 84, "z": 16 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 0, "bottom": 0, "left": 0, "right": 0 },
+      "dimensions": {
+        "width": 428,
+        "height": 81
+      },
+      "placement": {
+        "x1": 357.5,
+        "x2": 373.5,
+        "y1": 84,
+        "y2": 165,
+        "z1": 16,
+        "z2": 444
+      },
+      "position": {
+        "x": 357.5,
+        "y": 84,
+        "z": 16
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
       "estimated": true,
       "section_id": "drawer_stack"
     },
@@ -212,26 +381,108 @@
       "basis_orientation": "front",
       "material": "ЛДСП",
       "thickness": 16,
-      "dimensions": { "width": 311, "height": 81 },
-      "placement": { "x1": 46.5, "x2": 357.5, "y1": 84, "y2": 165, "z1": 444, "z2": 460 },
-      "position": { "x": 46.5, "y": 84, "z": 444 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 0, "bottom": 0, "left": 0, "right": 0 },
+      "dimensions": {
+        "width": 311,
+        "height": 81
+      },
+      "placement": {
+        "x1": 46.5,
+        "x2": 357.5,
+        "y1": 84,
+        "y2": 165,
+        "z1": 444,
+        "z2": 460
+      },
+      "position": {
+        "x": 46.5,
+        "y": 84,
+        "z": 444
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
       "estimated": true,
       "section_id": "drawer_stack"
     },
-
+    {
+      "name": "Фасад ящик 2",
+      "type": "drawer_front",
+      "basis_orientation": "front",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 368,
+        "height": 156
+      },
+      "placement": {
+        "x1": 18,
+        "x2": 386,
+        "y1": 226,
+        "y2": 382,
+        "z1": -16,
+        "z2": 0
+      },
+      "position": {
+        "x": 18,
+        "y": 226,
+        "z": -16
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
+      "estimated": true,
+      "section_id": "drawer_stack"
+    },
     {
       "name": "Ящик 2 дно",
       "type": "drawer_bottom",
       "basis_orientation": "horizont",
       "material": "ЛДСП",
       "thickness": 16,
-      "dimensions": { "width": 311, "height": 428 },
-      "placement": { "x1": 46.5, "x2": 357.5, "y1": 242, "y2": 258, "z1": 16, "z2": 444 },
-      "position": { "x": 46.5, "y": 242, "z": 16 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 0, "bottom": 0, "left": 0, "right": 0 },
+      "dimensions": {
+        "width": 311,
+        "height": 428
+      },
+      "placement": {
+        "x1": 46.5,
+        "x2": 357.5,
+        "y1": 242,
+        "y2": 258,
+        "z1": 16,
+        "z2": 444
+      },
+      "position": {
+        "x": 46.5,
+        "y": 242,
+        "z": 16
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
       "estimated": true,
       "section_id": "drawer_stack"
     },
@@ -241,11 +492,34 @@
       "basis_orientation": "vertical",
       "material": "ЛДСП",
       "thickness": 16,
-      "dimensions": { "width": 428, "height": 81 },
-      "placement": { "x1": 30.5, "x2": 46.5, "y1": 242, "y2": 323, "z1": 16, "z2": 444 },
-      "position": { "x": 30.5, "y": 242, "z": 16 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 0, "bottom": 0, "left": 0, "right": 0 },
+      "dimensions": {
+        "width": 428,
+        "height": 81
+      },
+      "placement": {
+        "x1": 30.5,
+        "x2": 46.5,
+        "y1": 242,
+        "y2": 323,
+        "z1": 16,
+        "z2": 444
+      },
+      "position": {
+        "x": 30.5,
+        "y": 242,
+        "z": 16
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
       "estimated": true,
       "section_id": "drawer_stack"
     },
@@ -255,11 +529,34 @@
       "basis_orientation": "vertical",
       "material": "ЛДСП",
       "thickness": 16,
-      "dimensions": { "width": 428, "height": 81 },
-      "placement": { "x1": 357.5, "x2": 373.5, "y1": 242, "y2": 323, "z1": 16, "z2": 444 },
-      "position": { "x": 357.5, "y": 242, "z": 16 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 0, "bottom": 0, "left": 0, "right": 0 },
+      "dimensions": {
+        "width": 428,
+        "height": 81
+      },
+      "placement": {
+        "x1": 357.5,
+        "x2": 373.5,
+        "y1": 242,
+        "y2": 323,
+        "z1": 16,
+        "z2": 444
+      },
+      "position": {
+        "x": 357.5,
+        "y": 242,
+        "z": 16
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
       "estimated": true,
       "section_id": "drawer_stack"
     },
@@ -269,26 +566,108 @@
       "basis_orientation": "front",
       "material": "ЛДСП",
       "thickness": 16,
-      "dimensions": { "width": 311, "height": 81 },
-      "placement": { "x1": 46.5, "x2": 357.5, "y1": 242, "y2": 323, "z1": 444, "z2": 460 },
-      "position": { "x": 46.5, "y": 242, "z": 444 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 0, "bottom": 0, "left": 0, "right": 0 },
+      "dimensions": {
+        "width": 311,
+        "height": 81
+      },
+      "placement": {
+        "x1": 46.5,
+        "x2": 357.5,
+        "y1": 242,
+        "y2": 323,
+        "z1": 444,
+        "z2": 460
+      },
+      "position": {
+        "x": 46.5,
+        "y": 242,
+        "z": 444
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
       "estimated": true,
       "section_id": "drawer_stack"
     },
-
+    {
+      "name": "Фасад ящик 3",
+      "type": "drawer_front",
+      "basis_orientation": "front",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 368,
+        "height": 155
+      },
+      "placement": {
+        "x1": 18,
+        "x2": 386,
+        "y1": 384,
+        "y2": 539,
+        "z1": -16,
+        "z2": 0
+      },
+      "position": {
+        "x": 18,
+        "y": 384,
+        "z": -16
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
+      "estimated": true,
+      "section_id": "drawer_stack"
+    },
     {
       "name": "Ящик 3 дно",
       "type": "drawer_bottom",
       "basis_orientation": "horizont",
       "material": "ЛДСП",
       "thickness": 16,
-      "dimensions": { "width": 311, "height": 428 },
-      "placement": { "x1": 46.5, "x2": 357.5, "y1": 400, "y2": 416, "z1": 16, "z2": 444 },
-      "position": { "x": 46.5, "y": 400, "z": 16 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 0, "bottom": 0, "left": 0, "right": 0 },
+      "dimensions": {
+        "width": 311,
+        "height": 428
+      },
+      "placement": {
+        "x1": 46.5,
+        "x2": 357.5,
+        "y1": 400,
+        "y2": 416,
+        "z1": 16,
+        "z2": 444
+      },
+      "position": {
+        "x": 46.5,
+        "y": 400,
+        "z": 16
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
       "estimated": true,
       "section_id": "drawer_stack"
     },
@@ -298,11 +677,34 @@
       "basis_orientation": "vertical",
       "material": "ЛДСП",
       "thickness": 16,
-      "dimensions": { "width": 428, "height": 81 },
-      "placement": { "x1": 30.5, "x2": 46.5, "y1": 400, "y2": 481, "z1": 16, "z2": 444 },
-      "position": { "x": 30.5, "y": 400, "z": 16 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 0, "bottom": 0, "left": 0, "right": 0 },
+      "dimensions": {
+        "width": 428,
+        "height": 81
+      },
+      "placement": {
+        "x1": 30.5,
+        "x2": 46.5,
+        "y1": 400,
+        "y2": 481,
+        "z1": 16,
+        "z2": 444
+      },
+      "position": {
+        "x": 30.5,
+        "y": 400,
+        "z": 16
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
       "estimated": true,
       "section_id": "drawer_stack"
     },
@@ -312,11 +714,34 @@
       "basis_orientation": "vertical",
       "material": "ЛДСП",
       "thickness": 16,
-      "dimensions": { "width": 428, "height": 81 },
-      "placement": { "x1": 357.5, "x2": 373.5, "y1": 400, "y2": 481, "z1": 16, "z2": 444 },
-      "position": { "x": 357.5, "y": 400, "z": 16 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 0, "bottom": 0, "left": 0, "right": 0 },
+      "dimensions": {
+        "width": 428,
+        "height": 81
+      },
+      "placement": {
+        "x1": 357.5,
+        "x2": 373.5,
+        "y1": 400,
+        "y2": 481,
+        "z1": 16,
+        "z2": 444
+      },
+      "position": {
+        "x": 357.5,
+        "y": 400,
+        "z": 16
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
       "estimated": true,
       "section_id": "drawer_stack"
     },
@@ -326,13 +751,73 @@
       "basis_orientation": "front",
       "material": "ЛДСП",
       "thickness": 16,
-      "dimensions": { "width": 311, "height": 81 },
-      "placement": { "x1": 46.5, "x2": 357.5, "y1": 400, "y2": 481, "z1": 444, "z2": 460 },
-      "position": { "x": 46.5, "y": 400, "z": 444 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 0, "bottom": 0, "left": 0, "right": 0 },
+      "dimensions": {
+        "width": 311,
+        "height": 81
+      },
+      "placement": {
+        "x1": 46.5,
+        "x2": 357.5,
+        "y1": 400,
+        "y2": 481,
+        "z1": 444,
+        "z2": 460
+      },
+      "position": {
+        "x": 46.5,
+        "y": 400,
+        "z": 444
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
       "estimated": true,
       "section_id": "drawer_stack"
+    },
+    {
+      "name": "Полка под нишей",
+      "type": "shelf",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 372,
+        "height": 486.8
+      },
+      "placement": {
+        "x1": 16,
+        "x2": 388,
+        "y1": 539,
+        "y2": 555,
+        "z1": 0,
+        "z2": 486.8
+      },
+      "position": {
+        "x": 16,
+        "y": 539,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
+      "estimated": true,
+      "section_id": "top_open"
     }
   ],
   "drawers": [
@@ -342,8 +827,16 @@
       "guide_type": "шариковые",
       "soft_close": false,
       "lock": false,
-      "dimensions": { "width": 311, "height": 81, "depth": 444 },
-      "position": { "x": 46.5, "y": 84, "z": 16 },
+      "dimensions": {
+        "width": 311.0,
+        "height": 81,
+        "depth": 428
+      },
+      "position": {
+        "x": 46.5,
+        "y": 84,
+        "z": 16
+      },
       "estimated": true
     },
     {
@@ -352,8 +845,16 @@
       "guide_type": "шариковые",
       "soft_close": false,
       "lock": false,
-      "dimensions": { "width": 311, "height": 81, "depth": 444 },
-      "position": { "x": 46.5, "y": 242, "z": 16 },
+      "dimensions": {
+        "width": 311.0,
+        "height": 81,
+        "depth": 428
+      },
+      "position": {
+        "x": 46.5,
+        "y": 242,
+        "z": 16
+      },
       "estimated": true
     },
     {
@@ -362,8 +863,16 @@
       "guide_type": "шариковые",
       "soft_close": false,
       "lock": false,
-      "dimensions": { "width": 311, "height": 81, "depth": 444 },
-      "position": { "x": 46.5, "y": 400, "z": 16 },
+      "dimensions": {
+        "width": 311.0,
+        "height": 81,
+        "depth": 428
+      },
+      "position": {
+        "x": 46.5,
+        "y": 400,
+        "z": 16
+      },
       "estimated": true
     }
   ],
@@ -378,6 +887,13 @@
       "offset_from_top": 40,
       "furniture_encoded": ""
     },
+    "legs": {
+      "type": "колёса (ролики)",
+      "adjustable": false,
+      "color": "—",
+      "height": 0,
+      "count": 0
+    },
     "drawer_guides": {
       "type": "направляющие",
       "length_mm": 450,
@@ -385,23 +901,14 @@
       "cabinet_left_panel": "Боковина левая",
       "cabinet_right_panel": "Боковина правая",
       "furniture_encoded": ""
-    },
-    "legs": {
-      "type": "колёса (ролики)",
-      "adjustable": false,
-      "color": "—",
-      "height": 0,
-      "count": 4
-    },
-    "locks": []
+    }
   },
   "constraints": {
     "default_gap": 2,
     "drawer_gap": 2,
     "door_gap": 2,
     "back_wall_offset": 3.2,
-    "construction": "top_bottom_over_sides",
-    "top_open_height": 117
+    "construction": "top_bottom_over_sides"
   },
   "basis_mapping": {
     "coordinate_system": "basis_mebelshik",
@@ -410,16 +917,14 @@
     "placement_required": true
   },
   "warnings": [
-    "Толщины материалов не указаны на изображении: принято T=16 (ЛДСП) и задник ДВП 3.2 (estimated).",
-    "Высота роликов/опор не указана: принято, что H=674 уже включает колёса.",
-    "Размеры ящиков 311×444×81 взяты из схемы ящика на картинке; привязка по X/Y для коробов оценочная."
+    "Толщины приняты T=16, задник ДВП 3.2 (estimated).",
+    "Размеры коробов ящиков оценочные.",
+    "Цвет/декор в ТЗ не указан — принят дефолт «Белый» (ЛДСП), подтвердить с заказчиком."
   ],
   "estimated_values": [
     "materials.board_thickness",
-    "panels[].section_id for drawer parts",
-    "drawers[].position",
-    "hardware.handles.size",
-    "hardware.drawer_guides.length_mm"
+    "drawer box params",
+    "hardware sizes"
   ],
   "carcass_calculation": {
     "W": 404,
@@ -427,11 +932,15 @@
     "H": 674,
     "T": 16,
     "T_back": 3.2,
-    "inner_width": "W - 2*T = 404 - 32 = 372",
-    "top_open_height": "117 (по картинке)",
-    "drawer_zone": "Y 68..539 (3 ящика с gap=2), полка под нишей y 539..555",
-    "drawer_fronts": "H = 156/156/155 (суммарно 471 с учётом gap)",
-    "drawer_box": "311×444×81 (по схеме ящика), z 16..460"
+    "Hleg": 0,
+    "construction": "top_bottom_over_sides",
+    "inner_width": "W - 2*T = 372",
+    "side_y": "16..658",
+    "drawer_heights": [
+      156,
+      156,
+      155
+    ],
+    "drawer_box": "311.0×428×81"
   }
 }
-

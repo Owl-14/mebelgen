@@ -42,7 +42,7 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     y = fb
     for k, h in enumerate(heights, start=1):
         fy1, fy2 = y, y + h
-        panels.append(panel(f"Фасад ящик {k}", "drawer_front", "front", (fx1, fx2), (fy1, fy2), (0, c.T),
+        panels.append(panel(f"Фасад ящик {k}", "drawer_front", "front", (fx1, fx2), (fy1, fy2), (-c.T, 0),
                             thickness=c.T, material=c.mat, section_id="drawer_stack", estimated=True))
         front_names.append(f"Фасад ящик {k}")
         bxl1 = ox1 + guide_gap

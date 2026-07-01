@@ -8,6 +8,8 @@
 - position не равен минимуму placement;
 - габарит из панелей не сходится с overall_dimensions с учётом ножек/цоколя
   (низ корпуса должен стоять на y = legs.height, верх — на overall.height);
+- ЛЮБОЕ объёмное пересечение деталей, включая фасады (детали должны стыковаться
+  встык, а не заходить друг на друга) — строже, чем geometry_check;
 - дубли имён панелей (импортёр БАЗИС может перепутать детали).
 
 Источник истины в этом конвейере — placement (по нему импортёр строит панель).
@@ -178,6 +180,22 @@ def check_consistency(
                         f"(под корпусом {bottom_y:g} мм, заявленный цоколь/ножки {hleg:g} мм)",
                     )
                 )
+
+    # Строгая проверка встык: ЛЮБОЕ объёмное пересечение деталей (включая фасады) —
+    # ошибка (детали должны стыковаться, а не заходить друг на друга). geometry_check
+    # исключает фасады и допускает угловые нахлёсты; здесь — без исключений, порог 0.5 мм.
+    pp = [p for p in panels if isinstance(p, dict) and isinstance(p.get("placement"), dict)]
+    for ia in range(len(pp)):
+        a = pp[ia]["placement"]
+        for ib in range(ia + 1, len(pp)):
+            b = pp[ib]["placement"]
+            ox = min(a["x2"], b["x2"]) - max(a["x1"], b["x1"])
+            oy = min(a["y2"], b["y2"]) - max(a["y1"], b["y1"])
+            oz = min(a["z2"], b["z2"]) - max(a["z1"], b["z1"])
+            if ox > 0.5 and oy > 0.5 and oz > 0.5:
+                issues.append(ConsistencyIssue(
+                    ERROR, str(pp[ia].get("name") or f"panel_{ia}"), "panel_overlap",
+                    f"пересекается с «{pp[ib].get('name') or ib}» на {ox:.1f}×{oy:.1f}×{oz:.1f} мм"))
 
     # Дубли имён панелей — риск для импортёра БАЗИС (перепутает детали).
     names = [str(p.get("name")) for p in panels if isinstance(p, dict) and p.get("name")]

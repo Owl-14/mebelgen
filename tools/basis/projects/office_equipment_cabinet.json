@@ -1,54 +1,119 @@
 {
-  "project_name": "Тумба для оргтехники 1200×350/270×740",
+  "project_name": "Тумба под оргтехнику 1200×350×740",
   "furniture_type": "тумба",
-  "overall_dimensions": { "width": 1200, "depth": 350, "height": 740, "tolerance": 5 },
+  "overall_dimensions": {
+    "width": 1200,
+    "depth": 270,
+    "height": 740,
+    "tolerance": 5
+  },
   "materials": {
     "board_material": "ЛДСП",
     "board_thickness": 22,
-    "back_wall_material": "ДВП (ламинированное с одной стороны)",
-    "edge_band_thickness": 2,
-    "color": "орех",
+    "back_wall_material": "ДВП",
+    "edge_band_thickness": 0.4,
+    "color": "Белый",
     "color_code": ""
   },
   "sections": [
     {
       "id": "left",
-      "type": "open_over_door",
-      "dimensions": { "width": 567, "height": 696, "depth": 270, "estimated": false },
-      "elements": ["Полка левая", "Дверь левая"]
+      "type": "door",
+      "dimensions": {
+        "width": 567,
+        "height": 696,
+        "depth": 266.8,
+        "estimated": false
+      },
+      "elements": [
+        "Полка левая (left)"
+      ]
     },
     {
       "id": "right",
-      "type": "open_over_door",
-      "dimensions": { "width": 567, "height": 696, "depth": 270, "estimated": false },
-      "elements": ["Полка правая", "Дверь правая"]
+      "type": "door",
+      "dimensions": {
+        "width": 567,
+        "height": 696,
+        "depth": 266.8,
+        "estimated": false
+      },
+      "elements": [
+        "Полка правая (right)"
+      ]
     }
   ],
   "panels": [
-    {
-      "name": "Крышка (столешница)",
-      "type": "top",
-      "basis_orientation": "horizont",
-      "material": "ЛДСП",
-      "thickness": 22,
-      "dimensions": { "width": 1200, "height": 350 },
-      "placement": { "x1": 0, "x2": 1200, "y1": 718, "y2": 740, "z1": -80, "z2": 270 },
-      "position": { "x": 0, "y": 718, "z": -80 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 0, "bottom": 0, "left": 2, "right": 2 },
-      "estimated": false
-    },
     {
       "name": "Дно",
       "type": "bottom",
       "basis_orientation": "horizont",
       "material": "ЛДСП",
       "thickness": 22,
-      "dimensions": { "width": 1200, "height": 266.8 },
-      "placement": { "x1": 0, "x2": 1200, "y1": 0, "y2": 22, "z1": 0, "z2": 266.8 },
-      "position": { "x": 0, "y": 0, "z": 0 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 0, "bottom": 0, "left": 2, "right": 2 },
+      "dimensions": {
+        "width": 1200,
+        "height": 270
+      },
+      "placement": {
+        "x1": 0,
+        "x2": 1200,
+        "y1": 0,
+        "y2": 22,
+        "z1": 0,
+        "z2": 270
+      },
+      "position": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
+      "estimated": false
+    },
+    {
+      "name": "Крышка",
+      "type": "top",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 22,
+      "dimensions": {
+        "width": 1200,
+        "height": 350
+      },
+      "placement": {
+        "x1": 0,
+        "x2": 1200,
+        "y1": 718,
+        "y2": 740,
+        "z1": -80,
+        "z2": 270
+      },
+      "position": {
+        "x": 0,
+        "y": 718,
+        "z": -80
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
       "estimated": false
     },
     {
@@ -57,11 +122,34 @@
       "basis_orientation": "vertical",
       "material": "ЛДСП",
       "thickness": 22,
-      "dimensions": { "width": 266.8, "height": 696 },
-      "placement": { "x1": 0, "x2": 22, "y1": 22, "y2": 718, "z1": 0, "z2": 266.8 },
-      "position": { "x": 0, "y": 22, "z": 0 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 2, "bottom": 2, "left": 2, "right": 0 },
+      "dimensions": {
+        "width": 270,
+        "height": 696
+      },
+      "placement": {
+        "x1": 0,
+        "x2": 22,
+        "y1": 22,
+        "y2": 718,
+        "z1": 0,
+        "z2": 270
+      },
+      "position": {
+        "x": 0,
+        "y": 22,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
       "estimated": false
     },
     {
@@ -70,152 +158,287 @@
       "basis_orientation": "vertical",
       "material": "ЛДСП",
       "thickness": 22,
-      "dimensions": { "width": 266.8, "height": 696 },
-      "placement": { "x1": 1178, "x2": 1200, "y1": 22, "y2": 718, "z1": 0, "z2": 266.8 },
-      "position": { "x": 1178, "y": 22, "z": 0 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 2, "bottom": 2, "left": 0, "right": 2 },
+      "dimensions": {
+        "width": 270,
+        "height": 696
+      },
+      "placement": {
+        "x1": 1178,
+        "x2": 1200,
+        "y1": 22,
+        "y2": 718,
+        "z1": 0,
+        "z2": 270
+      },
+      "position": {
+        "x": 1178,
+        "y": 22,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
       "estimated": false
     },
     {
-      "name": "Перегородка внутренняя",
+      "name": "Задняя стенка",
+      "type": "back",
+      "basis_orientation": "front",
+      "material": "ДВП",
+      "thickness": 3.2,
+      "dimensions": {
+        "width": 1156,
+        "height": 696
+      },
+      "placement": {
+        "x1": 22,
+        "x2": 1178,
+        "y1": 22,
+        "y2": 718,
+        "z1": 266.8,
+        "z2": 270
+      },
+      "position": {
+        "x": 22,
+        "y": 22,
+        "z": 266.8
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
+      "estimated": false
+    },
+    {
+      "name": "Перегородка 1",
       "type": "vertical_partition",
       "basis_orientation": "vertical",
       "material": "ЛДСП",
       "thickness": 22,
-      "dimensions": { "width": 266.8, "height": 696 },
-      "placement": { "x1": 589, "x2": 611, "y1": 22, "y2": 718, "z1": 0, "z2": 266.8 },
-      "position": { "x": 589, "y": 22, "z": 0 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 0, "bottom": 0, "left": 0, "right": 0 },
+      "dimensions": {
+        "width": 266.8,
+        "height": 696
+      },
+      "placement": {
+        "x1": 589,
+        "x2": 611,
+        "y1": 22,
+        "y2": 718,
+        "z1": 0,
+        "z2": 266.8
+      },
+      "position": {
+        "x": 589,
+        "y": 22,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
       "estimated": false
     },
     {
-      "name": "Задняя стенка ДВП",
-      "type": "back",
-      "basis_orientation": "front",
-      "material": "ДВП (ламинированное с одной стороны)",
-      "thickness": 3.2,
-      "dimensions": { "width": 1156, "height": 696 },
-      "placement": { "x1": 22, "x2": 1178, "y1": 22, "y2": 718, "z1": 266.8, "z2": 270 },
-      "position": { "x": 22, "y": 22, "z": 266.8 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 0, "bottom": 0, "left": 0, "right": 0 },
-      "estimated": false
-    },
-    {
-      "name": "Полка левая",
+      "name": "Полка левая (left)",
       "type": "shelf",
       "basis_orientation": "horizont",
       "material": "ЛДСП",
-      "thickness": 16,
-      "dimensions": { "width": 567, "height": 266.8 },
-      "placement": { "x1": 22, "x2": 589, "y1": 362, "y2": 378, "z1": 0, "z2": 266.8 },
-      "position": { "x": 22, "y": 362, "z": 0 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 2, "bottom": 0, "left": 2, "right": 2 },
+      "thickness": 22,
+      "dimensions": {
+        "width": 567,
+        "height": 266.8
+      },
+      "placement": {
+        "x1": 22,
+        "x2": 589,
+        "y1": 362,
+        "y2": 384,
+        "z1": 0,
+        "z2": 266.8
+      },
+      "position": {
+        "x": 22,
+        "y": 362,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
       "estimated": false,
       "section_id": "left"
-    },
-    {
-      "name": "Полка правая",
-      "type": "shelf",
-      "basis_orientation": "horizont",
-      "material": "ЛДСП",
-      "thickness": 16,
-      "dimensions": { "width": 567, "height": 266.8 },
-      "placement": { "x1": 611, "x2": 1178, "y1": 362, "y2": 378, "z1": 0, "z2": 266.8 },
-      "position": { "x": 611, "y": 362, "z": 0 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 2, "bottom": 0, "left": 2, "right": 2 },
-      "estimated": false,
-      "section_id": "right"
     },
     {
       "name": "Дверь левая",
       "type": "door_front",
       "basis_orientation": "front",
       "material": "ЛДСП",
-      "thickness": 16,
-      "dimensions": { "width": 563, "height": 336 },
-      "placement": { "x1": 24, "x2": 587, "y1": 24, "y2": 360, "z1": 0, "z2": 16 },
-      "position": { "x": 24, "y": 24, "z": 0 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 2, "bottom": 2, "left": 2, "right": 2 },
+      "thickness": 22,
+      "dimensions": {
+        "width": 563,
+        "height": 336
+      },
+      "placement": {
+        "x1": 24,
+        "x2": 587,
+        "y1": 24,
+        "y2": 360,
+        "z1": -22,
+        "z2": 0
+      },
+      "position": {
+        "x": 24,
+        "y": 24,
+        "z": -22
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
       "estimated": false,
       "section_id": "left"
+    },
+    {
+      "name": "Полка правая (right)",
+      "type": "shelf",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 22,
+      "dimensions": {
+        "width": 567,
+        "height": 266.8
+      },
+      "placement": {
+        "x1": 611,
+        "x2": 1178,
+        "y1": 362,
+        "y2": 384,
+        "z1": 0,
+        "z2": 266.8
+      },
+      "position": {
+        "x": 611,
+        "y": 362,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
+      "estimated": false,
+      "section_id": "right"
     },
     {
       "name": "Дверь правая",
       "type": "door_front",
       "basis_orientation": "front",
       "material": "ЛДСП",
-      "thickness": 16,
-      "dimensions": { "width": 563, "height": 336 },
-      "placement": { "x1": 613, "x2": 1176, "y1": 24, "y2": 360, "z1": 0, "z2": 16 },
-      "position": { "x": 613, "y": 24, "z": 0 },
-      "rotation": { "x": 0, "y": 0, "z": 0 },
-      "edge_banding": { "top": 2, "bottom": 2, "left": 2, "right": 2 },
+      "thickness": 22,
+      "dimensions": {
+        "width": 563,
+        "height": 336
+      },
+      "placement": {
+        "x1": 613,
+        "x2": 1176,
+        "y1": 24,
+        "y2": 360,
+        "z1": -22,
+        "z2": 0
+      },
+      "position": {
+        "x": 613,
+        "y": 24,
+        "z": -22
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
       "estimated": false,
       "section_id": "right"
     }
   ],
   "drawers": [],
-  "doors": [
-    {
-      "id": "door_left",
-      "type": "накладные",
-      "hinges": "регулируемые, угол 110",
-      "lock": false,
-      "dimensions": { "width": 563, "height": 336 },
-      "position": { "x": 24, "y": 24, "z": 0 },
-      "estimated": false
-    },
-    {
-      "id": "door_right",
-      "type": "накладные",
-      "hinges": "регулируемые, угол 110",
-      "lock": false,
-      "dimensions": { "width": 563, "height": 336 },
-      "position": { "x": 613, "y": 24, "z": 0 },
-      "estimated": false
-    }
-  ],
+  "doors": [],
   "hardware": {
     "handles": {
-      "type": "ручка-скоба",
+      "type": "ручка",
       "material": "металл",
-      "color": "сатин",
-      "size": 96,
+      "color": "—",
+      "size": 128,
       "count": 2,
-      "offset_from_top": 50,
-      "furniture_encoded": ""
-    },
-    "drawer_guides": {
-      "type": "нет",
-      "length_mm": 300,
-      "soft_close": false,
-      "cabinet_left_panel": "",
-      "cabinet_right_panel": "",
+      "offset_from_top": 32,
       "furniture_encoded": ""
     },
     "legs": {
       "type": "регулируемые опоры",
-      "adjustable": true,
+      "adjustable": false,
       "color": "—",
       "height": 0,
-      "count": 4
+      "count": 0
     },
-    "locks": []
+    "hinges": {
+      "type": "петля накладная 110°",
+      "furniture_encoded": ""
+    }
   },
   "constraints": {
     "default_gap": 2,
     "drawer_gap": 2,
     "door_gap": 2,
     "back_wall_offset": 3.2,
-    "construction": "top_over_sides_bottom_between_sides",
-    "carcass_depth": "350/270",
-    "carcass_setback_z": 0
+    "construction": "top_bottom_over_sides"
   },
   "basis_mapping": {
     "coordinate_system": "basis_mebelshik",
@@ -224,30 +447,38 @@
     "placement_required": true
   },
   "warnings": [
-    "Глубина указана как 350/270: принято Dобщ=350 (столешница), корпус глубина 270 и стоит по передней кромке (z 0..270).",
-    "Высота регулируемых опор в ТЗ не задана: опоры описаны в hardware, но не моделируются панелями.",
-    "ЛДСП: в ТЗ есть 22 мм для каркаса/дверей и 16 мм для полок/фасадов — принято: каркас 22, полки и двери 16."
+    "ЛДСП 22 мм; столешница со свесом вперёд (z -80..270); двойная глубина 350/270; верх открыт, двери закрывают низ.",
+    "Цвет/декор в ТЗ не указан — принят дефолт «Белый» (ЛДСП), подтвердить с заказчиком.",
+    "Петли не указаны — приняты накладные петли 110°."
   ],
   "estimated_values": [
-    "overall_dimensions.tolerance",
-    "constraints.carcass_setback_z",
-    "hardware.legs.height"
+    "materials.color"
   ],
   "carcass_calculation": {
     "W": 1200,
-    "D_total": 350,
-    "D_carcass": 270,
+    "D": 270,
     "H": 740,
-    "T_carcass": 22,
-    "T_shelf_front": 16,
+    "T": 22,
     "T_back": 3.2,
-    "z_setback": "фасады: z 0..16; корпусные панели: z 0..266.8 (у фасадов нет пересечения по X, т.к. двери внутри проёмов); полки: z 16..266.8; задник: z 266.8..270; столешница: z -80..270 (свес 80 мм вперёд)",
-    "inner_width": "W - 2*T = 1200 - 44 = 1156",
-    "partition_x": "x1=22+567=589, x2=611 (деление на 2 равных отсека с перегородкой 22)",
-    "inner_height": "H - T_bottom - T_top = 740 - 22 - 22 = 696",
-    "shelf_y": "При 1 полке: равные проёмы -> (696-16)/2=340; y1=22+340=362, y2=378",
-    "door_gap": "по 2 мм по периметру и между дверями",
-    "shelf_load_kg": 30,
-    "handle": "скоба 96, отступ 50 мм от верхнего края двери"
+    "Hleg": 0,
+    "construction": "top_bottom_over_sides",
+    "inner_width": "W - 2*T = 1156",
+    "side_y": "22..718",
+    "columns": [
+      {
+        "x": [
+          22,
+          589
+        ],
+        "kind": "door"
+      },
+      {
+        "x": [
+          611,
+          1178
+        ],
+        "kind": "door"
+      }
+    ]
   }
 }

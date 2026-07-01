@@ -52,7 +52,9 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
                 top = sec.get("front_top", yt - g)
                 h = (top - fb - (n - 1) * g) / n
                 heights = [round(h, 2)] * n
-            ps, dm, topy = drawer_stack(cx1, cx2, fb, heights, g, sec, c.T, c.mat, sid, sec.get("prefix", ""))
+            # короб ящика не должен доходить до задника (передний край = D − T_back)
+            sec_dr = {**sec, "back_limit": c.D - c.T_back}
+            ps, dm, topy = drawer_stack(cx1, cx2, fb, heights, g, sec_dr, c.T, c.mat, sid, sec.get("prefix", ""))
             panels += ps
             drawers_meta += dm
             names += [p["name"] for p in ps]
@@ -64,7 +66,10 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
                 names.append(sh["name"])
         else:
             if levels:
-                sp = shelves_in_column(cx1, cx2, levels, c.T, iz1, iz2, c.mat, sid, sec.get("shelf_label", "Полка"))
+                base_label = sec.get("shelf_label", "Полка")
+                # при >1 колонке имена полок уникализируем по секции (иначе дубли имён)
+                lbl = f"{base_label} ({sid})" if len(sections) > 1 else base_label
+                sp = shelves_in_column(cx1, cx2, levels, c.T, iz1, iz2, c.mat, sid, lbl)
                 panels += sp
                 names += [p["name"] for p in sp]
             nd = sec.get("door", 0)

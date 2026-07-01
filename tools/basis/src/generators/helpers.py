@@ -105,12 +105,13 @@ def shelves(levels: list[float], W: float, D: float, T: float, T_back: float, ma
 def overlay_door(W: float, H: float, T: float, Hleg: float, gap: float, mat: str, section_id: str,
                  name: str = "Фасад двери", *, x1: float = None, x2: float = None,
                  y1: float = None, y2: float = None) -> dict[str, Any]:
-    """Накладной фасад: z 0..T, по периметру зазор gap."""
+    """Накладной фасад: z −T..0 (ПЕРЕД корпусом, не в его плоскости — иначе
+    фасад врезается в боковину). По периметру зазор gap."""
     ax1 = gap if x1 is None else x1
     ax2 = (W - gap) if x2 is None else x2
     ay1 = (Hleg + T + gap) if y1 is None else y1
     ay2 = (H - T - gap) if y2 is None else y2
-    return panel(name, "door_front", "front", (ax1, ax2), (ay1, ay2), (0, T),
+    return panel(name, "door_front", "front", (ax1, ax2), (ay1, ay2), (-T, 0),
                  thickness=T, material=mat, section_id=section_id)
 
 
