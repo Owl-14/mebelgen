@@ -13,15 +13,24 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from .cfrn import project_to_cfrn_bytes
+from .cfrn import check_cfrn_encoding, project_to_cfrn_bytes
 from .cloud_api import CloudTasksClient
 from .generators import generate_from_paramspec
 from .paramspec import validate_paramspec
 
 
 def build_b3d(project: dict[str, Any], out_path: str | Path, *,
-              client: CloudTasksClient | None = None, timeout: float = 180) -> dict[str, Any]:
+              client: CloudTasksClient | None = None, timeout: float = 180,
+              skip_encoding_check: bool = False) -> dict[str, Any]:
     """project.json (панели) → .cfrn → облако CfrnToB3d → .b3d на диск. Возвращает отчёт."""
+    # проверка кодирования ДО платной конвертации: матрицы .cfrn должны
+    # воспроизводить placement и не давать нахлёстов (иначе .b3d будет с браком).
+    if not skip_encoding_check:
+        enc = check_cfrn_encoding(project)
+        if enc:
+            raise RuntimeError(
+                "Кодирование .cfrn не сошлось с placement (сборка отменена, деньги не потрачены):\n  "
+                + "\n  ".join(enc[:10]))
     client = client or CloudTasksClient()
     cfrn = project_to_cfrn_bytes(project)
     with tempfile.NamedTemporaryFile("wb", suffix=".cfrn", delete=False) as tf:
