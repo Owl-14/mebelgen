@@ -244,6 +244,26 @@ def cmd_materials(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_hardware(args: argparse.Namespace) -> int:
+    from src.hardware import compute_drilling, drilling_summary
+
+    data = json.loads(Path(args.input).read_text(encoding="utf-8"))
+    if data.get("schemaVersion") == "paramspec-v1":
+        from src.generators import generate_from_paramspec
+        project = generate_from_paramspec(data)
+    else:
+        project = data
+    holes = compute_drilling(project)
+    print(f"Присадки под фурнитуру: {len(holes)}")
+    for k, v in sorted(drilling_summary(holes).items(), key=lambda kv: -kv[1]):
+        print(f"  {v:>4}  {k}")
+    if args.full:
+        for h in holes:
+            d = "+" if h["dir"] > 0 else "−"
+            print(f"    {h['panel']:<26} {h['purpose']:<22} ({h['x']}, {h['y']}, {h['z']})  Ø{h['diameter']} гл{h['depth']} {h['axis']}{d}")
+    return 0
+
+
 def cmd_orchestrate(args: argparse.Namespace) -> int:
     from src.orchestrator import orchestrate_file
 
@@ -452,6 +472,11 @@ def main() -> int:
     p_mat.add_argument("--resolve", help="project.json → подобрать реальные позиции базы (material_refs)")
     p_mat.add_argument("--write", action="store_true", help="записать material_refs обратно в project.json (с --resolve)")
     p_mat.set_defaults(func=cmd_materials)
+
+    p_hw = sub.add_parser("hardware", help="расчёт присадок под фурнитуру (ручки/петли/полкодержатели/стяжки/направляющие)")
+    p_hw.add_argument("input", help="project.json или ParamSpec")
+    p_hw.add_argument("--full", action="store_true", help="показать все отверстия, не только сводку")
+    p_hw.set_defaults(func=cmd_hardware)
 
     p_orc = sub.add_parser(
         "orchestrate",
