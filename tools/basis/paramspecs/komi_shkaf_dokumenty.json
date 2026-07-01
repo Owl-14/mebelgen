@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "paramspec-v1",
+  "project_name": "Шкаф для документов 1000×400×1800 (komi)",
+  "furniture_type": "шкаф для документов",
+  "archetype": "cabinet",
+  "dimensions": { "width": 1000, "depth": 400, "height": 1800, "tolerance": 5 },
+  "materials": { "board_thickness": 16 },
+  "sections": [
+    { "id": "left", "kind": "door", "shelves": 4, "shelf_label": "Полка левая", "door": 1, "door_name": "Дверь левая" },
+    { "id": "right", "kind": "door", "shelves": 4, "shelf_label": "Полка правая", "door": 1, "door_name": "Дверь правая" }
+  ],
+  "hardware": {},
+  "features": [],
+  "warnings": [],
+  "estimated_values": []
+}

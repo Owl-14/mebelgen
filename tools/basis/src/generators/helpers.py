@@ -163,6 +163,8 @@ def build_project(spec: dict[str, Any], panels: list[dict[str, Any]], *,
     }
     if hw.get("drawer_guides"):
         project["hardware"]["drawer_guides"] = hw["drawer_guides"]
+    if hw.get("hinges"):
+        project["hardware"]["hinges"] = hw["hinges"]
     if hw.get("locks"):
         project["hardware"]["locks"] = hw["locks"]
     if carcass_calc:
