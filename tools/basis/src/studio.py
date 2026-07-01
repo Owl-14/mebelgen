@@ -59,14 +59,13 @@ def build_payload(spec: dict[str, Any]) -> dict[str, Any]:
     except Exception as e:
         issues["cfrn"] = [f"кодирование: {e}"]
 
-    from .webviewer import _COLORS, _hardware, _holes, _panels
+    from .webviewer import viewer_payload
     from .delivery import _hardware_bom, spec_summary
     s = spec_summary(project)
     payload = {
         "ok": not any(issues.values()),
         "issues": issues,
-        "viewer": {"panels": _panels(project), "colors": _COLORS,
-                   "holes": _holes(project), "hardware": _hardware(project)},
+        "viewer": viewer_payload(project),      # панели+присадки+фурнитура+открывашки
         "stats": {"n_panels": s["n_panels"], "n_holes": s["n_holes"],
                   "dims": s["dims"], "decor": s["decor"]},
         "bom": _hardware_bom(project),
@@ -114,8 +113,11 @@ def make_handler(st: _Studio):
 
         def do_GET(self):
             if self.path in ("/", "/index.html"):
-                page = PAGE.replace("__SPEC__", json.dumps(st.spec, ensure_ascii=False)
-                                    .replace("</", "<\\/"))
+                from .webviewer import SCENE_JS
+                page = (PAGE
+                        .replace("__SCENE_JS__", SCENE_JS)
+                        .replace("__SPEC__", json.dumps(st.spec, ensure_ascii=False)
+                                 .replace("</", "<\\/")))
                 self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
             else:
                 self._send(404, b"{}")
@@ -294,6 +296,8 @@ PAGE = r"""<!DOCTYPE html>
     <label><input type="checkbox" id="cbHoles" checked> присадки</label>
     <label><input type="checkbox" id="cbHw" checked> фурнитура</label>
     <label><input type="checkbox" id="cbXray"> прозрачный</label>
+    <button id="btnOpenAll">Открыть всё</button>
+    <button id="btnCloseAll">Закрыть</button>
   </div>
   <div id="draw"></div>
   <div id="toast"></div>
@@ -303,87 +307,25 @@ PAGE = r"""<!DOCTYPE html>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script>
+__SCENE_JS__
 let SPEC = __SPEC__;
 const $ = id => document.getElementById(id);
 const toast = (m,bad)=>{const t=$('toast');t.textContent=m;t.style.background=bad?'#b3261e':'#1a1d21';
   t.style.opacity=1;clearTimeout(t._h);t._h=setTimeout(()=>t.style.opacity=0,2600);};
 
-/* ---------- three.js сцена (как webviewer: правосторонняя, Y-вверх) ---------- */
+/* ---------- 3D: общий движок MebelScene (как webviewer, + анимация открытия) ---------- */
 const view=$('view3d');
-const scene=new THREE.Scene(); scene.background=new THREE.Color(0xeceff3);
-const camera=new THREE.PerspectiveCamera(42, 1, 1, 100000);
-const renderer=new THREE.WebGLRenderer({antialias:true});
-view.appendChild(renderer.domElement);
-const controls=new THREE.OrbitControls(camera,renderer.domElement);
-controls.enableDamping=true; controls.dampingFactor=0.08;
-scene.add(new THREE.AmbientLight(0xffffff,0.72));
-const d1=new THREE.DirectionalLight(0xffffff,0.55); d1.position.set(1,2,2); scene.add(d1);
-const d2=new THREE.DirectionalLight(0xffffff,0.30); d2.position.set(-2,1,-1); scene.add(d2);
-let gPanels=new THREE.Group(), gHoles=new THREE.Group(), gHw=new THREE.Group(), gAux=new THREE.Group();
-scene.add(gPanels,gHoles,gHw,gAux);
-let panelMats=[], fitted=false;
-
-function resize(){const w=view.clientWidth,h=view.clientHeight;
-  camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h);}
-addEventListener('resize',resize);
-
-function rebuild(v){
-  [gPanels,gHoles,gHw,gAux].forEach(g=>{scene.remove(g);});
-  gPanels=new THREE.Group();gHoles=new THREE.Group();gHw=new THREE.Group();gAux=new THREE.Group();
-  scene.add(gPanels,gHoles,gHw,gAux); panelMats=[];
-  const P=v.panels; if(!P.length) return;
-  let bb={x0:1e9,x1:-1e9,y0:1e9,y1:-1e9,z0:1e9,z1:-1e9};
-  P.forEach(p=>{bb.x0=Math.min(bb.x0,p.x1);bb.x1=Math.max(bb.x1,p.x2);
-    bb.y0=Math.min(bb.y0,p.y1);bb.y1=Math.max(bb.y1,p.y2);
-    bb.z0=Math.min(bb.z0,p.z1);bb.z1=Math.max(bb.z1,p.z2);});
-  const W=bb.x1-bb.x0,H=bb.y1-bb.y0,D=bb.z1-bb.z0,R=Math.max(W,H,D);
-  const TX=x=>x-bb.x0, TY=y=>y-bb.y0, TZ=z=>bb.z1-z;
-  P.forEach((p,i)=>{
-    const w=Math.max(p.x2-p.x1,1),h=Math.max(p.y2-p.y1,1),d=Math.max(p.z2-p.z1,1);
-    const geo=new THREE.BoxGeometry(w,h,d);
-    const col=new THREE.Color(v.colors[p.type]||'#c9a06a'); col.offsetHSL(0,0,((i%5)-2)*0.009);
-    const mat=new THREE.MeshLambertMaterial({color:col,side:THREE.DoubleSide});
-    if($('cbXray').checked){mat.transparent=true;mat.opacity=0.2;mat.depthWrite=false;}
-    panelMats.push(mat);
-    const mesh=new THREE.Mesh(geo,mat);
-    mesh.position.set(TX((p.x1+p.x2)/2),TY((p.y1+p.y2)/2),TZ((p.z1+p.z2)/2));
-    gPanels.add(mesh);
-    const e=new THREE.LineSegments(new THREE.EdgesGeometry(geo),
-      new THREE.LineBasicMaterial({color:0x5a4326}));
-    e.position.copy(mesh.position); gPanels.add(e);
-  });
-  (v.holes||[]).forEach(hp=>{
-    const m=new THREE.Mesh(new THREE.SphereGeometry(Math.max(hp.d/2,3),10,8),
-      new THREE.MeshBasicMaterial({color:0x333333}));
-    m.position.set(TX(hp.x),TY(hp.y),TZ(hp.z)); gHoles.add(m);});
-  (v.hardware||[]).forEach(h=>{
-    const w=Math.max(h.x2-h.x1,1),hh=Math.max(h.y2-h.y1,1),d=Math.max(h.z2-h.z1,1);
-    const m=new THREE.Mesh(new THREE.BoxGeometry(w,hh,d),
-      new THREE.MeshLambertMaterial({color:h.color||'#8f969e'}));
-    m.position.set(TX((h.x1+h.x2)/2),TY((h.y1+h.y2)/2),TZ((h.z1+h.z2)/2)); gHw.add(m);});
-  const ax=new THREE.AxesHelper(R*1.08); gAux.add(ax);
-  const cv=document.createElement('canvas');cv.width=cv.height=256;
-  const g2=cv.getContext('2d'),gr=g2.createRadialGradient(128,128,12,128,128,126);
-  gr.addColorStop(0,'rgba(0,0,0,0.28)');gr.addColorStop(1,'rgba(0,0,0,0)');
-  g2.fillStyle=gr;g2.fillRect(0,0,256,256);
-  const sh=new THREE.Mesh(new THREE.PlaneGeometry(W*1.55,D*1.9),
-    new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthWrite:false}));
-  sh.rotation.x=-Math.PI/2; sh.position.set(W/2,0.5,D/2); gAux.add(sh);
-  gHoles.visible=$('cbHoles').checked; gHw.visible=$('cbHw').checked;
-  if(!fitted){
-    const c=new THREE.Vector3(W/2,H/2,D/2);
-    const sphere=0.5*Math.sqrt(W*W+H*H+D*D), vfov=42*Math.PI/180;
-    const hfov=2*Math.atan(Math.tan(vfov/2)*view.clientWidth/view.clientHeight);
-    const dist=sphere/Math.sin(Math.min(vfov,hfov)/2)*1.12;
-    const dir=new THREE.Vector3(0.62,0.42,0.92).normalize().multiplyScalar(dist);
-    camera.position.copy(c).add(dir); controls.target.copy(c); controls.update(); fitted=true;
-  }
-}
-$('cbHoles').onchange=e=>gHoles.visible=e.target.checked;
-$('cbHw').onchange=e=>gHw.visible=e.target.checked;
-$('cbXray').onchange=e=>{const on=e.target.checked;
-  panelMats.forEach(m=>{m.transparent=on;m.opacity=on?0.2:1;m.depthWrite=!on;m.needsUpdate=true;});};
-(function loop(){requestAnimationFrame(loop);controls.update();renderer.render(scene,camera);})();
+const scene3d=MebelScene(view);
+function rebuild(v){scene3d.setPayload(v);
+  scene3d.setHoles($('cbHoles').checked);
+  scene3d.setHw($('cbHw').checked);
+  if($('cbXray').checked) scene3d.setXray(true);}
+function resize(){scene3d.resize();}
+$('cbHoles').onchange=e=>scene3d.setHoles(e.target.checked);
+$('cbHw').onchange=e=>scene3d.setHw(e.target.checked);
+$('cbXray').onchange=e=>scene3d.setXray(e.target.checked);
+$('btnOpenAll').onclick=()=>scene3d.openAll();
+$('btnCloseAll').onclick=()=>scene3d.closeAll();
 
 /* ---------- формы ← spec ---------- */
 function fillForm(){
