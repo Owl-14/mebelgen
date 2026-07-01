@@ -7,7 +7,8 @@
 - нулевой/отрицательный пролёт;
 - position не равен минимуму placement;
 - габарит из панелей не сходится с overall_dimensions с учётом ножек/цоколя
-  (низ корпуса должен стоять на y = legs.height, верх — на overall.height).
+  (низ корпуса должен стоять на y = legs.height, верх — на overall.height);
+- дубли имён панелей (импортёр БАЗИС может перепутать детали).
 
 Источник истины в этом конвейере — placement (по нему импортёр строит панель).
 Поэтому dimensions трактуется как производная величина.
@@ -15,6 +16,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 
@@ -176,6 +178,14 @@ def check_consistency(
                         f"(под корпусом {bottom_y:g} мм, заявленный цоколь/ножки {hleg:g} мм)",
                     )
                 )
+
+    # Дубли имён панелей — риск для импортёра БАЗИС (перепутает детали).
+    names = [str(p.get("name")) for p in panels if isinstance(p, dict) and p.get("name")]
+    for nm, cnt in Counter(names).items():
+        if cnt > 1:
+            issues.append(ConsistencyIssue(
+                ERROR, nm, "duplicate_name",
+                f"имя панели повторяется {cnt}× — импортёр может перепутать детали"))
 
     return issues
 
