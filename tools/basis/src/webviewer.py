@@ -107,10 +107,12 @@ const W=bb.x1-bb.x0, H=bb.y1-bb.y0, D=bb.z1-bb.z0, R=Math.max(W,H,D);
 const TX = x => x - bb.x0, TY = y => y - bb.y0, TZ = z => bb.z1 - z;
 
 const panelMats=[];   // материалы деталей — для прозрачного (рентген) режима
-PANELS.forEach(p=>{
+PANELS.forEach((p,i)=>{
   const w=Math.max(p.x2-p.x1,1), h=Math.max(p.y2-p.y1,1), d=Math.max(p.z2-p.z1,1);
   const geo=new THREE.BoxGeometry(w,h,d);
-  const mat=new THREE.MeshLambertMaterial({color:COLORS[p.type]||'#c9a06a', side:THREE.DoubleSide});
+  const col=new THREE.Color(COLORS[p.type]||'#c9a06a');
+  col.offsetHSL(0,0,((i%5)-2)*0.009);      // лёгкая вариация тона — детали читаются
+  const mat=new THREE.MeshLambertMaterial({color:col, side:THREE.DoubleSide});
   panelMats.push(mat);
   const mesh=new THREE.Mesh(geo,mat);
   mesh.position.set(TX((p.x1+p.x2)/2), TY((p.y1+p.y2)/2), TZ((p.z1+p.z2)/2));
@@ -138,6 +140,17 @@ scene.add(holeGroup);
 document.getElementById('toggleHoles').addEventListener('change',e=>{holeGroup.visible=e.target.checked;});
 
 const ax=new THREE.AxesHelper(R*1.08); scene.add(ax);   // оси из угла модели (0,0,0)
+
+// контактная тень под моделью (AKD-7): мягкое пятно на «полу»
+(function(){
+  const cv=document.createElement('canvas'); cv.width=cv.height=256;
+  const g=cv.getContext('2d'), gr=g.createRadialGradient(128,128,12,128,128,126);
+  gr.addColorStop(0,'rgba(0,0,0,0.28)'); gr.addColorStop(1,'rgba(0,0,0,0)');
+  g.fillStyle=gr; g.fillRect(0,0,256,256);
+  const sh=new THREE.Mesh(new THREE.PlaneGeometry(W*1.55, D*1.9),
+      new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cv), transparent:true, depthWrite:false}));
+  sh.rotation.x=-Math.PI/2; sh.position.set(W/2, 0.5, D/2); scene.add(sh);
+})();
 
 scene.add(new THREE.AmbientLight(0xffffff,0.72));
 const d1=new THREE.DirectionalLight(0xffffff,0.55); d1.position.set(1,2,2); scene.add(d1);
