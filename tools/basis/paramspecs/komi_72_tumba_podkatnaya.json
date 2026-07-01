@@ -1,0 +1,63 @@
+{
+  "schemaVersion": "paramspec-v1",
+  "project_name": "Тумба подкатная 400×450×580",
+  "furniture_type": "тумба подкатная",
+  "archetype": "drawer_unit",
+  "dimensions": {
+    "width": 400,
+    "depth": 450,
+    "height": 580,
+    "tolerance": 10
+  },
+  "materials": {
+    "board_thickness": 16,
+    "board_material": "ЛДСП",
+    "back_material": "ДВП",
+    "back_thickness": 3,
+    "color": "Светло-серый",
+    "color_code": "U708 ST9"
+  },
+  "legs": {
+    "type": "колёса (ролики)",
+    "height": 0,
+    "adjustable": false,
+    "count": 4
+  },
+  "sections": [
+    {
+      "id": "main",
+      "kind": "drawers",
+      "drawers": 3,
+      "front_bottom": true
+    }
+  ],
+  "hardware": {
+    "handles": {
+      "type": "ручка-профиль",
+      "material": "металл",
+      "color": "чёрный",
+      "size": 128,
+      "count": 3,
+      "offset_from_top": 40
+    },
+    "drawer_guides": {
+      "type": "шариковые",
+      "length_mm": 400,
+      "soft_close": false
+    },
+    "locks": [
+      {
+        "type": "центральный замок",
+        "color": "чёрный",
+        "target": "drawers"
+      }
+    ]
+  },
+  "features": [
+    "колёсные опоры (2 с тормозом)"
+  ],
+  "warnings": [
+    "3 ящика (по высоте 580). Колёсные опоры."
+  ],
+  "estimated_values": []
+}

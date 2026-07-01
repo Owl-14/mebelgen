@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "paramspec-v1",
+  "project_name": "Стол для переговоров Ø1200×750 (кабинет директора)",
+  "furniture_type": "стол переговорный круглый",
+  "archetype": "round_table",
+  "dimensions": {
+    "width": 1200,
+    "depth": 1200,
+    "height": 750,
+    "tolerance": 10
+  },
+  "materials": {
+    "board_thickness": 25,
+    "board_material": "ЛДСП",
+    "color": "Дуб Денвер трюфель",
+    "color_code": "Н 1399 ST 10"
+  },
+  "top_thickness": 25,
+  "pedestal_diameter": 170,
+  "base": true,
+  "base_diameter": 740,
+  "base_thickness": 20,
+  "legs": {
+    "type": "металлический пьедестал",
+    "height": 0
+  },
+  "sections": [],
+  "hardware": {
+    "handles": {
+      "type": "нет",
+      "count": 0
+    }
+  },
+  "features": [
+    "металлическое подстолье, чёрное порошковое покрытие"
+  ],
+  "warnings": [
+    "Столешница круглая Ø1200 25 мм; труба Ø170; основание Ø740. Пьедестал металлический (не панель)."
+  ],
+  "estimated_values": []
+}
