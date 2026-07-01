@@ -72,15 +72,17 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
                 z_mode = sec.get("door_z", "overlay")
                 dy1 = yb + g
                 dy2 = (min(levels) - g) if (levels and sec.get("door_below_shelf")) else (yt - g)
+                # имена дверей: door_names/door_name из ТЗ, иначе дефолт с id секции (уникально)
+                dn = sec.get("door_names") or sec.get("door_name")
+                dn = dn if isinstance(dn, list) else None
                 if nd == 2:
+                    names = dn or [f"Дверь левая {sid}", f"Дверь правая {sid}"]
                     mid = (cx1 + cx2) / 2
-                    panels.append(door_in_column(cx1 + g, mid - g / 2, dy1, dy2, c.T, c.mat, sid,
-                                                 sec.get("door_names", ["Дверь левая", "Дверь правая"])[0], z_mode=z_mode))
-                    panels.append(door_in_column(mid + g / 2, cx2 - g, dy1, dy2, c.T, c.mat, sid,
-                                                 sec.get("door_names", ["Дверь левая", "Дверь правая"])[1], z_mode=z_mode))
+                    panels.append(door_in_column(cx1 + g, mid - g / 2, dy1, dy2, c.T, c.mat, sid, names[0], z_mode=z_mode))
+                    panels.append(door_in_column(mid + g / 2, cx2 - g, dy1, dy2, c.T, c.mat, sid, names[1], z_mode=z_mode))
                 else:
-                    panels.append(door_in_column(cx1 + g, cx2 - g, dy1, dy2, c.T, c.mat, sid,
-                                                 sec.get("door_name", "Фасад двери"), z_mode=z_mode))
+                    one = sec.get("door_name") if isinstance(sec.get("door_name"), str) else f"Дверь {sid}"
+                    panels.append(door_in_column(cx1 + g, cx2 - g, dy1, dy2, c.T, c.mat, sid, one, z_mode=z_mode))
 
         sections_meta.append({"id": sid, "type": kind,
                               "dimensions": {"width": round(cx2 - cx1, 2), "height": round(yt - yb, 2),
