@@ -63,8 +63,15 @@ def _hardware_bom(project: dict[str, Any]) -> list[dict[str, str]]:
     label = {"handles": "Ручки", "hinges": "Петли", "drawer_guides": "Направляющие",
              "guides": "Направляющие", "legs": "Опоры/ножки", "locks": "Замки",
              "edge": "Кромка", "board": "Плита", "back": "Задняя стенка"}
+    # задник в BOM — только если задняя стенка реально есть среди деталей
+    # (у столов слот «back» из материалов есть, а детали-задника нет)
+    has_back_wall = any(
+        p.get("type") == "back" and "стенк" in str(p.get("name", "")).lower()
+        for p in project.get("panels", []))
     out: list[dict[str, str]] = []
     for slot, r in refs.items():
+        if slot == "back" and not has_back_wall:
+            continue
         if not isinstance(r, dict) or not r.get("resolved"):
             continue
         cand = None
@@ -77,6 +84,15 @@ def _hardware_bom(project: dict[str, Any]) -> list[dict[str, str]]:
             continue
         out.append({"slot": label.get(slot, slot), "name": str(cand.get("name")),
                     "art": str(cand.get("article") or "—")})
+    # опоры/каркас: если слот не разрешился по базе (напр. металлокаркас, count=0),
+    # берём описание из hardware.legs — покупное изделие должно быть в BOM
+    if not any(b["slot"] == "Опоры/ножки" for b in out):
+        lg = (project.get("hardware") or {}).get("legs") or {}
+        lt = str(lg.get("type") or "").strip()
+        if lt and lt.lower() not in ("нет", "-", "—"):
+            h = lg.get("height")
+            out.append({"slot": "Опоры/ножки",
+                        "name": f"{lt}" + (f", H={h} мм" if h else ""), "art": "—"})
     return out
 
 
