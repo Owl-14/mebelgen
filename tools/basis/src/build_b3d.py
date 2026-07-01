@@ -44,4 +44,8 @@ def build_b3d_from_paramspec(spec: dict[str, Any], out_path: str | Path, **kw: A
     errors = validate_paramspec(spec)
     if errors:
         raise ValueError("ParamSpec не прошёл валидацию:\n" + "\n".join(errors))
-    return build_b3d(generate_from_paramspec(spec), out_path, **kw)
+    project = generate_from_paramspec(spec)
+    # привязать реальные материалы/фурнитуру, чтобы декор и артикулы попали в .cfrn
+    from .materials import resolve_project_materials
+    project["material_refs"] = resolve_project_materials(project)
+    return build_b3d(project, out_path, **kw)
