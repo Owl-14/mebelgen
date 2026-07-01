@@ -160,15 +160,22 @@ def _dim_v(svg: _Svg, y1, y2, x_obj, x_dim, text):
 
 # ------------------------------------------------------------------ выноски
 
+def _clean_name(name: str) -> str:
+    """Имя детали для выноски: без хвостовых номеров и скобочных меток секций
+    («Полка гардероб (wardrobe) 2» → «Полка гардероб»)."""
+    import re
+    s = str(name).rstrip(" 0123456789")               # сначала номер...
+    s = re.sub(r"\s*\([^)]*\)\s*$", "", s)            # ...потом скобочную метку
+    return s.rstrip(" 0123456789") or str(name)
+
+
 def _pick_callouts(panels: list[dict[str, Any]], legs_h: float, legs_note: str) -> list[dict[str, Any]]:
-    """Якоря по реальным деталям: по одной выноске на тип (без дублей)."""
-    order = [
-        ("top", "Крышка"), ("door_front", "Дверь (фасад)"), ("drawer_front", "Фасад ящика"),
-        ("side_right", "Боковина"), ("vertical_partition", "Перегородка"),
-        ("shelf", "Полка"), ("plinth", "Цоколь"),
-    ]
+    """Якоря по реальным деталям: по одной выноске на тип, подпись — ИМЯ детали
+    (тип врёт на не-корпусной мебели: «Пьедестал», «Царга задняя» — не «Перегородка»)."""
+    order = ["top", "door_front", "drawer_front", "side_right",
+             "vertical_partition", "shelf", "plinth"]
     out: list[dict[str, Any]] = []
-    for t, label in order:
+    for t in order:
         cand = [p for p in panels if p.get("type") == t and p.get("placement")]
         if not cand:
             continue
@@ -176,6 +183,7 @@ def _pick_callouts(panels: list[dict[str, Any]], legs_h: float, legs_note: str) 
         p = max(cand, key=lambda q: q["placement"]["x2"])
         pl = p["placement"]
         th = p.get("thickness")
+        label = _clean_name(p.get("name") or t)
         txt = f"{label} {_fmt(th)} мм" if th else label
         out.append({"x": pl["x2"], "y": (pl["y1"] + pl["y2"]) / 2, "text": txt})
     if legs_h and not any("Цоколь" in c["text"] for c in out):
@@ -301,13 +309,19 @@ def build_techview_svg(project: dict[str, Any]) -> tuple[str, list[str]]:
     # --- размерки (AKD-8): W/H на фронте, D на боку, без дублей ---
     _dim_h(svg, fx0, fx0 + fw, fy1, fy1 + 30, _fmt(W))
     _dim_v(svg, fy0, fy1, fx0, fx0 - 40, _fmt(H))
-    # глубина — по корпусу (z 0..zs2), нахлёст накладного фасада в размер не входит
-    _dim_h(svg, SX(0), SX(zs2), fy1, fy1 + 30, _fmt(zs2))
+    # глубина: обычно по корпусу (z 0..zs2, нахлёст накладного фасада не в размер);
+    # при реальном свесе крышки вперёд (zs1 < −20) — полный габарит
+    if zs1 < -20:
+        _dim_h(svg, SX(zs1), SX(zs2), fy1, fy1 + 30, _fmt(zs2 - zs1))
+    else:
+        _dim_h(svg, SX(0), SX(zs2), fy1, fy1 + 30, _fmt(zs2))
 
     # внутренние цепочки — только при наполнении
     parts_v = sorted([p for p in panels if p.get("type") == "vertical_partition"],
                      key=lambda q: q["placement"]["x1"])
-    if parts_v:                                   # ширины секций (снизу, ранг 1)
+    has_sides = any(p.get("type") in ("side_left", "side_right") for p in panels)
+    if parts_v and has_sides:                     # ширины секций — только у корпусной
+                                                  # мебели (у стола пьедестал ≠ секции)
         side_in_l = max((p["placement"]["x2"] for p in panels if p.get("type") == "side_left"), default=xs1)
         side_in_r = min((p["placement"]["x1"] for p in panels if p.get("type") == "side_right"), default=xs2)
         bounds = [side_in_l] + [b for q in parts_v for b in
@@ -339,8 +353,9 @@ def build_techview_svg(project: dict[str, Any]) -> tuple[str, list[str]]:
     backs = [p for p in panels if p.get("type") == "back"]
     if backs:
         pl = backs[0]["placement"]
+        nm = _clean_name(backs[0].get("name") or "Задняя стенка")   # у стола это царга
         sc2 = [{"x": SX(pl["z2"]) - 1, "y": FY((pl["y1"] + pl["y2"]) / 2),
-                "text": f"Задняя стенка {_fmt(backs[0].get('thickness') or (pl['z2'] - pl['z1']))} мм"}]
+                "text": f"{nm} {_fmt(backs[0].get('thickness') or (pl['z2'] - pl['z1']))} мм"}]
         _draw_callout_column(svg, sc2, sx0 + sw_, sx0 + sw_ + 22, fy0 + 4, fy1 - 4)
 
     # подписи видов
