@@ -1,0 +1,120 @@
+{
+  "schemaVersion": "paramspec-v1",
+  "project_name": "Система встроенных гардеробных шкафов 4000×600×1800",
+  "furniture_type": "система гардеробных шкафов",
+  "archetype": "cabinet",
+  "dimensions": {
+    "width": 4000,
+    "depth": 600,
+    "height": 1800,
+    "tolerance": 10
+  },
+  "materials": {
+    "board_thickness": 16,
+    "board_material": "ЛДСП",
+    "back_material": "ХДФ",
+    "back_thickness": 3,
+    "color": "Бело-серый",
+    "color_code": "U775 ST9"
+  },
+  "legs": {
+    "type": "цоколь",
+    "height": 100,
+    "as_panel": true,
+    "adjustable": true,
+    "color": "чёрный"
+  },
+  "sections": [
+    {
+      "id": "s1",
+      "kind": "door",
+      "door": 2,
+      "door_name": [
+        "Секция 1 дверь левая",
+        "Секция 1 дверь правая"
+      ],
+      "shelf_levels": [
+        316,
+        1600,
+        1684
+      ],
+      "shelf_label": "Секция 1 полка"
+    },
+    {
+      "id": "s2",
+      "kind": "door",
+      "door": 2,
+      "door_name": [
+        "Секция 2 дверь левая",
+        "Секция 2 дверь правая"
+      ],
+      "shelf_levels": [
+        316,
+        1600,
+        1684
+      ],
+      "shelf_label": "Секция 2 полка"
+    },
+    {
+      "id": "s3",
+      "kind": "door",
+      "door": 2,
+      "door_name": [
+        "Секция 3 дверь левая",
+        "Секция 3 дверь правая"
+      ],
+      "shelf_levels": [
+        316,
+        1600,
+        1684
+      ],
+      "shelf_label": "Секция 3 полка"
+    },
+    {
+      "id": "s4",
+      "kind": "door",
+      "door": 2,
+      "door_name": [
+        "Секция 4 дверь левая",
+        "Секция 4 дверь правая"
+      ],
+      "shelf_levels": [
+        316,
+        1600,
+        1684
+      ],
+      "shelf_label": "Секция 4 полка"
+    }
+  ],
+  "hardware": {
+    "handles": {
+      "type": "ручка-профиль",
+      "material": "металл",
+      "color": "чёрный",
+      "size": 224,
+      "count": 8,
+      "offset_from_top": 40
+    },
+    "hinges": {
+      "type": "петля накладная без доводчика"
+    },
+    "locks": [
+      {
+        "type": "замок на правую дверь секции",
+        "color": "чёрный",
+        "target": "each_section"
+      }
+    ]
+  },
+  "features": [
+    "штанга круглая металлическая D25 в каждой секции",
+    "полка для обуви 300 мм",
+    "резиновый коврик",
+    "цоколь разделён на 2 части"
+  ],
+  "warnings": [
+    "4 секции по 2 двери (8 дверей). Штанга/полка обуви — фурнитура/фича. По чертежу 2 крышки — в модели одна крышка на всю ширину.",
+    "Задник ХДФ холодный серый."
+  ],
+  "estimated_values": []
+}

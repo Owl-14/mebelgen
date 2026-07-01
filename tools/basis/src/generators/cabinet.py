@@ -44,7 +44,8 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
         levels = levels or []
 
         if kind == "drawers":
-            fb = sec.get("front_bottom", yb + g)
+            _fb = sec.get("front_bottom")                       # Y-координата низа нижнего фасада
+            fb = _fb if isinstance(_fb, (int, float)) and not isinstance(_fb, bool) else yb + g
             heights = sec.get("drawer_heights")
             n = sec["drawers"]
             if not heights:

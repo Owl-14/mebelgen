@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "paramspec-v1",
+  "project_name": "Стол заместителя директора 1800×800×750",
+  "furniture_type": "стол",
+  "archetype": "desk",
+  "dimensions": {
+    "width": 1800,
+    "depth": 800,
+    "height": 750,
+    "tolerance": 10
+  },
+  "materials": {
+    "board_thickness": 25,
+    "board_material": "ЛДСП",
+    "color": "Дуб Денвер трюфель",
+    "color_code": "Н 1399 ST 10"
+  },
+  "frame": "metal",
+  "screen": true,
+  "screen_height": 500,
+  "legs": {
+    "type": "металлокаркас RAL9005, труба 40×40",
+    "height": 725
+  },
+  "sections": [],
+  "hardware": {
+    "handles": {
+      "type": "нет",
+      "count": 0
+    }
+  },
+  "features": [
+    "металлокаркас RAL9005 40×40",
+    "передний экран ~1870×500×16",
+    "кабель-канал"
+  ],
+  "warnings": [
+    "Экран по чертежу 1870 мм (с учётом свеса столешницы) — в модели по ширине корпуса."
+  ],
+  "estimated_values": []
+}

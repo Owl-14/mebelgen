@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "paramspec-v1",
+  "project_name": "Брифинг-приставка 1000×800×750",
+  "furniture_type": "приставка",
+  "archetype": "desk",
+  "dimensions": {
+    "width": 1000,
+    "depth": 800,
+    "height": 750,
+    "tolerance": 10
+  },
+  "materials": {
+    "board_thickness": 25,
+    "board_material": "ЛДСП",
+    "color": "Дуб Денвер трюфель",
+    "color_code": "Н 1399 ST 10"
+  },
+  "frame": "metal",
+  "legs": {
+    "type": "металлокаркас П-образный регулируемый 40×40 RAL9005",
+    "height": 725
+  },
+  "sections": [],
+  "hardware": {
+    "handles": {
+      "type": "нет",
+      "count": 0
+    }
+  },
+  "features": [
+    "П-образные регулируемые опоры 40×40 RAL9005",
+    "отрыв столешницы от опоры 20 мм"
+  ],
+  "warnings": [
+    "Опоры металлические (фурнитура). Без переднего экрана."
+  ],
+  "estimated_values": []
+}

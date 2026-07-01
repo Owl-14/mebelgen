@@ -27,8 +27,7 @@
     {
       "id": "main",
       "kind": "drawers",
-      "drawers": 3,
-      "front_bottom": true
+      "drawers": 3
     }
   ],
   "hardware": {

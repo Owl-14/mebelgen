@@ -15,7 +15,8 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     g = c.gap
     n = section["drawers"]
 
-    fb = section.get("front_bottom", c.Hleg + c.T + g)            # низ нижнего фасада
+    _fb = section.get("front_bottom")                             # низ нижнего фасада (Y-координата)
+    fb = _fb if isinstance(_fb, (int, float)) and not isinstance(_fb, bool) else c.Hleg + c.T + g
     heights = section.get("drawer_heights")
     if not heights:
         band_top = section.get("front_top", c.H - c.T - g)

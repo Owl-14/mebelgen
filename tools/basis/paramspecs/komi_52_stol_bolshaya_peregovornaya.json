@@ -1,0 +1,40 @@
+{
+  "schemaVersion": "paramspec-v1",
+  "project_name": "Стол для большой переговорной 2000×900×750",
+  "furniture_type": "стол переговорный",
+  "archetype": "desk",
+  "dimensions": {
+    "width": 2000,
+    "depth": 900,
+    "height": 750,
+    "tolerance": 10
+  },
+  "materials": {
+    "board_thickness": 32,
+    "board_material": "ЛДСП",
+    "color": "Дуб Денвер трюфель",
+    "color_code": "Н 1399 ST 10"
+  },
+  "frame": "metal",
+  "legs": {
+    "type": "металлокаркас П-образный 40×40 RAL9005",
+    "height": 718
+  },
+  "sections": [],
+  "hardware": {
+    "handles": {
+      "type": "нет",
+      "count": 0
+    }
+  },
+  "features": [
+    "столешница 32 мм",
+    "кромка u741 st9 лава серая",
+    "П-образные опоры, эффект парящей столешницы",
+    "лючок SLIDE 270×118 + розетки"
+  ],
+  "warnings": [
+    "Столешница 32 мм. Опоры металлические П-образные (фурнитура)."
+  ],
+  "estimated_values": []
+}

@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "paramspec-v1",
+  "project_name": "Стол директора 2000×800×750",
+  "furniture_type": "стол",
+  "archetype": "desk",
+  "dimensions": {
+    "width": 2000,
+    "depth": 800,
+    "height": 750,
+    "tolerance": 10
+  },
+  "materials": {
+    "board_thickness": 25,
+    "board_material": "ЛДСП",
+    "color": "Дуб Денвер трюфель",
+    "color_code": "Н 1399 ST 10"
+  },
+  "frame": "metal",
+  "screen": true,
+  "screen_height": 500,
+  "legs": {
+    "type": "металлокаркас RAL9005, труба 40×40",
+    "height": 725
+  },
+  "sections": [],
+  "hardware": {
+    "handles": {
+      "type": "нет",
+      "count": 0
+    }
+  },
+  "features": [
+    "металлокаркас RAL9005 40×40",
+    "передний экран 1910×500×16",
+    "лючок/кабель-канал под провода"
+  ],
+  "warnings": [
+    "Столешница 25 мм на металлокаркасе (каркас — фурнитура). Экран передний 500 мм."
+  ],
+  "estimated_values": []
+}
