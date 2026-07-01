@@ -264,6 +264,29 @@ def cmd_hardware(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_viewer(args: argparse.Namespace) -> int:
+    from src.webviewer import project_to_viewer_html
+
+    data = json.loads(Path(args.input).read_text(encoding="utf-8"))
+    if data.get("schemaVersion") == "paramspec-v1":
+        from src.generators import generate_from_paramspec
+        from src.materials import resolve_project_materials
+        project = generate_from_paramspec(data)
+        try:
+            project["material_refs"] = resolve_project_materials(project)
+        except Exception:
+            pass
+    else:
+        project = data
+    html = project_to_viewer_html(project, include_holes=not args.no_holes)
+    out = Path(args.output) if args.output else Path(args.input).with_suffix(".html")
+    out.write_text(html, encoding="utf-8")
+    n_p = len(project.get("panels", []))
+    print(f"3D-просмотр (правосторонний, Y-вверх): {out}  (деталей: {n_p})")
+    print("Открыть в браузере; вращение нормальное. Производственный .cfrn/.b3d не затронут.")
+    return 0
+
+
 def cmd_orchestrate(args: argparse.Namespace) -> int:
     from src.orchestrator import orchestrate_file
 
@@ -477,6 +500,12 @@ def main() -> int:
     p_hw.add_argument("input", help="project.json или ParamSpec")
     p_hw.add_argument("--full", action="store_true", help="показать все отверстия, не только сводку")
     p_hw.set_defaults(func=cmd_hardware)
+
+    p_view = sub.add_parser("viewer", help="ParamSpec/project → интерактивный 3D-просмотр (.html, правосторонний Y-вверх, нормальное вращение)")
+    p_view.add_argument("input", help="ParamSpec или project.json")
+    p_view.add_argument("-o", "--output", help="Путь к .html (по умолчанию рядом с входом)")
+    p_view.add_argument("--no-holes", action="store_true", help="Не показывать присадки")
+    p_view.set_defaults(func=cmd_viewer)
 
     p_orc = sub.add_parser(
         "orchestrate",
