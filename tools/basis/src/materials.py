@@ -343,4 +343,18 @@ def resolve_project_materials(project: dict[str, Any], base: dict[str, Any] | No
         refs["legs"] = _legs_shortlist(legs, base)
     if hw.get("locks"):
         refs["locks"] = shortlist("Замки", ["замок"], label="замок", base=base)
+
+    # Выбор пользователя (Studio A4): hardware.selection = {slot: article} —
+    # выбранная позиция становится первым кандидатом и помечается chosen
+    for slot, art in (hw.get("selection") or {}).items():
+        item = by_article(str(art), base=base)
+        if not item or slot not in refs:
+            continue
+        chosen = {"article": item.get("article"), "name": item.get("name"),
+                  "cost": item.get("cost")}
+        r = refs[slot]
+        cands = [c for c in (r.get("candidates") or [])
+                 if isinstance(c, dict) and c.get("article") != chosen["article"]]
+        refs[slot] = {**r, "resolved": True, "chosen": True,
+                      "candidates": [chosen] + cands}
     return refs

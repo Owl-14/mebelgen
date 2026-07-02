@@ -164,7 +164,9 @@ def build_project(spec: dict[str, Any], panels: list[dict[str, Any]], *,
         "panels": panels,
         "drawers": drawers or [],
         "doors": doors or [],
-        "hardware": {"handles": handles, "legs": legs_block},
+        "hardware": {"handles": handles, "legs": legs_block,
+                     # выбранные позиции базы по слотам {slot: article} (Studio A4)
+                     **({"selection": hw["selection"]} if hw.get("selection") else {})},
         "constraints": {
             "default_gap": gaps.get("default", 2),
             "drawer_gap": gaps.get("default", 2),

@@ -114,6 +114,7 @@ def build_payload(spec: dict[str, Any]) -> dict[str, Any]:
         "stats": {"n_panels": s["n_panels"], "n_holes": s["n_holes"],
                   "dims": s["dims"], "decor": s["decor"]},
         "bom": _hardware_bom(project),
+        "refs": project.get("material_refs") or {},   # слоты фурнитуры для выбора (A4)
     }
     return payload
 
@@ -389,6 +390,12 @@ PAGE = r"""<!DOCTYPE html>
     <div class="mini">Платная сборка доступна только при зелёных проверках.</div>
   </fieldset>
 
+  <fieldset id="fs_hw"><legend>Фурнитура <span class="mini" id="hwBadge"></span></legend>
+    <div id="hwSlots"></div>
+    <div class="row"><label>Ручка: межцентр.</label><input type="number" id="f_hsize" step="32" min="0"></div>
+    <div class="row"><label>Отступ сверху</label><input type="number" id="f_hoff" step="5" min="0"></div>
+  </fieldset>
+
   <fieldset id="bom"><legend>BOM (фурнитура)</legend><table></table></fieldset>
 
   <details><summary class="mini">ParamSpec (raw JSON)</summary>
@@ -523,6 +530,13 @@ function harvest(){
   SPEC.materials.board_thickness=num($('f_t').value);
   SPEC.legs.height=num($('f_legs').value)||0;
   SPEC.gaps.default=num($('f_gap').value);
+  const hs=num($('f_hsize').value), ho=num($('f_hoff').value);   // позиции ручек (A4)
+  if(hs!==undefined||ho!==undefined){
+    SPEC.hardware=SPEC.hardware||{};
+    const hh=SPEC.hardware.handles=SPEC.hardware.handles||{};
+    if(hs!==undefined) hh.size=hs; else delete hh.size;
+    if(ho!==undefined) hh.offset_from_top=ho; else delete hh.offset_from_top;
+  }
   $('rawspec').value=JSON.stringify(SPEC,null,2);
 }
 document.addEventListener('input',e=>{
@@ -577,6 +591,7 @@ function paint(p){
     const C=p.viewer.colors||{};
     $('swCarcass').style.background=C.side_left||'#c9a06a';
     $('swFacade').style.background=C.door_front||C.side_left||'#c9a06a';
+    renderHwSlots(p.refs||{});
     const st=p.stats;
     $('stats').innerHTML=`<div><b>${st.n_panels}</b><span>деталей</span></div>
       <div><b>${st.n_holes}</b><span>присадок</span></div>
@@ -638,6 +653,46 @@ document.addEventListener('click',e=>{           // клик по детали �
   const idx=((lastPayload&&lastPayload.viewer&&lastPayload.viewer.panels)||[])
     .findIndex(p=>p.name===name);
   if(idx>=0) scene3d.select(idx);
+});
+
+/* ---------- фурнитура из базы (AKD-123) ---------- */
+const HW_LABELS={handles:'Ручки',hinges:'Петли',drawer_guides:'Направляющие',
+                 legs:'Опоры',locks:'Замки'};
+function renderHwSlots(refs){
+  const box=$('hwSlots'); box.innerHTML='';
+  const sel=(SPEC.hardware&&SPEC.hardware.selection)||{};
+  let total=0, chosen=0;
+  for(const slot of Object.keys(HW_LABELS)){
+    const r=refs[slot];
+    if(!r||!Array.isArray(r.candidates)||!r.candidates.length) continue;
+    total++;
+    const cur=sel[slot]||'';
+    if(cur) chosen++;
+    const row=document.createElement('div'); row.className='row';
+    const opts=['<option value="">— из шорт-листа —</option>']
+      .concat(r.candidates.map(c=>{
+        const price=(c.cost&&c.cost>0)?` · ${c.cost}₽`:'';
+        return `<option value="${c.article}" ${String(cur)===String(c.article)?'selected':''}>`+
+               `${(c.name||'').slice(0,46)}${price}</option>`;}));
+    row.innerHTML=`<label>${HW_LABELS[slot]}</label>
+      <select data-hw="${slot}">${opts.join('')}</select>`;
+    box.appendChild(row);
+  }
+  $('hwBadge').textContent=total?`выбрано ${chosen}/${total}`:'— нет слотов';
+  $('fs_hw').style.display=total?'':'none';
+  const hh=(SPEC.hardware&&SPEC.hardware.handles)||{};
+  $('f_hsize').value=hh.size??'';
+  $('f_hoff').value=hh.offset_from_top??'';
+}
+document.addEventListener('change',e=>{
+  const slot=e.target.dataset&&e.target.dataset.hw;
+  if(!slot) return;
+  SPEC.hardware=SPEC.hardware||{};
+  const sel=SPEC.hardware.selection=SPEC.hardware.selection||{};
+  if(e.target.value) sel[slot]=e.target.value; else delete sel[slot];
+  if(!Object.keys(sel).length) delete SPEC.hardware.selection;
+  $('rawspec').value=JSON.stringify(SPEC,null,2);
+  apply();
 });
 
 /* ---------- выбор декора из производственной базы ---------- */
