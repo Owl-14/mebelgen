@@ -329,6 +329,14 @@ def resolve_project_materials(project: dict[str, Any], base: dict[str, Any] | No
         "board": resolve_board_ref(m.get("board_thickness"), m.get("color"), m.get("color_code"), base=base),
         "back": resolve_back_ref(m.get("back_wall_material"), base=base),
     }
+    # отдельный декор фасадов (C4): точный артикул или подбор по цвету/коду
+    if m.get("facade_article"):
+        item = by_article(str(m["facade_article"]), base=base)
+        refs["facade"] = _ref(item, "артикул фасада (выбор)", "high") if item \
+            else _unresolved(f"фасад арт. {m['facade_article']}", "артикул не найден в базе")
+    elif m.get("facade_color") or m.get("facade_color_code"):
+        refs["facade"] = resolve_board_ref(m.get("board_thickness"), m.get("facade_color"),
+                                           m.get("facade_color_code"), base=base)
     if m.get("edge_band_thickness"):
         refs["edge"] = resolve_edge_ref(m.get("edge_band_thickness"), m.get("color"), base=base)
     h = hw.get("handles") or {}
