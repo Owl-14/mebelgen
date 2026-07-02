@@ -31,6 +31,19 @@ def column_bounds(W: float, T: float, sections: list[dict[str, Any]]) -> list[tu
     return bounds
 
 
+def facade_x_span(i: int, bounds: list[tuple[float, float]], W: float, T: float,
+                  reveal: float, gap: float) -> tuple[float, float]:
+    """Внешний X-пролёт НАКЛАДНОГО фасада секции i.
+
+    Крайняя секция перекрывает боковину (край = reveal / W−reveal); внутренняя
+    доходит до центра перегородки минус полузазор. Так фасады закрывают корпус и
+    стыкуются друг с другом с зазором gap, не открывая петли/направляющие."""
+    cx1, cx2 = bounds[i]
+    left = reveal if i == 0 else round(cx1 - T / 2 + gap / 2, 2)
+    right = round(W - reveal, 2) if i == len(bounds) - 1 else round(cx2 + T / 2 - gap / 2, 2)
+    return left, right
+
+
 def partitions(bounds, H, T, Hleg, mat, z1, z2) -> list[dict[str, Any]]:
     out = []
     for i in range(len(bounds) - 1):
@@ -55,12 +68,15 @@ def door_in_column(cx1, cx2, y1, y2, T, mat, sid, name, *, z_mode="overlay") -> 
                  thickness=T, material=mat, section_id=sid)
 
 
-def drawer_stack(cx1, cx2, fb, heights, gap, p, T, mat, sid, prefix) -> tuple[list[dict[str, Any]], list[dict[str, Any]], float]:
-    """Стек ящиков в колонке [cx1,cx2]. p — параметры короба. Возвращает (panels, drawers_meta, top_y)."""
+def drawer_stack(cx1, cx2, fb, heights, gap, p, T, mat, sid, prefix, facade_bounds=None) -> tuple[list[dict[str, Any]], list[dict[str, Any]], float]:
+    """Стек ящиков в колонке [cx1,cx2]. p — параметры короба. Возвращает (panels, drawers_meta, top_y).
+
+    facade_bounds=(fx1,fx2) — внешний X-пролёт НАКЛАДНОГО фасада (перекрывает корпус);
+    короб живёт в проёме [cx1,cx2] и прижат к фасаду (box_z1=0)."""
     panels: list[dict[str, Any]] = []
     meta: list[dict[str, Any]] = []
     guide_gap = p.get("guide_gap", 14.5)
-    box_z1 = p.get("box_z1", T)
+    box_z1 = p.get("box_z1", 0)                          # короб прижат к фасаду (z=0)
     box_depth = p.get("box_depth", 350)
     box_y_off = p.get("box_y_offset", T)
     box_h = p.get("box_height", round(min(heights) * 0.52, 2))
@@ -72,8 +88,8 @@ def drawer_stack(cx1, cx2, fb, heights, gap, p, T, mat, sid, prefix) -> tuple[li
     if back_limit is not None and box_z1 + box_depth + box_back > back_limit:
         box_depth = max(50, back_limit - box_z1 - box_back)
     boxes = p.get("boxes", True)
-    fx1 = cx1 + gap                                      # врезной фасад в проём колонки
-    fx2 = cx2 - gap
+    # накладной фасад: внешний пролёт (перекрывает боковины), иначе — врезной в проём
+    fx1, fx2 = facade_bounds if facade_bounds else (cx1 + gap, cx2 - gap)
     y = fb
     for k, h in enumerate(heights, start=1):
         fy1, fy2 = y, y + h
