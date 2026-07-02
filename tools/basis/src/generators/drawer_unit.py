@@ -6,7 +6,7 @@ from typing import Any
 
 from .base import read_carcass
 from .corpus import carcass_calc
-from .helpers import build_project, carcass, panel
+from .helpers import build_project, carcass, facade_band, panel
 
 
 def generate(spec: dict[str, Any]) -> dict[str, Any]:
@@ -15,18 +15,22 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     g = c.gap
     n = section["drawers"]
 
+    # накладные фасады: полоса по высоте (перекрывает дно и крышку/столешницу)
+    reveal = spec.get("facade_reveal", 2.0)
+    band_bottom, band_top = facade_band(c.Hleg, c.H, c.T, has_overhang=bool(spec.get("top_overhang")),
+                                        reveal=reveal)
     _fb = section.get("front_bottom")                             # низ нижнего фасада (Y-координата)
-    fb = _fb if isinstance(_fb, (int, float)) and not isinstance(_fb, bool) else c.Hleg + c.T + g
+    fb = _fb if isinstance(_fb, (int, float)) and not isinstance(_fb, bool) else band_bottom
     heights = section.get("drawer_heights")
     if not heights:
-        band_top = section.get("front_top", c.H - c.T - g)
-        h = (band_top - fb - (n - 1) * g) / n
+        top = section.get("front_top", band_top)
+        h = (top - fb - (n - 1) * g) / n
         heights = [round(h, 2)] * n
 
     # параметры короба ящика (drawer-construction, не выводятся из габарита)
     guide_gap = section.get("guide_gap", 14.5)
-    box_z1 = section.get("box_z1", c.T)
-    box_depth = section.get("box_depth", round(c.D - c.T - 46, 2))
+    box_z1 = section.get("box_z1", 0)                             # короб прижат к фасаду (z=0)
+    box_depth = section.get("box_depth", round(c.D - c.T_back - box_z1 - 30, 2))
     box_y_off = section.get("box_y_offset", c.T)
     box_h = section.get("box_height", round(min(heights) * 0.52, 2))
     box_back = section.get("box_back_thickness", c.T)
@@ -35,8 +39,8 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     panels = carcass(c.W, c.D, c.H, c.T, c.T_back, c.Hleg, c.mat, c.mat_back,
                      leg_as_panel=c.leg_as_panel, leg_type=c.leg_type)
 
-    ox1, ox2 = c.T, c.W - c.T                # внутренний проём
-    fx1, fx2 = c.T + g, c.W - c.T - g        # врезной фасад в проём
+    ox1, ox2 = c.T, c.W - c.T                # внутренний проём (короб между боковинами)
+    fx1, fx2 = round(reveal, 2), round(c.W - reveal, 2)   # накладной фасад — во всю ширину
     drawers_meta: list[dict[str, Any]] = []
     front_names: list[str] = []
     y = fb

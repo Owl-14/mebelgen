@@ -321,20 +321,20 @@
       "material": "ЛДСП",
       "thickness": 16,
       "dimensions": {
-        "width": 410,
-        "height": 484
+        "width": 435,
+        "height": 516
       },
       "placement": {
-        "x1": 18,
-        "x2": 428,
-        "y1": 98,
-        "y2": 582,
+        "x1": 2,
+        "x2": 437,
+        "y1": 82,
+        "y2": 598,
         "z1": -16,
         "z2": 0
       },
       "position": {
-        "x": 18,
-        "y": 98,
+        "x": 2,
+        "y": 82,
         "z": -16
       },
       "rotation": {
@@ -358,19 +358,19 @@
       "material": "ЛДСП",
       "thickness": 16,
       "dimensions": {
-        "width": 704,
+        "width": 722,
         "height": 180
       },
       "placement": {
-        "x1": 448,
-        "x2": 1152,
+        "x1": 439,
+        "x2": 1161,
         "y1": 98,
         "y2": 278,
         "z1": -16,
         "z2": 0
       },
       "position": {
-        "x": 448,
+        "x": 439,
         "y": 98,
         "z": -16
       },
@@ -543,19 +543,19 @@
       "material": "ЛДСП",
       "thickness": 16,
       "dimensions": {
-        "width": 704,
+        "width": 722,
         "height": 180
       },
       "placement": {
-        "x1": 448,
-        "x2": 1152,
+        "x1": 439,
+        "x2": 1161,
         "y1": 280,
         "y2": 460,
         "z1": -16,
         "z2": 0
       },
       "position": {
-        "x": 448,
+        "x": 439,
         "y": 280,
         "z": -16
       },
@@ -728,20 +728,20 @@
       "material": "ЛДСП",
       "thickness": 16,
       "dimensions": {
-        "width": 410,
-        "height": 484
+        "width": 435,
+        "height": 516
       },
       "placement": {
-        "x1": 1172,
-        "x2": 1582,
-        "y1": 98,
-        "y2": 582,
+        "x1": 1163,
+        "x2": 1598,
+        "y1": 82,
+        "y2": 598,
         "z1": -16,
         "z2": 0
       },
       "position": {
-        "x": 1172,
-        "y": 98,
+        "x": 1163,
+        "y": 82,
         "z": -16
       },
       "rotation": {

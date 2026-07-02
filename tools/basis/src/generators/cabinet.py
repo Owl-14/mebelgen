@@ -10,8 +10,8 @@ from typing import Any
 
 from .base import read_carcass
 from .corpus import carcass_calc
-from .columns import column_bounds, door_in_column, drawer_stack, partitions, shelves_in_column
-from .helpers import build_project, carcass, panel, shelf_levels
+from .columns import column_bounds, door_in_column, drawer_stack, facade_x_span, partitions, shelves_in_column
+from .helpers import build_project, carcass, facade_band, panel, shelf_levels
 
 
 def generate(spec: dict[str, Any]) -> dict[str, Any]:
@@ -21,6 +21,10 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     yb, yt = c.Hleg + c.T, c.H - c.T
     iz1 = spec.get("interior_z_front", c.T)      # фронт полок/перегородок
     iz2 = c.D - c.T_back
+    # накладные фасады: полоса по высоте (перекрывает дно и крышку) и зазоры
+    reveal = spec.get("facade_reveal", 2.0)
+    fb_bottom, fb_top = facade_band(c.Hleg, c.H, c.T, has_overhang=bool(spec.get("top_overhang")),
+                                    reveal=reveal)
 
     top_z = spec.get("top_overhang")
     panels = carcass(c.W, c.D, c.H, c.T, c.T_back, c.Hleg, c.mat, c.mat_back,
@@ -43,18 +47,21 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
             levels = shelf_levels(yb, yt, sec["shelves"], c.T)
         levels = levels or []
 
+        fspan = facade_x_span(idx - 1, bounds, c.W, c.T, reveal, g)   # внешний пролёт фасада секции
+
         if kind == "drawers":
             _fb = sec.get("front_bottom")                       # Y-координата низа нижнего фасада
-            fb = _fb if isinstance(_fb, (int, float)) and not isinstance(_fb, bool) else yb + g
+            fb = _fb if isinstance(_fb, (int, float)) and not isinstance(_fb, bool) else fb_bottom
             heights = sec.get("drawer_heights")
             n = sec["drawers"]
             if not heights:
-                top = sec.get("front_top", yt - g)
+                top = sec.get("front_top", fb_top)
                 h = (top - fb - (n - 1) * g) / n
                 heights = [round(h, 2)] * n
             # короб ящика не должен доходить до задника (передний край = D − T_back)
             sec_dr = {**sec, "back_limit": c.D - c.T_back}
-            ps, dm, topy = drawer_stack(cx1, cx2, fb, heights, g, sec_dr, c.T, c.mat, sid, sec.get("prefix", ""))
+            ps, dm, topy = drawer_stack(cx1, cx2, fb, heights, g, sec_dr, c.T, c.mat, sid,
+                                        sec.get("prefix", ""), facade_bounds=fspan)
             panels += ps
             drawers_meta += dm
             names += [p["name"] for p in ps]
@@ -75,19 +82,23 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
             nd = sec.get("door", 0)
             if nd:
                 z_mode = sec.get("door_z", "overlay")
-                dy1 = yb + g
-                dy2 = (min(levels) - g) if (levels and sec.get("door_below_shelf")) else (yt - g)
+                # накладная дверь: перекрывает дно/крышку по высоте и корпус по ширине
+                inset = z_mode == "inset"
+                dy1 = (yb + g) if inset else fb_bottom
+                dy2 = (min(levels) - g) if (levels and sec.get("door_below_shelf")) else (
+                    (yt - g) if inset else fb_top)
+                fx1, fx2 = (cx1 + g, cx2 - g) if inset else fspan
                 # имена дверей: door_names/door_name из ТЗ, иначе дефолт с id секции (уникально)
                 dn = sec.get("door_names") or sec.get("door_name")
                 dn = dn if isinstance(dn, list) else None
                 if nd == 2:
                     names = dn or [f"Дверь левая {sid}", f"Дверь правая {sid}"]
-                    mid = (cx1 + cx2) / 2
-                    panels.append(door_in_column(cx1 + g, mid - g / 2, dy1, dy2, c.T, c.mat, sid, names[0], z_mode=z_mode))
-                    panels.append(door_in_column(mid + g / 2, cx2 - g, dy1, dy2, c.T, c.mat, sid, names[1], z_mode=z_mode))
+                    mid = (fx1 + fx2) / 2
+                    panels.append(door_in_column(fx1, mid - g / 2, dy1, dy2, c.T, c.mat, sid, names[0], z_mode=z_mode))
+                    panels.append(door_in_column(mid + g / 2, fx2, dy1, dy2, c.T, c.mat, sid, names[1], z_mode=z_mode))
                 else:
                     one = sec.get("door_name") if isinstance(sec.get("door_name"), str) else f"Дверь {sid}"
-                    panels.append(door_in_column(cx1 + g, cx2 - g, dy1, dy2, c.T, c.mat, sid, one, z_mode=z_mode))
+                    panels.append(door_in_column(fx1, fx2, dy1, dy2, c.T, c.mat, sid, one, z_mode=z_mode))
 
         sections_meta.append({"id": sid, "type": kind,
                               "dimensions": {"width": round(cx2 - cx1, 2), "height": round(yt - yb, 2),

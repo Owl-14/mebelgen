@@ -131,16 +131,18 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
             for z in (pl["z1"] + 50, pl["z2"] - 50):
                 holes.append(_hole(p["name"], "стяжка (конфирмат)", xc, y, z, 7, 50, "y", ydir))
 
-    # --- Направляющие ящиков: винты на боковинах/перегородках колонки ---
-    for p in panels:
-        if p.get("type") != "drawer_front":
+    # --- Направляющие ящиков: винты на боковинах/перегородках у КОРОБА ---
+    # (по коробу, а не по фасаду: накладной фасад шире проёма и не задаёт колонку)
+    for d in project.get("drawers", []):
+        pos, dim = d.get("position") or {}, d.get("dimensions") or {}
+        if not pos or not dim:
             continue
-        pl = p["placement"]
-        guide_y = pl["y1"] + 12
-        left = min((v for v in verticals if v["placement"]["x2"] <= pl["x1"] + 1),
-                   key=lambda v: pl["x1"] - v["placement"]["x2"], default=None)
-        right = min((v for v in verticals if v["placement"]["x1"] >= pl["x2"] - 1),
-                    key=lambda v: v["placement"]["x1"] - pl["x2"], default=None)
+        box_l, box_r = float(pos["x"]), float(pos["x"]) + float(dim["width"])
+        guide_y = float(pos["y"]) + 12
+        left = min((v for v in verticals if v["placement"]["x2"] <= box_l + 1),
+                   key=lambda v: box_l - v["placement"]["x2"], default=None)
+        right = min((v for v in verticals if v["placement"]["x1"] >= box_r - 1),
+                    key=lambda v: v["placement"]["x1"] - box_r, default=None)
         for v, inx in ((left, 1), (right, -1)):
             if v is None:
                 continue

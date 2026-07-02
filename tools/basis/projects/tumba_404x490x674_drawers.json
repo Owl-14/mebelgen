@@ -234,19 +234,19 @@
       "material": "ЛДСП",
       "thickness": 16,
       "dimensions": {
-        "width": 368,
+        "width": 400,
         "height": 156
       },
       "placement": {
-        "x1": 18,
-        "x2": 386,
+        "x1": 2,
+        "x2": 402,
         "y1": 68,
         "y2": 224,
         "z1": -16,
         "z2": 0
       },
       "position": {
-        "x": 18,
+        "x": 2,
         "y": 68,
         "z": -16
       },
@@ -419,19 +419,19 @@
       "material": "ЛДСП",
       "thickness": 16,
       "dimensions": {
-        "width": 368,
+        "width": 400,
         "height": 156
       },
       "placement": {
-        "x1": 18,
-        "x2": 386,
+        "x1": 2,
+        "x2": 402,
         "y1": 226,
         "y2": 382,
         "z1": -16,
         "z2": 0
       },
       "position": {
-        "x": 18,
+        "x": 2,
         "y": 226,
         "z": -16
       },
@@ -604,19 +604,19 @@
       "material": "ЛДСП",
       "thickness": 16,
       "dimensions": {
-        "width": 368,
+        "width": 400,
         "height": 155
       },
       "placement": {
-        "x1": 18,
-        "x2": 386,
+        "x1": 2,
+        "x2": 402,
         "y1": 384,
         "y2": 539,
         "z1": -16,
         "z2": 0
       },
       "position": {
-        "x": 18,
+        "x": 2,
         "y": 384,
         "z": -16
       },

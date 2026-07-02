@@ -102,6 +102,18 @@ def shelves(levels: list[float], W: float, D: float, T: float, T_back: float, ma
     return out
 
 
+def facade_band(Hleg: float, H: float, T: float, *, has_overhang: bool = False,
+                reveal: float = 2.0) -> tuple[float, float]:
+    """Вертикальная полоса накладных фасадов: перекрывают дно и крышку.
+
+    Низ — чуть выше ножек/цоколя (Hleg+reveal, закрывает торец дна).
+    Верх — под крышкой (H−reveal, закрывает её торец), либо под столешницей
+    (H−T−reveal), если сверху свес (столешница не закрывается фасадом)."""
+    bottom = round(Hleg + reveal, 2)
+    top = round((H - T - reveal) if has_overhang else (H - reveal), 2)
+    return bottom, top
+
+
 def overlay_door(W: float, H: float, T: float, Hleg: float, gap: float, mat: str, section_id: str,
                  name: str = "Фасад двери", *, x1: float = None, x2: float = None,
                  y1: float = None, y2: float = None) -> dict[str, Any]:
