@@ -52,3 +52,21 @@ if __name__ == "__main__":
                test_all_komi_drill_without_error):
         fn()
         print("OK", fn.__name__)
+
+
+def test_fasteners_reverse_patterns():
+    """Крепёж из реверса готовых изделий БАЗИС (docs/BASIS_FASTENERS_REVERSE.md)."""
+    import json
+    from src.generators import generate_from_paramspec
+    from src.hardware import compute_drilling, drilling_summary, fastener_bom
+    spec = json.loads((ROOT / "paramspecs" / "komi_72_tumba_podkatnaya.json").read_text(encoding="utf-8"))
+    holes = compute_drilling(generate_from_paramspec(spec))
+    s = drilling_summary(holes)
+    assert s["задник (гвоздь)"] >= 8            # сетка по периметру ДВП
+    assert s["короб ящика (саморез)"] == 24     # 8 на ящик (дно 2×2 + ЗС 2×2)
+    bom = fastener_bom(holes, resolve=True)
+    names = {b["name"]: b for b in bom}
+    assert names["Гвоздь 1.6×25"]["qty"] >= 8
+    assert names["Гвоздь 1.6×25"].get("article")        # позиция из базы
+    assert names["Конфирмат 7×50"].get("article")
+    assert names["Заглушка самоклеящаяся D13"]["qty"] == names["Конфирмат 7×50"]["qty"]

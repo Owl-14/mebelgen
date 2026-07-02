@@ -24,6 +24,15 @@ def _hole(panel: str, purpose: str, x: float, y: float, z: float,
             "diameter": diameter, "depth": depth, "axis": axis, "dir": dir}
 
 
+def _spread(a: float, b: float, step: float) -> list[float]:
+    """Точки от a до b включительно с шагом ≤ step (минимум 2, если b>a)."""
+    if b <= a:
+        return [a]
+    import math
+    n = max(1, math.ceil((b - a) / step))
+    return [a + (b - a) * i / n for i in range(n + 1)]
+
+
 def _n_hinges(h: float) -> int:
     if h <= 900:
         return 2
@@ -131,6 +140,62 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
             for z in (pl["z1"] + 50, pl["z2"] - 50):
                 holes.append(_hole(p["name"], "стяжка (конфирмат)", xc, y, z, 7, 50, "y", ydir))
 
+    # --- Гвозди задника: по периметру + вдоль внутренних полок/стоек (реверс
+    #     готовой тумбы БАЗИС: гвоздь 1.6×25, шаг ≤250, см. BASIS_FASTENERS_REVERSE) ---
+    for p in panels:
+        if p.get("type") != "back" or float(p.get("thickness", 16)) > 6:
+            continue                                  # только тонкий ДВП-задник
+        pl = p["placement"]
+        m = 12.0                                      # отступ от кромки ДВП
+        xs = _spread(pl["x1"] + m, pl["x2"] - m, 250)
+        ys = _spread(pl["y1"] + m, pl["y2"] - m, 250)
+        pts = [(x, pl["y1"] + m) for x in xs] + [(x, pl["y2"] - m) for x in xs] \
+            + [(pl["x1"] + m, y) for y in ys[1:-1]] + [(pl["x2"] - m, y) for y in ys[1:-1]]
+        # внутренние стойки/полки, примыкающие к заднику сзади
+        for q in panels:
+            qp = q.get("placement")
+            if q.get("type") not in ("vertical_partition", "shelf") or not qp:
+                continue
+            if qp["z2"] < pl["z1"] - 20:              # не доходит до задника
+                continue
+            if q["type"] == "vertical_partition":
+                cx = (qp["x1"] + qp["x2"]) / 2
+                if pl["x1"] < cx < pl["x2"]:
+                    pts += [(cx, y) for y in _spread(max(qp["y1"], pl["y1"]) + m,
+                                                     min(qp["y2"], pl["y2"]) - m, 250)]
+            else:
+                cy = (qp["y1"] + qp["y2"]) / 2
+                if pl["y1"] < cy < pl["y2"]:
+                    pts += [(x, cy) for x in _spread(max(qp["x1"], pl["x1"]) + m,
+                                                     min(qp["x2"], pl["x2"]) - m, 250)]
+        for x, y in dict.fromkeys(pts):               # dedup, порядок сохранён
+            holes.append(_hole(p["name"], "задник (гвоздь)", x, y, pl["z2"], 1.6, 25, "z", -1))
+
+    # --- Короб ящика: саморезы 3.5×16 сквозь бок в торцы дна и задней стенки ---
+    for p in panels:
+        if p.get("type") not in ("drawer_side_left", "drawer_side_right"):
+            continue
+        pl = p["placement"]
+        outer_x = pl["x1"] if p["type"] == "drawer_side_left" else pl["x2"]
+        into = 1 if p["type"] == "drawer_side_left" else -1
+        for q in panels:
+            qp = q.get("placement")
+            if not qp:
+                continue
+            edge = qp["x1"] if p["type"] == "drawer_side_left" else qp["x2"]
+            near = (abs(edge - (pl["x2"] if into > 0 else pl["x1"])) < 1.0
+                    and qp["y1"] < pl["y2"] and qp["y2"] > pl["y1"])   # тот же ящик (Y-пересечение)
+            if q.get("type") == "drawer_bottom" and near:
+                yc = (qp["y1"] + qp["y2"]) / 2
+                for z in _spread(qp["z1"] + 60, qp["z2"] - 60, 300):
+                    holes.append(_hole(p["name"], "короб ящика (саморез)",
+                                       outer_x, yc, z, 3.5, 16, "x", into))
+            elif q.get("type") == "drawer_back" and near:
+                zc = (qp["z1"] + qp["z2"]) / 2
+                for y in (qp["y1"] + 25, qp["y2"] - 25):
+                    holes.append(_hole(p["name"], "короб ящика (саморез)",
+                                       outer_x, y, zc, 3.5, 16, "x", into))
+
     # --- Направляющие ящиков: винты на боковинах/перегородках у КОРОБА ---
     # (по коробу, а не по фасаду: накладной фасад шире проёма и не задаёт колонку)
     for d in project.get("drawers", []):
@@ -151,6 +216,55 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
             for z in (vp["z1"] + 30, (vp["z1"] + vp["z2"]) / 2, vp["z2"] - 50):
                 holes.append(_hole(v["name"], "направляющая (винт)", sx, guide_y, z, 5, 12, "x", inx))
     return holes
+
+
+# Присадка → позиция крепежа (имя для BOM + запрос в группу «Крепёж» базы).
+# Кол-во: у конфирмата/гвоздя/самореза 1 отверстие = 1 шт; полкодержатель — 1 шт
+# на отверстие; ручка — 1 винт на отверстие; петля-чашка — 1 петля.
+_FASTENER_MAP = {
+    "стяжка (конфирмат)": ("Конфирмат 7×50", "конфирмат 7"),
+    "задник (гвоздь)": ("Гвоздь 1.6×25", "гвоздь 1,6"),
+    "короб ящика (саморез)": ("Саморез 3,5×16", "саморез потай 3,5 16"),
+    "направляющая (винт)": ("Саморез 3,5×16 (направляющие)", "саморез потай 3,5 16"),
+    "ручка (винт)": ("Винт М4×16", "винт м4 16"),
+    "полкодержатель": ("Полкодержатель", "полкодержатель"),
+    "петля (чашка Ø35)": ("Петля накладная", "петля наклад"),
+}
+
+
+def fastener_bom(holes: list[dict[str, Any]],
+                 resolve: bool = False) -> list[dict[str, Any]]:
+    """Крепёж по присадкам: [{name, qty, [article, base_name]}] для BOM/сметы.
+
+    resolve=True — подобрать позицию из группы «Крепёж» производственной базы
+    (первое совпадение; точный выбор за технологом).
+    """
+    counts: dict[str, int] = {}
+    for h in holes:
+        m = _FASTENER_MAP.get(h["purpose"])
+        if m:
+            counts[m[0]] = counts.get(m[0], 0) + 1
+    out = []
+    for (name, query) in _FASTENER_MAP.values():
+        if name not in counts:
+            continue
+        row: dict[str, Any] = {"name": name, "qty": counts[name]}
+        if resolve:
+            try:
+                from .materials import search_base
+                hit = search_base(query, category="Крепеж", limit=1) or \
+                    search_base(query, limit=1)
+                if hit:
+                    row["article"] = hit[0].get("article")
+                    row["base_name"] = hit[0].get("name")
+            except Exception:
+                pass
+        out.append(row)
+    # заглушки на видимые конфирматы (самоклейка, по 1 на конфирмат)
+    conf = counts.get("Конфирмат 7×50", 0)
+    if conf:
+        out.append({"name": "Заглушка самоклеящаяся D13", "qty": conf})
+    return out
 
 
 def drilling_summary(holes: list[dict[str, Any]]) -> dict[str, int]:
