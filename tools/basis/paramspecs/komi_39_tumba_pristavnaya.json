@@ -32,16 +32,16 @@
     {
       "id": "open",
       "kind": "open",
-      "shelves": 2,
-      "shelf_label": "Полка открытая"
+      "shelf_label": "Полка открытая",
+      "shelves": 2
     },
     {
       "id": "door",
       "kind": "door",
       "shelves": 2,
       "shelf_label": "Полка закрытая",
-      "door": 1,
-      "door_name": "Дверца"
+      "door_name": "Дверца",
+      "door": 1
     }
   ],
   "hardware": {
