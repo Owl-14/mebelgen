@@ -509,6 +509,8 @@ PAGE = r"""<!DOCTYPE html>
     <label><input type="checkbox" id="cbXray"> прозрачный</label>
     <button id="btnOpenAll">Открыть всё</button>
     <button id="btnCloseAll">Закрыть</button>
+    <label title="разнесённый вид">разбор
+      <input type="range" id="explode" min="0" max="100" value="0" style="width:90px;vertical-align:middle"></label>
   </div>
   <div id="draw"></div>
   <div id="toast"></div>
@@ -541,6 +543,7 @@ $('cbHw').onchange=e=>scene3d.setHw(e.target.checked);
 $('cbTex').onchange=e=>scene3d.setTextures(e.target.checked);
 $('cbDims').onchange=e=>scene3d.setDims(e.target.checked);
 $('cbXray').onchange=e=>scene3d.setXray(e.target.checked);
+$('explode').oninput=e=>scene3d.setExplode(e.target.value/100);
 $('btnOpenAll').onclick=()=>scene3d.openAll();
 $('btnCloseAll').onclick=()=>scene3d.closeAll();
 

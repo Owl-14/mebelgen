@@ -232,6 +232,25 @@ function MebelScene(container){
     if(vertical){tex.center.set(0.5,0.5); tex.rotation=Math.PI/2;}
     texCache.set(key,tex); return tex;
   }
+  // --- разнесённый вид (AKD-126): смещение деталей по типу ---
+  const _EXPL={door_front:[0,0,1],drawer_front:[0,0,1],facade:[0,0,1],screen:[0,0,1],
+    back:[0,0,-1],drawer_back:[0,0,-.6],top:[0,1,0],bottom:[0,-1,0],
+    shelf:[0,.45,0],plinth:[0,-.5,0],side_left:[-1,0,0],side_right:[1,0,0],
+    drawer_side_left:[-.55,0,0],drawer_side_right:[.55,0,0],drawer_bottom:[0,-.45,0]};
+  let explodeT=0, explodeR=600;
+  function setExplode(t){
+    explodeT=Math.min(Math.max(t,0),1);
+    const k=explodeT*explodeR*0.45;
+    panelMeshes.forEach((m,i)=>{
+      if(!m||!m.userData.basePos) return;
+      const d=_EXPL[(PANELS_REF[i]||{}).type]||[0,0,0];
+      m.position.set(m.userData.basePos.x+d[0]*k,
+                     m.userData.basePos.y+d[1]*k,
+                     m.userData.basePos.z+d[2]*k);   // фронт модели уже +Z сцены
+      const e=m.userData.edgeObj; if(e) e.position.copy(m.position);
+    });
+  }
+
   // --- размерные линии W×D×H (AKD-125) ---
   function dimLabel(text,R){
     const cv=document.createElement('canvas'); cv.width=256; cv.height=72;
@@ -379,6 +398,8 @@ function MebelScene(container){
       applyTexture(mesh);
       place(mesh,gi); holder(gi).add(mesh);
       const e=edge(mesh,COLORS._edge); holder(gi).add(e);
+      mesh.userData.edgeObj=e;
+      mesh.userData.basePos=mesh.position.clone();
     });
     HW.forEach((h,j)=>{
       const gi=ownH[j];
@@ -397,6 +418,7 @@ function MebelScene(container){
     world.add(holeGroup);
     world.add(new THREE.AxesHelper(R*1.08));
     dimGroup=buildDims(W,H,D,R); world.add(dimGroup);
+    explodeR=R; if(explodeT>0) setExplode(explodeT);
     const cv=document.createElement('canvas');cv.width=cv.height=256;
     const g2=cv.getContext('2d'),gr=g2.createRadialGradient(128,128,12,128,128,126);
     gr.addColorStop(0,'rgba(0,0,0,0.28)');gr.addColorStop(1,'rgba(0,0,0,0)');
@@ -475,6 +497,7 @@ function MebelScene(container){
     onSelect:null,                     // колбэк ({index,panel}|null)
     setTextures(on){texOn=on; panelMeshes.forEach(m=>m&&applyTexture(m));},
     setDims(on){dimsOn=on; if(dimGroup) dimGroup.visible=on;},
+    setExplode,
     resize:size,
   };
   size();
