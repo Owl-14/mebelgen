@@ -181,6 +181,7 @@ function MebelScene(container){
   let world=null, holeGroup=null, hwVisible=true, fitted=false;
   let panelMats=[], groups=[];      // groups: {node,kind,travel,sign,swing,t,target}
   let panelMeshes=[], selectedPi=null, PANELS_REF=[];   // выбор детали (AKD-120)
+  let dimGroup=null, dimsOn=true;                       // размерные линии (AKD-125)
 
   function size(){const w=container.clientWidth||innerWidth,h=container.clientHeight||innerHeight;
     camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h);}
@@ -231,6 +232,47 @@ function MebelScene(container){
     if(vertical){tex.center.set(0.5,0.5); tex.rotation=Math.PI/2;}
     texCache.set(key,tex); return tex;
   }
+  // --- размерные линии W×D×H (AKD-125) ---
+  function dimLabel(text,R){
+    const cv=document.createElement('canvas'); cv.width=256; cv.height=72;
+    const g=cv.getContext('2d');
+    g.font='600 44px Segoe UI,Arial'; g.textAlign='center'; g.textBaseline='middle';
+    g.fillStyle='rgba(236,239,243,0.92)';
+    const w=g.measureText(text).width+26;
+    g.fillRect(128-w/2,8,w,56);
+    g.fillStyle='#1a4fa0'; g.fillText(text,128,38);
+    const sp=new THREE.Sprite(new THREE.SpriteMaterial(
+      {map:new THREE.CanvasTexture(cv),depthTest:false,transparent:true}));
+    sp.scale.set(R*0.20,R*0.056,1); sp.renderOrder=9; return sp;
+  }
+  function dimLine(a,b,R){
+    const g=new THREE.Group();
+    const mat=new THREE.LineBasicMaterial({color:0x1a4fa0});
+    const v=new THREE.Vector3().subVectors(b,a), n=v.clone().normalize();
+    // перпендикуляр для засечек
+    const up=Math.abs(n.y)>0.9?new THREE.Vector3(1,0,0):new THREE.Vector3(0,1,0);
+    const t=new THREE.Vector3().crossVectors(n,up).normalize().multiplyScalar(R*0.014);
+    const pts=[a,b];
+    g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),mat));
+    for(const p of [a,b]){
+      g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(
+        [p.clone().add(t),p.clone().sub(t)]),mat));
+    }
+    const label=dimLabel(`${Math.round(v.length())}`,R);
+    label.position.copy(a).add(v.multiplyScalar(0.5)).add(t.clone().multiplyScalar(3));
+    g.add(label);
+    return g;
+  }
+  function buildDims(W,H,D,R){
+    const g=new THREE.Group();
+    const o=Math.max(R*0.055,28);
+    g.add(dimLine(new THREE.Vector3(0,0,D+o),new THREE.Vector3(W,0,D+o),R));      // ширина
+    g.add(dimLine(new THREE.Vector3(W+o,0,D),new THREE.Vector3(W+o,0,0),R));      // глубина
+    g.add(dimLine(new THREE.Vector3(W+o,0,D+o),new THREE.Vector3(W+o,H,D+o),R));  // высота
+    g.visible=dimsOn;
+    return g;
+  }
+
   function applyTexture(mesh){
     const m=mesh.material, u=mesh.userData;
     if(texOn&&u.baseHex){
@@ -354,6 +396,7 @@ function MebelScene(container){
       m.position.set(TX(hp.x),TY(hp.y),TZ(hp.z)); holeGroup.add(m);});
     world.add(holeGroup);
     world.add(new THREE.AxesHelper(R*1.08));
+    dimGroup=buildDims(W,H,D,R); world.add(dimGroup);
     const cv=document.createElement('canvas');cv.width=cv.height=256;
     const g2=cv.getContext('2d'),gr=g2.createRadialGradient(128,128,12,128,128,126);
     gr.addColorStop(0,'rgba(0,0,0,0.28)');gr.addColorStop(1,'rgba(0,0,0,0)');
@@ -431,6 +474,7 @@ function MebelScene(container){
     getSelected(){return selectedPi;},
     onSelect:null,                     // колбэк ({index,panel}|null)
     setTextures(on){texOn=on; panelMeshes.forEach(m=>m&&applyTexture(m));},
+    setDims(on){dimsOn=on; if(dimGroup) dimGroup.visible=on;},
     resize:size,
   };
   size();
