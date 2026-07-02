@@ -19,7 +19,9 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     sections = spec.get("sections") or [{"kind": "open"}]
     g = c.gap
     yb, yt = c.Hleg + c.T, c.H - c.T
-    iz1 = spec.get("interior_z_front", c.T)      # фронт полок/перегородок
+    # фронт полок/перегородок = фронт корпуса (дно/крышка), а не утоплен на T:
+    # иначе полки посередине не доходят до переднего края изделия
+    iz1 = spec.get("interior_z_front", spec.get("carcass_z_front", 0))
     iz2 = c.D - c.T_back
     # накладные фасады: полоса по высоте (перекрывает дно и крышку) и зазоры
     reveal = spec.get("facade_reveal", 2.0)
