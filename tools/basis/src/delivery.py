@@ -93,6 +93,14 @@ def _hardware_bom(project: dict[str, Any]) -> list[dict[str, str]]:
             h = lg.get("height")
             out.append({"slot": "Опоры/ножки",
                         "name": f"{lt}" + (f", H={h} мм" if h else ""), "art": "—"})
+    # крепёж по присадкам (конфирматы/гвозди/саморезы/заглушки — реверс готовых
+    # изделий БАЗИС, docs/BASIS_FASTENERS_REVERSE.md)
+    try:
+        from .hardware import compute_drilling, fastener_bom
+        for f in fastener_bom(compute_drilling(project)):
+            out.append({"slot": "Крепёж", "name": f["name"], "art": f"{f['qty']} шт"})
+    except Exception:
+        pass
     return out
 
 
