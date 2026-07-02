@@ -31,6 +31,8 @@ copy .env.example .env        # вписать OPENAI_API_KEY (для convert)
 
 ## Studio — локальный редактор (основной способ показа и правок)
 
+Концепция и дорожная карта Studio 2.0 — в [STUDIO.md](STUDIO.md).
+
 ```bash
 python main.py studio paramspecs/<spec>.json [--port 8765] [--out ../../out]
 ```
