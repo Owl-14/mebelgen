@@ -177,6 +177,10 @@ def make_handler(st: _Studio):
                     self._json(build_payload(spec))
                 elif self.path == "/api/techview":
                     self._json(techview_svg(spec))
+                elif self.path == "/api/chat":
+                    from .spec_chat import chat_edit
+                    self._json(chat_edit(spec, str(body.get("message", "")),
+                                         body.get("history") or []))
                 elif self.path == "/api/save":
                     st.spec = spec
                     st.spec_path.write_text(json.dumps(spec, ensure_ascii=False, indent=2),
@@ -285,6 +289,12 @@ PAGE = r"""<!DOCTYPE html>
   details{margin-top:8px} textarea{width:100%;height:170px;font:11px/1.4 Consolas,monospace}
   #bom table{width:100%;border-collapse:collapse;font-size:11.5px}
   #bom td{border-bottom:1px solid var(--line);padding:3px 4px}
+  #chatlog{max-height:190px;overflow-y:auto;display:flex;flex-direction:column;gap:5px;
+           margin-bottom:6px}
+  .cmsg{border-radius:8px;padding:5px 8px;font-size:12px;white-space:pre-wrap;max-width:95%}
+  .cmsg.user{background:var(--accent);color:#fff;align-self:flex-end}
+  .cmsg.ai{background:var(--bg);border:1px solid var(--line);align-self:flex-start}
+  .cmsg .diff{display:block;margin-top:4px;font:10.5px/1.5 Consolas,monospace;color:var(--mut)}
 </style></head><body>
 <div id="app">
 <div id="side">
@@ -293,6 +303,18 @@ PAGE = r"""<!DOCTYPE html>
   <div class="badges" id="badges"></div>
   <div id="errors"></div>
   <div id="stats"></div>
+
+  <fieldset id="fs_chat"><legend>Чат с ИИ</legend>
+    <div id="chatlog"></div>
+    <div class="row" style="gap:6px">
+      <input type="text" id="chatMsg" placeholder="напр.: сделай глубину 600, цвет дуб вотан">
+      <button id="chatSend" title="отправить">➤</button>
+    </div>
+    <div class="row" style="gap:6px;margin-top:2px">
+      <button id="btnUndo" disabled>⟲ Откатить</button>
+      <span class="mini">правки применяются к модели сразу</span>
+    </div>
+  </fieldset>
 
   <fieldset><legend>Габариты, мм</legend>
     <div class="row"><label>Ширина</label><input type="number" id="f_w" step="10"></div>
@@ -420,6 +442,7 @@ function renderArchetype(){
   });
 }
 $('archSel').addEventListener('change',()=>{
+  pushUndo();                                  // смена архетипа — структурная правка
   SPEC.archetype=$('archSel').value;
   if(SECTION_ARCHS.includes(SPEC.archetype)&&!Array.isArray(SPEC.sections))
     SPEC.sections=[{kind:'shelves',shelves:2}];
@@ -530,6 +553,44 @@ async function refreshDraw(){
     headers:{'Content-Type':'application/json'},body:JSON.stringify({spec:SPEC})});
   const p=await r.json(); $('draw').innerHTML=p.svg||('<i>'+(p.issues||[]).join('; ')+'</i>');
 }
+
+/* ---------- чат с ИИ + undo (AKD-107/108/110) ---------- */
+const UNDO=[], CHAT_HISTORY=[];
+function pushUndo(){UNDO.push(JSON.stringify(SPEC));
+  if(UNDO.length>30)UNDO.shift(); $('btnUndo').disabled=false;}
+$('btnUndo').onclick=()=>{
+  if(!UNDO.length)return;
+  SPEC=JSON.parse(UNDO.pop()); $('btnUndo').disabled=!UNDO.length;
+  fillForm(); apply(); addMsg('ai','Откатил последнюю правку.');};
+function addMsg(who,text,changes){
+  const d=document.createElement('div'); d.className='cmsg '+who;
+  d.textContent=text;
+  if(changes&&changes.length){
+    const df=document.createElement('span'); df.className='diff';
+    df.textContent=changes.join('\n'); d.appendChild(df);
+  }
+  $('chatlog').appendChild(d); $('chatlog').scrollTop=1e9; return d;}
+let chatBusy=false;
+async function sendChat(){
+  const m=$('chatMsg').value.trim();
+  if(!m||chatBusy)return;
+  chatBusy=true; $('chatMsg').value=''; addMsg('user',m);
+  const wait=addMsg('ai','думаю…');
+  try{
+    const r=await fetch('/api/chat',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({spec:SPEC,message:m,history:CHAT_HISTORY})});
+    const p=await r.json();
+    wait.remove();
+    addMsg('ai',p.reply||'(пусто)',p.changes);
+    CHAT_HISTORY.push({role:'user',text:m},{role:'assistant',text:p.reply||''});
+    if(CHAT_HISTORY.length>16)CHAT_HISTORY.splice(0,CHAT_HISTORY.length-16);
+    if(p.spec){pushUndo(); SPEC=p.spec; fillForm(); apply();}
+  }catch(e){wait.remove(); addMsg('ai','Ошибка: '+e.message);}
+  finally{chatBusy=false;}
+}
+$('chatSend').onclick=sendChat;
+$('chatMsg').addEventListener('keydown',e=>{if(e.key==='Enter')sendChat();});
 
 /* ---------- экспорт ---------- */
 async function post(url){const r=await fetch(url,{method:'POST',
