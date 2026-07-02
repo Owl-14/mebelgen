@@ -298,6 +298,12 @@ PAGE = r"""<!DOCTYPE html>
   #bom td{border-bottom:1px solid var(--line);padding:3px 4px}
   .swatch{flex:0 0 18px;height:18px;border-radius:4px;border:1px solid var(--line);
           background:#c9a06a}
+  #partCard{font-size:12px;line-height:1.6}
+  #partCard b{font-size:13px}
+  #partCard .kv{display:grid;grid-template-columns:96px 1fr;gap:0 8px}
+  #partCard .kv span:nth-child(odd){color:var(--mut)}
+  #draw rect.sel{stroke:#2b62c4 !important;stroke-width:2.4 !important;
+                 fill:#2b62c433 !important}
   #decorList{max-height:170px;overflow-y:auto;display:none;flex-direction:column;gap:2px;
              border:1px solid var(--line);border-radius:6px;padding:3px;margin-top:4px}
   .ditem{display:flex;align-items:center;gap:6px;padding:3px 5px;border-radius:5px;
@@ -320,6 +326,10 @@ PAGE = r"""<!DOCTYPE html>
   <div class="badges" id="badges"></div>
   <div id="errors"></div>
   <div id="stats"></div>
+
+  <fieldset id="fs_part" style="display:none"><legend>Деталь <span class="mini">(клик в 3D)</span></legend>
+    <div id="partCard"></div>
+  </fieldset>
 
   <fieldset id="fs_chat"><legend>Чат с ИИ</legend>
     <div id="chatlog"></div>
@@ -422,7 +432,9 @@ const scene3d=MebelScene(view);
 function rebuild(v){scene3d.setPayload(v);
   scene3d.setHoles($('cbHoles').checked);
   scene3d.setHw($('cbHw').checked);
-  if($('cbXray').checked) scene3d.setXray(true);}
+  if($('cbXray').checked) scene3d.setXray(true);
+  if(scene3d.select) scene3d.select(null);      // модель пересобрана — выбор сброшен
+}
 function resize(){scene3d.resize();}
 $('cbHoles').onchange=e=>scene3d.setHoles(e.target.checked);
 $('cbHw').onchange=e=>scene3d.setHw(e.target.checked);
@@ -550,6 +562,7 @@ async function apply(){
   if(drawOn) refreshDraw();
 }
 function paint(p){
+  lastPayload=p;
   const B=$('badges'); B.innerHTML='';
   const names={schema:'схема',consistency:'встык',geometry:'геометрия',cfrn:'.cfrn',holes:'присадки'};
   let errs=[];
@@ -583,7 +596,49 @@ async function refreshDraw(){
   const r=await fetch('/api/techview',{method:'POST',
     headers:{'Content-Type':'application/json'},body:JSON.stringify({spec:SPEC})});
   const p=await r.json(); $('draw').innerHTML=p.svg||('<i>'+(p.issues||[]).join('; ')+'</i>');
+  const pi=scene3d.getSelected&&scene3d.getSelected();     // восстановить подсветку
+  if(pi!==null&&pi!==undefined&&lastPayload){
+    const nm=(lastPayload.viewer.panels[pi]||{}).name;
+    if(nm) document.querySelectorAll(`#draw rect[data-panel="${CSS.escape(nm)}"]`)
+      .forEach(el=>el.classList.add('sel'));
+  }
 }
+
+/* ---------- выбор детали кликом (AKD-120) ---------- */
+let lastPayload=null;
+scene3d.onSelect=sel=>{
+  const fs=$('fs_part'), card=$('partCard');
+  document.querySelectorAll('#draw rect.sel').forEach(r=>r.classList.remove('sel'));
+  if(!sel){fs.style.display='none';card.innerHTML='';return;}
+  const p=sel.panel;
+  const dx=p.x2-p.x1, dy=p.y2-p.y1, dz=p.z2-p.z1;
+  const nHoles=((lastPayload&&lastPayload.viewer&&lastPayload.viewer.holes)||[])
+    .filter(h=>h.panel===p.name).length;
+  card.innerHTML=`<b>${p.name}</b>
+    <div class="kv">
+      <span>Тип</span><span>${p.type||'—'}</span>
+      <span>Габарит</span><span>${dx}×${dy}×${dz} мм</span>
+      <span>Толщина</span><span>${p.thickness??'—'} мм</span>
+      <span>Материал</span><span>${p.material||'—'}</span>
+      <span>Кромка</span><span>${p.edges||'—'}</span>
+      <span>Присадки</span><span>${nHoles}</span>
+      <span>Положение</span><span>x ${p.x1}…${p.x2}, y ${p.y1}…${p.y2}, z ${p.z1}…${p.z2}</span>
+    </div>`;
+  fs.style.display='';
+  document.querySelectorAll(`#draw rect[data-panel="${CSS.escape(p.name)}"]`)
+    .forEach(r=>r.classList.add('sel'));
+};
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape') scene3d.select(null);
+});
+document.addEventListener('click',e=>{           // клик по детали на чертеже
+  const r=e.target.closest&&e.target.closest('#draw rect[data-panel]');
+  if(!r) return;
+  const name=r.getAttribute('data-panel');
+  const idx=((lastPayload&&lastPayload.viewer&&lastPayload.viewer.panels)||[])
+    .findIndex(p=>p.name===name);
+  if(idx>=0) scene3d.select(idx);
+});
 
 /* ---------- выбор декора из производственной базы ---------- */
 let decorTimer=null;
