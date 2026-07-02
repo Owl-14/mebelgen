@@ -98,11 +98,12 @@ class _Svg:
         self.parts.append(f'<line x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}" '
                           f'stroke="{stroke}" stroke-width="{w}"{d}/>')
 
-    def rect(self, x, y, w, h, fill, stroke=_INK, sw=0.9, rx=0.0):
+    def rect(self, x, y, w, h, fill, stroke=_INK, sw=0.9, rx=0.0, panel: str = ""):
         r = f' rx="{rx}"' if rx else ""
         s = f' stroke="{stroke}" stroke-width="{sw}"' if stroke else ' stroke="none"'
+        dp = f' data-panel="{_e(panel)}"' if panel else ""   # связь 3D↔чертёж (AKD-120)
         self.parts.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}" '
-                          f'fill="{fill}"{s}{r}/>')
+                          f'fill="{fill}"{s}{r}{dp}/>')
 
     def poly(self, pts, stroke=_CALL, w=0.8, fill="none"):
         p = " ".join(f"{x:.1f},{y:.1f}" for x, y in pts)
@@ -278,7 +279,8 @@ def build_techview_svg(project: dict[str, Any]) -> tuple[str, list[str]]:
         k = _kind(p)
         x, y = FX(pl["x1"]), FY(pl["y2"])
         w, h = (pl["x2"] - pl["x1"]) * scale, (pl["y2"] - pl["y1"]) * scale
-        svg.rect(x, y, max(w, 1), max(h, 1), _FILL[k], stroke=_INK, sw=0.9)
+        svg.rect(x, y, max(w, 1), max(h, 1), _FILL[k], stroke=_INK, sw=0.9,
+                 panel=str(p.get("name", "")))
         if k == "facade" and w > 26 and h > 26:      # кромка по периметру фасада
             svg.rect(x + 2.2, y + 2.2, w - 4.4, h - 4.4, "none", stroke="#b08d5b", sw=0.8)
         # высота фасада ящика — внутри детали (читаемо, без внешних цепочек)
@@ -298,7 +300,7 @@ def build_techview_svg(project: dict[str, Any]) -> tuple[str, list[str]]:
         x, y = SX(pl["z1"]), FY(pl["y2"])
         w, h = (pl["z2"] - pl["z1"]) * scale, (pl["y2"] - pl["y1"]) * scale
         svg.rect(x, y, max(w, 1), max(h, 1), _FILL["back" if k == "back" else ("facade" if k == "facade" else "carcass")],
-                 stroke=_INK, sw=0.9)
+                 stroke=_INK, sw=0.9, panel=str(p.get("name", "")))
     if legs_h > 0 and not has_plinth:
         for lz in (min(zs1, 0) + 30, zs2 - 30):
             svg.rect(SX(lz) - 4, fy1 - legs_h * scale, 8, legs_h * scale, "#6f5a3e", stroke=_INK, sw=0.8)

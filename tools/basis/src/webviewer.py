@@ -64,16 +64,19 @@ def _panels(project: dict[str, Any]) -> list[dict[str, Any]]:
         pl = p.get("placement")
         if not isinstance(pl, dict):
             continue
+        eb = p.get("edge_banding") or {}
         out.append({"name": p.get("name"), "type": p.get("type"),
                     "x1": pl["x1"], "x2": pl["x2"], "y1": pl["y1"],
-                    "y2": pl["y2"], "z1": pl["z1"], "z2": pl["z2"]})
+                    "y2": pl["y2"], "z1": pl["z1"], "z2": pl["z2"],
+                    "thickness": p.get("thickness"), "material": p.get("material"),
+                    "edges": ", ".join(f"{k}:{v}" for k, v in eb.items() if v) or "—"})
     return out
 
 
 def _holes(project: dict[str, Any]) -> list[dict[str, Any]]:
     try:
         from .hardware import compute_drilling
-        return [{"x": h["x"], "y": h["y"], "z": h["z"],
+        return [{"x": h["x"], "y": h["y"], "z": h["z"], "panel": h.get("panel"),
                  "d": h["diameter"], "purpose": h["purpose"]} for h in compute_drilling(project)]
     except Exception:
         return []
@@ -177,6 +180,7 @@ function MebelScene(container){
 
   let world=null, holeGroup=null, hwVisible=true, fitted=false;
   let panelMats=[], groups=[];      // groups: {node,kind,travel,sign,swing,t,target}
+  let panelMeshes=[], selectedPi=null, PANELS_REF=[];   // выбор детали (AKD-120)
 
   function size(){const w=container.clientWidth||innerWidth,h=container.clientHeight||innerHeight;
     camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h);}
@@ -232,7 +236,8 @@ function MebelScene(container){
     opts=opts||{};
     if(world) scene.remove(world);
     world=new THREE.Group(); scene.add(world);
-    panelMats=[]; groups=[];
+    panelMats=[]; groups=[]; panelMeshes=[]; selectedPi=null;
+    PANELS_REF=DATA.panels||[];
     const PANELS=DATA.panels||[], COLORS=DATA.colors||{}, HOLES=DATA.holes||[];
     const HW=DATA.hardware||[], OPEN=DATA.openables||[];
     if(!PANELS.length){renderer.render(scene,camera);return;}
@@ -270,6 +275,7 @@ function MebelScene(container){
       const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);
       mesh.position.set(TX((p.x1+p.x2)/2),TY((p.y1+p.y2)/2),TZ((p.z1+p.z2)/2));
       if(gi!==undefined) mesh.userData.gi=gi;
+      mesh.userData.pi=i; panelMeshes[i]=mesh;
       place(mesh,gi); holder(gi).add(mesh);
       const e=edge(mesh,COLORS._edge); holder(gi).add(e);
     });
@@ -320,12 +326,28 @@ function MebelScene(container){
     mv.x=((e.clientX-r.left)/r.width)*2-1; mv.y=-((e.clientY-r.top)/r.height)*2+1;
     ray.setFromCamera(mv,camera);
     for(const hit of ray.intersectObjects(scene.children,true)){
-      let o=hit.object, gi;
-      while(o){ if(o.userData&&o.userData.gi!==undefined){gi=o.userData.gi;break;} o=o.parent; }
-      if(gi!==undefined){const g=groups[gi]; g.target=g.target>0.5?0:1; return;}
-      if(hit.object.type==='Mesh') return;   // клик по корпусу — ничего
+      let o=hit.object, gi, pi;
+      while(o){
+        if(gi===undefined&&o.userData&&o.userData.gi!==undefined) gi=o.userData.gi;
+        if(pi===undefined&&o.userData&&o.userData.pi!==undefined) pi=o.userData.pi;
+        o=o.parent;
+      }
+      if(pi!==undefined) selectPanel(pi===selectedPi?null:pi);   // повторный клик — снять
+      if(gi!==undefined){const g=groups[gi]; g.target=g.target>0.5?0:1;}
+      if(pi!==undefined||gi!==undefined) return;
+      if(hit.object.type==='Mesh') return;   // клик по фурнитуре/прочему — ничего
     }
+    selectPanel(null);                        // клик в пустоту — снять выбор
   });
+
+  function selectPanel(pi){
+    if(selectedPi!==null&&panelMeshes[selectedPi])
+      panelMeshes[selectedPi].material.emissive.setHex(0x000000);
+    selectedPi=pi;
+    if(pi!==null&&panelMeshes[pi])
+      panelMeshes[pi].material.emissive.setHex(0x2b62c4);
+    if(api.onSelect) api.onSelect(pi===null?null:{index:pi,panel:PANELS_REF[pi]});
+  }
 
   (function loop(){
     requestAnimationFrame(loop);
@@ -346,6 +368,9 @@ function MebelScene(container){
       world&&world.traverse(o=>{ if(o.userData&&o.userData.hwpart) o.visible=on; });},
     openAll(){groups.forEach(g=>g.target=1);},
     closeAll(){groups.forEach(g=>g.target=0);},
+    select:selectPanel,
+    getSelected(){return selectedPi;},
+    onSelect:null,                     // колбэк ({index,panel}|null)
     resize:size,
   };
   size();
