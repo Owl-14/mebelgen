@@ -33,6 +33,24 @@ def _spread(a: float, b: float, step: float) -> list[float]:
     return [a + (b - a) * i / n for i in range(n + 1)]
 
 
+def _pair_centers(a: float, b: float, *, step: float = 64.0, margin: float = 31.0,
+                  two_pairs_at: float = 400.0) -> list[float]:
+    """Позиции отверстий конфирматов вдоль отрезка стыка [a, b].
+
+    Реверс готовых изделий БАЗИС (BASIS_FASTENERS_REVERSE): конфирматы идут
+    ПАРАМИ с шагом 64 мм, отступ пары от торца ~31; при длинном стыке (≥400)
+    пары у обоих концов, при коротком — одна пара по центру, при совсем
+    узком — одиночный конфирмат в центре.
+    """
+    L = b - a
+    if L < step + 20:
+        return [(a + b) / 2]
+    if L < two_pairs_at:
+        c = (a + b) / 2
+        return [c - step / 2, c + step / 2]
+    return [a + margin, a + margin + step, b - margin - step, b - margin]
+
+
 def _n_hinges(h: float) -> int:
     if h <= 900:
         return 2
@@ -110,7 +128,8 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
             continue
         pl = p["placement"]
         yc = (pl["y1"] + pl["y2"]) / 2
-        zf, zb = pl["z1"] + 37, pl["z2"] - 37
+        m = min(110.0, (pl["z2"] - pl["z1"]) * 0.25)   # отступ ~110 (реверс БАЗИС)
+        zf, zb = pl["z1"] + m, pl["z2"] - m
         for edge_x, want in ((pl["x1"], "x2"), (pl["x2"], "x1")):
             v = min((v for v in verticals if abs(v["placement"][want] - edge_x) < 1.0),
                     key=lambda v: abs(v["placement"][want] - edge_x), default=None)
@@ -120,8 +139,13 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
             for z in (zf, zb):
                 holes.append(_hole(v["name"], "полкодержатель", edge_x, yc, z, 5, 10, "x", into))
 
-    # --- Стяжки: дно/крышка ↔ боковины/перегородки. Боковина стоит на дне
-    #     (стык по Y, X-диапазоны вложены) → конфирмат вдоль Y в торец боковины. ---
+    # --- Стяжки Y-стыков: дно/крышка/столешница ↔ боковины/перегородки.
+    #     Боковина стоит на дне (стык по Y, X-диапазоны вложены). Конфирматы —
+    #     ПАРАМИ с шагом 64 (реверс BASIS_FASTENERS_REVERSE); столешница на
+    #     опорах (top_on_supports) — скрытый крепёж: шкант 8×30 + minifix
+    #     (видимую пласть столешницы не сверлим насквозь). ---
+    construction = str((project.get("carcass_calculation") or {}).get("construction", ""))
+    hidden_top = construction == "top_on_supports"
     for p in panels:
         if p.get("type") not in ("bottom", "top"):
             continue
@@ -137,8 +161,52 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
             else:
                 continue
             xc = (vp["x1"] + vp["x2"]) / 2
-            for z in (pl["z1"] + 50, pl["z2"] - 50):
+            cz1, cz2 = max(pl["z1"], vp["z1"]), min(pl["z2"], vp["z2"])
+            if p["type"] == "top" and hidden_top:
+                # шканты по краям зоны контакта + эксцентрики на 34 внутрь
+                for z in (cz1 + 50, cz2 - 50):
+                    holes.append(_hole(v["name"], "шкант 8×30 (торец)", xc, vp["y2"], z, 8, 20, "y", -1))
+                    holes.append(_hole(p["name"], "шкант 8×30 (пласть)", xc, pl["y1"], z, 8, 12, "y", 1))
+                for z in (cz1 + 50 + 34, cz2 - 50 - 34):
+                    holes.append(_hole(p["name"], "эксцентрик (чашка Ø15)", xc, pl["y1"], z, 15, 13, "y", 1))
+                    holes.append(_hole(v["name"], "эксцентрик (шток)", xc, vp["y2"], z, 5, 34, "y", -1))
+                continue
+            for z in _pair_centers(cz1 + 10, cz2 - 10):
                 holes.append(_hole(p["name"], "стяжка (конфирмат)", xc, y, z, 7, 50, "y", ydir))
+
+    # --- Стяжки X-стыков: торец горизонтали/царги/цоколя → пласть боковины.
+    #     Раньше НЕ покрывалось вовсе (стол был без крепежа): царга/экран к
+    #     боковинам, дно/крышка МЕЖДУ боковинами, цоколь. Конфирматы парами
+    #     сквозь вертикаль в торец примыкающей панели. ---
+    x_joint_types = ("bottom", "top", "back", "screen", "plinth")
+    for p in panels:
+        if p.get("type") not in x_joint_types:
+            continue
+        if p.get("type") == "back" and float(p.get("thickness", 16)) <= 6:
+            continue                                  # тонкий ДВП-задник — гвозди
+        pl = p["placement"]
+        for v in verticals:
+            vp = v["placement"]
+            side = None
+            if abs(pl["x1"] - vp["x2"]) < 1:          # панель справа от вертикали
+                x, xdir = vp["x1"], 1                 # сверлим сквозь вертикаль в +X
+            elif abs(pl["x2"] - vp["x1"]) < 1:        # панель слева от вертикали
+                x, xdir = vp["x2"], -1
+            else:
+                continue
+            cy1, cy2 = max(pl["y1"], vp["y1"]), min(pl["y2"], vp["y2"])
+            cz1, cz2 = max(pl["z1"], vp["z1"]), min(pl["z2"], vp["z2"])
+            if cy2 - cy1 < 20 or cz2 - cz1 < 20:      # нет полноценного контакта
+                continue
+            # раскладка пар вдоль длинной стороны зоны контакта
+            if (cz2 - cz1) >= (cy2 - cy1):
+                yc = (cy1 + cy2) / 2
+                pts = [(yc, z) for z in _pair_centers(cz1 + 10, cz2 - 10)]
+            else:
+                zc = (cz1 + cz2) / 2
+                pts = [(y, zc) for y in _pair_centers(cy1 + 10, cy2 - 10)]
+            for y, z in pts:
+                holes.append(_hole(v["name"], "стяжка (конфирмат)", x, y, z, 7, 50, "x", xdir))
 
     # --- Гвозди задника: по периметру + вдоль внутренних полок/стоек (реверс
     #     готовой тумбы БАЗИС: гвоздь 1.6×25, шаг ≤250, см. BASIS_FASTENERS_REVERSE) ---
@@ -218,17 +286,21 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
     return holes
 
 
-# Присадка → позиция крепежа (имя для BOM + запрос в группу «Крепёж» базы).
-# Кол-во: у конфирмата/гвоздя/самореза 1 отверстие = 1 шт; полкодержатель — 1 шт
-# на отверстие; ручка — 1 винт на отверстие; петля-чашка — 1 петля.
+# Присадка → позиция крепежа (имя для BOM, запрос в базу, шт на отверстие).
+# У шканта 2 отверстия (торец+пласть) на 1 шкант; у эксцентрика чашка = 1 шт,
+# отверстие штока — в комплекте (0).
 _FASTENER_MAP = {
-    "стяжка (конфирмат)": ("Конфирмат 7×50", "конфирмат 7"),
-    "задник (гвоздь)": ("Гвоздь 1.6×25", "гвоздь 1,6"),
-    "короб ящика (саморез)": ("Саморез 3,5×16", "саморез потай 3,5 16"),
-    "направляющая (винт)": ("Саморез 3,5×16 (направляющие)", "саморез потай 3,5 16"),
-    "ручка (винт)": ("Винт М4×16", "винт м4 16"),
-    "полкодержатель": ("Полкодержатель", "полкодержатель"),
-    "петля (чашка Ø35)": ("Петля накладная", "петля наклад"),
+    "стяжка (конфирмат)": ("Конфирмат 7×50", "конфирмат 7", 1.0),
+    "задник (гвоздь)": ("Гвоздь 1.6×25", "гвоздь 1,6", 1.0),
+    "короб ящика (саморез)": ("Саморез 3,5×16", "саморез потай 3,5 16", 1.0),
+    "направляющая (винт)": ("Саморез 3,5×16 (направляющие)", "саморез потай 3,5 16", 1.0),
+    "ручка (винт)": ("Винт М4×16", "винт м4 16", 1.0),
+    "полкодержатель": ("Полкодержатель", "полкодержатель", 1.0),
+    "петля (чашка Ø35)": ("Петля накладная", "петля наклад", 1.0),
+    "шкант 8×30 (торец)": ("Шкант 8×30", "шкант 8", 0.5),
+    "шкант 8×30 (пласть)": ("Шкант 8×30", "шкант 8", 0.5),
+    "эксцентрик (чашка Ø15)": ("Эксцентрик Ø15 + шток", "эксцентрик", 1.0),
+    "эксцентрик (шток)": ("Эксцентрик Ø15 + шток", "эксцентрик", 0.0),
 }
 
 
@@ -239,16 +311,18 @@ def fastener_bom(holes: list[dict[str, Any]],
     resolve=True — подобрать позицию из группы «Крепёж» производственной базы
     (первое совпадение; точный выбор за технологом).
     """
-    counts: dict[str, int] = {}
+    counts: dict[str, float] = {}
     for h in holes:
         m = _FASTENER_MAP.get(h["purpose"])
         if m:
-            counts[m[0]] = counts.get(m[0], 0) + 1
+            counts[m[0]] = counts.get(m[0], 0) + m[2]
+    seen: set[str] = set()
     out = []
-    for (name, query) in _FASTENER_MAP.values():
-        if name not in counts:
+    for (name, query, _per) in _FASTENER_MAP.values():
+        if name not in counts or name in seen:
             continue
-        row: dict[str, Any] = {"name": name, "qty": counts[name]}
+        seen.add(name)
+        row: dict[str, Any] = {"name": name, "qty": round(counts[name]) or 1}
         if resolve:
             try:
                 from .materials import search_base
@@ -263,7 +337,7 @@ def fastener_bom(holes: list[dict[str, Any]],
     # заглушки на видимые конфирматы (самоклейка, по 1 на конфирмат)
     conf = counts.get("Конфирмат 7×50", 0)
     if conf:
-        out.append({"name": "Заглушка самоклеящаяся D13", "qty": conf})
+        out.append({"name": "Заглушка самоклеящаяся D13", "qty": round(conf)})
     return out
 
 

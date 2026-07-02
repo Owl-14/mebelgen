@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from src.generators import generate_from_paramspec           # noqa: E402
-from src.hardware import compute_drilling, drilling_summary  # noqa: E402
+from src.hardware import compute_drilling, drilling_summary, fastener_bom  # noqa: E402
 
 
 def _project(name: str) -> dict:
@@ -70,3 +70,30 @@ def test_fasteners_reverse_patterns():
     assert names["Гвоздь 1.6×25"].get("article")        # позиция из базы
     assert names["Конфирмат 7×50"].get("article")
     assert names["Заглушка самоклеящаяся D13"]["qty"] == names["Конфирмат 7×50"]["qty"]
+
+
+def test_desk_joints_covered():
+    """AKD-146: стол получает крепёж — шкант+minifix столешницы, конфирматы царги."""
+    import json
+    from src.generators import generate_from_paramspec
+    spec = json.loads((ROOT / "paramspecs" / "stol_ofisny_foto.json").read_text(encoding="utf-8"))
+    holes = compute_drilling(generate_from_paramspec(spec))
+    s = drilling_summary(holes)
+    assert s.get("шкант 8×30 (торец)") == 4 and s.get("шкант 8×30 (пласть)") == 4
+    assert s.get("эксцентрик (чашка Ø15)") == 4 and s.get("эксцентрик (шток)") == 4
+    assert s.get("стяжка (конфирмат)") == 4          # царга ↔ боковины, пары 64
+    bom = {b["name"]: b["qty"] for b in fastener_bom(holes)}
+    assert bom["Шкант 8×30"] == 4                    # 2 отверстия = 1 шкант
+    assert bom["Эксцентрик Ø15 + шток"] == 4
+
+
+def test_confirmat_pairs_64():
+    """Конфирматы идут парами с шагом 64 мм (реверс готовых изделий БАЗИС)."""
+    import json
+    from src.generators import generate_from_paramspec
+    spec = json.loads((ROOT / "paramspecs" / "komi_72_tumba_podkatnaya.json").read_text(encoding="utf-8"))
+    holes = [h for h in compute_drilling(generate_from_paramspec(spec))
+             if h["purpose"] == "стяжка (конфирмат)"]
+    zs = sorted({round(h["z"], 1) for h in holes})
+    diffs = [round(b - a, 1) for a, b in zip(zs, zs[1:])]
+    assert 64.0 in diffs, f"нет шага 64 в {diffs}"
