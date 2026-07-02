@@ -16,10 +16,10 @@ Y-вверх и нормальной орбитой. Файл для станк�
 
 from __future__ import annotations
 
-import colorsys
-import hashlib
 import json
 from typing import Any
+
+from .decor_colors import build_palette, decor_label
 
 # Палитра по умолчанию (когда декор не указан) — «обезличенное дерево»
 _COLORS = {
@@ -32,72 +32,30 @@ _COLORS = {
     "_default": "#c9a06a", "_edge": "#5a4326",
 }
 
-# Базовые цвета популярных декоров ЛДСП (подстрока, специфичные — раньше)
-_DECOR_COLORS: list[tuple[str, str]] = [
-    ("дуб вотан", "#9a7b52"), ("дуб сонома", "#cfa671"), ("дуб крафт", "#b98d5d"),
-    ("венге", "#4b3626"), ("орех", "#7b5a3a"), ("ольха", "#c98850"),
-    ("бук", "#d9a869"), ("берёза", "#e2c290"), ("береза", "#e2c290"),
-    ("ясень шимо тём", "#8c7b66"), ("ясень шимо", "#cbbfa4"), ("ясень", "#d3c6ae"),
-    ("махагон", "#6e3b2a"), ("вишня", "#9e4f35"), ("клён", "#e8d3ac"), ("клен", "#e8d3ac"),
-    ("сосна", "#d9b57c"), ("лиственница", "#c9a06a"), ("дуб", "#c69c6d"),
-    ("слоновая кость", "#ece2c8"), ("крем", "#e8dcc0"), ("беж", "#ddc9a3"),
-    ("белый", "#f0efec"), ("бел", "#f0efec"),
-    ("графит", "#4f5357"), ("антрацит", "#3a3d40"),
-    ("чёрный", "#2e2e2e"), ("черный", "#2e2e2e"),
-    ("бетон", "#a3a49e"), ("металлик", "#aeb2b8"), ("сер", "#9a9da1"),
-    ("синий", "#4a6f9c"), ("голуб", "#7fa3c4"),
-    ("зелён", "#5e7d54"), ("зелен", "#5e7d54"),
-    ("красн", "#a34434"), ("бордо", "#7a2f33"),
-    ("жёлт", "#d9b13b"), ("желт", "#d9b13b"), ("оранж", "#cf7b3a"),
-]
 
-# Смещение светлоты по типу детали (объём читается даже в однотонном декоре)
-_TYPE_SHADE = {
-    "door_front": +0.04, "drawer_front": +0.04, "facade": +0.04, "screen": +0.04,
-    "shelf": +0.07, "drawer_bottom": +0.07,
-    "top": -0.03, "bottom": -0.03,
-    "plinth": -0.10, "back": -0.12, "drawer_back": -0.12,
-    "side_left": 0.0, "side_right": 0.0, "vertical_partition": 0.0,
-    "drawer_side_left": 0.0, "drawer_side_right": 0.0,
-    "_default": 0.0,
-}
-
-
-def _hex_to_hls(h: str) -> tuple[float, float, float]:
-    h = h.lstrip("#")
-    r, g, b = (int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
-    return colorsys.rgb_to_hls(r, g, b)
-
-
-def _hls_to_hex(h: float, l: float, s: float) -> str:
-    r, g, b = colorsys.hls_to_rgb(h, min(max(l, 0.04), 0.97), s)
-    return "#{:02x}{:02x}{:02x}".format(round(r * 255), round(g * 255), round(b * 255))
-
-
-def _decor_base(decor: str | None) -> str | None:
-    """Имя декора → базовый hex. Неизвестный (но заданный) — стабильный тон из хэша."""
-    d = (decor or "").strip().lower()
-    if not d or d in ("по согласованию", "—", "-"):
+def _article_decor(article: Any) -> str | None:
+    """Артикул позиции базы → метка декора из её имени (для цвета показа)."""
+    if not article:
         return None
-    for key, hexcol in _DECOR_COLORS:
-        if key in d:
-            return hexcol
-    x = int(hashlib.md5(d.encode("utf-8")).hexdigest()[:6], 16)   # стабильно по имени
-    hue = 0.055 + (x % 97) / 97 * 0.055          # 20°..40° — древесная гамма
-    light = 0.50 + (x // 97 % 89) / 89 * 0.22    # 0.50..0.72
-    sat = 0.30 + (x // 8633 % 83) / 83 * 0.15    # 0.30..0.45
-    return _hls_to_hex(hue, light, sat)
+    try:
+        from .materials import by_article
+        item = by_article(str(article))
+        return decor_label(str(item["name"])) if item else None
+    except Exception:
+        return None
 
 
 def _palette(project: dict[str, Any]) -> dict[str, str]:
-    """Палитра типов деталей из декора проекта; без декора — дефолтная."""
-    base = _decor_base((project.get("materials") or {}).get("color"))
-    if base is None:
-        return _COLORS
-    h, l, s = _hex_to_hls(base)
-    pal = {t: _hls_to_hex(h, l + dl, s) for t, dl in _TYPE_SHADE.items()}
-    pal["_edge"] = _hls_to_hex(h, max(l - 0.30, 0.06), min(s * 1.1, 1.0))
-    return pal
+    """Палитра типов из декоров проекта (корпус + фасады); без декора — дефолт.
+
+    Слоты: materials.color / board_article — корпус; materials.facade_color /
+    facade_article — фасады (не задано → как корпус).
+    """
+    m = project.get("materials") or {}
+    carcass = m.get("color") or _article_decor(m.get("board_article"))
+    facade = m.get("facade_color") or _article_decor(m.get("facade_article"))
+    pal = build_palette(carcass, facade, default=_COLORS)
+    return pal if pal is not None else _COLORS
 
 
 def _panels(project: dict[str, Any]) -> list[dict[str, Any]]:

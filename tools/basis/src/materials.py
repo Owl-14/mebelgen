@@ -101,6 +101,57 @@ def base_items(category: str | None = None, group_substr: str | None = None,
     return items
 
 
+def by_article(article: str, base: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    """Позиция базы по точному артикулу/id."""
+    art = str(article).strip()
+    for x in base_items(base=base):
+        if str(x.get("article", "")).strip() == art or str(x.get("id", "")).strip() == art:
+            return x
+    return None
+
+
+def list_sheet_decors(query: str = "", thickness: float | None = None, limit: int = 30,
+                      base: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    """Выбор декора в Studio: листовой материал базы со свотчем цвета.
+
+    Возвращает [{article, name, label, thickness, hex}] — label короткая метка
+    декора, hex условный цвет показа (см. decor_colors). Дубли по label схлопнуты.
+    """
+    from .decor_colors import decor_base, decor_label
+    tokens = [t for t in query.lower().split() if t]
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for x in base_items(category="Листовой материал", base=base):
+        t = x.get("thickness")
+        if thickness is not None and (t is None or abs(float(t) - thickness) > 0.05):
+            continue
+        name = str(x.get("name", ""))
+        hay = f"{name} {x.get('article', '')} {x.get('group', '')}".lower()
+        name_l = name.lower()
+
+        def _tok_ok(tk: str) -> bool:
+            # числовой токен = толщина (иначе «16» ловит артикулы вроде U2167)
+            if tk.replace(".", "").replace(",", "").isdigit():
+                try:
+                    return t is not None and abs(float(t) - float(tk.replace(",", "."))) < 0.05
+                except ValueError:
+                    return tk in name_l
+            return tk in hay
+
+        if tokens and not all(_tok_ok(tk) for tk in tokens):
+            continue
+        label = decor_label(name)
+        key = label.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({"article": x.get("article"), "name": name, "label": label,
+                    "thickness": t, "hex": decor_base(label) or "#c9a06a"})
+        if len(out) >= limit:
+            break
+    return out
+
+
 def search_base(query: str, category: str | None = None, limit: int = 25,
                 base: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     """Поиск по имени/артикулу/обозначению/группе: все слова запроса должны
