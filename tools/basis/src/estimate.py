@@ -41,11 +41,17 @@ def estimate_project(project: dict[str, Any],
     rows: list[dict[str, Any]] = []
     warnings: list[str] = []
 
-    # --- плита: площади деталей по слоям корпус/задник ---
+    # --- плита: площади деталей по слоям корпус/фасады/задник ---
+    from .decor_colors import FACADE_TYPES
     back_names = {p["name"] for p in panels
                   if p.get("type") == "back" and float(p.get("thickness", 16)) <= 6}
+    has_facade_ref = bool((refs.get("facade") or {}).get("resolved"))
+    facade_names = {p["name"] for p in panels
+                    if has_facade_ref and p.get("type") in FACADE_TYPES}
     area_board = sum(_face(p)[0] * _face(p)[1] for p in panels
-                     if p["name"] not in back_names) * _M2
+                     if p["name"] not in back_names and p["name"] not in facade_names) * _M2
+    area_facade = sum(_face(p)[0] * _face(p)[1] for p in panels
+                      if p["name"] in facade_names) * _M2
     area_back = sum(_face(p)[0] * _face(p)[1] for p in panels
                     if p["name"] in back_names) * _M2
 
@@ -65,6 +71,7 @@ def estimate_project(project: dict[str, Any],
             warnings.append(f"{label}: нет цены (слот {slot})")
 
     _sheet_row("board", "Плита", area_board)
+    _sheet_row("facade", "Плита фасадов", area_facade)
     _sheet_row("back", "Задник", area_back)
 
     # --- кромка: длина кромления по edge_banding деталей ---

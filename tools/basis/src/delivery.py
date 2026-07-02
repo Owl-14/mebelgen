@@ -62,7 +62,8 @@ def _hardware_bom(project: dict[str, Any]) -> list[dict[str, str]]:
     refs = project.get("material_refs") or {}
     label = {"handles": "Ручки", "hinges": "Петли", "drawer_guides": "Направляющие",
              "guides": "Направляющие", "legs": "Опоры/ножки", "locks": "Замки",
-             "edge": "Кромка", "board": "Плита", "back": "Задняя стенка"}
+             "edge": "Кромка", "board": "Плита", "back": "Задняя стенка",
+             "facade": "Плита фасадов"}
     # задник в BOM — только если задняя стенка реально есть среди деталей
     # (у столов слот «back» из материалов есть, а детали-задника нет)
     has_back_wall = any(

@@ -678,6 +678,13 @@ function paint(p){
     B.insertAdjacentHTML('beforeend',`<span class="badge ${bad?'bad':''}">${names[k]}</span>`);
     if(bad) errs.push(...p.issues[k].slice(0,4).map(x=>`[${names[k]}] ${x}`));
   }
+  if(p.refs){                                    // подбор позиций базы (C4, информативно)
+    const rs=Object.values(p.refs).filter(r=>r&&typeof r==='object');
+    const ok=rs.filter(r=>r.resolved).length;
+    if(rs.length) B.insertAdjacentHTML('beforeend',
+      `<span class="badge" style="background:${ok===rs.length?'var(--ok)':'#c78a2b'}"
+        title="позиции производственной базы">база ${ok}/${rs.length}</span>`);
+  }
   $('errors').textContent=errs.join('\n');
   lastOk=p.ok; $('btnB3d').disabled=!p.ok;
   if(p.viewer){rebuild(p.viewer);
