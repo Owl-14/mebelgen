@@ -135,6 +135,55 @@ def techview_svg(spec: dict[str, Any]) -> dict[str, Any]:
         return {"svg": "", "issues": [str(e)]}
 
 
+# ------------------------------------------------------------------ экспорт-центр (C3)
+
+B3D_COST_RUB = 10          # цена облачной конвертации CfrnToB3d
+
+
+def _read_builds(out_dir: Path) -> dict[str, Any]:
+    f = out_dir / "builds.json"
+    try:
+        builds = json.loads(f.read_text(encoding="utf-8"))
+    except Exception:
+        builds = []
+    return {"builds": builds[-20:][::-1],              # свежие сверху
+            "total_spent": sum(b.get("cost_rub", 0) for b in builds)}
+
+
+def _log_build(out_dir: Path, spec: dict[str, Any], b3d: Path) -> None:
+    from datetime import datetime
+    f = out_dir / "builds.json"
+    try:
+        builds = json.loads(f.read_text(encoding="utf-8"))
+    except Exception:
+        builds = []
+    d = spec.get("dimensions", {})
+    builds.append({"ts": datetime.now().isoformat(timespec="seconds"),
+                   "file": str(b3d), "project": spec.get("project_name", ""),
+                   "dims": f'{d.get("width")}×{d.get("depth")}×{d.get("height")}',
+                   "cost_rub": B3D_COST_RUB})
+    f.write_text(json.dumps(builds, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def _open_file(out_dir: Path, path: str) -> dict[str, Any]:
+    """Открыть файл из каталога результатов: .b3d — БАЗИС-Просмотр, прочее — ОС."""
+    import os
+    import subprocess
+    p = Path(path).resolve()
+    roots = (out_dir.resolve(), Path.cwd().resolve())
+    if not any(str(p).startswith(str(r)) for r in roots) or not p.is_file():
+        return {"ok": False, "error": "файл вне каталога результатов или не существует"}
+    viewer = Path(os.environ.get("BAZIS_VIEWER", r"D:\bazis\viewer.exe"))
+    try:
+        if p.suffix.lower() == ".b3d" and viewer.is_file():
+            subprocess.Popen([str(viewer), str(p)])
+        else:
+            os.startfile(str(p))                       # noqa: S606 — локальный запуск по клику
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200]}
+
+
 # ------------------------------------------------------------------ server
 
 class _Studio:
@@ -227,9 +276,31 @@ def make_handler(st: _Studio):
                     out = st.out_dir / (st.spec_path.stem + ".b3d")
                     try:
                         rep = build_b3d_from_paramspec(spec, out)
+                        _log_build(st.out_dir, spec, out)          # история сборок (C3)
                         self._json({"ok": True, **{k: str(v) for k, v in rep.items()}})
                     except Exception as e:
                         self._json({"ok": False, "error": str(e)[:300]}, 502)
+                elif self.path == "/api/builds":         # история сборок .b3d (C3)
+                    self._json(_read_builds(st.out_dir))
+                elif self.path == "/api/open-file":      # открыть результат (C3)
+                    self._json(_open_file(st.out_dir, str(body.get("path", ""))))
+                elif self.path == "/api/deliver":        # лист согласования (C3)
+                    from datetime import datetime
+                    from .generators import generate_from_paramspec
+                    from .materials import resolve_project_materials
+                    from .delivery import create_delivery
+                    project = generate_from_paramspec(spec)
+                    try:
+                        project["material_refs"] = resolve_project_materials(project)
+                    except Exception:
+                        pass
+                    res = create_delivery(spec, project, out_root=st.out_dir,
+                                          created_iso=datetime.now().isoformat(timespec="seconds"),
+                                          export=False)
+                    import webbrowser
+                    webbrowser.open(Path(res["page"]).resolve().as_uri())
+                    self._json({"ok": True, "page": res["page"],
+                                "version": res["version"]})
                 else:
                     self._send(404, b"{}")
             except Exception as e:
@@ -398,7 +469,11 @@ PAGE = r"""<!DOCTYPE html>
       <button id="btnCfrn">.cfrn</button>
       <button id="btnB3d" class="primary">Собрать .b3d (~10₽)</button>
     </div>
+    <div class="row" style="gap:6px;margin-top:4px">
+      <button id="btnDeliver">Лист согласования</button>
+    </div>
     <div class="mini">Платная сборка доступна только при зелёных проверках.</div>
+    <div id="builds" style="margin-top:6px"></div>
   </fieldset>
 
   <fieldset id="fs_hw"><legend>Фурнитура <span class="mini" id="hwBadge"></span></legend>
@@ -826,7 +901,39 @@ $('btnB3d').onclick=async()=>{
   if(!confirm('Собрать .b3d через облако БАЗИС? Операция платная (~10₽).'))return;
   toast('Сборка в облаке…');
   const p=await post('/api/build-b3d');
-  toast(p.ok?('Готов .b3d: '+p.b3d):('Ошибка: '+(p.error||'')),!p.ok);};
+  toast(p.ok?('Готов .b3d: '+p.b3d):('Ошибка: '+(p.error||'')),!p.ok);
+  if(p.ok){loadBuilds();
+    if(confirm('Открыть результат в БАЗИС-Просмотре?'))
+      await fetch('/api/open-file',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({path:p.b3d})});}};
+
+/* ---------- экспорт-центр (AKD-130) ---------- */
+$('btnDeliver').onclick=async()=>{
+  toast('Собираю лист согласования…');
+  const p=await post('/api/deliver');
+  toast(p.ok?`Лист v${p.version} открыт в браузере`:('Ошибка: '+(p.error||'')),!p.ok);};
+async function loadBuilds(){
+  const r=await fetch('/api/builds',{method:'POST',
+    headers:{'Content-Type':'application/json'},body:'{}'});
+  const p=await r.json();
+  const b=$('builds');
+  if(!(p.builds||[]).length){b.innerHTML='';return;}
+  b.innerHTML=`<div class="mini">Сборки .b3d (расход ~${p.total_spent}₽):</div>`+
+    p.builds.slice(0,5).map(x=>{
+      const f=(x.file||'').split(/[\\/]/).pop();
+      return `<div class="row" style="margin:2px 0"><span class="mini" style="flex:1"
+        title="${x.file}">${x.ts.replace('T',' ')} · ${f}</span>
+        <button class="fb" data-open="${x.file}">▶</button></div>`;}).join('');
+}
+document.addEventListener('click',async e=>{
+  const f=e.target.dataset&&e.target.dataset.open;
+  if(!f) return;
+  const r=await fetch('/api/open-file',{method:'POST',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({path:f})});
+  const p=await r.json();
+  if(!p.ok) toast('Открыть не удалось: '+(p.error||''),true);
+});
+loadBuilds();
 
 /* старт */
 fillForm(); resize(); apply();

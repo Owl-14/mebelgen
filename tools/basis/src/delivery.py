@@ -183,6 +183,26 @@ def build_approval_html(project: dict[str, Any], *, version: int, status: str,
         '<div class="card" style="margin-top:16px"><h2>Чертёж (фронт · бок)</h2>'
         f'<div class="body" style="overflow-x:auto">{techview}</div></div>') if techview else ""
 
+    # смета материалов (C1) — карточка в листе согласования (C3)
+    estimate_card = ""
+    try:
+        from .estimate import estimate_project
+        est = estimate_project(project)
+        if est["rows"]:
+            er = "".join(
+                f'<tr><td>{_e(r["group"])}</td><td>{_e(r["name"])}</td>'
+                f'<td class="num">{r["qty"]} {_e(r["unit"])}</td>'
+                f'<td class="num">{(str(r["cost"]) + " ₽") if r["cost"] is not None else "—"}</td></tr>'
+                for r in est["rows"])
+            estimate_card = (
+                '<div class="card" style="margin-top:16px"><h2>Смета материалов '
+                f'(закупка) — ≈{est["total"]:.0f} {est["currency"]}</h2>'
+                '<div class="body" style="padding:0"><table><thead><tr><th>Группа</th>'
+                '<th>Позиция</th><th class="num">Кол-во</th><th class="num">Стоимость</th>'
+                f'</tr></thead><tbody>{er}</tbody></table></div></div>')
+    except Exception:
+        pass
+
     return _SHEET_TEMPLATE.format(
         name=_e(s["name"]), badge=badge, version=version, created=_e(created_iso),
         dim=_e(dim_str), decor=_e(s["decor"]), thickness=_e(s["thickness"]),
@@ -190,7 +210,7 @@ def build_approval_html(project: dict[str, Any], *, version: int, status: str,
         n_panels=s["n_panels"], n_holes=s["n_holes"],
         bom_rows=bom_rows, panel_rows=panel_rows, drill_rows=drill_rows,
         viewer_srcdoc=viewer_doc, renderer=RENDERER_VERSION,
-        techview_card=techview_card)
+        techview_card=techview_card, estimate_card=estimate_card)
 
 
 # ------------------------------------------------------------------ версии/снапшот
@@ -359,6 +379,7 @@ _SHEET_TEMPLATE = r"""<!DOCTYPE html>
   </div>
 
   {techview_card}
+  {estimate_card}
 
   <div class="grid" style="margin-top:16px">
     <div class="card">
