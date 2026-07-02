@@ -504,6 +504,7 @@ PAGE = r"""<!DOCTYPE html>
   <div id="hud">
     <label><input type="checkbox" id="cbHoles" checked> присадки</label>
     <label><input type="checkbox" id="cbHw" checked> фурнитура</label>
+    <label><input type="checkbox" id="cbTex" checked> текстура</label>
     <label><input type="checkbox" id="cbXray"> прозрачный</label>
     <button id="btnOpenAll">Открыть всё</button>
     <button id="btnCloseAll">Закрыть</button>
@@ -536,6 +537,7 @@ function rebuild(v){scene3d.setPayload(v);
 function resize(){scene3d.resize();}
 $('cbHoles').onchange=e=>scene3d.setHoles(e.target.checked);
 $('cbHw').onchange=e=>scene3d.setHw(e.target.checked);
+$('cbTex').onchange=e=>scene3d.setTextures(e.target.checked);
 $('cbXray').onchange=e=>scene3d.setXray(e.target.checked);
 $('btnOpenAll').onclick=()=>scene3d.openAll();
 $('btnCloseAll').onclick=()=>scene3d.closeAll();

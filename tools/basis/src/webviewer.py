@@ -193,6 +193,59 @@ function MebelScene(container){
   function box(w,h,d,color){return new THREE.Mesh(new THREE.BoxGeometry(Math.max(w,0.8),
       Math.max(h,0.8),Math.max(d,0.8)), new THREE.MeshLambertMaterial({color:color}));}
 
+  // --- процедурная текстура декора (AKD-124): волокна от базового цвета ---
+  let texOn=true; const texCache=new Map();
+  function woodTexture(hex, vertical){
+    const key=hex+(vertical?'|v':'|h');
+    if(texCache.has(key)) return texCache.get(key);
+    const cv=document.createElement('canvas'); cv.width=cv.height=256;
+    const ctx=cv.getContext('2d');
+    ctx.fillStyle=hex; ctx.fillRect(0,0,256,256);
+    const c=new THREE.Color(hex), hsl={}; c.getHSL(hsl);
+    let seed=0; for(const ch of hex) seed=(seed*31+ch.charCodeAt(0))>>>0;
+    const rand=()=>{seed=(seed*1664525+1013904223)>>>0; return seed/4294967296;};
+    if(hsl.s>0.09){                                   // древесные — волокна
+      for(let i=0;i<70;i++){
+        const y=rand()*256, w=0.8+rand()*3.2, dl=(rand()-0.5)*0.22;
+        const col=new THREE.Color().setHSL(hsl.h,
+          Math.min(hsl.s*(0.85+rand()*0.3),1),
+          Math.min(Math.max(hsl.l+dl,0.03),0.97));
+        ctx.strokeStyle='#'+col.getHexString(); ctx.globalAlpha=0.5; ctx.lineWidth=w;
+        ctx.beginPath(); ctx.moveTo(-4,y);
+        for(let x=0;x<=260;x+=12)
+          ctx.lineTo(x,y+Math.sin(x*0.018+i*1.7)*2.0+(rand()-0.5)*1.2);
+        ctx.stroke();
+      }
+      for(let i=0;i<2;i++){                           // редкие «сучки», деликатно
+        const x=rand()*256,y=rand()*256,r=1.5+rand()*2;
+        ctx.globalAlpha=0.12; ctx.fillStyle='#000';
+        ctx.beginPath(); ctx.ellipse(x,y,r*2.2,r,0,0,7); ctx.fill();
+      }
+    }
+    ctx.globalAlpha=0.045;                            // лёгкий шум для всех
+    for(let i=0;i<900;i++){ctx.fillStyle=(i%2)?'#000':'#fff';
+      ctx.fillRect(rand()*256,rand()*256,1.5,1.5);}
+    ctx.globalAlpha=1;
+    const tex=new THREE.CanvasTexture(cv);
+    tex.wrapS=tex.wrapT=THREE.RepeatWrapping;
+    if(vertical){tex.center.set(0.5,0.5); tex.rotation=Math.PI/2;}
+    texCache.set(key,tex); return tex;
+  }
+  function applyTexture(mesh){
+    const m=mesh.material, u=mesh.userData;
+    if(texOn&&u.baseHex){
+      const base=woodTexture(u.baseHex,!!u.grainV);
+      const t=base.clone(); t.needsUpdate=true;        // общая канва, свой repeat
+      const k=Math.max(1,(u.longDim||400)/700);        // масштаб волокон под деталь
+      t.repeat.set(k,k);
+      m.map=t; m.color.set('#ffffff');
+    }else{
+      m.map=null;
+      if(u.baseColor) m.color.copy(u.baseColor);
+    }
+    m.needsUpdate=true;
+  }
+
   // Направляющая как направляющая: C-профиль (стенка+полки) + каретка + стопор.
   function buildGuide(h,TX,TY,TZ,parent,tagGi){
     const gx1=h.x1,gx2=h.x2,gy1=h.y1,gy2=h.y2,gz1=h.z1,gz2=h.z2;
@@ -276,6 +329,12 @@ function MebelScene(container){
       mesh.position.set(TX((p.x1+p.x2)/2),TY((p.y1+p.y2)/2),TZ((p.z1+p.z2)/2));
       if(gi!==undefined) mesh.userData.gi=gi;
       mesh.userData.pi=i; panelMeshes[i]=mesh;
+      // текстура декора: базовый цвет типа + направление волокон по ориентации
+      mesh.userData.baseHex='#'+col.getHexString();
+      mesh.userData.baseColor=col.clone();
+      mesh.userData.grainV=(w<=h&&w<=d)||(d<=w&&d<=h);   // боковины/фасады — вертикально
+      mesh.userData.longDim=Math.max(w,h,d);
+      applyTexture(mesh);
       place(mesh,gi); holder(gi).add(mesh);
       const e=edge(mesh,COLORS._edge); holder(gi).add(e);
     });
@@ -371,6 +430,7 @@ function MebelScene(container){
     select:selectPanel,
     getSelected(){return selectedPi;},
     onSelect:null,                     // колбэк ({index,panel}|null)
+    setTextures(on){texOn=on; panelMeshes.forEach(m=>m&&applyTexture(m));},
     resize:size,
   };
   size();
