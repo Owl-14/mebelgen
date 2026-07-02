@@ -181,6 +181,13 @@ def make_handler(st: _Studio):
                     from .spec_chat import chat_edit
                     self._json(chat_edit(spec, str(body.get("message", "")),
                                          body.get("history") or []))
+                elif self.path == "/api/decors":
+                    from .materials import list_sheet_decors
+                    th = body.get("thickness")
+                    self._json({"items": list_sheet_decors(
+                        str(body.get("q", "")),
+                        thickness=float(th) if th else None,
+                        limit=int(body.get("limit", 30)))})
                 elif self.path == "/api/save":
                     st.spec = spec
                     st.spec_path.write_text(json.dumps(spec, ensure_ascii=False, indent=2),
@@ -289,6 +296,16 @@ PAGE = r"""<!DOCTYPE html>
   details{margin-top:8px} textarea{width:100%;height:170px;font:11px/1.4 Consolas,monospace}
   #bom table{width:100%;border-collapse:collapse;font-size:11.5px}
   #bom td{border-bottom:1px solid var(--line);padding:3px 4px}
+  .swatch{flex:0 0 18px;height:18px;border-radius:4px;border:1px solid var(--line);
+          background:#c9a06a}
+  #decorList{max-height:170px;overflow-y:auto;display:none;flex-direction:column;gap:2px;
+             border:1px solid var(--line);border-radius:6px;padding:3px;margin-top:4px}
+  .ditem{display:flex;align-items:center;gap:6px;padding:3px 5px;border-radius:5px;
+         cursor:pointer;font-size:11.5px}
+  .ditem:hover{background:var(--bg)}
+  .ditem .sw{flex:0 0 16px;height:16px;border-radius:3px;border:1px solid var(--line)}
+  .ditem .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ditem .fb{flex:0 0 auto;font-size:10px;padding:1px 6px}
   #chatlog{max-height:190px;overflow-y:auto;display:flex;flex-direction:column;gap:5px;
            margin-bottom:6px}
   .cmsg{border-radius:8px;padding:5px 8px;font-size:12px;white-space:pre-wrap;max-width:95%}
@@ -323,9 +340,16 @@ PAGE = r"""<!DOCTYPE html>
   </fieldset>
 
   <fieldset><legend>Материал</legend>
-    <div class="row"><label>Цвет</label><input type="text" id="f_color"></div>
+    <div class="row"><label>Цвет</label><input type="text" id="f_color">
+      <span class="swatch" id="swCarcass" title="цвет показа корпуса"></span></div>
+    <div class="row"><label>Цвет фасадов</label><input type="text" id="f_facade_color"
+      placeholder="как корпус"><span class="swatch" id="swFacade" title="цвет показа фасадов"></span></div>
     <div class="row"><label>Код</label><input type="text" id="f_code"></div>
     <div class="row"><label>Плита, мм</label><input type="number" id="f_t" step="1"></div>
+    <div class="row"><label>Из базы</label><input type="text" id="decorQ"
+      placeholder="поиск декора: дуб, белый, 16…"></div>
+    <div id="decorList"></div>
+    <div class="mini" id="decorHint">клик — корпус, кнопка «Ф» — фасады (база: ≈960 листовых)</div>
   </fieldset>
 
   <fieldset><legend>Опоры / зазор</legend>
@@ -411,6 +435,7 @@ function fillForm(){
   const d=SPEC.dimensions||{},m=SPEC.materials||{},lg=SPEC.legs||{},gp=SPEC.gaps||{};
   $('f_w').value=d.width??'';$('f_d').value=d.depth??'';$('f_h').value=d.height??'';
   $('f_color').value=m.color??'';$('f_code').value=m.color_code??'';
+  $('f_facade_color').value=m.facade_color??'';
   $('f_t').value=m.board_thickness??16;$('f_legs').value=lg.height??0;
   $('f_gap').value=gp.default??2;
   $('rawspec').value=JSON.stringify(SPEC,null,2);
@@ -480,6 +505,9 @@ function harvest(){
   SPEC.dimensions.width=num($('f_w').value);SPEC.dimensions.depth=num($('f_d').value);
   SPEC.dimensions.height=num($('f_h').value);
   SPEC.materials.color=$('f_color').value;SPEC.materials.color_code=$('f_code').value;
+  const fc=$('f_facade_color').value.trim();
+  if(fc) SPEC.materials.facade_color=fc;
+  else {delete SPEC.materials.facade_color; delete SPEC.materials.facade_article;}
   SPEC.materials.board_thickness=num($('f_t').value);
   SPEC.legs.height=num($('f_legs').value)||0;
   SPEC.gaps.default=num($('f_gap').value);
@@ -533,6 +561,9 @@ function paint(p){
   $('errors').textContent=errs.join('\n');
   lastOk=p.ok; $('btnB3d').disabled=!p.ok;
   if(p.viewer){rebuild(p.viewer);
+    const C=p.viewer.colors||{};
+    $('swCarcass').style.background=C.side_left||'#c9a06a';
+    $('swFacade').style.background=C.door_front||C.side_left||'#c9a06a';
     const st=p.stats;
     $('stats').innerHTML=`<div><b>${st.n_panels}</b><span>деталей</span></div>
       <div><b>${st.n_holes}</b><span>присадок</span></div>
@@ -552,6 +583,46 @@ async function refreshDraw(){
   const r=await fetch('/api/techview',{method:'POST',
     headers:{'Content-Type':'application/json'},body:JSON.stringify({spec:SPEC})});
   const p=await r.json(); $('draw').innerHTML=p.svg||('<i>'+(p.issues||[]).join('; ')+'</i>');
+}
+
+/* ---------- выбор декора из производственной базы ---------- */
+let decorTimer=null;
+$('decorQ').addEventListener('input',()=>{clearTimeout(decorTimer);
+  decorTimer=setTimeout(loadDecors,300);});
+async function loadDecors(){
+  const q=$('decorQ').value.trim();
+  const box=$('decorList');
+  if(!q){box.style.display='none';box.innerHTML='';return;}
+  const r=await fetch('/api/decors',{method:'POST',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({q})});
+  const p=await r.json();
+  box.innerHTML='';
+  (p.items||[]).forEach(it=>{
+    const d=document.createElement('div'); d.className='ditem';
+    d.innerHTML=`<span class="sw" style="background:${it.hex}"></span>
+      <span class="nm" title="${it.name} (арт. ${it.article})">${it.label}</span>
+      <span class="mini">${it.thickness??''}</span>
+      <button class="fb" title="применить к фасадам">Ф</button>`;
+    d.onclick=e=>{
+      pushUndo();
+      if(e.target.classList.contains('fb')){          // фасады
+        SPEC.materials.facade_color=it.label;
+        SPEC.materials.facade_article=String(it.article);
+      }else{                                          // корпус: выбор ДЕКОРА
+        SPEC.materials.color=it.label;
+        // артикул и толщину переносим только если позиция совпадает по толщине —
+        // иначе это лишь цвет, конкретную плиту подберёт резолвер по декору
+        if(it.thickness && it.thickness===SPEC.materials.board_thickness)
+          SPEC.materials.board_article=String(it.article);
+        else delete SPEC.materials.board_article;
+      }
+      fillForm(); apply();
+    };
+    box.appendChild(d);
+  });
+  if(!(p.items||[]).length)
+    box.innerHTML='<div class="mini" style="padding:4px">ничего не найдено</div>';
+  box.style.display='flex';
 }
 
 /* ---------- чат с ИИ + undo (AKD-107/108/110) ---------- */

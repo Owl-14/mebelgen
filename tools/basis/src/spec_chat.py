@@ -91,11 +91,17 @@ class MockChatProvider:
                 new.setdefault("dimensions", {})[key] = _num(m.group(m.lastindex))
                 done.append(f"{key} = {new['dimensions'][key]}")
 
-        m = re.search(r"(?:цвет|декор|материал)\w*\s+(?:на\s+)?«?\"?([а-яёa-z0-9 \-]+?)\"?»?\s*$", msg)
+        m = re.search(r"фасад\w*\s+(?:цвет\w*\s+)?(?:на\s+)?«?\"?([а-яёa-z0-9 \-]+?)\"?»?\s*$", msg)
         if m:
             color = m.group(1).strip().capitalize()
-            new.setdefault("materials", {})["color"] = color
-            done.append(f"цвет = {color}")
+            new.setdefault("materials", {})["facade_color"] = color
+            done.append(f"цвет фасадов = {color}")
+        else:
+            m = re.search(r"(?:цвет|декор|материал)\w*\s+(?:на\s+)?«?\"?([а-яёa-z0-9 \-]+?)\"?»?\s*$", msg)
+            if m:
+                color = m.group(1).strip().capitalize()
+                new.setdefault("materials", {})["color"] = color
+                done.append(f"цвет = {color}")
 
         m = re.search(rf"(?:плит|толщин)\w*\D*?{_NUM}", msg)
         if m:

@@ -11,7 +11,11 @@ ParamSpec (высокоуровневые параметры изделия). К
 3. Меняй только то, о чём попросили. Не выдумывай лишних изменений.
 4. Доступные рычаги (по архетипам):
    - dimensions.width/depth/height — габариты, мм;
-   - materials.color / color_code / board_thickness / board_material — декор и плита;
+   - materials.color / color_code / board_thickness / board_material — декор и плита корпуса;
+   - materials.facade_color / facade_color_code — отдельный декор ФАСАДОВ
+     («корпус белый, фасады дуб» → color="Белый", facade_color="Дуб");
+   - materials.board_article / facade_article — точный артикул позиции из
+     производственной базы (если пользователь назвал артикул);
    - legs.height / legs.type — ножки/опоры («добавь ножки 100» → legs.height=100);
    - sections[] — секции (kind: drawers|shelves|door|open; drawers/shelves/door; width_share);
    - archetype — тип изделия (corpus, shelving, drawer_unit, door_unit, cabinet,

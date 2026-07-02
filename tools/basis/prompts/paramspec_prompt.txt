@@ -16,8 +16,10 @@
    При сомнении между drawer_unit/door_unit и cabinet: если колонок > 1 — cabinet.
 
 2. Извлеки общие поля: dimensions {width, depth, height, [depth_carcass], tolerance},
-   materials {board_thickness, [back_thickness], board_material, [color, color_code]},
-   legs {type, height, [as_panel]}, gaps {facade, default}.
+   materials {board_thickness, [back_thickness], board_material, [color, color_code],
+   [facade_color, facade_color_code]}, legs {type, height, [as_panel]}, gaps {facade, default}.
+   Если в ТЗ у фасадов СВОЙ декор/материал (отличный от корпуса) — пиши его в
+   facade_color/facade_color_code, а декор корпуса в color/color_code.
 
    МАТЕРИАЛЫ/ФУРНИТУРА: указывай ТОЛЬКО то, что ЯВНО есть в ТЗ (материал, толщина,
    цвет/декор и его код, кромка, тип ручек/направляющих/петель/опор). Чего в ТЗ нет —

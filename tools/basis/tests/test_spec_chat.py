@@ -44,6 +44,13 @@ def test_remove_legs():
     assert r["spec"]["legs"]["height"] == 0
 
 
+def test_facade_color():
+    r = chat_edit(SPEC, "сделай фасады цвет дуб вотан")
+    assert r["spec"]["materials"]["facade_color"] == "Дуб вотан"
+    assert "color" not in [c.split(":")[0] for c in r["changes"]
+                           if c.startswith("materials.color:")], "корпус не трогаем"
+
+
 def test_metal_frame():
     r = chat_edit(SPEC, "сделай стол на металлокаркасе")
     assert r["spec"]["frame"] == "metal"
