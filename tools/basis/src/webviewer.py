@@ -77,7 +77,9 @@ def _holes(project: dict[str, Any]) -> list[dict[str, Any]]:
     try:
         from .hardware import compute_drilling
         return [{"x": h["x"], "y": h["y"], "z": h["z"], "panel": h.get("panel"),
-                 "d": h["diameter"], "purpose": h["purpose"]} for h in compute_drilling(project)]
+                 "d": h["diameter"], "purpose": h["purpose"],
+                 "depth": h.get("depth"), "axis": h.get("axis"), "dir": h.get("dir")}
+                for h in compute_drilling(project)]
     except Exception:
         return []
 
@@ -232,6 +234,54 @@ function MebelScene(container){
     if(vertical){tex.center.set(0.5,0.5); tex.rotation=Math.PI/2;}
     texCache.set(key,tex); return tex;
   }
+  // --- 3D-метизы по присадкам (AKD-147): как в веб-вьювере БАЗИС ---
+  const _MTL={steel:0x9aa0a6, dark:0x646a71, chrome:0xd2d6da, brass:0xc9b37e,
+              wood:0xd8b483, hole:0x2b2620};
+  const _mtlCache={};
+  function fMtl(c){return _mtlCache[c]||(_mtlCache[c]=new THREE.MeshLambertMaterial({color:c}));}
+  function cyl(d,len,color){
+    return new THREE.Mesh(new THREE.CylinderGeometry(d/2,d/2,Math.max(len,0.6),12),fMtl(color));}
+  function orient(m,axis){                       // цилиндр Y → вдоль оси сверления
+    if(axis==='x') m.rotation.z=Math.PI/2;
+    else if(axis==='z') m.rotation.x=Math.PI/2;
+    return m;}
+  function alongAxis(v,axis,k){                  // сдвиг вдоль оси на k
+    if(axis==='x') v.x+=k; else if(axis==='z') v.z+=k; else v.y+=k; return v;}
+  function fastenerGroup(hp){
+    // hp: {d, depth, axis, dir, purpose}; сцена: мировой Z инвертирован (TZ)
+    const g=new THREE.Group();
+    const axis=hp.axis||'z', dir=(axis==='z'?-1:1)*(hp.dir||1);
+    const depth=hp.depth||12, pu=hp.purpose||'';
+    const add=(mesh,off)=>{orient(mesh,axis);
+      alongAxis(mesh.position,axis,off); g.add(mesh);};
+    // отверстие: тёмный цилиндр Ø×глубина, утопленный вглубь
+    add(cyl(hp.d,depth,_MTL.hole),dir*depth/2);
+    if(pu.includes('конфирмат')){
+      add(cyl(7,50,_MTL.steel),dir*25);
+      add(cyl(10,3.5,_MTL.steel),dir*1.2);                 // головка
+    }else if(pu.includes('саморез')||pu.includes('планка')){
+      add(cyl(3.5,16,_MTL.dark),dir*8);
+      add(cyl(7,2,_MTL.dark),dir*0.8);
+    }else if(pu.includes('гвоздь')){
+      add(cyl(1.8,25,_MTL.steel),dir*12);
+      add(cyl(3.5,1,_MTL.steel),dir*0.4);
+    }else if(pu.includes('шкант')){
+      if(pu.includes('торец')) add(cyl(8,30,_MTL.wood),dir*10);  // одно тело на пару отверстий
+    }else if(pu.includes('чашка Ø15')){
+      add(cyl(15,13,_MTL.brass),dir*6.5);
+    }else if(pu.includes('шток')){
+      add(cyl(7,depth,_MTL.steel),dir*depth/2);
+    }else if(pu.includes('полкодержатель')){
+      add(cyl(5,10,_MTL.chrome),dir*5);
+      add(cyl(7,5,_MTL.chrome),dir*-2.5);                  // опорный носик наружу
+    }else if(pu.includes('ручка (винт)')){
+      add(cyl(4,25,_MTL.chrome),dir*12);
+    }else if(pu.includes('направляющая')){
+      add(cyl(3.5,12,_MTL.dark),dir*6);
+    }
+    return g;
+  }
+
   // --- разнесённый вид (AKD-126): смещение деталей по типу ---
   const _EXPL={door_front:[0,0,1],drawer_front:[0,0,1],facade:[0,0,1],screen:[0,0,1],
     back:[0,0,-1],drawer_back:[0,0,-.6],top:[0,1,0],bottom:[0,-1,0],
@@ -412,9 +462,8 @@ function MebelScene(container){
     });
     holeGroup=new THREE.Group();
     HOLES.forEach(hp=>{
-      const m=new THREE.Mesh(new THREE.SphereGeometry(Math.max(hp.d/2,3),10,8),
-        new THREE.MeshBasicMaterial({color:0x333333}));
-      m.position.set(TX(hp.x),TY(hp.y),TZ(hp.z)); holeGroup.add(m);});
+      const g=fastenerGroup(hp);                  // отверстие с глубиной + метиз
+      g.position.set(TX(hp.x),TY(hp.y),TZ(hp.z)); holeGroup.add(g);});
     world.add(holeGroup);
     world.add(new THREE.AxesHelper(R*1.08));
     dimGroup=buildDims(W,H,D,R); world.add(dimGroup);
