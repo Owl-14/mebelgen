@@ -21,6 +21,51 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+# ------------------------------------------------------------------ формы архетипов
+#
+# Studio универсален: бэкенд собирает ЛЮБОЙ archetype через generate_from_paramspec.
+# Здесь — декларация редактируемых параметров каждого архетипа для боковой панели
+# (тип num|bool|select|text; пустое значение = удалить ключ → дефолт генератора).
+
+ARCHETYPE_FIELDS: dict[str, list[dict[str, Any]]] = {
+    "desk": [
+        {"key": "frame", "label": "Каркас", "type": "select", "options": ["", "metal"],
+         "hint": "metal = опоры-труба (фурнитура), панели только столешница+экран"},
+        {"key": "apron", "label": "Царга", "type": "bool", "default": True},
+        {"key": "apron_height", "label": "Царга H", "type": "num", "default": 120},
+        {"key": "screen", "label": "Перед. экран", "type": "bool", "default": False,
+         "hint": "только при metal-каркасе"},
+        {"key": "screen_height", "label": "Экран H", "type": "num", "default": 500},
+        {"key": "screen_thickness", "label": "Экран T", "type": "num", "default": 16},
+        {"key": "screen_margin", "label": "Экран отступ", "type": "num", "default": 45},
+        {"key": "screen_z", "label": "Экран Z", "type": "num", "default": 50},
+    ],
+    "round_table": [
+        {"key": "top_thickness", "label": "Столешница T", "type": "num"},
+        {"key": "pedestal_diameter", "label": "Пьедестал Ø", "type": "num"},
+        {"key": "base", "label": "База-диск", "type": "bool", "default": False},
+        {"key": "base_diameter", "label": "База Ø", "type": "num"},
+        {"key": "base_thickness", "label": "База T", "type": "num"},
+    ],
+    "cabinet": [
+        {"key": "facade_reveal", "label": "Свес фасада", "type": "num"},
+        {"key": "socle_full", "label": "Цоколь глух.", "type": "bool", "default": False},
+        {"key": "carcass_z_front", "label": "Корпус Z-перед", "type": "num"},
+        {"key": "interior_z_front", "label": "Нутро Z-перед", "type": "num"},
+    ],
+    "drawer_unit": [
+        {"key": "facade_reveal", "label": "Свес фасада", "type": "num"},
+    ],
+    "shelving": [], "door_unit": [], "corpus": [],
+    "composite": [],   # blocks — через raw JSON
+}
+ARCHETYPE_FIELDS["table"] = ARCHETYPE_FIELDS["desk"]
+ARCHETYPE_FIELDS["wardrobe"] = ARCHETYPE_FIELDS["cabinet"]
+
+# У кого есть секции (панель «Секции» видна даже если их пока нет)
+SECTION_ARCHETYPES = ["cabinet", "wardrobe", "shelving", "drawer_unit", "door_unit"]
+
+
 # ------------------------------------------------------------------ payload
 
 def build_payload(spec: dict[str, Any]) -> dict[str, Any]:
@@ -116,6 +161,8 @@ def make_handler(st: _Studio):
                 from .webviewer import SCENE_JS
                 page = (PAGE
                         .replace("__SCENE_JS__", SCENE_JS)
+                        .replace("__FIELDS__", json.dumps(ARCHETYPE_FIELDS, ensure_ascii=False))
+                        .replace("__SECTION_ARCHS__", json.dumps(SECTION_ARCHETYPES))
                         .replace("__SPEC__", json.dumps(st.spec, ensure_ascii=False)
                                  .replace("</", "<\\/")))
                 self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
@@ -264,6 +311,14 @@ PAGE = r"""<!DOCTYPE html>
     <div class="row"><label>Зазор, мм</label><input type="number" id="f_gap" step="0.5"></div>
   </fieldset>
 
+  <fieldset><legend>Архетип</legend>
+    <div class="row"><label>Тип</label><select id="archSel"></select></div>
+  </fieldset>
+
+  <fieldset id="fs_arch" style="display:none"><legend>Параметры архетипа</legend>
+    <div id="archFields"></div>
+  </fieldset>
+
   <fieldset id="fs_sections"><legend>Секции</legend>
     <div id="sections"></div>
     <button id="addSec">+ секция</button>
@@ -309,6 +364,8 @@ PAGE = r"""<!DOCTYPE html>
 <script>
 __SCENE_JS__
 let SPEC = __SPEC__;
+const FIELDS = __FIELDS__;                 // archetype -> [{key,label,type,...}]
+const SECTION_ARCHS = __SECTION_ARCHS__;   // архетипы с секциями
 const $ = id => document.getElementById(id);
 const toast = (m,bad)=>{const t=$('toast');t.textContent=m;t.style.background=bad?'#b3261e':'#1a1d21';
   t.style.opacity=1;clearTimeout(t._h);t._h=setTimeout(()=>t.style.opacity=0,2600);};
@@ -335,13 +392,45 @@ function fillForm(){
   $('f_t').value=m.board_thickness??16;$('f_legs').value=lg.height??0;
   $('f_gap').value=gp.default??2;
   $('rawspec').value=JSON.stringify(SPEC,null,2);
+  renderArchetype();
   renderSections();
 }
+function renderArchetype(){
+  const sel=$('archSel');
+  sel.innerHTML=Object.keys(FIELDS).sort()
+    .map(a=>`<option ${SPEC.archetype===a?'selected':''}>${a}</option>`).join('');
+  const defs=FIELDS[SPEC.archetype]||[];
+  const box=$('archFields'); box.innerHTML='';
+  $('fs_arch').style.display=defs.length?'':'none';
+  defs.forEach(f=>{
+    const v=SPEC[f.key], row=document.createElement('div'); row.className='row';
+    let inp;
+    if(f.type==='bool'){
+      const on=(v===undefined)?(f.default===true):!!v;
+      inp=`<input type="checkbox" data-ak="${f.key}" ${on?'checked':''}>`;
+    }else if(f.type==='select'){
+      inp=`<select data-ak="${f.key}">${(f.options||[]).map(o=>
+        `<option value="${o}" ${String(v??'')===o?'selected':''}>${o||'—'}</option>`).join('')}</select>`;
+    }else{
+      const ph=f.default!==undefined?` placeholder="${f.default}"`:'';
+      inp=`<input type="${f.type==='num'?'number':'text'}" data-ak="${f.key}" value="${v??''}"${ph}>`;
+    }
+    row.innerHTML=`<label title="${f.hint||''}">${f.label}</label>${inp}`;
+    box.appendChild(row);
+  });
+}
+$('archSel').addEventListener('change',()=>{
+  SPEC.archetype=$('archSel').value;
+  if(SECTION_ARCHS.includes(SPEC.archetype)&&!Array.isArray(SPEC.sections))
+    SPEC.sections=[{kind:'shelves',shelves:2}];
+  fillForm(); apply();
+});
 function renderSections(){
   const box=$('sections'); box.innerHTML='';
-  const secs=SPEC.sections;
-  if(!Array.isArray(secs)){$('fs_sections').style.display='none';return;}
+  const supported=SECTION_ARCHS.includes(SPEC.archetype);
+  if(!supported){$('fs_sections').style.display='none';return;}
   $('fs_sections').style.display='';
+  const secs=SPEC.sections||[];
   secs.forEach((s,i)=>{
     const div=document.createElement('div'); div.className='sec';
     div.innerHTML=`
@@ -375,6 +464,16 @@ function harvest(){
 }
 document.addEventListener('input',e=>{
   const t=e.target;
+  if(t.dataset&&t.dataset.ak){                       // параметр архетипа
+    const def=(FIELDS[SPEC.archetype]||[]).find(f=>f.key===t.dataset.ak);
+    let v;
+    if(t.type==='checkbox') v=t.checked;
+    else if(t.value==='') v=undefined;
+    else v=(def&&def.type==='num')?Number(t.value):t.value;
+    if(v===undefined) delete SPEC[t.dataset.ak]; else SPEC[t.dataset.ak]=v;
+    $('rawspec').value=JSON.stringify(SPEC,null,2);
+    schedule(); return;
+  }
   if(t.dataset&&t.dataset.k!==undefined&&t.dataset.i!==undefined){
     const s=SPEC.sections[+t.dataset.i], k=t.dataset.k;
     const v=t.value===''?undefined:(k==='kind'?t.value:Number(t.value));
