@@ -116,6 +116,12 @@ def build_payload(spec: dict[str, Any]) -> dict[str, Any]:
         "bom": _hardware_bom(project),
         "refs": project.get("material_refs") or {},   # слоты фурнитуры для выбора (A4)
     }
+    try:
+        from .estimate import estimate_project
+        payload["estimate"] = estimate_project(project)   # смета live (C1)
+    except Exception as e:
+        payload["estimate"] = {"rows": [], "total": 0, "currency": "₽",
+                               "warnings": [f"смета: {e}"]}
     return payload
 
 
@@ -297,6 +303,11 @@ PAGE = r"""<!DOCTYPE html>
   details{margin-top:8px} textarea{width:100%;height:170px;font:11px/1.4 Consolas,monospace}
   #bom table{width:100%;border-collapse:collapse;font-size:11.5px}
   #bom td{border-bottom:1px solid var(--line);padding:3px 4px}
+  #estTable{width:100%;border-collapse:collapse;font-size:11px}
+  #estTable td{border-bottom:1px solid var(--line);padding:2px 3px;vertical-align:top}
+  #estTable td:last-child{text-align:right;white-space:nowrap}
+  #estTable tr.grp td{background:var(--bg);font-weight:600;color:var(--mut);
+                      text-transform:uppercase;font-size:10px}
   .swatch{flex:0 0 18px;height:18px;border-radius:4px;border:1px solid var(--line);
           background:#c9a06a}
   #partCard{font-size:12px;line-height:1.6}
@@ -394,6 +405,11 @@ PAGE = r"""<!DOCTYPE html>
     <div id="hwSlots"></div>
     <div class="row"><label>Ручка: межцентр.</label><input type="number" id="f_hsize" step="32" min="0"></div>
     <div class="row"><label>Отступ сверху</label><input type="number" id="f_hoff" step="5" min="0"></div>
+  </fieldset>
+
+  <fieldset id="fs_est"><legend>Смета материалов <span class="mini">(закупка, не продажа)</span></legend>
+    <div id="estTotal" style="font-size:16px;font-weight:600;margin:2px 0 6px"></div>
+    <table id="estTable"></table>
   </fieldset>
 
   <fieldset id="bom"><legend>BOM (фурнитура)</legend><table></table></fieldset>
@@ -593,11 +609,15 @@ function paint(p){
     $('swFacade').style.background=C.door_front||C.side_left||'#c9a06a';
     renderHwSlots(p.refs||{});
     const st=p.stats;
+    const tot=(p.estimate&&p.estimate.total>0)
+      ?`≈${Math.round(p.estimate.total).toLocaleString('ru-RU')}₽`:'—';
     $('stats').innerHTML=`<div><b>${st.n_panels}</b><span>деталей</span></div>
       <div><b>${st.n_holes}</b><span>присадок</span></div>
+      <div><b>${tot}</b><span>материалы</span></div>
       <div><b>${st.dims.w}×${st.dims.d}×${st.dims.h}</b><span>${st.decor}</span></div>`;
     const tb=$('bom').querySelector('table');
     tb.innerHTML=(p.bom||[]).map(b=>`<tr><td>${b.slot}</td><td>${b.name}</td><td>${b.art}</td></tr>`).join('');
+    renderEstimate(p.estimate);
   }
 }
 
@@ -654,6 +674,26 @@ document.addEventListener('click',e=>{           // клик по детали �
     .findIndex(p=>p.name===name);
   if(idx>=0) scene3d.select(idx);
 });
+
+/* ---------- смета live (AKD-128) ---------- */
+function renderEstimate(est){
+  if(!est){$('fs_est').style.display='none';return;}
+  $('fs_est').style.display='';
+  const t=$('estTotal');
+  t.textContent=est.total>0?`≈ ${est.total.toLocaleString('ru-RU')} ${est.currency}`:'—';
+  if(est.warnings&&est.warnings.length)
+    t.textContent+=`  (${est.warnings.length} без цены)`;
+  const rows=[]; let grp='';
+  for(const r of (est.rows||[])){
+    if(r.group!==grp){grp=r.group;
+      rows.push(`<tr class="grp"><td colspan="2">${grp}</td></tr>`);}
+    const c=r.cost!=null?`${r.cost.toLocaleString('ru-RU')} ₽`:'— ₽';
+    rows.push(`<tr><td title="${r.note||''}">${r.name}<br>
+      <span class="mini">${r.qty} ${r.unit}${r.unit_cost?` × ${r.unit_cost}₽`:''}</span></td>
+      <td>${c}</td></tr>`);
+  }
+  $('estTable').innerHTML=rows.join('');
+}
 
 /* ---------- фурнитура из базы (AKD-123) ---------- */
 const HW_LABELS={handles:'Ручки',hinges:'Петли',drawer_guides:'Направляющие',
