@@ -309,6 +309,25 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
             holes.append(_hole(q["name"], "короб ящика (саморез)",
                                x, yb, qp["z2"], 3.5, 30, "z", -1))
 
+    # --- Замки (AKD-137): цилиндр Ø18 сквозь фасад. Дверь — сторона ручки;
+    #     ящики — центральный замок в верхнем фасаде ---
+    if hw.get("locks"):
+        doors = [p for p in panels if p.get("type") == "door_front"]
+        for p in doors:
+            pl = p["placement"]
+            nm = p["name"].lower()
+            lx = pl["x2"] - 30 if "прав" not in nm else pl["x1"] + 30
+            ly = (pl["y1"] + pl["y2"]) / 2
+            holes.append(_hole(p["name"], "замок (цилиндр Ø18)", lx, ly, pl["z2"],
+                               18, pl["z2"] - pl["z1"], "z", -1))
+        fronts = [p for p in panels if p.get("type") == "drawer_front"]
+        if fronts and not doors:
+            top_front = max(fronts, key=lambda q: q["placement"]["y2"])
+            pl = top_front["placement"]
+            holes.append(_hole(top_front["name"], "замок (цилиндр Ø18)",
+                               (pl["x1"] + pl["x2"]) / 2, pl["y2"] - 30, pl["z2"],
+                               18, pl["z2"] - pl["z1"], "z", -1))
+
     # --- Направляющие ящиков: винты на боковинах/перегородках у КОРОБА ---
     # (по коробу, а не по фасаду: накладной фасад шире проёма и не задаёт колонку)
     for d in project.get("drawers", []):
@@ -348,6 +367,7 @@ _FASTENER_MAP = {
     "шкант 8×30 (пласть)": ("Шкант 8×30", "шкант 8", 0.5),
     "эксцентрик (чашка Ø15)": ("Эксцентрик Ø15 + шток", "эксцентрик", 1.0),
     "эксцентрик (шток)": ("Эксцентрик Ø15 + шток", "эксцентрик", 0.0),
+    "замок (цилиндр Ø18)": ("Замок мебельный", "замок", 1.0),
 }
 
 

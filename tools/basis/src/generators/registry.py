@@ -34,10 +34,12 @@ def generate_from_paramspec(spec: dict[str, Any]) -> dict[str, Any]:
     # Дозаполнить материалы/фурнитуру детерминированной политикой (AKD-76):
     # из одного ТЗ должна собираться полная модель, без пропусков.
     from ..materials_policy import apply_material_policy
-    from ..overrides import apply_overrides
+    from ..overrides import apply_back_mount, apply_overrides
 
     spec = apply_material_policy(spec)
     project = get_generator(spec["archetype"])(spec)
+    # конструкция задника (AKD-137): overlay = накладной поверх торцов
+    project = apply_back_mount(project, spec.get("back_mount"))
     # точечные правки деталей поверх генератора (AKD-121) — до валидаторов,
     # чтобы чертёж/присадки/смета/cfrn считались по итоговой геометрии
     return apply_overrides(project, spec.get("overrides"))
