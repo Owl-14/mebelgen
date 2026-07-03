@@ -155,7 +155,24 @@ def _read_builds(out_dir: Path) -> dict[str, Any]:
             "total_spent": sum(b.get("cost_rub", 0) for b in builds)}
 
 
-def _log_build(out_dir: Path, spec: dict[str, Any], b3d: Path) -> None:
+def _verify_parity(spec: dict[str, Any], b3d: Path) -> dict[str, Any] | None:
+    """Бесплатная сверка собранного .b3d со Studio-моделью (AKD-169)."""
+    try:
+        from .b3d_verify import verify_b3d_parity
+        from .generators import generate_from_paramspec
+        from .materials import resolve_project_materials
+        project = generate_from_paramspec(spec)
+        try:
+            project["material_refs"] = resolve_project_materials(project)
+        except Exception:
+            pass
+        return verify_b3d_parity(b3d, project)
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200]}
+
+
+def _log_build(out_dir: Path, spec: dict[str, Any], b3d: Path,
+               parity: dict[str, Any] | None = None) -> None:
     from datetime import datetime
     f = out_dir / "builds.json"
     try:
@@ -166,7 +183,8 @@ def _log_build(out_dir: Path, spec: dict[str, Any], b3d: Path) -> None:
     builds.append({"ts": datetime.now().isoformat(timespec="seconds"),
                    "file": str(b3d), "project": spec.get("project_name", ""),
                    "dims": f'{d.get("width")}×{d.get("depth")}×{d.get("height")}',
-                   "cost_rub": B3D_COST_RUB})
+                   "cost_rub": B3D_COST_RUB,
+                   "parity": bool(parity and parity.get("ok"))})
     f.write_text(json.dumps(builds, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
@@ -281,8 +299,10 @@ def make_handler(st: _Studio):
                     out = st.out_dir / (st.spec_path.stem + ".b3d")
                     try:
                         rep = build_b3d_from_paramspec(spec, out)
-                        _log_build(st.out_dir, spec, out)          # история сборок (C3)
-                        self._json({"ok": True, **{k: str(v) for k, v in rep.items()}})
+                        parity = _verify_parity(spec, out)         # паритет ✓ (AKD-169)
+                        _log_build(st.out_dir, spec, out, parity)  # история сборок (C3)
+                        self._json({"ok": True, "parity": parity,
+                                    **{k: str(v) for k, v in rep.items()}})
                     except Exception as e:
                         self._json({"ok": False, "error": str(e)[:300]}, 502)
                 elif self.path == "/api/builds":         # история сборок .b3d (C3)
@@ -941,8 +961,10 @@ async function loadBuilds(){
   b.innerHTML=`<div class="mini">Сборки .b3d (расход ~${p.total_spent}₽):</div>`+
     p.builds.slice(0,5).map(x=>{
       const f=(x.file||'').split(/[\\/]/).pop();
+      const par=x.parity===true?' <span title="паритет Studio↔b3d подтверждён" style="color:var(--ok)">✓</span>'
+               :(x.parity===false?' <span title="паритет не подтверждён" style="color:#c78a2b">?</span>':'');
       return `<div class="row" style="margin:2px 0"><span class="mini" style="flex:1"
-        title="${x.file}">${x.ts.replace('T',' ')} · ${f}</span>
+        title="${x.file}">${x.ts.replace('T',' ')} · ${f}${par}</span>
         <button class="fb" data-open="${x.file}">▶</button></div>`;}).join('');
 }
 document.addEventListener('click',async e=>{

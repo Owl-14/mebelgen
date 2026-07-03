@@ -147,48 +147,78 @@ def project_to_cfrn_json(project: dict[str, Any]) -> dict[str, Any]:
         children.append({"tableIndex": idx, "matrix": _matrix(orient, tx, pl["y1"], tz)})
 
     table: dict[str, Any] = {"materials": materials, "objects": objects}
-    _encode_drilling(project, objects, children, table)
+    models: dict[str, str] = {}
+    _encode_drilling(project, objects, children, table, models)
     _encode_catalog_hardware(project, materials, objects, children, table)
     return {
         "model": {"tableIndex": -1, "objs": [{"tableIndex": 0, "objs": children}]},
         "table": table,
         "modelParams": {"name": name},
+        "_models": models,          # OBJ/MTL метизов — уходит в zip, не в file.json
     }
 
 
 def _encode_drilling(project: dict[str, Any], objects: list[dict[str, Any]],
-                     children: list[dict[str, Any]], table: dict[str, Any]) -> None:
-    """Присадки под фурнитуру (AKD-88) в .cfrn — по схеме эталона native_cabinet.cfrn:
-    каталог `table.holes` [{depth,diameter,drillMode}] + объект `objType 5` с
-    `holes:[{pos,dir,infoIndex}]` и матрицей. 3D-меш фурнитуры (triangleData) НЕ
-    строим — он берётся из каталога БАЗИС (десктоп-импортёр AKD-14).
+                     children: list[dict[str, Any]], table: dict[str, Any],
+                     models: dict[str, str] | None = None) -> None:
+    """Присадки + 3D-тела метизов (AKD-168) — по механике эталона
+    native_cabinet.cfrn: объект objType 5 на ТИПОРАЗМЕР метиза с материалом
+    (имя+артикул для спецификации), triangleData → OBJ в models/,
+    локальные holes {pos, dir, infoIndex}, инстансы узлами с матрицами.
 
-    Присадки считает hardware.compute_drilling по геометрии. Ошибка расчёта не должна
-    ломать сборку .cfrn — тогда модель просто идёт без присадок."""
+    Присадки считает hardware.compute_drilling. Ошибка не ломает сборку .cfrn —
+    модель просто идёт без присадок."""
     try:
         drill = compute_drilling(project)
     except Exception:
         return
     if not drill:
         return
-    catalog: list[dict[str, Any]] = []
-    index: dict[tuple[float, float, int], int] = {}
-    holes: list[dict[str, Any]] = []
-    for h in drill:
-        key = (_r(h["depth"]), _r(h["diameter"]), 1)   # drillMode 1 — как в эталоне
-        if key not in index:
-            index[key] = len(catalog)
+    # артикулы позиций крепежа из BOM (для материалов-строк спецификации)
+    arts: dict[str, str] = {}
+    try:
+        from .hardware import fastener_bom
+        for b in fastener_bom(drill, resolve=True):
+            if b.get("article"):
+                arts[b["name"]] = str(b["article"])
+    except Exception:
+        pass
+
+    from .fasteners3d import build_fastener_objects
+    catalog: list[dict[str, Any]] = table.setdefault("holes", [])
+    cat_index: dict[tuple[float, float, int], int] = {}
+    triangles: list[str] = table.setdefault("triangles", [])
+    materials: list[dict[str, Any]] = table["materials"]
+    mat_index = {m.get("name"): i for i, m in enumerate(materials)}
+
+    def _info(depth: float, dia: float) -> int:
+        key = (_r(depth), _r(dia), 1)                 # drillMode 1 — как в эталоне
+        if key not in cat_index:
+            cat_index[key] = len(catalog)
             catalog.append({"depth": key[0], "diameter": key[1], "drillMode": key[2]})
-        vec = _DRILL_VEC.get((h["axis"], int(h["dir"])), {"x": 0, "y": 0, "z": -1})
-        holes.append({"pos": {"x": _r(h["x"]), "y": _r(h["y"]), "z": _r(h["z"])},
-                      "dir": vec, "infoIndex": index[key]})
-    idx = len(objects)
-    # один служебный объект-«фурнитура» держит все присадки (pos = мировые, матрица 1)
-    objects.append({"objType": 5, "name": "Присадки", "materialIndex": 0,
-                    "triangleData": [], "holes": holes})
-    children.append({"tableIndex": idx, "matrix": _matrix("front", 0, 0, 0)})
-    table["holes"] = catalog
-    table.setdefault("triangles", [])
+        return cat_index[key]
+
+    for fo in build_fastener_objects(drill, arts):
+        mname = fo["name"]
+        if mname not in mat_index:
+            mat_index[mname] = len(materials)
+            mat = {"name": mname}
+            if fo.get("art"):
+                mat["art"] = fo["art"]
+            materials.append(mat)
+        tri_idx = len(triangles)
+        triangles.append(fo["obj_name"])
+        if models is not None:
+            models[f"models/{fo['obj_name']}"] = fo["obj_text"]
+            models[f"models/{fo['obj_name'][:-4]}.mtl"] = fo["mtl_text"]
+        obj_holes = [{"pos": h["pos"], "dir": h["dir"],
+                      "infoIndex": _info(h["depth"], h["diameter"])}
+                     for h in fo["holes"]]
+        idx = len(objects)
+        objects.append({"objType": 5, "materialIndex": mat_index[mname],
+                        "triangleData": tri_idx, "holes": obj_holes})
+        for mtx in fo["instances"]:
+            children.append({"tableIndex": idx, "matrix": mtx})
 
 
 # поворот экземпляра фурнитуры на фронте (из эталона: нормаль наружу, −Z)
@@ -253,10 +283,14 @@ def _encode_catalog_hardware(project: dict[str, Any], materials: list[dict[str, 
 
 
 def project_to_cfrn_bytes(project: dict[str, Any]) -> bytes:
-    data = json.dumps(project_to_cfrn_json(project), ensure_ascii=False).encode("utf-8")
+    doc = project_to_cfrn_json(project)
+    models = doc.pop("_models", {})
+    data = json.dumps(doc, ensure_ascii=False).encode("utf-8")
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("file.json", data)
+        for path, text in models.items():
+            z.writestr(path, text.encode("utf-8"))
     return buf.getvalue()
 
 
@@ -293,30 +327,34 @@ def cfrn_world_boxes(project: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def cfrn_holes(project: dict[str, Any]) -> list[dict[str, Any]]:
-    """Мировые присадки, реконструированные ИЗ .cfrn (матрица объекта objType 5 +
-    локальные pos отверстий + каталог table.holes). Для сверки с compute_drilling."""
+    """Мировые присадки, реконструированные ИЗ .cfrn: все объекты-метизы
+    (objType 5) × их инстансы (узлы с матрицами) × локальные отверстия.
+    Для сверки с compute_drilling."""
     d = project_to_cfrn_json(project)
     tobjs = d["table"]["objects"]
     nodes = d["model"]["objs"][0]["objs"]
     catalog = d["table"].get("holes", [])
-    node = next((n for n in nodes if tobjs[n["tableIndex"]].get("objType") == 5), None)
-    if node is None:
-        return []
-    M = node["matrix"]
-    obj = tobjs[node["tableIndex"]]
-
-    def xf(p: dict[str, float]) -> tuple[float, float, float]:
-        px, py, pz = p["x"], p["y"], p["z"]
-        return (px * M[0] + py * M[4] + pz * M[8] + M[12],
-                px * M[1] + py * M[5] + pz * M[9] + M[13],
-                px * M[2] + py * M[6] + pz * M[10] + M[14])
 
     out: list[dict[str, Any]] = []
-    for h in obj.get("holes", []):
-        w = xf(h["pos"])
-        cat = catalog[h["infoIndex"]] if h["infoIndex"] < len(catalog) else {}
-        out.append({"x": w[0], "y": w[1], "z": w[2], "dir": h["dir"],
-                    "diameter": cat.get("diameter"), "depth": cat.get("depth")})
+    for node in nodes:
+        obj = tobjs[node["tableIndex"]]
+        if obj.get("objType") != 5 or not obj.get("holes"):
+            continue
+        M = node["matrix"]
+
+        def xf(p: dict[str, float], translate: bool = True):
+            px, py, pz = p["x"], p["y"], p["z"]
+            return (px * M[0] + py * M[4] + pz * M[8] + (M[12] if translate else 0),
+                    px * M[1] + py * M[5] + pz * M[9] + (M[13] if translate else 0),
+                    px * M[2] + py * M[6] + pz * M[10] + (M[14] if translate else 0))
+
+        for h in obj.get("holes", []):
+            w = xf(h["pos"])
+            dv = xf(h["dir"], translate=False)        # направление — только поворот
+            cat = catalog[h["infoIndex"]] if h["infoIndex"] < len(catalog) else {}
+            out.append({"x": w[0], "y": w[1], "z": w[2],
+                        "dir": {"x": round(dv[0], 3), "y": round(dv[1], 3), "z": round(dv[2], 3)},
+                        "diameter": cat.get("diameter"), "depth": cat.get("depth")})
     return out
 
 
@@ -330,14 +368,25 @@ def check_cfrn_holes(project: dict[str, Any], *, tol: float = 0.5) -> list[str]:
     if len(src) != len(enc):
         issues.append(f"число присадок: compute={len(src)} ≠ .cfrn={len(enc)}")
         return issues
-    for s, e in zip(src, enc):
-        if abs(s["x"] - e["x"]) > tol or abs(s["y"] - e["y"]) > tol or abs(s["z"] - e["z"]) > tol:
-            issues.append(
-                f"{s['purpose']}: .cfrn ({e['x']:.1f},{e['y']:.1f},{e['z']:.1f}) "
-                f"≠ compute ({s['x']},{s['y']},{s['z']})")
-        elif s["diameter"] != e["diameter"] or s["depth"] != e["depth"]:
-            issues.append(f"{s['purpose']}: Ø/глубина .cfrn ({e['diameter']}/{e['depth']}) "
-                          f"≠ compute ({s['diameter']}/{s['depth']})")
+
+    def _svec(s: dict[str, Any]) -> tuple[float, float, float]:
+        v = _DRILL_VEC[(s["axis"], int(s["dir"]))]
+        return (v["x"], v["y"], v["z"])
+
+    # метизы группируются по типам → порядок другой: сверка как мультимножество
+    def _key(x, y, z, d, dep, vx, vy, vz):
+        return (round(x, 1), round(y, 1), round(z, 1), round(d, 1), round(dep, 1),
+                round(vx, 2), round(vy, 2), round(vz, 2))
+
+    s_keys = sorted(_key(s["x"], s["y"], s["z"], s["diameter"], s["depth"], *_svec(s))
+                    for s in src)
+    e_keys = sorted(_key(e["x"], e["y"], e["z"], e["diameter"], e["depth"],
+                         e["dir"]["x"], e["dir"]["y"], e["dir"]["z"]) for e in enc)
+    for sk, ek in zip(s_keys, e_keys):
+        if any(abs(a - b) > tol for a, b in zip(sk[:3], ek[:3])) or sk[3:] != ek[3:]:
+            issues.append(f".cfrn {ek} ≠ compute {sk}")
+            if len(issues) >= 10:
+                break
     return issues
 
 
