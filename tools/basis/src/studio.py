@@ -764,20 +764,75 @@ scene3d.onSelect=sel=>{
   const dx=p.x2-p.x1, dy=p.y2-p.y1, dz=p.z2-p.z1;
   const nHoles=((lastPayload&&lastPayload.viewer&&lastPayload.viewer.holes)||[])
     .filter(h=>h.panel===p.name).length;
-  card.innerHTML=`<b>${p.name}</b>
+  const hasOv=(SPEC.overrides||[]).some(o=>o.panel===p.name);
+  const num=(id,v)=>`<input type="number" data-ov="${id}" value="${v}" step="1"
+    style="width:74px;padding:2px 4px;border:1px solid var(--line);border-radius:4px">`;
+  card.innerHTML=`<b>${p.name}</b>${hasOv?' <span class="mini" style="color:#c78a2b">✎ правлено</span>':''}
     <div class="kv">
       <span>Тип</span><span>${p.type||'—'}</span>
       <span>Габарит</span><span>${dx}×${dy}×${dz} мм</span>
       <span>Толщина</span><span>${p.thickness??'—'} мм</span>
       <span>Материал</span><span>${p.material||'—'}</span>
-      <span>Кромка</span><span>${p.edges||'—'}</span>
       <span>Присадки</span><span>${nHoles}</span>
-      <span>Положение</span><span>x ${p.x1}…${p.x2}, y ${p.y1}…${p.y2}, z ${p.z1}…${p.z2}</span>
-    </div>`;
+    </div>
+    <div class="kv" style="margin-top:6px">
+      <span>X</span><span>${num('x1',p.x1)} … ${num('x2',p.x2)}</span>
+      <span>Y</span><span>${num('y1',p.y1)} … ${num('y2',p.y2)}</span>
+      <span>Z</span><span>${num('z1',p.z1)} … ${num('z2',p.z2)}</span>
+    </div>
+    <div class="row" style="gap:4px;margin-top:6px">
+      <button id="ovApply" class="primary">Применить</button>
+      ${hasOv?'<button id="ovReset" title="убрать правки этой детали">Сбросить</button>':''}
+      <button id="ovDelete" title="удалить деталь из изделия">Удалить</button>
+    </div>
+    <div class="mini" style="margin-top:4px">Shift+перетаскивание в 3D — двигать деталь.
+    Правки хранятся в спеке и переживают смену габаритов; чертёж, присадки,
+    смета и .b3d пересчитываются.</div>`;
   fs.style.display='';
+  $('ovApply').onclick=()=>{
+    const pl={};
+    card.querySelectorAll('input[data-ov]').forEach(i=>{
+      const v=Number(i.value);
+      if(isFinite(v)&&v!==p[i.dataset.ov]) pl[i.dataset.ov]=v;
+    });
+    if(Object.keys(pl).length) setOverride(p.name, pl);
+  };
+  const rb=$('ovReset'); if(rb) rb.onclick=()=>clearOverride(p.name);
+  $('ovDelete').onclick=()=>{
+    if(!confirm(`Удалить деталь «${p.name}»?`)) return;
+    pushUndo();
+    SPEC.overrides=(SPEC.overrides||[]).filter(o=>o.panel!==p.name);
+    SPEC.overrides.push({panel:p.name, action:'delete'});
+    $('rawspec').value=JSON.stringify(SPEC,null,2);
+    scene3d.select(null); apply();
+  };
   document.querySelectorAll(`#draw rect[data-panel="${CSS.escape(p.name)}"]`)
     .forEach(r=>r.classList.add('sel'));
 };
+function setOverride(name, placement, move){
+  pushUndo();
+  SPEC.overrides=SPEC.overrides||[];
+  let ov=SPEC.overrides.find(o=>o.panel===name&&(o.action||'transform')==='transform');
+  if(!ov){ov={panel:name}; SPEC.overrides.push(ov);}
+  if(placement) ov.placement=Object.assign(ov.placement||{}, placement);
+  if(move){
+    // сдвиг фиксируем абсолютными гранями (складывается с прошлыми правками)
+    const p=(lastPayload.viewer.panels||[]).find(q=>q.name===name);
+    if(p){ov.placement=Object.assign(ov.placement||{},{
+      x1:p.x1+move[0],x2:p.x2+move[0],y1:p.y1+move[1],y2:p.y2+move[1],
+      z1:p.z1+move[2],z2:p.z2+move[2]});}
+  }
+  $('rawspec').value=JSON.stringify(SPEC,null,2);
+  apply();
+}
+function clearOverride(name){
+  pushUndo();
+  SPEC.overrides=(SPEC.overrides||[]).filter(o=>o.panel!==name);
+  if(!SPEC.overrides.length) delete SPEC.overrides;
+  $('rawspec').value=JSON.stringify(SPEC,null,2);
+  scene3d.select(null); apply();
+}
+scene3d.onTransform=(name,delta)=>setOverride(name,null,delta);
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape') scene3d.select(null);
 });

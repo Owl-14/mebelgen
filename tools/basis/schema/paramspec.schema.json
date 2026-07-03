@@ -259,6 +259,55 @@
       "items": {
         "type": "string"
       }
+    },
+    "overrides": {
+      "type": "array",
+      "description": "Точечные правки деталей поверх генератора (AKD-121): transform/move/delete/rename/add",
+      "items": {
+        "type": "object",
+        "required": [
+          "panel"
+        ],
+        "properties": {
+          "panel": {
+            "type": "string"
+          },
+          "action": {
+            "enum": [
+              "transform",
+              "delete",
+              "rename",
+              "add"
+            ]
+          },
+          "placement": {
+            "type": "object"
+          },
+          "move": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "to": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "orientation": {
+            "type": "string"
+          },
+          "thickness": {
+            "type": "number"
+          },
+          "material": {
+            "type": "string"
+          }
+        }
+      }
     }
   }
 }
