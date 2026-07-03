@@ -21,9 +21,9 @@ from src.validate import validate_furniture                        # noqa: E402
 from src.geometry_check import check_placement_geometry            # noqa: E402
 from src.consistency_check import check_consistency                # noqa: E402
 
-# *.project.json — сгенерированные проекты (например, «Сохранить» в Studio), не ParamSpec
+# *.project.json / *.versions.json — артефакты Studio («Сохранить», версии), не ParamSpec
 SPECS = sorted(p for p in (ROOT / "paramspecs").glob("*.json")
-               if not p.name.endswith(".project.json"))
+               if not p.name.endswith((".project.json", ".versions.json")))
 
 
 def exact_match(gen: dict, golden_path: Path) -> tuple[bool, int, int, int]:

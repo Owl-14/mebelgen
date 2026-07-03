@@ -11,4 +11,4 @@ __pycache__/
 **/media_rows/
 
 # тяжёлые исходники ТЗ (.doc/.docx) — храним извлечённый текст, не бинарь
-input_specs/**/source/
+input_specs/**/source/*.versions.json

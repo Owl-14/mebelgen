@@ -203,6 +203,39 @@ def _safe_spec_file(spec_dir: Path, fname: str) -> Path:
     return p
 
 
+# ------------------------------------------------------------------ версии (D2)
+
+def _versions_file(spec_path: Path) -> Path:
+    return spec_path.with_suffix(".versions.json")
+
+
+def _read_versions(spec_path: Path) -> list[dict[str, Any]]:
+    try:
+        return json.loads(_versions_file(spec_path).read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+
+def _snapshot_version(spec_path: Path, spec: dict[str, Any], keep: int = 30) -> None:
+    from datetime import datetime
+    vs = _read_versions(spec_path)
+    if vs and vs[-1]["spec"] == spec:                 # без дублей подряд
+        return
+    vs.append({"ts": datetime.now().isoformat(timespec="seconds"), "spec": spec})
+    _versions_file(spec_path).write_text(
+        json.dumps(vs[-keep:], ensure_ascii=False), encoding="utf-8")
+
+
+def _list_versions(spec_path: Path) -> list[dict[str, Any]]:
+    out = []
+    for i, v in enumerate(_read_versions(spec_path)):
+        d = (v["spec"].get("dimensions") or {})
+        out.append({"index": i, "ts": v["ts"],
+                    "dims": f'{d.get("width")}×{d.get("depth")}×{d.get("height")}',
+                    "n_overrides": len(v["spec"].get("overrides") or [])})
+    return out[::-1]                                  # свежие сверху
+
+
 # ------------------------------------------------------------------ экспорт-центр (C3)
 
 B3D_COST_RUB = 10          # цена облачной конвертации CfrnToB3d
@@ -324,6 +357,17 @@ def make_handler(st: _Studio):
                     self._json(chat_edit(spec, str(body.get("message", "")),
                                          body.get("history") or [],
                                          body.get("context") or None))
+                elif self.path == "/api/versions":    # версии спеки (D2)
+                    self._json({"versions": _list_versions(st.spec_path)})
+                elif self.path == "/api/restore":     # восстановить версию (D2)
+                    idx = int(body.get("index", -1))
+                    vs = _read_versions(st.spec_path)
+                    if 0 <= idx < len(vs):
+                        st.spec = vs[idx]["spec"]
+                        self._json({"ok": True, "spec": st.spec,
+                                    "ts": vs[idx]["ts"]})
+                    else:
+                        self._json({"ok": False, "error": "нет такой версии"}, 404)
                 elif self.path == "/api/projects":    # каталог спек (D1)
                     self._json({"projects": _list_projects(st.spec_path.parent),
                                 "current": st.spec_path.name})
@@ -375,6 +419,7 @@ def make_handler(st: _Studio):
                     st.spec = spec
                     st.spec_path.write_text(json.dumps(spec, ensure_ascii=False, indent=2),
                                             encoding="utf-8")
+                    _snapshot_version(st.spec_path, spec)          # версия (D2)
                     from .generators import generate_from_paramspec
                     project = generate_from_paramspec(spec)
                     out = st.out_dir / (st.spec_path.stem + ".project.json")
@@ -610,6 +655,10 @@ PAGE = r"""<!DOCTYPE html>
       <button id="btnDeliver">Лист согласования</button>
     </div>
     <div class="mini">Платная сборка доступна только при зелёных проверках.</div>
+    <div class="row" style="gap:6px;margin-top:6px">
+      <select id="verSel" style="flex:1"><option value="">— версии (при сохранении) —</option></select>
+      <button id="verRestore" title="восстановить выбранную версию">⤺</button>
+    </div>
     <div id="builds" style="margin-top:6px"></div>
   </fieldset>
 
@@ -1209,7 +1258,8 @@ async function post(url){const r=await fetch(url,{method:'POST',
   headers:{'Content-Type':'application/json'},body:JSON.stringify({spec:SPEC})});
   return await r.json();}
 $('btnSave').onclick=async()=>{const p=await post('/api/save');
-  toast(p.ok?('Сохранено: '+p.spec):('Ошибка: '+p.error),!p.ok);};
+  toast(p.ok?('Сохранено: '+p.spec):('Ошибка: '+p.error),!p.ok);
+  loadVersions();};
 $('btnCfrn').onclick=async()=>{const p=await post('/api/export-cfrn');
   toast(p.ok?('.cfrn: '+p.cfrn):('Ошибка: '+p.error),!p.ok);};
 $('btnB3d').onclick=async()=>{
@@ -1222,6 +1272,27 @@ $('btnB3d').onclick=async()=>{
     if(confirm('Открыть результат в БАЗИС-Просмотре?'))
       await fetch('/api/open-file',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({path:p.b3d})});}};
+
+/* ---------- версии (AKD-133) ---------- */
+async function loadVersions(){
+  const r=await fetch('/api/versions',{method:'POST',
+    headers:{'Content-Type':'application/json'},body:'{}'});
+  const p=await r.json();
+  $('verSel').innerHTML='<option value="">— версии (при сохранении) —</option>'+
+    (p.versions||[]).map(v=>`<option value="${v.index}">${v.ts.replace('T',' ')} · `+
+      `${v.dims}${v.n_overrides?` · правок ${v.n_overrides}`:''}</option>`).join('');
+}
+$('verRestore').onclick=async()=>{
+  const idx=$('verSel').value;
+  if(idx==='')return;
+  const r=await fetch('/api/restore',{method:'POST',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({index:+idx})});
+  const p=await r.json();
+  if(p.ok){pushUndo(); SPEC=p.spec; scene3d.select(null); fillForm(); apply();
+    toast('Восстановлена версия '+p.ts);}
+  else toast('Ошибка: '+(p.error||''),true);
+};
+loadVersions();
 
 /* ---------- экспорт-центр (AKD-130) ---------- */
 $('btnDeliver').onclick=async()=>{
