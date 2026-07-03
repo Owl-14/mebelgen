@@ -493,6 +493,40 @@ function MebelScene(container){
 
   // --- Shift+drag: перемещение детали (AKD-121) ---
   let dragState=null;
+  const SNAP_MM=8;    // радиус магнита к граням соседних деталей
+
+  // Магнит: по каждой движущейся оси прилипаем к ближайшей грани соседа —
+  // торец-к-пласти или заподлицо. Работает в МИРОВЫХ осях БАЗИС
+  // (сцена Z инвертирована), правит d НА МЕСТЕ (d — сценовый вектор).
+  function magnetSnap(pi,d){
+    const p=PANELS_REF[pi]; if(!p) return;
+    const dw={x:d.x,y:d.y,z:-d.z};                   // сцена → мир
+    const axes=['x','y','z'];
+    for(const a of axes){
+      if(!dw[a]) continue;
+      const [t1,t2]=axes.filter(t=>t!==a);
+      const lo=p[a+'1']+dw[a], hi=p[a+'2']+dw[a];
+      let best=null;
+      for(const q of PANELS_REF){
+        if(!q||q===p) continue;
+        // сосед должен пересекаться с деталью по обеим поперечным осям (≥5 мм)
+        const ok=[t1,t2].every(t=>{
+          const l=Math.min(p[t+'2']+ (dw[t]||0), q[t+'2'])
+                - Math.max(p[t+'1']+ (dw[t]||0), q[t+'1']);
+          return l>=5;});
+        if(!ok) continue;
+        for(const g of [q[a+'1'],q[a+'2']]){
+          for(const e of [lo,hi]){
+            const adj=g-e;
+            if(Math.abs(adj)<=SNAP_MM&&(best===null||Math.abs(adj)<Math.abs(best)))
+              best=adj;
+          }
+        }
+      }
+      if(best!==null) dw[a]=Math.round(dw[a]+best);
+    }
+    d.set(dw.x,dw.y,-dw.z);                          // мир → сцена
+  }
   function _setMv(e){
     const r=renderer.domElement.getBoundingClientRect();
     mv.x=((e.clientX-r.left)/r.width)*2-1; mv.y=-((e.clientY-r.top)/r.height)*2+1;
@@ -526,6 +560,7 @@ function MebelScene(container){
       // чтобы «тащу вверх» не давало паразитных сдвигов по X/Z
       const m=Math.max(Math.abs(d.x),Math.abs(d.y),Math.abs(d.z));
       if(m>0){['x','y','z'].forEach(a=>{if(Math.abs(d[a])<m*0.35) d[a]=0;});}
+      magnetSnap(dragState.pi,d);                    // магнит к граням соседей
       dragState.delta.copy(d);
       dragState.mesh.position.copy(dragState.basePos).add(d);
       const eo=dragState.mesh.userData.edgeObj;
