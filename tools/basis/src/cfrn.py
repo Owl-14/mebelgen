@@ -150,12 +150,66 @@ def project_to_cfrn_json(project: dict[str, Any]) -> dict[str, Any]:
     models: dict[str, str] = {}
     _encode_drilling(project, objects, children, table, models)
     _encode_catalog_hardware(project, materials, objects, children, table)
+    children = _group_assemblies(project, objects, children)   # узлы ящик/дверь (AKD-137)
     return {
         "model": {"tableIndex": -1, "objs": [{"tableIndex": 0, "objs": children}]},
         "table": table,
         "modelParams": {"name": name},
         "_models": models,          # OBJ/MTL метизов — уходит в zip, не в file.json
     }
+
+
+_IDENTITY = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+
+
+def _group_assemblies(project: dict[str, Any], objects: list[dict[str, Any]],
+                      children: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Сборочные узлы как в изделиях БАЗИС (реверс GLB, AKD-137): ящики и
+    двери — подузлы objType 7 isAssemblyUnit с единичной матрицей (координаты
+    детей не меняются — только группировка для спецификации/структуры)."""
+    panels = [p for p in project.get("panels", [])
+              if isinstance(p.get("placement"), dict)]
+    # child-индекс панели = её порядковый номер (панели добавляются первыми)
+    name_to_child = {str(p.get("name")): i for i, p in enumerate(panels)}
+    box_types = ("drawer_bottom", "drawer_side_left", "drawer_side_right", "drawer_back")
+    groups: list[tuple[str, list[int]]] = []
+    used: set[int] = set()
+
+    for d in project.get("drawers", []):
+        pos, dim = d.get("position") or {}, d.get("dimensions") or {}
+        if not pos or not dim:
+            continue
+        idxs: list[int] = []
+        for i, p in enumerate(panels):
+            pl = p["placement"]
+            cx, cy = (pl["x1"] + pl["x2"]) / 2, (pl["y1"] + pl["y2"]) / 2
+            in_box = (pos["x"] - 20 <= cx <= pos["x"] + dim["width"] + 20
+                      and pos["y"] - 5 <= cy <= pos["y"] + dim["height"] + 5)
+            if p.get("type") in box_types and in_box:
+                idxs.append(i)
+            elif p.get("type") == "drawer_front" and i not in used \
+                    and pl["y1"] - 2 <= pos["y"] <= pl["y2"] + 2 \
+                    and pl["x1"] - 20 <= pos["x"] <= pl["x2"] + 20:
+                idxs.append(i)
+        idxs = [i for i in idxs if i not in used]
+        if idxs:
+            groups.append((f"Ящик {d.get('id', len(groups) + 1)}", idxs))
+            used.update(idxs)
+
+    for i, p in enumerate(panels):
+        if p.get("type") == "door_front" and i not in used:
+            groups.append((f"Дверь: {p.get('name')}", [i]))
+            used.add(i)
+
+    if not groups:
+        return children
+    out = [c for i, c in enumerate(children) if i >= len(panels) or i not in used]
+    for gname, idxs in groups:
+        gi = len(objects)
+        objects.append({"objType": 7, "name": gname, "isAssemblyUnit": True})
+        out.append({"tableIndex": gi, "matrix": list(_IDENTITY),
+                    "objs": [children[i] for i in idxs]})
+    return out
 
 
 def _encode_drilling(project: dict[str, Any], objects: list[dict[str, Any]],
@@ -294,13 +348,27 @@ def project_to_cfrn_bytes(project: dict[str, Any]) -> bytes:
     return buf.getvalue()
 
 
+def _leaf_nodes(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Листовые узлы модели (панели/метизы), сборочные узлы — насквозь.
+
+    Матрицы сборочных узлов у нас единичные (группировка без трансформации),
+    поэтому листовые матрицы остаются мировыми."""
+    out: list[dict[str, Any]] = []
+    for n in nodes:
+        if n.get("objs"):
+            out.extend(_leaf_nodes(n["objs"]))
+        else:
+            out.append(n)
+    return out
+
+
 def cfrn_world_boxes(project: dict[str, Any]) -> list[dict[str, Any]]:
     """Мировые AABB панелей, реконструированные ИЗ матриц .cfrn — как их строит
     БАЗИС при сборке .b3d. Позволяет проверить кодирование, а не только placement
     (совпадает с обратной выгрузкой b3d→cfrn из облака до миллиметра)."""
     d = project_to_cfrn_json(project)
     tobjs = d["table"]["objects"]
-    nodes = d["model"]["objs"][0]["objs"]
+    nodes = _leaf_nodes(d["model"]["objs"][0]["objs"])
 
     def xf(M: list[float], p: tuple[float, float, float]) -> tuple[float, float, float]:
         px, py, pz = p
@@ -332,7 +400,7 @@ def cfrn_holes(project: dict[str, Any]) -> list[dict[str, Any]]:
     Для сверки с compute_drilling."""
     d = project_to_cfrn_json(project)
     tobjs = d["table"]["objects"]
-    nodes = d["model"]["objs"][0]["objs"]
+    nodes = _leaf_nodes(d["model"]["objs"][0]["objs"])
     catalog = d["table"].get("holes", [])
 
     out: list[dict[str, Any]] = []
@@ -399,7 +467,13 @@ def check_cfrn_encoding(project: dict[str, Any], *, tol: float = 0.5) -> list[st
     boxes = cfrn_world_boxes(project)
     panels = [p for p in project.get("panels", []) if p.get("placement")]
     issues: list[str] = []
-    for p, b in zip(panels, boxes):
+    # сопоставление по имени: сборочные узлы (AKD-137) меняют порядок узлов
+    by_name = {b["name"]: b for b in boxes}
+    for p in panels:
+        b = by_name.get(p.get("name"))
+        if b is None:
+            issues.append(f"{p.get('name')}: нет узла в .cfrn")
+            continue
         pl = p["placement"]
         for ax in ("x", "y", "z"):
             if abs(b[ax + "1"] - pl[ax + "1"]) > tol or abs(b[ax + "2"] - pl[ax + "2"]) > tol:

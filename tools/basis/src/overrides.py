@@ -45,6 +45,39 @@ def _refresh_derived(p: dict[str, Any]) -> None:
     p["thickness"] = _r(span[thick_axis])
 
 
+def apply_back_mount(project: dict[str, Any], mode: str | None) -> dict[str, Any]:
+    """Накладной задник (AKD-137): mode="overlay" перекладывает тонкий
+    ДВП-задник ПОВЕРХ задних торцов корпуса на всю его ширину/высоту —
+    как в реальных изделиях БАЗИС (реверс: гвозди по периметру в торцы).
+    По умолчанию (inset) задник остаётся врезным — golden-эталоны не меняются.
+    """
+    if mode != "overlay":
+        return project
+    panels = project.get("panels", [])
+    back = next((p for p in panels
+                 if p.get("type") == "back" and float(p.get("thickness", 16)) <= 6
+                 and isinstance(p.get("placement"), dict)), None)
+    if back is None:
+        return project
+    carcass = [p for p in panels
+               if p is not back and isinstance(p.get("placement"), dict)
+               and p.get("type") in ("side_left", "side_right", "top", "bottom",
+                                     "vertical_partition", "shelf", "plinth")]
+    if not carcass:
+        return project
+    t = float(back.get("thickness", 3))
+    pl = back["placement"]
+    pl["x1"] = min(q["placement"]["x1"] for q in carcass)
+    pl["x2"] = max(q["placement"]["x2"] for q in carcass)
+    pl["y1"] = min(q["placement"]["y1"] for q in carcass)
+    pl["y2"] = max(q["placement"]["y2"] for q in carcass)
+    z_rear = max(q["placement"]["z2"] for q in carcass)
+    pl["z1"], pl["z2"] = _r(z_rear), _r(z_rear + t)
+    back["override"] = True
+    _refresh_derived(back)
+    return project
+
+
 def apply_overrides(project: dict[str, Any],
                     overrides: list[dict[str, Any]] | None) -> dict[str, Any]:
     if not overrides:

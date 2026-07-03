@@ -278,6 +278,9 @@ function MebelScene(container){
       add(cyl(4,25,_MTL.chrome),dir*12);
     }else if(pu.includes('направляющая')){
       add(cyl(3.5,12,_MTL.dark),dir*6);
+    }else if(pu.includes('замок')){
+      add(cyl(18,depth,_MTL.chrome),dir*depth/2);
+      add(cyl(22,2,_MTL.chrome),dir*1);
     }
     return g;
   }
