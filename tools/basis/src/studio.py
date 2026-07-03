@@ -140,6 +140,66 @@ def techview_svg(spec: dict[str, Any]) -> dict[str, Any]:
         return {"svg": "", "issues": [str(e)]}
 
 
+# ------------------------------------------------------------------ каталог проектов (D1)
+
+def _slugify(name: str) -> str:
+    import re
+    s = re.sub(r"[^\w\-]+", "_", name.lower().strip()).strip("_")
+    return s[:60] or "model"
+
+
+def _list_projects(spec_dir: Path) -> list[dict[str, Any]]:
+    out = []
+    for f in sorted(spec_dir.glob("*.json")):
+        if f.name.endswith(".project.json"):
+            continue
+        try:
+            s = json.loads(f.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if s.get("schemaVersion") != "paramspec-v1":
+            continue
+        d = s.get("dimensions", {})
+        out.append({"file": f.name,
+                    "name": s.get("project_name", f.stem),
+                    "archetype": s.get("archetype", "?"),
+                    "dims": f'{d.get("width", "?")}×{d.get("depth", "?")}×{d.get("height", "?")}',
+                    "decor": (s.get("materials") or {}).get("color", "")})
+    return out
+
+
+def _default_spec(archetype: str, name: str) -> dict[str, Any]:
+    """Минимальная валидная спека нового изделия по архетипу."""
+    dims = {"desk": (1200, 700, 750), "table": (1200, 700, 750),
+            "round_table": (900, 900, 750), "wardrobe": (1200, 600, 2100),
+            "cabinet": (800, 400, 2000)}.get(archetype, (800, 400, 720))
+    spec: dict[str, Any] = {
+        "schemaVersion": "paramspec-v1",
+        "project_name": name,
+        "furniture_type": archetype,
+        "archetype": archetype,
+        "dimensions": {"width": dims[0], "depth": dims[1], "height": dims[2],
+                       "tolerance": 5},
+        "materials": {"board_thickness": 16, "board_material": "ЛДСП",
+                      "edge_band_thickness": 2, "color": "Белый", "color_code": ""},
+        "legs": {"type": "нет", "height": 0},
+        "warnings": [], "estimated_values": [],
+    }
+    if archetype in ("desk", "table"):
+        spec["materials"]["board_thickness"] = 25
+        spec["apron"] = True
+    elif archetype in ("cabinet", "wardrobe", "shelving", "drawer_unit", "door_unit"):
+        spec["sections"] = [{"kind": "shelves", "shelves": 3}]
+    return spec
+
+
+def _safe_spec_file(spec_dir: Path, fname: str) -> Path:
+    p = (spec_dir / Path(fname).name).resolve()
+    if p.parent != spec_dir.resolve() or p.suffix != ".json":
+        raise ValueError("файл вне каталога спек")
+    return p
+
+
 # ------------------------------------------------------------------ экспорт-центр (C3)
 
 B3D_COST_RUB = 10          # цена облачной конвертации CfrnToB3d
@@ -260,6 +320,39 @@ def make_handler(st: _Studio):
                     from .spec_chat import chat_edit
                     self._json(chat_edit(spec, str(body.get("message", "")),
                                          body.get("history") or []))
+                elif self.path == "/api/projects":    # каталог спек (D1)
+                    self._json({"projects": _list_projects(st.spec_path.parent),
+                                "current": st.spec_path.name})
+                elif self.path == "/api/open":        # открыть другую спеку (D1)
+                    p = _safe_spec_file(st.spec_path.parent, str(body.get("file", "")))
+                    st.spec = json.loads(p.read_text(encoding="utf-8"))
+                    st.spec_path = p
+                    self._json({"ok": True, "spec": st.spec, "file": p.name})
+                elif self.path == "/api/new":         # новое изделие (D1)
+                    arch = str(body.get("archetype", "cabinet"))
+                    name = str(body.get("name") or f"Новое изделие ({arch})")
+                    new_spec = _default_spec(arch, name)
+                    p = st.spec_path.parent / f"{_slugify(name)}.json"
+                    i = 2
+                    while p.exists():
+                        p = st.spec_path.parent / f"{_slugify(name)}_{i}.json"
+                        i += 1
+                    p.write_text(json.dumps(new_spec, ensure_ascii=False, indent=2),
+                                 encoding="utf-8")
+                    st.spec, st.spec_path = new_spec, p
+                    self._json({"ok": True, "spec": new_spec, "file": p.name})
+                elif self.path == "/api/duplicate":   # дубликат текущего (D1)
+                    dup = json.loads(json.dumps(spec or st.spec))
+                    dup["project_name"] = str(dup.get("project_name", "модель")) + " (копия)"
+                    p = st.spec_path.parent / f"{st.spec_path.stem}_copy.json"
+                    i = 2
+                    while p.exists():
+                        p = st.spec_path.parent / f"{st.spec_path.stem}_copy{i}.json"
+                        i += 1
+                    p.write_text(json.dumps(dup, ensure_ascii=False, indent=2),
+                                 encoding="utf-8")
+                    st.spec, st.spec_path = dup, p
+                    self._json({"ok": True, "spec": dup, "file": p.name})
                 elif self.path == "/api/nesting":     # раскрой-превью (C2)
                     from .generators import generate_from_paramspec
                     from .nesting import nesting_svg
@@ -437,6 +530,14 @@ PAGE = r"""<!DOCTYPE html>
 <div id="app">
 <div id="side">
   <h1>BAZIS Studio <span class="mini">— правки до платной сборки</span></h1>
+
+  <fieldset><legend>Проект</legend>
+    <div class="row"><label>Изделие</label><select id="projSel"></select></div>
+    <div class="row" style="gap:6px">
+      <button id="projNew">+ Новое</button>
+      <button id="projDup">Дублировать</button>
+    </div>
+  </fieldset>
 
   <div class="badges" id="badges"></div>
   <div id="errors"></div>
@@ -867,6 +968,46 @@ document.addEventListener('click',e=>{           // клик по детали �
     .findIndex(p=>p.name===name);
   if(idx>=0) scene3d.select(idx);
 });
+
+/* ---------- каталог проектов (AKD-132) ---------- */
+async function loadProjects(){
+  const r=await fetch('/api/projects',{method:'POST',
+    headers:{'Content-Type':'application/json'},body:'{}'});
+  const p=await r.json();
+  $('projSel').innerHTML=(p.projects||[]).map(x=>
+    `<option value="${x.file}" ${x.file===p.current?'selected':''}>`+
+    `${x.name.slice(0,38)} · ${x.archetype} ${x.dims}</option>`).join('');
+}
+function adoptSpec(p){
+  SPEC=p.spec; UNDO.length=0; $('btnUndo').disabled=true;
+  scene3d.select(null); fillForm(); apply(); loadProjects(); loadBuilds();
+  toast('Открыто: '+p.file);
+}
+$('projSel').onchange=async e=>{
+  const r=await fetch('/api/open',{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({file:e.target.value})});
+  const p=await r.json();
+  if(p.ok) adoptSpec(p); else toast('Ошибка: '+(p.error||''),true);
+};
+$('projNew').onclick=async()=>{
+  const arch=prompt('Архетип нового изделия:\n(desk, cabinet, wardrobe, shelving, drawer_unit, door_unit, round_table, corpus)','cabinet');
+  if(!arch) return;
+  const name=prompt('Название изделия:','Новое изделие');
+  if(name===null) return;
+  const r=await fetch('/api/new',{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({archetype:arch.trim(),name})});
+  const p=await r.json();
+  if(p.ok) adoptSpec(p); else toast('Ошибка: '+(p.error||''),true);
+};
+$('projDup').onclick=async()=>{
+  const r=await fetch('/api/duplicate',{method:'POST',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({spec:SPEC})});
+  const p=await r.json();
+  if(p.ok) adoptSpec(p); else toast('Ошибка: '+(p.error||''),true);
+};
+loadProjects();
 
 /* ---------- смета live (AKD-128) ---------- */
 function renderEstimate(est){
