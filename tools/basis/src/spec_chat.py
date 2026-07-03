@@ -70,17 +70,103 @@ def _num(s: str) -> float:
     return int(v) if v == int(v) else v
 
 
+_ARCHETYPE_WORDS = [
+    ("тумб", "drawer_unit"), ("шкаф", "cabinet"), ("гардероб", "wardrobe"),
+    ("стеллаж", "shelving"), ("полк", "shelving"),
+    ("стол", "desk"), ("стойк", "corpus"),
+]
+_CREATE_WORDS = ("сделай", "создай", "нов", "спроектируй", "построй")
+
+
+def _try_create(msg: str) -> dict[str, Any] | None:
+    """«Сделай тумбу 600×450×550 с 3 ящиками» → новая спека с нуля (D3)."""
+    if not any(w in msg for w in _CREATE_WORDS):
+        return None
+    arch = next((a for w, a in _ARCHETYPE_WORDS if w in msg), None)
+    if arch is None:
+        return None
+    m = re.search(r"(\d{2,4})\s*[x×х*]\s*(\d{2,4})\s*[x×х*]\s*(\d{2,4})", msg)
+    # создание — только при явных габаритах или «нов…»/«с нуля»
+    # (иначе «сделай стол на металлокаркасе» — это ПРАВКА текущего)
+    if m is None and "нов" not in msg and "с нуля" not in msg:
+        return None
+    dims = tuple(int(v) for v in m.groups()) if m else \
+        {"desk": (1200, 700, 750), "wardrobe": (1200, 600, 2100)}.get(arch, (800, 450, 800))
+    n_drawers = re.search(r"(\d+|двумя|тремя|четырьмя)\s*ящик", msg)
+    n_shelves = re.search(r"(\d+|двумя|тремя|четырьмя)\s*полк", msg)
+    n_doors = re.search(r"(\d+|одной|двумя)\s*двер", msg) or ("двер" in msg)
+    words = {"одной": 1, "двумя": 2, "тремя": 3, "четырьмя": 4}
+
+    def _n(mm, default):
+        if not mm or mm is True:
+            return default
+        v = mm.group(1)
+        return words.get(v) or int(v)
+
+    spec: dict[str, Any] = {
+        "schemaVersion": "paramspec-v1",
+        "project_name": f"Изделие из чата {dims[0]}×{dims[1]}×{dims[2]}",
+        "furniture_type": arch, "archetype": arch,
+        "dimensions": {"width": dims[0], "depth": dims[1], "height": dims[2],
+                       "tolerance": 5},
+        "materials": {"board_thickness": 25 if arch == "desk" else 16,
+                      "board_material": "ЛДСП", "edge_band_thickness": 2,
+                      "color": "Белый", "color_code": ""},
+        "legs": {"type": "нет", "height": 0},
+        "warnings": ["Создано из чата — параметры уточнить"],
+        "estimated_values": [],
+    }
+    if arch == "desk":
+        spec["apron"] = True
+    elif arch == "drawer_unit" and (n_drawers or "ящик" in msg):
+        spec["sections"] = [{"kind": "drawers", "drawers": _n(n_drawers, 3)}]
+    elif arch in ("cabinet", "wardrobe", "shelving", "drawer_unit", "door_unit"):
+        sec: dict[str, Any] = {"kind": "shelves", "shelves": _n(n_shelves, 3)}
+        if n_doors:
+            sec = {"kind": "door", "door": _n(n_doors if n_doors is not True else None, 1),
+                   "shelves": _n(n_shelves, 2)}
+        elif n_drawers:
+            sec = {"kind": "drawers", "drawers": _n(n_drawers, 3)}
+        spec["sections"] = [sec]
+    return spec
+
+
+def _try_question(msg: str, context: dict[str, Any] | None) -> str | None:
+    """Вопросы о модели без правки: стоимость/состав/габариты (D3)."""
+    c = context or {}
+    if re.search(r"сколько\s+сто|цена|стоимост", msg):
+        t = c.get("estimate_total")
+        return (f"Материалы по смете ≈ {t:,.0f} ₽ (закупка, без работы)."
+                .replace(",", " ") if t else "Смета ещё не посчитана.")
+    if re.search(r"сколько\s+дета|состав", msg):
+        return (f"В изделии {c.get('n_panels', '?')} деталей и "
+                f"{c.get('n_holes', '?')} присадок.")
+    if re.search(r"габарит|размер изделия", msg):
+        d = c.get("dims") or {}
+        return f"Габариты: {d.get('w', '?')}×{d.get('d', '?')}×{d.get('h', '?')} мм."
+    return None
+
+
 class MockChatProvider:
     """Rule-based разбор типовых команд — офлайн, для тестов и деградации.
 
-    Понимает: габариты (ширина/глубина/высота N), цвет/декор, толщину плиты,
-    ножки/опоры (добавь/убери/высота N), царгу (высота/убери), металлокаркас.
+    Понимает: СОЗДАНИЕ с нуля («сделай тумбу 600×450×550 с 3 ящиками»),
+    вопросы о модели («сколько стоит», «сколько деталей»), габариты,
+    цвет/декор (+фасады), толщину плиты, ножки/опоры, царгу, металлокаркас.
     """
 
     def chat(self, spec: dict[str, Any], message: str,
-             history: list[dict[str, str]] | None = None) -> dict[str, Any]:
-        new = copy.deepcopy(spec)
+             history: list[dict[str, str]] | None = None,
+             context: dict[str, Any] | None = None) -> dict[str, Any]:
         msg = message.lower()
+        created = _try_create(msg)
+        if created is not None:
+            return {"reply": "Создал новое изделие по описанию — уточняй параметры.",
+                    "spec": created, "created": True}
+        q = _try_question(msg, context)
+        if q is not None:
+            return {"reply": q, "spec": None}
+        new = copy.deepcopy(spec)
         done: list[str] = []
 
         for pat, key in ((rf"ширин\w*\D*?{_NUM}", "width"),
@@ -153,14 +239,16 @@ class OpenAIChatProvider:
         self.model = os.environ.get("OPENAI_MODEL", "gpt-4o")
 
     def chat(self, spec: dict[str, Any], message: str,
-             history: list[dict[str, str]] | None = None) -> dict[str, Any]:
+             history: list[dict[str, str]] | None = None,
+             context: dict[str, Any] | None = None) -> dict[str, Any]:
         system = CHAT_PROMPT_PATH.read_text(encoding="utf-8").replace(
             "__SCHEMA__", PARAMSPEC_SCHEMA_PATH.read_text(encoding="utf-8"))
         msgs: list[dict[str, Any]] = [{"role": "system", "content": system}]
         for h in (history or [])[-8:]:               # короткая память диалога
             msgs.append({"role": h.get("role", "user"), "content": h.get("text", "")})
+        ctx = f"\nСостояние модели: {json.dumps(context, ensure_ascii=False)}\n" if context else ""
         msgs.append({"role": "user", "content":
-                     f"Текущий ParamSpec:\n```json\n{json.dumps(spec, ensure_ascii=False, indent=2)}\n```\n\n"
+                     f"Текущий ParamSpec:\n```json\n{json.dumps(spec, ensure_ascii=False, indent=2)}\n```\n{ctx}\n"
                      f"Запрос пользователя: {message}"})
         r = self.client.chat.completions.create(
             model=self.model, temperature=0.1, messages=msgs,
@@ -185,15 +273,18 @@ def get_chat_provider(name: str | None = None) -> Any:
 # ------------------------------------------------------------------ вход
 
 def chat_edit(spec: dict[str, Any], message: str,
-              history: list[dict[str, str]] | None = None) -> dict[str, Any]:
-    """Команда словами → {reply, spec|None, changes[]}. Невалидное не отдаём.
+              history: list[dict[str, str]] | None = None,
+              context: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Команда словами → {reply, spec|None, changes[], created?}. Невалидное не отдаём.
 
     Гарантии: PROTECTED_KEYS не меняются; новая спека проходит validate_paramspec,
-    иначе spec=None и причина в reply (AKD-110).
+    иначе spec=None и причина в reply (AKD-110). created=True — изделие с нуля (D3).
     """
     from .paramspec import validate_paramspec
 
     try:
+        res = get_chat_provider().chat(spec, message, history, context)
+    except TypeError:
         res = get_chat_provider().chat(spec, message, history)
     except Exception as e:                            # сеть/ключ/парсинг — в чат, не 500
         return {"reply": f"Ошибка провайдера: {e}", "spec": None, "changes": []}
@@ -202,13 +293,18 @@ def chat_edit(spec: dict[str, Any], message: str,
     if not new:
         return {"reply": res.get("reply", ""), "spec": None, "changes": []}
 
-    for k in PROTECTED_KEYS:                          # структуру не трогаем
-        if k in spec:
-            new[k] = spec[k]
+    created = bool(res.get("created"))
+    if not created:
+        for k in PROTECTED_KEYS:                      # структуру не трогаем
+            if k in spec:
+                new[k] = spec[k]
     errors = validate_paramspec(new)
     if errors:
         return {"reply": "Правка отклонена — спека не прошла схему:\n"
                          + "\n".join(errors[:5]), "spec": None, "changes": []}
+    if created:
+        return {"reply": res.get("reply", "Создано."), "spec": new,
+                "changes": ["новое изделие с нуля"], "created": True}
     changes = spec_diff(spec, new)
     if not changes:
         return {"reply": res.get("reply", "Изменений нет."), "spec": None, "changes": []}
