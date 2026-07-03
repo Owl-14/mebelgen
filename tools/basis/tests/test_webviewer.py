@@ -16,7 +16,8 @@ sys.path.insert(0, str(ROOT))
 from src.generators import generate_from_paramspec       # noqa: E402
 from src.webviewer import project_to_viewer_html, viewer_payload   # noqa: E402
 
-PARAMSPECS = sorted((ROOT / "paramspecs").glob("*.json"))
+PARAMSPECS = sorted(f for f in (ROOT / "paramspecs").glob("*.json")
+                    if not f.name.endswith((".project.json", ".versions.json")))
 
 
 def test_viewer_html_for_all_paramspecs():

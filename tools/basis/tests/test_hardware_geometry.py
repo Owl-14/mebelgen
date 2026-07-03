@@ -17,7 +17,8 @@ from src.generators import generate_from_paramspec                     # noqa: E
 from src.hardware_geometry import (                                    # noqa: E402
     compute_hardware_geometry, hardware_geometry_summary)
 
-PARAMSPECS = sorted((ROOT / "paramspecs").glob("*.json"))
+PARAMSPECS = sorted(f for f in (ROOT / "paramspecs").glob("*.json")
+                    if not f.name.endswith((".project.json", ".versions.json")))
 
 
 def _project(name: str):
