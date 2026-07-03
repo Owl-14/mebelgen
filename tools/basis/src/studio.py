@@ -260,6 +260,13 @@ def make_handler(st: _Studio):
                     from .spec_chat import chat_edit
                     self._json(chat_edit(spec, str(body.get("message", "")),
                                          body.get("history") or []))
+                elif self.path == "/api/nesting":     # раскрой-превью (C2)
+                    from .generators import generate_from_paramspec
+                    from .nesting import nesting_svg
+                    try:
+                        self._json({"svg": nesting_svg(generate_from_paramspec(spec))})
+                    except Exception as e:
+                        self._json({"svg": "", "error": str(e)[:200]})
                 elif self.path == "/api/decors":
                     from .materials import list_sheet_decors
                     th = body.get("thickness")
@@ -525,6 +532,7 @@ PAGE = r"""<!DOCTYPE html>
   <div id="tabs">
     <button id="tab3d" class="on">3D</button>
     <button id="tabDraw">Чертёж</button>
+    <button id="tabNest">Раскрой</button>
   </div>
   <div id="hud">
     <label><input type="checkbox" id="cbHoles" checked> присадки</label>
@@ -697,6 +705,7 @@ async function apply(){
     headers:{'Content-Type':'application/json'},body:JSON.stringify({spec:SPEC})});
   const p=await r.json(); paint(p);
   if(drawOn) refreshDraw();
+  if(nestOn) refreshNest();
 }
 function paint(p){
   lastPayload=p;
@@ -736,12 +745,26 @@ function paint(p){
   }
 }
 
-/* ---------- чертёж ---------- */
-let drawOn=false;
-$('tab3d').onclick=()=>{drawOn=false;$('draw').style.display='none';
-  $('tab3d').classList.add('on');$('tabDraw').classList.remove('on');};
-$('tabDraw').onclick=()=>{drawOn=true;$('draw').style.display='block';
-  $('tabDraw').classList.add('on');$('tab3d').classList.remove('on');refreshDraw();};
+/* ---------- чертёж / раскрой ---------- */
+let drawOn=false, nestOn=false;
+function switchTab(mode){
+  drawOn=(mode==='draw'); nestOn=(mode==='nest');
+  $('draw').style.display=(drawOn||nestOn)?'block':'none';
+  $('tab3d').classList.toggle('on',mode==='3d');
+  $('tabDraw').classList.toggle('on',drawOn);
+  $('tabNest').classList.toggle('on',nestOn);
+  if(drawOn) refreshDraw();
+  if(nestOn) refreshNest();
+}
+$('tab3d').onclick=()=>switchTab('3d');
+$('tabDraw').onclick=()=>switchTab('draw');
+$('tabNest').onclick=()=>switchTab('nest');
+async function refreshNest(){
+  const r=await fetch('/api/nesting',{method:'POST',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({spec:SPEC})});
+  const p=await r.json();
+  $('draw').innerHTML=p.svg||('<i>'+(p.error||'раскрой недоступен')+'</i>');
+}
 async function refreshDraw(){
   const r=await fetch('/api/techview',{method:'POST',
     headers:{'Content-Type':'application/json'},body:JSON.stringify({spec:SPEC})});
