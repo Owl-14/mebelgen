@@ -357,6 +357,36 @@ def make_handler(st: _Studio):
                     self._json(chat_edit(spec, str(body.get("message", "")),
                                          body.get("history") or [],
                                          body.get("context") or None))
+                elif self.path == "/api/import-tz":   # drag&drop ТЗ (D4)
+                    import base64
+                    import os
+                    import tempfile
+                    if not os.environ.get("OPENAI_API_KEY"):
+                        self._json({"ok": False, "error":
+                                    "Для распознавания ТЗ нужен OPENAI_API_KEY "
+                                    "в tools/basis/.env (сейчас пустой)."})
+                        return
+                    try:
+                        raw = base64.b64decode(str(body.get("data", "")))
+                        suffix = "." + str(body.get("name", "tz.png")).rsplit(".", 1)[-1]
+                        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
+                            f.write(raw)
+                            tmp = Path(f.name)
+                        from .converter import FurnitureConverter
+                        new_spec = FurnitureConverter().convert_paramspec(tmp)
+                        tmp.unlink(missing_ok=True)
+                        name = new_spec.get("project_name", "Из ТЗ")
+                        out = st.spec_path.parent / f"{_slugify(name)}.json"
+                        i = 2
+                        while out.exists():
+                            out = st.spec_path.parent / f"{_slugify(name)}_{i}.json"
+                            i += 1
+                        out.write_text(json.dumps(new_spec, ensure_ascii=False, indent=2),
+                                       encoding="utf-8")
+                        st.spec, st.spec_path = new_spec, out
+                        self._json({"ok": True, "spec": new_spec, "file": out.name})
+                    except Exception as e:
+                        self._json({"ok": False, "error": str(e)[:300]})
                 elif self.path == "/api/versions":    # версии спеки (D2)
                     self._json({"versions": _list_versions(st.spec_path)})
                 elif self.path == "/api/restore":     # восстановить версию (D2)
@@ -1272,6 +1302,28 @@ $('btnB3d').onclick=async()=>{
     if(confirm('Открыть результат в БАЗИС-Просмотре?'))
       await fetch('/api/open-file',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({path:p.b3d})});}};
+
+/* ---------- drag&drop ТЗ (AKD-135) ---------- */
+const stage=$('main');
+stage.addEventListener('dragover',e=>{e.preventDefault();
+  stage.style.outline='3px dashed var(--accent)';});
+stage.addEventListener('dragleave',()=>{stage.style.outline='';});
+stage.addEventListener('drop',async e=>{
+  e.preventDefault(); stage.style.outline='';
+  const f=e.dataTransfer.files&&e.dataTransfer.files[0];
+  if(!f) return;
+  if(!/[.](png|jpe?g|webp|gif)$/i.test(f.name)){
+    toast('Поддерживаются изображения ТЗ (png/jpg/webp)',true); return;}
+  toast('Распознаю ТЗ…');
+  const buf=await f.arrayBuffer();
+  const b64=btoa(String.fromCharCode(...new Uint8Array(buf)));
+  const r=await fetch('/api/import-tz',{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name:f.name,data:b64})});
+  const p=await r.json();
+  if(p.ok){adoptSpec(p); toast('ТЗ распознано → '+p.file);}
+  else toast(p.error||'не удалось распознать',true);
+});
 
 /* ---------- версии (AKD-133) ---------- */
 async function loadVersions(){

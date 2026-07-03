@@ -21,7 +21,7 @@ def _check(name: str):
 def test_all_reference_specs_clean():
     """После фиксов AKD-171 все эталонные спеки без ошибок сверловки."""
     for f in sorted((ROOT / "paramspecs").glob("*.json")):
-        if f.name.endswith(".project.json"):
+        if f.name.endswith((".project.json", ".versions.json")):
             continue
         spec = json.loads(f.read_text(encoding="utf-8"))
         if spec.get("schemaVersion") != "paramspec-v1":

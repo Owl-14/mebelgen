@@ -18,7 +18,8 @@ from src.generators import generate_from_paramspec        # noqa: E402
 from src.sheet_layout import Label, overlaps, stack        # noqa: E402
 from src.techview import build_techview_svg                # noqa: E402
 
-PARAMSPECS = sorted((ROOT / "paramspecs").glob("*.json"))
+PARAMSPECS = sorted(f for f in (ROOT / "paramspecs").glob("*.json")
+                    if not f.name.endswith((".project.json", ".versions.json")))
 
 
 def _projects():
