@@ -34,6 +34,10 @@ def generate_from_paramspec(spec: dict[str, Any]) -> dict[str, Any]:
     # Дозаполнить материалы/фурнитуру детерминированной политикой (AKD-76):
     # из одного ТЗ должна собираться полная модель, без пропусков.
     from ..materials_policy import apply_material_policy
+    from ..overrides import apply_overrides
 
     spec = apply_material_policy(spec)
-    return get_generator(spec["archetype"])(spec)
+    project = get_generator(spec["archetype"])(spec)
+    # точечные правки деталей поверх генератора (AKD-121) — до валидаторов,
+    # чтобы чертёж/присадки/смета/cfrn считались по итоговой геометрии
+    return apply_overrides(project, spec.get("overrides"))

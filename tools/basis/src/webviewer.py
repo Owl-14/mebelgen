@@ -490,6 +490,60 @@ function MebelScene(container){
   // клик по узлу — открыть/закрыть (отличаем от вращения по сдвигу мыши)
   const ray=new THREE.Raycaster(), mv=new THREE.Vector2();
   let downAt=null;
+
+  // --- Shift+drag: перемещение детали (AKD-121) ---
+  let dragState=null;
+  function _setMv(e){
+    const r=renderer.domElement.getBoundingClientRect();
+    mv.x=((e.clientX-r.left)/r.width)*2-1; mv.y=-((e.clientY-r.top)/r.height)*2+1;
+  }
+  renderer.domElement.addEventListener('pointerdown',e=>{
+    if(!e.shiftKey) return;
+    _setMv(e); ray.setFromCamera(mv,camera);
+    for(const h of ray.intersectObjects(scene.children,true)){
+      let o=h.object, pi;
+      while(o){ if(o.userData&&o.userData.pi!==undefined){pi=o.userData.pi;break;} o=o.parent; }
+      if(pi===undefined) continue;
+      const plane=new THREE.Plane();
+      plane.setFromNormalAndCoplanarPoint(
+        camera.getWorldDirection(new THREE.Vector3()), h.point);
+      dragState={pi, plane, start:h.point.clone(), mesh:panelMeshes[pi],
+                 basePos:panelMeshes[pi].position.clone(), delta:new THREE.Vector3()};
+      controls.enabled=false;
+      selectPanel(pi);
+      e.stopImmediatePropagation(); e.preventDefault();
+      break;
+    }
+  }, true);
+  renderer.domElement.addEventListener('pointermove',e=>{
+    if(!dragState) return;
+    _setMv(e); ray.setFromCamera(mv,camera);
+    const p=new THREE.Vector3();
+    if(ray.ray.intersectPlane(dragState.plane,p)){
+      const d=p.sub(dragState.start);
+      d.set(Math.round(d.x),Math.round(d.y),Math.round(d.z));   // шаг 1 мм
+      // снап к доминантной оси: слабые компоненты (<35% максимума) убираем,
+      // чтобы «тащу вверх» не давало паразитных сдвигов по X/Z
+      const m=Math.max(Math.abs(d.x),Math.abs(d.y),Math.abs(d.z));
+      if(m>0){['x','y','z'].forEach(a=>{if(Math.abs(d[a])<m*0.35) d[a]=0;});}
+      dragState.delta.copy(d);
+      dragState.mesh.position.copy(dragState.basePos).add(d);
+      const eo=dragState.mesh.userData.edgeObj;
+      if(eo) eo.position.copy(dragState.mesh.position);
+    }
+  });
+  addEventListener('pointerup',()=>{
+    if(!dragState) return;
+    controls.enabled=true;
+    const st=dragState; dragState=null;
+    const d=st.delta, panel=PANELS_REF[st.pi];
+    if(panel&&(d.x||d.y||d.z)&&api.onTransform){
+      api.onTransform(panel.name,[d.x,d.y,-d.z]);   // сцена→мир БАЗИС: Z инвертирован
+    }else{
+      st.mesh.position.copy(st.basePos);
+      const eo=st.mesh.userData.edgeObj; if(eo) eo.position.copy(st.basePos);
+    }
+  });
   renderer.domElement.addEventListener('pointerdown',e=>{downAt=[e.clientX,e.clientY,Date.now()];});
   renderer.domElement.addEventListener('pointerup',e=>{
     if(!downAt) return;
@@ -544,6 +598,7 @@ function MebelScene(container){
     select:selectPanel,
     getSelected(){return selectedPi;},
     onSelect:null,                     // колбэк ({index,panel}|null)
+    onTransform:null,                  // колбэк (name, [dx,dy,dz] в мире БАЗИС)
     setTextures(on){texOn=on; panelMeshes.forEach(m=>m&&applyTexture(m));},
     setDims(on){dimsOn=on; if(dimGroup) dimGroup.visible=on;},
     setExplode,
