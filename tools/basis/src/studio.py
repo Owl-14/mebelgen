@@ -154,13 +154,13 @@ def _slugify(name: str) -> str:
 def _list_projects(spec_dir: Path) -> list[dict[str, Any]]:
     out = []
     for f in sorted(spec_dir.glob("*.json")):
-        if f.name.endswith(".project.json"):
+        if f.name.endswith((".project.json", ".versions.json")):
             continue
         try:
             s = json.loads(f.read_text(encoding="utf-8"))
         except Exception:
             continue
-        if s.get("schemaVersion") != "paramspec-v1":
+        if not isinstance(s, dict) or s.get("schemaVersion") != "paramspec-v1":
             continue
         d = s.get("dimensions", {})
         out.append({"file": f.name,
