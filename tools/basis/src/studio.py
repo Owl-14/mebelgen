@@ -130,11 +130,14 @@ def build_payload(spec: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
-def techview_svg(spec: dict[str, Any]) -> dict[str, Any]:
+def techview_svg(spec: dict[str, Any], panel: str | None = None) -> dict[str, Any]:
     from .generators import generate_from_paramspec
-    from .techview import build_techview_svg
+    from .techview import build_panel_detail_svg, build_techview_svg
     try:
-        svg, tv_issues = build_techview_svg(generate_from_paramspec(spec))
+        project = generate_from_paramspec(spec)
+        if panel:                                     # деталировка одной детали (B4)
+            return {"svg": build_panel_detail_svg(project, panel), "issues": []}
+        svg, tv_issues = build_techview_svg(project)
         return {"svg": svg, "issues": tv_issues}
     except Exception as e:
         return {"svg": "", "issues": [str(e)]}
@@ -315,7 +318,7 @@ def make_handler(st: _Studio):
                 if self.path == "/api/generate":
                     self._json(build_payload(spec))
                 elif self.path == "/api/techview":
-                    self._json(techview_svg(spec))
+                    self._json(techview_svg(spec, body.get("panel")))
                 elif self.path == "/api/chat":
                     from .spec_chat import chat_edit
                     self._json(chat_edit(spec, str(body.get("message", "")),
@@ -634,6 +637,7 @@ PAGE = r"""<!DOCTYPE html>
     <button id="tab3d" class="on">3D</button>
     <button id="tabDraw">Чертёж</button>
     <button id="tabNest">Раскрой</button>
+    <button id="btnPrint" title="печать открытого чертежа/раскроя">⎙</button>
   </div>
   <div id="hud">
     <label><input type="checkbox" id="cbHoles" checked> присадки</label>
@@ -860,6 +864,14 @@ function switchTab(mode){
 $('tab3d').onclick=()=>switchTab('3d');
 $('tabDraw').onclick=()=>switchTab('draw');
 $('tabNest').onclick=()=>switchTab('nest');
+$('btnPrint').onclick=()=>{
+  const svg=$('draw').querySelector('svg');
+  if(!svg){toast('Откройте чертёж или раскрой',true);return;}
+  const w=window.open('','print');
+  w.document.write('<html><head><title>Печать</title></head><body>'+svg.outerHTML+
+    '<scr'+'ipt>onload=()=>{print();close();}</scr'+'ipt></body></html>');
+  w.document.close();
+};
 async function refreshNest(){
   const r=await fetch('/api/nesting',{method:'POST',
     headers:{'Content-Type':'application/json'},body:JSON.stringify({spec:SPEC})});
@@ -908,6 +920,7 @@ scene3d.onSelect=sel=>{
       <button id="ovApply" class="primary">Применить</button>
       ${hasOv?'<button id="ovReset" title="убрать правки этой детали">Сбросить</button>':''}
       <button id="ovDelete" title="удалить деталь из изделия">Удалить</button>
+      <button id="ovDetail" title="чертёж этой детали с размерами и присадками">Чертёж</button>
     </div>
     <div class="mini" style="margin-top:4px">Shift+перетаскивание в 3D — двигать деталь.
     Правки хранятся в спеке и переживают смену габаритов; чертёж, присадки,
@@ -922,6 +935,14 @@ scene3d.onSelect=sel=>{
     if(Object.keys(pl).length) setOverride(p.name, pl);
   };
   const rb=$('ovReset'); if(rb) rb.onclick=()=>clearOverride(p.name);
+  $('ovDetail').onclick=async()=>{
+    switchTab('draw');
+    const r=await fetch('/api/techview',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({spec:SPEC,panel:p.name})});
+    const d=await r.json();
+    $('draw').innerHTML=(d.svg||'')+'<div style="margin:8px"><button onclick="refreshDraw()">← общий чертёж</button></div>';
+  };
   $('ovDelete').onclick=()=>{
     if(!confirm(`Удалить деталь «${p.name}»?`)) return;
     pushUndo();

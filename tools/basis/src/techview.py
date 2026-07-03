@@ -364,6 +364,22 @@ def build_techview_svg(project: dict[str, Any]) -> tuple[str, list[str]]:
     svg.text(fx0 + fw / 2, fy1 + 56, "ФРОНТ", size=_FS_TITLE, fill=_MUT, weight="600")
     svg.text(sx0 + sw_ / 2, fy1 + 56, "ВИД СБОКУ", size=_FS_TITLE, fill=_MUT, weight="600")
 
+    # --- вид СВЕРХУ (B4, AKD-127): под фронтом, painter по высоте ---
+    ty0 = total_h + 6
+    td = D * scale
+    total_h = ty0 + td + 44
+    def TZ(z):
+        return ty0 + (z - min(zs1, 0)) * scale
+    for p in sorted(panels, key=lambda q: q["placement"]["y2"]):   # верхние поверх
+        pl = p["placement"]
+        k = _kind(p)
+        x, y = FX(pl["x1"]), TZ(pl["z1"])
+        w, h = (pl["x2"] - pl["x1"]) * scale, (pl["z2"] - pl["z1"]) * scale
+        svg.rect(x, y, max(w, 1), max(h, 1),
+                 _FILL["facade" if k == "facade" else "carcass"],
+                 stroke=_INK, sw=0.9, panel=str(p.get("name", "")))
+    svg.text(fx0 + fw / 2, ty0 + td + 26, "ВИД СВЕРХУ", size=_FS_TITLE, fill=_MUT, weight="600")
+
     # --- self-check: пересечения текстов + выход за рамку (AKD-8) ---
     issues: list[str] = []
     tb = svg.text_boxes
@@ -380,3 +396,63 @@ def build_techview_svg(project: dict[str, Any]) -> tuple[str, list[str]]:
     out = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {total_w:.0f} {total_h:.0f}" '
            f'font-family="Segoe UI, Arial, sans-serif">{body}</svg>')
     return out, issues
+
+
+# ------------------------------------------------------------------ деталировка (B4)
+
+_AX = {"horizont": ("x", "z"), "horizontal": ("x", "z"),
+       "vertical": ("z", "y"), "front": ("x", "y")}
+
+
+def build_panel_detail_svg(project: dict[str, Any], panel_name: str) -> str:
+    """Чертёж одной детали: пласть с размерами, кромка по сторонам, присадки."""
+    p = next((q for q in project.get("panels", [])
+              if q.get("name") == panel_name and isinstance(q.get("placement"), dict)),
+             None)
+    if p is None:
+        return "<svg xmlns='http://www.w3.org/2000/svg'/>"
+    pl = p["placement"]
+    orient = str(p.get("basis_orientation", "front")).lower()
+    wa, ha = _AX.get(orient, ("x", "y"))
+    pw = pl[f"{wa}2"] - pl[f"{wa}1"]
+    ph = pl[f"{ha}2"] - pl[f"{ha}1"]
+    scale = min(760.0 / max(pw, 1), 420.0 / max(ph, 1), 0.5)
+    m = 90.0
+    x0, y0 = m, 60.0
+    w, h = pw * scale, ph * scale
+    svg = _Svg()
+    svg.text(x0 + w / 2, 26, f"{p.get('name')} — {_fmt(pw)}×{_fmt(ph)}×"
+             f"{_fmt(p.get('thickness', 16))} мм · {p.get('material', '')}",
+             size=13, fill=_INK, weight="600")
+    svg.rect(x0, y0, w, h, "#e9d8bd", stroke=_INK, sw=1.1)
+    # кромка: стороны с ненулевой толщиной — цветной обвод с подписью
+    eb = p.get("edge_banding") or {}
+    edge_c = {"2": "#b5651d", "0.4": "#caa06a"}
+    for side, (lx1, ly1, lx2, ly2, tx, ty) in {
+            "top": (x0, y0, x0 + w, y0, x0 + w / 2, y0 - 8),
+            "bottom": (x0, y0 + h, x0 + w, y0 + h, x0 + w / 2, y0 + h + 14),
+            "left": (x0, y0, x0, y0 + h, x0 - 32, y0 + h / 2),
+            "right": (x0 + w, y0, x0 + w, y0 + h, x0 + w + 32, y0 + h / 2)}.items():
+        t = eb.get(side)
+        if t:
+            svg.line(lx1, ly1, lx2, ly2, stroke=edge_c.get(str(t), "#b5651d"), w=3.2)
+            svg.text(tx, ty, f"{t}", size=9, fill="#8a5a26")
+    # присадки этой детали (мировые → локальные оси пласти)
+    try:
+        from .hardware import compute_drilling
+        for hh in compute_drilling(project):
+            if hh.get("panel") != panel_name:
+                continue
+            hx = x0 + (hh[wa] - pl[f"{wa}1"]) * scale
+            hy = y0 + h - (hh[ha] - pl[f"{ha}1"]) * scale
+            r = max(hh["diameter"] * scale / 2, 2)
+            svg.circle(hx, hy, r, fill="#333")
+            svg.text(hx, hy - r - 3, f'Ø{_fmt(hh["diameter"])}', size=8, fill=_DIM)
+    except Exception:
+        pass
+    _dim_h(svg, x0, x0 + w, y0 + h, y0 + h + 34, _fmt(pw))
+    _dim_v(svg, y0, y0 + h, x0, x0 - 48, _fmt(ph))
+    total_w, total_h = x0 + w + m, y0 + h + 80
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {total_w:.0f} '
+            f'{total_h:.0f}" font-family="Segoe UI, Arial, sans-serif">'
+            f'{"".join(svg.parts)}</svg>')
