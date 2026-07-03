@@ -88,18 +88,19 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
             if t not in _FACADE:
                 continue
             pl = p["placement"]
-            zc = (pl["z1"] + pl["z2"]) / 2
+            # винт входит с ЗАДНЕЙ (внутренней) грани фасада, сквозной
+            z_in, t_f = pl["z2"], pl["z2"] - pl["z1"]
             if t == "drawer_front":
                 cx = (pl["x1"] + pl["x2"]) / 2
                 y = pl["y2"] - off
                 for dx in (-size / 2, size / 2):
-                    holes.append(_hole(p["name"], "ручка (винт)", cx + dx, y, zc, 5, 25, "z", -1))
+                    holes.append(_hole(p["name"], "ручка (винт)", cx + dx, y, z_in, 5, t_f, "z", -1))
             else:  # door_front: ручка у кромки открывания, 2 винта по вертикали
                 nm = p["name"].lower()
                 hx = pl["x1"] + 40 if "прав" in nm else pl["x2"] - 40
                 cy = (pl["y1"] + pl["y2"]) / 2
                 for dy in (-size / 2, size / 2):
-                    holes.append(_hole(p["name"], "ручка (винт)", hx, cy + dy, zc, 5, 25, "z", -1))
+                    holes.append(_hole(p["name"], "ручка (винт)", hx, cy + dy, z_in, 5, t_f, "z", -1))
 
     # --- Петли: чашка Ø35 на фасаде + 2 отв ответной планки на боковине ---
     for p in panels:
@@ -115,12 +116,15 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
         side_x = pl["x1"] if hinge_left else pl["x2"]
         side = min(verticals, key=lambda v: abs(((v["placement"]["x1"] + v["placement"]["x2"]) / 2) - side_x), default=None)
         for y in _hinge_levels(pl["y1"], pl["y2"], n):
-            holes.append(_hole(p["name"], "петля (чашка Ø35)", cup_x, y, (pl["z1"] + pl["z2"]) / 2, 35, 12, "z", -1))
+            # чашка сверлится с ВНУТРЕННЕЙ (задней) грани двери, глухая 12 мм
+            holes.append(_hole(p["name"], "петля (чашка Ø35)", cup_x, y, pl["z2"], 35, 12, "z", -1))
             if side is not None:
-                sx = side["placement"]["x2"] if hinge_left else side["placement"]["x1"]
+                sp = side["placement"]
+                sx = sp["x2"] if hinge_left else sp["x1"]
                 sdir = -1 if hinge_left else 1
+                z_pl = sp["z1"] + 37                  # планка на 37 от переднего края боковины
                 for dy in (-16, 16):
-                    holes.append(_hole(side["name"], "петля (планка)", sx, y + dy, (pl["z1"] + pl["z2"]) / 2, 5, 12, "x", sdir))
+                    holes.append(_hole(side["name"], "петля (планка)", sx, y + dy, z_pl, 5, 12, "x", sdir))
 
     # --- Полкодержатели: 4 отв на съёмную полку (2 на каждую боковину/перегородку) ---
     for p in panels:
@@ -135,7 +139,9 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
                     key=lambda v: abs(v["placement"][want] - edge_x), default=None)
             if v is None:
                 continue
-            into = 1 if want == "x2" else -1     # x2 совпал с левой гранью полки → сверлим в +X
+            # сверлим В ТЕЛО боковины: у левой (её x2 = грань полки) — в −X,
+            # у правой (её x1) — в +X. Раньше был инверт (дырка уходила в полку).
+            into = -1 if want == "x2" else 1
             for z in (zf, zb):
                 holes.append(_hole(v["name"], "полкодержатель", edge_x, yc, z, 5, 10, "x", into))
 
@@ -236,7 +242,17 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
                 if pl["y1"] < cy < pl["y2"]:
                     pts += [(x, cy) for x in _spread(max(qp["x1"], pl["x1"]) + m,
                                                      min(qp["x2"], pl["x2"]) - m, 250)]
-        for x, y in dict.fromkeys(pts):               # dedup, порядок сохранён
+        # гвоздь ставится только там, где за ДВП есть тело (торец панели):
+        # задник «в проём» (между боковинами) не перекрывает их торцы — такие
+        # точки периметра пропускаем, держат дно/крышка/стойки
+        bodies = [q["placement"] for q in panels
+                  if q.get("placement") and q is not p
+                  and q["placement"]["z2"] >= pl["z1"] - 1.5]
+        tip_z = pl["z2"] - 25 * 0.6                   # середина заглубления гвоздя
+        for x, y in dict.fromkeys(pts):
+            if not any(b["x1"] - 1 <= x <= b["x2"] + 1 and b["y1"] - 1 <= y <= b["y2"] + 1
+                       and b["z1"] - 1 <= tip_z <= b["z2"] + 1 for b in bodies):
+                continue
             holes.append(_hole(p["name"], "задник (гвоздь)", x, y, pl["z2"], 1.6, 25, "z", -1))
 
     # --- Короб ящика: саморезы 3.5×16 сквозь бок в торцы дна и задней стенки ---
@@ -255,14 +271,43 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
                     and qp["y1"] < pl["y2"] and qp["y2"] > pl["y1"])   # тот же ящик (Y-пересечение)
             if q.get("type") == "drawer_bottom" and near:
                 yc = (qp["y1"] + qp["y2"]) / 2
-                for z in _spread(qp["z1"] + 60, qp["z2"] - 60, 300):
+                zlo, zhi = max(qp["z1"], pl["z1"]), min(qp["z2"], pl["z2"])
+                for z in _spread(zlo + 60, zhi - 60, 300):
                     holes.append(_hole(p["name"], "короб ящика (саморез)",
                                        outer_x, yc, z, 3.5, 16, "x", into))
             elif q.get("type") == "drawer_back" and near:
                 zc = (qp["z1"] + qp["z2"]) / 2
-                for y in (qp["y1"] + 25, qp["y2"] - 25):
-                    holes.append(_hole(p["name"], "короб ящика (саморез)",
-                                       outer_x, y, zc, 3.5, 16, "x", into))
+                if zc <= pl["z2"]:
+                    # стенка между боковинами: сквозь бок в торец стенки
+                    for y in (qp["y1"] + 25, qp["y2"] - 25):
+                        holes.append(_hole(p["name"], "короб ящика (саморез)",
+                                           outer_x, y, zc, 3.5, 16, "x", into))
+
+    # --- Задняя стенка ящика ЗА боковинами (касается только торца дна):
+    #     саморезы сквозь стенку по −Z в торец дна ---
+    seen_back: set[str] = set()
+    for q in panels:
+        if q.get("type") != "drawer_back" or q["name"] in seen_back:
+            continue
+        qp = q["placement"]
+        bottom = next((b for b in panels if b.get("type") == "drawer_bottom"
+                       and abs(b["placement"]["z2"] - qp["z1"]) < 1.5
+                       and b["placement"]["x1"] < (qp["x1"] + qp["x2"]) / 2 < b["placement"]["x2"]
+                       and qp["y1"] - 1 <= b["placement"]["y1"] <= qp["y2"] + 1), None)
+        if bottom is None:
+            continue
+        sides_reach = any(p.get("type") in ("drawer_side_left", "drawer_side_right")
+                          and p["placement"]["z2"] >= qp["z1"] + 1 for p in panels
+                          if p.get("placement") and p["placement"]["y1"] < qp["y2"]
+                          and p["placement"]["y2"] > qp["y1"])
+        if sides_reach:
+            continue                                   # покрыто сквозь-бок веткой
+        seen_back.add(q["name"])
+        bp = bottom["placement"]
+        yb = (bp["y1"] + bp["y2"]) / 2                 # уровень торца дна
+        for x in _spread(max(qp["x1"], bp["x1"]) + 40, min(qp["x2"], bp["x2"]) - 40, 300):
+            holes.append(_hole(q["name"], "короб ящика (саморез)",
+                               x, yb, qp["z2"], 3.5, 30, "z", -1))
 
     # --- Направляющие ящиков: винты на боковинах/перегородках у КОРОБА ---
     # (по коробу, а не по фасаду: накладной фасад шире проёма и не задаёт колонку)
@@ -276,11 +321,13 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
                    key=lambda v: box_l - v["placement"]["x2"], default=None)
         right = min((v for v in verticals if v["placement"]["x1"] >= box_r - 1),
                     key=lambda v: v["placement"]["x1"] - box_r, default=None)
-        for v, inx in ((left, 1), (right, -1)):
+        # винт входит с ВНУТРЕННЕЙ пласти опоры и сверлится В её тело:
+        # левая опора — вход с её x2, сверло в −X; правая — с x1, в +X
+        for v, inx in ((left, -1), (right, 1)):
             if v is None:
                 continue
             vp = v["placement"]
-            sx = vp["x2"] if inx > 0 else vp["x1"]
+            sx = vp["x2"] if inx < 0 else vp["x1"]
             for z in (vp["z1"] + 30, (vp["z1"] + vp["z2"]) / 2, vp["z2"] - 50):
                 holes.append(_hole(v["name"], "направляющая (винт)", sx, guide_y, z, 5, 12, "x", inx))
     return holes

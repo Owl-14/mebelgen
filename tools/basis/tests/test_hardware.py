@@ -62,13 +62,17 @@ def test_fasteners_reverse_patterns():
     spec = json.loads((ROOT / "paramspecs" / "komi_72_tumba_podkatnaya.json").read_text(encoding="utf-8"))
     holes = compute_drilling(generate_from_paramspec(spec))
     s = drilling_summary(holes)
-    assert s["задник (гвоздь)"] >= 8            # сетка по периметру ДВП
-    assert s["короб ящика (саморез)"] == 24     # 8 на ящик (дно 2×2 + ЗС 2×2)
+    # задник komi_72 ВРЕЗНОЙ (между боковинами) — гвозди к торцам невозможны
+    # (AKD-171: фильтр «за гвоздём есть тело»); гвозди остаются у изделий
+    # со стойками до задника — см. wardrobe ниже
+    assert s.get("задник (гвоздь)", 0) == 0
+    assert s["короб ящика (саморез)"] == 18     # 6 на ящик (дно 2×2 + ЗС к дну 2)
+    w = json.loads((ROOT / "paramspecs" / "wardrobe_demo.json").read_text(encoding="utf-8"))
+    sw = drilling_summary(compute_drilling(generate_from_paramspec(w)))
+    assert sw["задник (гвоздь)"] >= 8           # стойки/полки до задника
     bom = fastener_bom(holes, resolve=True)
     names = {b["name"]: b for b in bom}
-    assert names["Гвоздь 1.6×25"]["qty"] >= 8
-    assert names["Гвоздь 1.6×25"].get("article")        # позиция из базы
-    assert names["Конфирмат 7×50"].get("article")
+    assert names["Конфирмат 7×50"].get("article")       # позиция из базы
     assert names["Заглушка самоклеящаяся D13"]["qty"] == names["Конфирмат 7×50"]["qty"]
 
 

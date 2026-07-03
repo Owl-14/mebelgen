@@ -73,7 +73,7 @@ def build_payload(spec: dict[str, Any]) -> dict[str, Any]:
     from .paramspec import validate_paramspec
 
     issues: dict[str, list[str]] = {"schema": [], "consistency": [], "geometry": [],
-                                    "cfrn": [], "holes": []}
+                                    "cfrn": [], "holes": [], "drilling": []}
     issues["schema"] = list(validate_paramspec(spec) or [])
     if issues["schema"]:
         return {"ok": False, "issues": issues}
@@ -103,6 +103,11 @@ def build_payload(spec: dict[str, Any]) -> dict[str, Any]:
         issues["holes"] = check_cfrn_holes(project)[:20]
     except Exception as e:
         issues["cfrn"] = [f"кодирование: {e}"]
+    try:
+        from .drilling_check import check_drilling_geometry
+        issues["drilling"] = check_drilling_geometry(project)["errors"][:20]
+    except Exception as e:
+        issues["drilling"] = [f"валидатор сверловки: {e}"]
 
     from .webviewer import viewer_payload
     from .delivery import _hardware_bom, spec_summary
@@ -676,7 +681,8 @@ async function apply(){
 function paint(p){
   lastPayload=p;
   const B=$('badges'); B.innerHTML='';
-  const names={schema:'схема',consistency:'встык',geometry:'геометрия',cfrn:'.cfrn',holes:'присадки'};
+  const names={schema:'схема',consistency:'встык',geometry:'геометрия',cfrn:'.cfrn',
+               holes:'присадки',drilling:'сверловка'};
   let errs=[];
   for(const k of Object.keys(names)){
     const bad=(p.issues[k]||[]).length>0;
