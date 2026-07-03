@@ -73,3 +73,24 @@ def test_result_regenerates():
 def test_diff_readable():
     d = spec_diff({"a": 1, "b": {"c": 2}}, {"a": 1, "b": {"c": 3}, "d": 4})
     assert d == ["b.c: 2 → 3", "d: (нет) → 4"]
+
+
+def test_create_from_scratch():
+    """D3: «сделай тумбу WxDxH с N ящиками» — новое изделие с нуля."""
+    r = chat_edit(SPEC, "сделай тумбу 600х450х550 с 3 ящиками")
+    assert r.get("created") is True
+    s = r["spec"]
+    assert s["archetype"] == "drawer_unit"
+    assert s["dimensions"] == {"width": 600, "depth": 450, "height": 550, "tolerance": 5}
+    assert s["sections"][0] == {"kind": "drawers", "drawers": 3}
+    from src.studio import build_payload
+    assert build_payload(s)["ok"]                    # собирается и проходит проверки
+
+
+def test_question_about_model():
+    """D3: вопрос о модели — ответ из контекста, спека не трогается."""
+    r = chat_edit(SPEC, "сколько стоит?", context={"estimate_total": 2181.0})
+    assert r["spec"] is None and "2 181" in r["reply"]
+    r2 = chat_edit(SPEC, "сколько деталей в изделии?",
+                   context={"n_panels": 4, "n_holes": 20})
+    assert r2["spec"] is None and "4" in r2["reply"] and "20" in r2["reply"]

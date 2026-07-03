@@ -322,7 +322,8 @@ def make_handler(st: _Studio):
                 elif self.path == "/api/chat":
                     from .spec_chat import chat_edit
                     self._json(chat_edit(spec, str(body.get("message", "")),
-                                         body.get("history") or []))
+                                         body.get("history") or [],
+                                         body.get("context") or None))
                 elif self.path == "/api/projects":    # каталог спек (D1)
                     self._json({"projects": _list_projects(st.spec_path.parent),
                                 "current": st.spec_path.name})
@@ -1153,9 +1154,13 @@ async function sendChat(){
   chatBusy=true; $('chatMsg').value=''; addMsg('user',m);
   const wait=addMsg('ai','думаю…');
   try{
+    const ctx=lastPayload?{n_panels:lastPayload.stats&&lastPayload.stats.n_panels,
+      n_holes:lastPayload.stats&&lastPayload.stats.n_holes,
+      dims:lastPayload.stats&&lastPayload.stats.dims,
+      estimate_total:lastPayload.estimate&&lastPayload.estimate.total}:null;
     const r=await fetch('/api/chat',{method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({spec:SPEC,message:m,history:CHAT_HISTORY})});
+      body:JSON.stringify({spec:SPEC,message:m,history:CHAT_HISTORY,context:ctx})});
     const p=await r.json();
     wait.remove();
     addMsg('ai',p.reply||'(пусто)',p.changes);
