@@ -746,8 +746,33 @@ function renderSections(){
       <div class="row"><label>Ящиков</label><input type="number" min="0" data-i="${i}" data-k="drawers" value="${s.drawers??''}"></div>
       <div class="row"><label>Полок</label><input type="number" min="0" data-i="${i}" data-k="shelves" value="${s.shelves??''}"></div>
       <div class="row"><label>Дверей</label><input type="number" min="0" max="2" data-i="${i}" data-k="door" value="${s.door??''}"></div>
-      <div class="row"><label>Доля шир.</label><input type="number" step="0.1" data-i="${i}" data-k="width_share" value="${s.width_share??''}"></div>`;
+      <div class="row"><label>Доля шир.</label><input type="number" step="0.1" data-i="${i}" data-k="width_share" value="${s.width_share??''}"></div>
+      <div class="row"><label title="высоты фасадов ящиков сверху вниз, через запятую">Высоты ящ.</label>
+        <input type="text" data-i="${i}" data-k="drawer_heights" placeholder="напр. 180,180,240"
+          value="${(s.drawer_heights||[]).join(',')}"></div>
+      <div class="row"><label title="уровни полок (Y от пола), через запятую">Уровни полок</label>
+        <input type="text" data-i="${i}" data-k="shelf_levels" placeholder="напр. 400,800,1200"
+          value="${(s.shelf_levels||[]).join(',')}"></div>
+      <div class="row"><label title="низ фасадной зоны (Y) — ниша снизу">Ниша снизу до</label>
+        <input type="number" data-i="${i}" data-k="front_bottom" value="${s.front_bottom??''}"></div>
+      <div class="row"><label title="верх фасадной зоны (Y) — ниша сверху">Ниша сверху от</label>
+        <input type="number" data-i="${i}" data-k="front_top" value="${s.front_top??''}"></div>
+      <div class="mini" data-sum="${i}"></div>`;
     box.appendChild(div);
+  });
+  updateSectionSums();
+}
+function updateSectionSums(){
+  (SPEC.sections||[]).forEach((s,i)=>{
+    const el=document.querySelector(`[data-sum="${i}"]`);
+    if(!el) return;
+    const hs=s.drawer_heights||[];
+    if(hs.length){
+      const sum=hs.reduce((a,b)=>a+Number(b||0),0);
+      const H=(SPEC.dimensions||{}).height||0;
+      el.textContent=`Σ высот ящиков: ${sum} мм из ~${H}`;
+      el.style.color=sum>H?'var(--bad)':'var(--mut)';
+    } else el.textContent='';
   });
 }
 $('addSec').onclick=()=>{(SPEC.sections=SPEC.sections||[]).push({kind:'shelves',shelves:2});
@@ -790,8 +815,14 @@ document.addEventListener('input',e=>{
   }
   if(t.dataset&&t.dataset.k!==undefined&&t.dataset.i!==undefined){
     const s=SPEC.sections[+t.dataset.i], k=t.dataset.k;
-    const v=t.value===''?undefined:(k==='kind'?t.value:Number(t.value));
-    if(v===undefined) delete s[k]; else s[k]=v;
+    let v;
+    if(t.value==='') v=undefined;
+    else if(k==='kind') v=t.value;
+    else if(k==='drawer_heights'||k==='shelf_levels')
+      v=t.value.split(/[,;\s]+/).map(Number).filter(x=>isFinite(x)&&x>0);
+    else v=Number(t.value);
+    if(v===undefined||(Array.isArray(v)&&!v.length)) delete s[k]; else s[k]=v;
+    updateSectionSums();
     schedule(); return;
   }
   if(t.id&&t.id.startsWith('f_')){harvest();schedule();}
