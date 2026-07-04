@@ -63,7 +63,8 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
                             thickness=c.T, material=c.mat, section_id="drawer_stack", estimated=True))
         panels.append(panel(f"Ящик {k} боковина правая", "drawer_side_right", "vertical", (bxr1, bxr2), (by1, by2), (box_z1, bz2),
                             thickness=c.T, material=c.mat, section_id="drawer_stack", estimated=True))
-        panels.append(panel(f"Ящик {k} задняя", "drawer_back", "front", (bxl2, bxr1), (by1, by2), (bz2, bz2 + box_back),
+        # накладная стенка перекрывает торцы боковин (AKD-181) — есть куда крепить
+        panels.append(panel(f"Ящик {k} задняя", "drawer_back", "front", (bxl1, bxr2), (by1, by2), (bz2, bz2 + box_back),
                             thickness=box_back, material=c.mat, section_id="drawer_stack", estimated=True))
         drawers_meta.append({"id": f"drawer_{k}", "count": 1,
                              "guide_type": section.get("guide_type", "шариковые"), "soft_close": False, "lock": False,

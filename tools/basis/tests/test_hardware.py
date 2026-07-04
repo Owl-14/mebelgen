@@ -65,7 +65,7 @@ def test_fasteners_reverse_patterns():
     # тонкий ДВП-задник по умолчанию НАКЛАДНОЙ (AKD-179): гвозди по периметру
     # в торцы корпуса — иначе врезному заподлицо держаться не за что
     assert s.get("задник (гвоздь)", 0) >= 8
-    assert s["короб ящика (саморез)"] == 18     # 6 на ящик (дно 2×2 + ЗС к дну 2)
+    assert s["короб ящика (саморез)"] == 30     # 10 на ящик (дно 2×2 + ЗС к дну 2 + ЗС к боковинам 4)
     w = json.loads((ROOT / "paramspecs" / "wardrobe_demo.json").read_text(encoding="utf-8"))
     sw = drilling_summary(compute_drilling(generate_from_paramspec(w)))
     assert sw["задник (гвоздь)"] >= 8           # стойки/полки до задника

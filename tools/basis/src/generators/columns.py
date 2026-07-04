@@ -114,8 +114,13 @@ def drawer_stack(cx1, cx2, fb, heights, gap, p, T, mat, sid, prefix, facade_boun
                                 thickness=T, material=mat, section_id=sid, estimated=True))
             panels.append(panel(pre + "боковина правая", "drawer_side_right", "vertical", (bxr1, bxr2), (sy1, sy2), (box_z1, bz2),
                                 thickness=T, material=mat, section_id=sid, estimated=True))
-            back_z = (bz2 - box_back, bz2) if p.get("box_back_mode") == "inset" else (bz2, bz2 + box_back)
-            panels.append(panel(pre + "задняя", "drawer_back", "front", (bxl2, bxr1), (sy1, sy2), back_z,
+            if p.get("box_back_mode") == "inset":
+                back_z, back_x, back_y = (bz2 - box_back, bz2), (bxl2, bxr1), (sy1, sy2)
+            else:
+                # накладная стенка перекрывает торцы боковин и дна — иначе стыки
+                # только рёбрами и крепёж физически невозможен (AKD-181)
+                back_z, back_x, back_y = (bz2, bz2 + box_back), (bxl1, bxr2), (box_y1, sy2)
+            panels.append(panel(pre + "задняя", "drawer_back", "front", back_x, back_y, back_z,
                                 thickness=box_back, material=mat, section_id=sid, estimated=True))
             meta.append({"id": f"{sid}_drawer_{k}", "count": 1, "guide_type": p.get("guide_type", "шариковые"),
                          "soft_close": False, "lock": False,
