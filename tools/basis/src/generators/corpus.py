@@ -27,6 +27,7 @@ def carcass_calc(c) -> dict[str, Any]:
 def generate(spec: dict[str, Any]) -> dict[str, Any]:
     c = read_carcass(spec)
     panels = carcass(c.W, c.D, c.H, c.T, c.T_back, c.Hleg, c.mat, c.mat_back,
-                     leg_as_panel=c.leg_as_panel, leg_type=c.leg_type)
+                     leg_as_panel=c.leg_as_panel, leg_type=c.leg_type,
+                     socle_recess=spec.get("socle_recess", 50))
     sec = [cavity_section(c, [p["name"] for p in panels])]
     return build_project(spec, panels, sections=sec, carcass_calc=carcass_calc(c))

@@ -13,7 +13,8 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     c = read_carcass(spec)
     section = (spec.get("sections") or [{"kind": "door", "door": 1}])[0]
     panels = carcass(c.W, c.D, c.H, c.T, c.T_back, c.Hleg, c.mat, c.mat_back,
-                     leg_as_panel=c.leg_as_panel, leg_type=c.leg_type)
+                     leg_as_panel=c.leg_as_panel, leg_type=c.leg_type,
+                     socle_recess=spec.get("socle_recess", 50))
 
     # полки: явные уровни имеют приоритет; счётчик shelves — раскладка равномерно
     levels = section.get("shelf_levels")

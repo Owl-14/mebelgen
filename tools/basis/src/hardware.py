@@ -217,6 +217,25 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
             for y, z in pts:
                 holes.append(_hole(v["name"], "стяжка (конфирмат)", x, y, z, 7, 50, "x", xdir))
 
+    # --- Цоколь (AKD-180): боковины начинаются выше дна — единственный стык
+    #     цоколя это его верхний торец под дном. Конфирматы сквозь дно вниз ---
+    for p in panels:
+        if p.get("type") != "plinth":
+            continue
+        pl = p["placement"]
+        zc = (pl["z1"] + pl["z2"]) / 2
+        for q in panels:
+            if q.get("type") != "bottom":
+                continue
+            qp = q["placement"]
+            if abs(pl["y2"] - qp["y1"]) > 1:
+                continue
+            x1o, x2o = max(pl["x1"], qp["x1"]), min(pl["x2"], qp["x2"])
+            if x2o - x1o < 60 or not (qp["z1"] - 1 <= zc <= qp["z2"] + 1):
+                continue
+            for x in _pair_centers(x1o + 10, x2o - 10):
+                holes.append(_hole(q["name"], "стяжка (конфирмат)", x, qp["y2"], zc, 7, 50, "y", -1))
+
     # --- Толстый задник в проём (>6, ЛДСП): помимо конфирматов через боковины
     #     (X-стыки выше) — конфирматы через дно/крышку в его торцы и саморезы
     #     сквозь пласть в торцы примыкающих перегородок/полок ---

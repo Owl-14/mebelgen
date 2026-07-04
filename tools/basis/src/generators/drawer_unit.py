@@ -37,7 +37,8 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     box_bot = section.get("box_bottom_thickness", c.T)
 
     panels = carcass(c.W, c.D, c.H, c.T, c.T_back, c.Hleg, c.mat, c.mat_back,
-                     leg_as_panel=c.leg_as_panel, leg_type=c.leg_type)
+                     leg_as_panel=c.leg_as_panel, leg_type=c.leg_type,
+                     socle_recess=spec.get("socle_recess", 50))
 
     ox1, ox2 = c.T, c.W - c.T                # внутренний проём (короб между боковинами)
     fx1, fx2 = round(reveal, 2), round(c.W - reveal, 2)   # накладной фасад — во всю ширину

@@ -58,12 +58,15 @@ def panel(
 
 def carcass(W: float, D: float, H: float, T: float, T_back: float, Hleg: float, mat: str, mat_back: str,
             *, leg_as_panel: bool = False, leg_type: str = "", z_front: float = 0,
-            top_z: tuple[float, float] | None = None, socle_full: bool = False) -> list[dict[str, Any]]:
+            top_z: tuple[float, float] | None = None, socle_full: bool = False,
+            socle_recess: float = 50) -> list[dict[str, Any]]:
     """Короб top_bottom_over_sides: дно, крышка, боковины, задник (+ опц. цоколь-панель).
 
     z_front — фронтальный инсет дна/боковин/задника (по умолчанию 0, заподлицо).
     top_z — переопределение Z крышки/столешницы (свес), напр. (-80, 270).
     socle_full — цоколь на всю ширину (для tv-тумб).
+    socle_recess — утопление цоколя от фронта (AKD-180): фасады выступают
+    перед корпусом, цоколь заподлицо читался «ступенькой»; 0 = заподлицо.
     """
     yb, yt = Hleg + T, H - T
     tz = top_z if top_z is not None else (z_front, D)
@@ -76,7 +79,8 @@ def carcass(W: float, D: float, H: float, T: float, T_back: float, Hleg: float, 
     ]
     if Hleg > 0 and leg_as_panel:
         sx = (0, W) if socle_full else (T, W - T)
-        out.append(panel("Цоколь", "plinth", "front", sx, (0, Hleg), (0, T),
+        r = max(0.0, min(socle_recess, D - T_back - T))
+        out.append(panel("Цоколь", "plinth", "front", sx, (0, Hleg), (r, r + T),
                          thickness=T, material=mat, estimated=True))
     return out
 

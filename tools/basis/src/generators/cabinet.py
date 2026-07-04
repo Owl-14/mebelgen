@@ -33,7 +33,8 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
                      leg_as_panel=c.leg_as_panel, leg_type=c.leg_type,
                      z_front=spec.get("carcass_z_front", 0),
                      top_z=tuple(top_z) if top_z else None,
-                     socle_full=spec.get("socle_full", False))
+                     socle_full=spec.get("socle_full", False),
+                     socle_recess=spec.get("socle_recess", 50))
     bounds = column_bounds(c.W, c.T, sections)
     panels += partitions(bounds, c.H, c.T, c.Hleg, c.mat, iz1, iz2)
 
