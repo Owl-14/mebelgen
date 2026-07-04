@@ -37,7 +37,8 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     box_bot = section.get("box_bottom_thickness", c.T)
 
     panels = carcass(c.W, c.D, c.H, c.T, c.T_back, c.Hleg, c.mat, c.mat_back,
-                     leg_as_panel=c.leg_as_panel, leg_type=c.leg_type)
+                     leg_as_panel=c.leg_as_panel, leg_type=c.leg_type,
+                     socle_recess=spec.get("socle_recess", 50))
 
     ox1, ox2 = c.T, c.W - c.T                # внутренний проём (короб между боковинами)
     fx1, fx2 = round(reveal, 2), round(c.W - reveal, 2)   # накладной фасад — во всю ширину
@@ -62,7 +63,8 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
                             thickness=c.T, material=c.mat, section_id="drawer_stack", estimated=True))
         panels.append(panel(f"Ящик {k} боковина правая", "drawer_side_right", "vertical", (bxr1, bxr2), (by1, by2), (box_z1, bz2),
                             thickness=c.T, material=c.mat, section_id="drawer_stack", estimated=True))
-        panels.append(panel(f"Ящик {k} задняя", "drawer_back", "front", (bxl2, bxr1), (by1, by2), (bz2, bz2 + box_back),
+        # накладная стенка перекрывает торцы боковин (AKD-181) — есть куда крепить
+        panels.append(panel(f"Ящик {k} задняя", "drawer_back", "front", (bxl1, bxr2), (by1, by2), (bz2, bz2 + box_back),
                             thickness=box_back, material=c.mat, section_id="drawer_stack", estimated=True))
         drawers_meta.append({"id": f"drawer_{k}", "count": 1,
                              "guide_type": section.get("guide_type", "шариковые"), "soft_close": False, "lock": False,

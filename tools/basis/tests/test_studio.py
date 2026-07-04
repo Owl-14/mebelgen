@@ -23,7 +23,7 @@ def test_payload_ok_model():
     assert all(not v for v in p["issues"].values())
     v = p["viewer"]
     assert len(v["panels"]) == 20
-    assert len(v["holes"]) == 59                    # komi_72: + замок ящиков (AKD-137)
+    assert len(v["holes"]) == 93                    # komi_72: + фасадные стяжки и крепёж стенки короба (AKD-181)
     assert any(h["kind"] == "guide_corpus" for h in v["hardware"])
     assert p["stats"]["dims"]["w"] == 400 and p["stats"]["n_panels"] == 20
     assert any("аправляющ" in b["slot"] or "аправляющ" in b["name"] for b in p["bom"])

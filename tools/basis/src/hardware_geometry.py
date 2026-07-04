@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .hardware import _hinge_levels, _n_hinges
+from .hardware import _hinge_levels, _n_hinges, leg_positions
 
 _VERT = ("side_left", "side_right", "vertical_partition")
 
@@ -21,6 +21,7 @@ _VERT = ("side_left", "side_right", "vertical_partition")
 COL_RAIL = "#8f969e"
 COL_HINGE = "#7a828b"
 COL_CUP = "#666d75"
+COL_LEG = "#3a3d40"                                   # опоры/каркас (чёрный RAL9005)
 
 _STD_LENGTHS = (500, 450, 400, 350, 300, 250)
 
@@ -94,6 +95,58 @@ def compute_hardware_geometry(project: dict[str, Any]) -> list[dict[str, Any]]:
                                 COL_RAIL, fx - 7, fx, y1, y2, bz1, bz1 + L))
                 out.append(_box("guide_drawer", f"{d['id']} направляющая (ящик, {side})",
                                 COL_RAIL, bxo, bxo + 6, y1, dy2, bz1, bz1 + min(L, bd)))
+
+    # --- опоры/подпятники (AKD-178): цилиндры от пола до опорной панели ---
+    for i, leg in enumerate(leg_positions(project), start=1):
+        r = 20.0
+        out.append(_box("leg", f"Опора {i}", COL_LEG,
+                        leg["x"] - r, leg["x"] + r, 0, leg["y_top"],
+                        leg["z"] - r, leg["z"] + r))
+
+    # --- металлокаркас стола (AKD-178): стойки 40×40 + продольные царги ---
+    construction = str((project.get("carcass_calculation") or {}).get("construction", ""))
+    if construction == "top_on_metal_frame":
+        top = next((p for p in panels if p.get("type") == "top"), None)
+        if top is not None:
+            tp = top["placement"]
+            y_top = tp["y1"]
+            t = 40.0
+            mx, mz = 60.0, 60.0
+            xs = (tp["x1"] + mx, tp["x2"] - mx - t)
+            zs = (tp["z1"] + mz, tp["z2"] - mz - t)
+            k = 0
+            for x in xs:
+                for z in zs:
+                    k += 1
+                    out.append(_box("frame_leg", f"Стойка каркаса {k}", COL_LEG,
+                                    x, x + t, 0, y_top, z, z + t))
+                # продольная царга подстолья вдоль X на каждой стороне Z
+            for j, z in enumerate(zs, start=1):
+                out.append(_box("frame_rail", f"Царга каркаса {j}", COL_LEG,
+                                xs[0], xs[1] + t, y_top - t, y_top, z, z + t))
+
+    # --- штанга-вешало (AKD-177): труба + держатели/рельса ---
+    for rod in hw.get("rods") or []:
+        rid = rod.get("id", "rod")
+        x1, x2 = float(rod["x1"]), float(rod["x2"])
+        y1, y2 = float(rod["y1"]), float(rod["y2"])
+        z1, z2 = float(rod["z1"]), float(rod["z2"])
+        out.append(_box("rod", f"{rid}: штанга", COL_RAIL, x1, x2, y1, y2, z1, z2))
+        yc, zc, xc = (y1 + y2) / 2, (z1 + z2) / 2, (x1 + x2) / 2
+        if rod.get("axis") == "z":
+            # выдвижная: монтажная рельса над трубой до горизонта выше
+            host_y = min((p["placement"]["y1"] for p in panels
+                          if p.get("type") in ("shelf", "top", "bottom")
+                          and 5 <= p["placement"]["y1"] - y2 <= 120
+                          and p["placement"]["x1"] - 1 <= xc <= p["placement"]["x2"] + 1),
+                         default=y2 + 20)
+            out.append(_box("rod_bracket", f"{rid}: рельса", COL_HINGE,
+                            xc - 16, xc + 16, y2, host_y, z1, z2))
+        else:
+            for ex in (x1, x2):
+                px1, px2 = (ex, ex + 5) if ex == x1 else (ex - 5, ex)
+                out.append(_box("rod_bracket", f"{rid}: держатель", COL_HINGE,
+                                px1, px2, yc - 25, yc + 25, zc - 25, zc + 25))
 
     # --- петли: чашка + плечо + ответная планка на каждую точку ---
     for p in panels:

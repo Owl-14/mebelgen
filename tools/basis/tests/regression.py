@@ -20,6 +20,7 @@ from src.generators import generate_from_paramspec                 # noqa: E402
 from src.validate import validate_furniture                        # noqa: E402
 from src.geometry_check import check_placement_geometry            # noqa: E402
 from src.consistency_check import check_consistency                # noqa: E402
+from src.completeness_check import check_completeness              # noqa: E402
 
 # *.project.json / *.versions.json — артефакты Studio («Сохранить», версии), не ParamSpec
 SPECS = sorted(p for p in (ROOT / "paramspecs").glob("*.json")
@@ -55,7 +56,8 @@ def main() -> int:
         sc = validate_furniture(gen)
         g = check_placement_geometry(gen)
         c = check_consistency(gen)
-        valid = (not sc) and g["ok"] and not c
+        comp = check_completeness(gen, spec)
+        valid = (not sc) and g["ok"] and not c and not comp
         n_valid += valid
         golden = ROOT / "projects" / spec_path.name
         ex = "—"
@@ -63,7 +65,8 @@ def main() -> int:
             ok, miss, extra, bad = exact_match(gen, golden)
             n_exact += ok
             ex = "EXACT" if ok else f"~ (m{miss}/e{extra}/d{bad})"
-        note = "" if valid else f"sc{len(sc)} g{0 if g['ok'] else g['overlap_count']} c{len(c)}"
+        note = "" if valid else (f"sc{len(sc)} g{0 if g['ok'] else g['overlap_count']} "
+                                 f"c{len(c)} comp{len(comp)}" + (f" [{comp[0][:38]}]" if comp else ""))
         rows.append((spec_path.stem, "VALID" if valid else "INVALID", len(gen["panels"]), ex, note))
 
     w = max(len(r[0]) for r in rows)

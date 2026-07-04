@@ -58,12 +58,15 @@ def panel(
 
 def carcass(W: float, D: float, H: float, T: float, T_back: float, Hleg: float, mat: str, mat_back: str,
             *, leg_as_panel: bool = False, leg_type: str = "", z_front: float = 0,
-            top_z: tuple[float, float] | None = None, socle_full: bool = False) -> list[dict[str, Any]]:
+            top_z: tuple[float, float] | None = None, socle_full: bool = False,
+            socle_recess: float = 50) -> list[dict[str, Any]]:
     """Короб top_bottom_over_sides: дно, крышка, боковины, задник (+ опц. цоколь-панель).
 
     z_front — фронтальный инсет дна/боковин/задника (по умолчанию 0, заподлицо).
     top_z — переопределение Z крышки/столешницы (свес), напр. (-80, 270).
     socle_full — цоколь на всю ширину (для tv-тумб).
+    socle_recess — утопление цоколя от фронта (AKD-180): фасады выступают
+    перед корпусом, цоколь заподлицо читался «ступенькой»; 0 = заподлицо.
     """
     yb, yt = Hleg + T, H - T
     tz = top_z if top_z is not None else (z_front, D)
@@ -76,7 +79,8 @@ def carcass(W: float, D: float, H: float, T: float, T_back: float, Hleg: float, 
     ]
     if Hleg > 0 and leg_as_panel:
         sx = (0, W) if socle_full else (T, W - T)
-        out.append(panel("Цоколь", "plinth", "front", sx, (0, Hleg), (0, T),
+        r = max(0.0, min(socle_recess, D - T_back - T))
+        out.append(panel("Цоколь", "plinth", "front", sx, (0, Hleg), (r, r + T),
                          thickness=T, material=mat, estimated=True))
     return out
 
@@ -131,7 +135,8 @@ def build_project(spec: dict[str, Any], panels: list[dict[str, Any]], *,
                   sections: list[dict[str, Any]] | None = None,
                   drawers: list[dict[str, Any]] | None = None,
                   doors: list[dict[str, Any]] | None = None,
-                  carcass_calc: dict[str, Any] | None = None) -> dict[str, Any]:
+                  carcass_calc: dict[str, Any] | None = None,
+                  rods: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """Собрать project.json по furniture.schema.json из панелей и ParamSpec."""
     dim = spec["dimensions"]
     m = spec["materials"]
@@ -141,9 +146,15 @@ def build_project(spec: dict[str, Any], panels: list[dict[str, Any]], *,
     gaps = spec.get("gaps", {}) or {}
     handles = hw.get("handles") or {"type": "нет", "material": "—", "color": "—", "size": 0,
                                      "count": 0, "offset_from_top": 0, "furniture_encoded": ""}
+    # count по умолчанию из габарита (AKD-178): 4, шире 1200 — 6
+    _lt = str(legs.get("type", "нет")).lower()
+    _n_legs = legs.get("count", 0)
+    if not _n_legs and legs.get("height", 0) and not legs.get("as_panel") \
+            and _lt not in ("нет", "", "-", "—"):
+        _n_legs = 6 if dim["width"] > 1200 else 4
     legs_block = {"type": legs.get("type", "нет"), "adjustable": legs.get("adjustable", False),
                   "color": legs.get("color", "—"), "height": legs.get("height", 0),
-                  "count": legs.get("count", 0)}
+                  "count": _n_legs}
     project: dict[str, Any] = {
         "project_name": spec["project_name"],
         "furniture_type": spec.get("furniture_type", spec["archetype"]),
@@ -179,6 +190,8 @@ def build_project(spec: dict[str, Any], panels: list[dict[str, Any]], *,
         "warnings": spec.get("warnings", []),
         "estimated_values": spec.get("estimated_values", []),
     }
+    if rods:
+        project["hardware"]["rods"] = rods
     if hw.get("drawer_guides"):
         project["hardware"]["drawer_guides"] = hw["drawer_guides"]
     if hw.get("hinges"):

@@ -49,9 +49,11 @@ def apply_back_mount(project: dict[str, Any], mode: str | None) -> dict[str, Any
     """Накладной задник (AKD-137): mode="overlay" перекладывает тонкий
     ДВП-задник ПОВЕРХ задних торцов корпуса на всю его ширину/высоту —
     как в реальных изделиях БАЗИС (реверс: гвозди по периметру в торцы).
-    По умолчанию (inset) задник остаётся врезным — golden-эталоны не меняются.
+
+    AKD-179: для тонкого задника overlay — умолчание (врезной ДВП заподлицо
+    гвоздям не за что держаться); явный mode="inset" оставляет врезным.
     """
-    if mode != "overlay":
+    if mode != "overlay" and mode is not None:
         return project
     panels = project.get("panels", [])
     back = next((p for p in panels

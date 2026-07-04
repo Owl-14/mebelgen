@@ -62,11 +62,10 @@ def test_fasteners_reverse_patterns():
     spec = json.loads((ROOT / "paramspecs" / "komi_72_tumba_podkatnaya.json").read_text(encoding="utf-8"))
     holes = compute_drilling(generate_from_paramspec(spec))
     s = drilling_summary(holes)
-    # задник komi_72 ВРЕЗНОЙ (между боковинами) — гвозди к торцам невозможны
-    # (AKD-171: фильтр «за гвоздём есть тело»); гвозди остаются у изделий
-    # со стойками до задника — см. wardrobe ниже
-    assert s.get("задник (гвоздь)", 0) == 0
-    assert s["короб ящика (саморез)"] == 18     # 6 на ящик (дно 2×2 + ЗС к дну 2)
+    # тонкий ДВП-задник по умолчанию НАКЛАДНОЙ (AKD-179): гвозди по периметру
+    # в торцы корпуса — иначе врезному заподлицо держаться не за что
+    assert s.get("задник (гвоздь)", 0) >= 8
+    assert s["короб ящика (саморез)"] == 30     # 10 на ящик (дно 2×2 + ЗС к дну 2 + ЗС к боковинам 4)
     w = json.loads((ROOT / "paramspecs" / "wardrobe_demo.json").read_text(encoding="utf-8"))
     sw = drilling_summary(compute_drilling(generate_from_paramspec(w)))
     assert sw["задник (гвоздь)"] >= 8           # стойки/полки до задника

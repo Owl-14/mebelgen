@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from .base import read_carcass
+from .columns import rod_in_column
 from .corpus import carcass_calc, cavity_section
 from .helpers import build_project, carcass, overlay_door, panel, shelf_levels, shelves
 
@@ -13,10 +14,14 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     c = read_carcass(spec)
     section = (spec.get("sections") or [{"kind": "door", "door": 1}])[0]
     panels = carcass(c.W, c.D, c.H, c.T, c.T_back, c.Hleg, c.mat, c.mat_back,
-                     leg_as_panel=c.leg_as_panel, leg_type=c.leg_type)
+                     leg_as_panel=c.leg_as_panel, leg_type=c.leg_type,
+                     socle_recess=spec.get("socle_recess", 50))
 
-    if section.get("shelves"):
-        levels = section.get("shelf_levels") or shelf_levels(c.Hleg + c.T, c.H - c.T, section["shelves"], c.T)
+    # полки: явные уровни имеют приоритет; счётчик shelves — раскладка равномерно
+    levels = section.get("shelf_levels")
+    if levels is None and section.get("shelves"):
+        levels = shelf_levels(c.Hleg + c.T, c.H - c.T, section["shelves"], c.T)
+    if levels:
         panels += shelves(levels, c.W, c.D, c.T, c.T_back, c.mat, "main")
 
     ndoor = section.get("door", 1)
@@ -41,6 +46,13 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
                        "dimensions": {"width": c.W - 2 * g, "height": y2 - y1},
                        "position": {"x": g, "y": y1, "z": 0}, "estimated": False}]
 
-    sec = [cavity_section(c, [p["name"] for p in panels], stype="door")]
+    rods_meta = []
+    rod = rod_in_column(c.T, c.W - c.T, section, c.H - c.T, 0, c.D - c.T_back, "main")
+    if rod:
+        rods_meta.append(rod)
+
+    sec = [cavity_section(c, [p["name"] for p in panels] + (["Штанга"] if rods_meta else []),
+                          stype="door")]
     cc = carcass_calc(c)
-    return build_project(spec, panels, sections=sec, doors=doors_meta, carcass_calc=cc)
+    return build_project(spec, panels, sections=sec, doors=doors_meta,
+                         carcass_calc=cc, rods=rods_meta)

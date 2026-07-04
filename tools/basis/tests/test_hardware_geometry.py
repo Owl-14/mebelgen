@@ -64,3 +64,61 @@ def test_all_paramspecs_geometry_builds():
         parts = compute_hardware_geometry(pr)
         for g in parts:
             assert g["x2"] > g["x1"] and g["y2"] > g["y1"] and g["z2"] > g["z1"], (f.name, g["name"])
+
+
+def test_wardrobe_rod_modeled():
+    """AKD-177: штанга — фурнитура: геометрия, присадки держателей, BOM."""
+    import json
+    from src.generators import generate_from_paramspec
+    from src.hardware import compute_drilling, drilling_summary
+    from src.drilling_check import check_drilling_geometry
+    from src.hardware_geometry import compute_hardware_geometry
+    from src.delivery import _hardware_bom
+
+    w = json.loads((ROOT / "paramspecs" / "wardrobe_demo.json").read_text(encoding="utf-8"))
+    p = generate_from_paramspec(w)
+    rods = p["hardware"].get("rods") or []
+    assert rods and rods[0]["axis"] == "x"
+    holes = compute_drilling(p)
+    assert drilling_summary(holes).get("штангодержатель (саморез)") == 4
+    assert not check_drilling_geometry(p, holes)["errors"]
+    kinds = {g["kind"] for g in compute_hardware_geometry(p)}
+    assert "rod" in kinds and "rod_bracket" in kinds
+    assert any(b["slot"] == "Штанга" for b in _hardware_bom(p))
+
+    g = json.loads((ROOT / "paramspecs" / "komi_47_shkaf_garderobny.json").read_text(encoding="utf-8"))
+    pg = generate_from_paramspec(g)
+    assert (pg["hardware"].get("rods") or [{}])[0].get("axis") == "z"   # выдвижная
+    hg = compute_drilling(pg)
+    assert drilling_summary(hg).get("штангодержатель (саморез)") == 3   # рельса вверх в полку
+    assert not check_drilling_geometry(pg, hg)["errors"]
+
+
+def test_legs_and_metal_frame_modeled():
+    """AKD-178: регулируемые опоры и металлокаркас видимы + крепёж столешницы/экрана."""
+    import json
+    from src.generators import generate_from_paramspec
+    from src.hardware import compute_drilling, drilling_summary, leg_positions
+    from src.drilling_check import check_drilling_geometry
+    from src.hardware_geometry import compute_hardware_geometry
+
+    # шкаф на регулируемых опорах: 4 опоры под дном + саморезы подпятников
+    g = json.loads((ROOT / "paramspecs" / "komi_46_shkaf_dokumenty.json").read_text(encoding="utf-8"))
+    p = generate_from_paramspec(g)
+    assert len(leg_positions(p)) == 4
+    kinds = {q["kind"] for q in compute_hardware_geometry(p)}
+    assert "leg" in kinds
+    holes = compute_drilling(p)
+    assert drilling_summary(holes).get("опора (саморез)") == 8
+    assert not check_drilling_geometry(p, holes)["errors"]
+    assert p["hardware"]["legs"]["count"] == 4          # дефолт из габарита
+
+    # стол на металлокаркасе: стойки+царги видимы, столешница и экран с крепежом
+    d = json.loads((ROOT / "paramspecs" / "komi_38_stol_direktora.json").read_text(encoding="utf-8"))
+    pd = generate_from_paramspec(d)
+    kd = {q["kind"] for q in compute_hardware_geometry(pd)}
+    assert "frame_leg" in kd and "frame_rail" in kd
+    hd = compute_drilling(pd)
+    sd = drilling_summary(hd)
+    assert sd.get("каркас (саморез)", 0) >= 8           # подстолье + экран
+    assert not check_drilling_geometry(pd, hd)["errors"]

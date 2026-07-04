@@ -89,11 +89,12 @@ class FinishResult:
     overlaps: list[dict[str, Any]] = field(default_factory=list)
     fixes_applied: list[str] = field(default_factory=list)
     consistency_notes: list[str] = field(default_factory=list)
+    completeness_errors: list[str] = field(default_factory=list)
     saved: bool = False
 
     @property
     def ok(self) -> bool:
-        return self.schema_ok and self.geometry_ok
+        return self.schema_ok and self.geometry_ok and not self.completeness_errors
 
     def summary(self) -> str:
         lines = [f"Файл: {self.json_path}"]
@@ -113,6 +114,12 @@ class FinishResult:
                 lines.append(
                     f"  - {o['panel_a']} <-> {o['panel_b']}: {o['suggested_action']}"
                 )
+        if self.completeness_errors:
+            lines.append(f"Полнота: ОШИБКА ({len(self.completeness_errors)} шт., AKD-182)")
+            for n in self.completeness_errors:
+                lines.append(f"  - {n}")
+        else:
+            lines.append("Полнота: OK (все детали закреплены)")
         if self.consistency_notes:
             lines.append("Несостыковки (не блокируют, проверьте вручную):")
             for n in self.consistency_notes:
@@ -181,6 +188,11 @@ def finish_project(
     result.consistency_notes = [
         f"[{i.code}] {i.panel}: {i.message}" for i in check_consistency(data)
     ]
+    try:
+        from src.completeness_check import check_completeness
+        result.completeness_errors = check_completeness(data)
+    except Exception as e:  # noqa: BLE001 — полнота не должна ронять finish целиком
+        result.completeness_errors = [f"проверка полноты упала: {e}"]
 
     if fixes:
         path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
