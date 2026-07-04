@@ -195,21 +195,21 @@
       "material": "ДВП",
       "thickness": 3.2,
       "dimensions": {
-        "width": 1156,
-        "height": 696
+        "width": 1200,
+        "height": 740
       },
       "placement": {
-        "x1": 22,
-        "x2": 1178,
-        "y1": 22,
-        "y2": 718,
-        "z1": 266.8,
-        "z2": 270
+        "x1": 0,
+        "x2": 1200,
+        "y1": 0,
+        "y2": 740,
+        "z1": 270,
+        "z2": 273.2
       },
       "position": {
-        "x": 22,
-        "y": 22,
-        "z": 266.8
+        "x": 0,
+        "y": 0,
+        "z": 270
       },
       "rotation": {
         "x": 0,
@@ -222,7 +222,8 @@
         "left": 0.4,
         "right": 0.4
       },
-      "estimated": false
+      "estimated": false,
+      "override": true
     },
     {
       "name": "Перегородка 1",

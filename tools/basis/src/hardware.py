@@ -202,7 +202,10 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
                 continue
             cy1, cy2 = max(pl["y1"], vp["y1"]), min(pl["y2"], vp["y2"])
             cz1, cz2 = max(pl["z1"], vp["z1"]), min(pl["z2"], vp["z2"])
-            if cy2 - cy1 < 20 or cz2 - cz1 < 20:      # нет полноценного контакта
+            # у задника в проём контакт по Z = его толщина (16 < 20) — порог
+            # по короткой стороне снижаем, иначе задник остаётся без крепежа
+            thin = min(20.0, float(p.get("thickness", 16)) - 2) if p["type"] == "back" else 20.0
+            if cy2 - cy1 < min(20.0, thin) or cz2 - cz1 < thin:   # нет полноценного контакта
                 continue
             # раскладка пар вдоль длинной стороны зоны контакта
             if (cz2 - cz1) >= (cy2 - cy1):
@@ -213,6 +216,55 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
                 pts = [(y, zc) for y in _pair_centers(cy1 + 10, cy2 - 10)]
             for y, z in pts:
                 holes.append(_hole(v["name"], "стяжка (конфирмат)", x, y, z, 7, 50, "x", xdir))
+
+    # --- Толстый задник в проём (>6, ЛДСП): помимо конфирматов через боковины
+    #     (X-стыки выше) — конфирматы через дно/крышку в его торцы и саморезы
+    #     сквозь пласть в торцы примыкающих перегородок/полок ---
+    thick_backs = [p for p in panels if p.get("type") == "back"
+                   and float(p.get("thickness", 16)) > 6]
+    for b in thick_backs:
+        bp = b["placement"]
+        zc = (bp["z1"] + bp["z2"]) / 2
+        for p in panels:
+            if p.get("type") not in ("bottom", "top"):
+                continue
+            if p["type"] == "top" and hidden_top:
+                continue                           # видимую пласть столешницы не сверлим
+            pl = p["placement"]
+            if not (pl["x1"] - 1 <= bp["x1"] and bp["x2"] <= pl["x2"] + 1
+                    and pl["z1"] - 1 <= zc <= pl["z2"] + 1):
+                continue
+            if p["type"] == "bottom" and abs(bp["y1"] - pl["y2"]) < 1:
+                y, ydir = pl["y1"], 1              # снизу дна вверх в торец задника
+            elif p["type"] == "top" and abs(bp["y2"] - pl["y1"]) < 1:
+                y, ydir = pl["y2"], -1             # сверху крышки вниз в торец задника
+            else:
+                continue
+            for x in _pair_centers(bp["x1"] + 10, bp["x2"] - 10):
+                holes.append(_hole(p["name"], "стяжка (конфирмат)", x, y, zc, 7, 50, "y", ydir))
+        # перегородки/полки, упирающиеся торцом в пласть задника
+        t_b = float(b.get("thickness", 16))
+        for q in panels:
+            qp = q.get("placement")
+            if q.get("type") not in ("vertical_partition", "shelf") or not qp:
+                continue
+            if abs(qp["z2"] - bp["z1"]) > 1.5:
+                continue
+            if q["type"] == "vertical_partition":
+                cx = (qp["x1"] + qp["x2"]) / 2
+                y1o, y2o = max(qp["y1"], bp["y1"]), min(qp["y2"], bp["y2"])
+                if not (bp["x1"] < cx < bp["x2"]) or y2o - y1o < 100:
+                    continue
+                pts = [(cx, y) for y in _spread(y1o + 40, y2o - 40, 300)]
+            else:
+                cy = (qp["y1"] + qp["y2"]) / 2
+                x1o, x2o = max(qp["x1"], bp["x1"]), min(qp["x2"], bp["x2"])
+                if not (bp["y1"] < cy < bp["y2"]) or x2o - x1o < 100:
+                    continue
+                pts = [(x, cy) for x in _spread(x1o + 40, x2o - 40, 300)]
+            for x, y in pts:
+                holes.append(_hole(b["name"], "задник (саморез)", x, y, bp["z2"],
+                                   3.5, round(t_b + 14, 1), "z", -1))
 
     # --- Гвозди задника: по периметру + вдоль внутренних полок/стоек (реверс
     #     готовой тумбы БАЗИС: гвоздь 1.6×25, шаг ≤250, см. BASIS_FASTENERS_REVERSE) ---
@@ -358,6 +410,7 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
 _FASTENER_MAP = {
     "стяжка (конфирмат)": ("Конфирмат 7×50", "конфирмат 7", 1.0),
     "задник (гвоздь)": ("Гвоздь 1.6×25", "гвоздь 1,6", 1.0),
+    "задник (саморез)": ("Саморез 3,5×30", "саморез потай 3,5 30", 1.0),
     "короб ящика (саморез)": ("Саморез 3,5×16", "саморез потай 3,5 16", 1.0),
     "направляющая (винт)": ("Саморез 3,5×16 (направляющие)", "саморез потай 3,5 16", 1.0),
     "ручка (винт)": ("Винт М4×16", "винт м4 16", 1.0),

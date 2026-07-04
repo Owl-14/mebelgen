@@ -198,21 +198,21 @@
       "material": "ДВП",
       "thickness": 3.2,
       "dimensions": {
-        "width": 372,
-        "height": 642
+        "width": 404,
+        "height": 674
       },
       "placement": {
-        "x1": 16,
-        "x2": 388,
-        "y1": 16,
-        "y2": 658,
-        "z1": 486.8,
-        "z2": 490
+        "x1": 0,
+        "x2": 404,
+        "y1": 0,
+        "y2": 674,
+        "z1": 490,
+        "z2": 493.2
       },
       "position": {
-        "x": 16,
-        "y": 16,
-        "z": 486.8
+        "x": 0,
+        "y": 0,
+        "z": 490
       },
       "rotation": {
         "x": 0,
@@ -225,7 +225,8 @@
         "left": 0.4,
         "right": 0.4
       },
-      "estimated": false
+      "estimated": false,
+      "override": true
     },
     {
       "name": "Фасад ящик 1",

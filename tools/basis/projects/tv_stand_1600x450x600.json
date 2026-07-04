@@ -209,21 +209,21 @@
       "material": "ДВП",
       "thickness": 3.2,
       "dimensions": {
-        "width": 1568,
-        "height": 454
+        "width": 1600,
+        "height": 600
       },
       "placement": {
-        "x1": 16,
-        "x2": 1584,
-        "y1": 130,
-        "y2": 584,
-        "z1": 446.8,
-        "z2": 450
+        "x1": 0,
+        "x2": 1600,
+        "y1": 0,
+        "y2": 600,
+        "z1": 450,
+        "z2": 453.2
       },
       "position": {
-        "x": 16,
-        "y": 130,
-        "z": 446.8
+        "x": 0,
+        "y": 0,
+        "z": 450
       },
       "rotation": {
         "x": 0,
@@ -236,7 +236,8 @@
         "left": 0.4,
         "right": 0.4
       },
-      "estimated": false
+      "estimated": false,
+      "override": true
     },
     {
       "name": "Цоколь",
