@@ -146,9 +146,15 @@ def build_project(spec: dict[str, Any], panels: list[dict[str, Any]], *,
     gaps = spec.get("gaps", {}) or {}
     handles = hw.get("handles") or {"type": "нет", "material": "—", "color": "—", "size": 0,
                                      "count": 0, "offset_from_top": 0, "furniture_encoded": ""}
+    # count по умолчанию из габарита (AKD-178): 4, шире 1200 — 6
+    _lt = str(legs.get("type", "нет")).lower()
+    _n_legs = legs.get("count", 0)
+    if not _n_legs and legs.get("height", 0) and not legs.get("as_panel") \
+            and _lt not in ("нет", "", "-", "—"):
+        _n_legs = 6 if dim["width"] > 1200 else 4
     legs_block = {"type": legs.get("type", "нет"), "adjustable": legs.get("adjustable", False),
                   "color": legs.get("color", "—"), "height": legs.get("height", 0),
-                  "count": legs.get("count", 0)}
+                  "count": _n_legs}
     project: dict[str, Any] = {
         "project_name": spec["project_name"],
         "furniture_type": spec.get("furniture_type", spec["archetype"]),

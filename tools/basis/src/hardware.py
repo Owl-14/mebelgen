@@ -68,6 +68,43 @@ def _hinge_levels(y1: float, y2: float, n: int, margin: float = 100.0) -> list[f
     return [lo + (hi - lo) * k / (n - 1) for k in range(n)]
 
 
+def leg_positions(project: dict[str, Any]) -> list[dict[str, Any]]:
+    """Точки регулируемых опор/подпятников (AKD-178): [{x, z, y_top, panel}].
+
+    Опоры ставятся под нижние опорные панели (дно — по углам с отступом 50,
+    +2 в середине при ширине > 1200; панельные опоры столов — по 2 на опору).
+    Пусто, если опор нет (цоколь-панель, металлокаркас, height=0)."""
+    hw = project.get("hardware", {}) or {}
+    legs = hw.get("legs") or {}
+    lt = str(legs.get("type") or "").lower()
+    lh = float(legs.get("height") or 0)
+    construction = str((project.get("carcass_calculation") or {}).get("construction", ""))
+    panels = [p for p in project.get("panels", []) if isinstance(p.get("placement"), dict)]
+    if lh <= 0 or lt in ("", "нет", "-", "—") or construction == "top_on_metal_frame" \
+            or any(p.get("type") == "plinth" for p in panels):
+        return []
+    out: list[dict[str, Any]] = []
+    for p in panels:
+        pl = p["placement"]
+        if abs(pl["y1"] - lh) > 0.5:                  # панель не опирается на опоры
+            continue
+        if p.get("type") == "bottom":
+            m = 50.0
+            xs = [pl["x1"] + m, pl["x2"] - m]
+            if pl["x2"] - pl["x1"] > 1200:
+                xs.insert(1, (pl["x1"] + pl["x2"]) / 2)
+            for x in xs:
+                for z in (pl["z1"] + m, pl["z2"] - m):
+                    out.append({"x": round(x, 1), "z": round(z, 1),
+                                "y_top": pl["y1"], "panel": p["name"]})
+        elif p.get("type") in _VERT:                  # панельные опоры стола до пола
+            xc = (pl["x1"] + pl["x2"]) / 2
+            for z in (pl["z1"] + 40, pl["z2"] - 40):
+                out.append({"x": round(xc, 1), "z": round(z, 1),
+                            "y_top": pl["y1"], "panel": p["name"]})
+    return out
+
+
 def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
     panels = project.get("panels", [])
     hw = project.get("hardware", {}) or {}
@@ -445,6 +482,32 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
             holes.append(_hole(p["name"], "фасадная стяжка (эксцентрик Ø15)",
                                sx, yc, z_cam, 15, 13, "x", sdir))
 
+    # --- Опоры/подпятники (AKD-178): по 2 самореза на опору вверх в панель ---
+    for leg in leg_positions(project):
+        for dx in (-12, 12):
+            holes.append(_hole(leg["panel"], "опора (саморез)",
+                               leg["x"] + dx, leg["y_top"], leg["z"], 3.5, 14, "y", 1))
+
+    # --- Металлокаркас стола (AKD-178): саморезы подстолья снизу столешницы
+    #     + отверстия крепления экрана к каркасу ---
+    if construction == "top_on_metal_frame":
+        for p in panels:
+            if p.get("type") != "top":
+                continue
+            pl = p["placement"]
+            for z in (pl["z1"] + 80, pl["z2"] - 80):
+                for x in _spread(pl["x1"] + 100, pl["x2"] - 100, 500)[:4]:
+                    holes.append(_hole(p["name"], "каркас (саморез)",
+                                       x, pl["y1"], z, 5, 12, "y", 1))
+        for p in panels:
+            if p.get("type") != "screen":
+                continue
+            pl = p["placement"]
+            for x in (pl["x1"] + 40, pl["x2"] - 40):
+                for y in (pl["y1"] + 40, pl["y2"] - 40):
+                    holes.append(_hole(p["name"], "каркас (саморез)",
+                                       x, y, pl["z2"], 5, 10, "z", -1))
+
     # --- Штанга-вешало (AKD-177): саморезы штангодержателей. Поперечная (axis x)
     #     — по 2 винта в боковину/перегородку у каждого конца; продольная
     #     выдвижная (axis z) — 3 винта вверх в горизонт над ней ---
@@ -540,6 +603,8 @@ _FASTENER_MAP = {
     "фасадная стяжка (шток)": ("Стяжка фасадная (эксцентрик+шток)", "эксцентрик", 0.0),
     "замок (цилиндр Ø18)": ("Замок мебельный", "замок", 1.0),
     "штангодержатель (саморез)": ("Штангодержатель (комплект)", "штангодержатель", 0.5),
+    "опора (саморез)": ("Саморез 3,5×16 (опоры)", "саморез потай 3,5 16", 1.0),
+    "каркас (саморез)": ("Саморез 5×12 (каркас/экран)", "саморез 5 12", 1.0),
 }
 
 
