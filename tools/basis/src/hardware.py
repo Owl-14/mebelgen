@@ -445,6 +445,38 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
             holes.append(_hole(p["name"], "фасадная стяжка (эксцентрик Ø15)",
                                sx, yc, z_cam, 15, 13, "x", sdir))
 
+    # --- Штанга-вешало (AKD-177): саморезы штангодержателей. Поперечная (axis x)
+    #     — по 2 винта в боковину/перегородку у каждого конца; продольная
+    #     выдвижная (axis z) — 3 винта вверх в горизонт над ней ---
+    for rod in hw.get("rods") or []:
+        yc = (float(rod["y1"]) + float(rod["y2"])) / 2
+        zc = (float(rod["z1"]) + float(rod["z2"])) / 2
+        xc = (float(rod["x1"]) + float(rod["x2"])) / 2
+        if rod.get("axis") == "z":
+            host = min((p for p in panels
+                        if p.get("type") in ("shelf", "top", "bottom")
+                        and 5 <= p["placement"]["y1"] - float(rod["y2"]) <= 120
+                        and p["placement"]["x1"] - 1 <= xc <= p["placement"]["x2"] + 1
+                        and p["placement"]["z1"] - 1 <= zc <= p["placement"]["z2"] + 1),
+                       key=lambda p: p["placement"]["y1"], default=None)
+            if host is None:
+                continue
+            hp = host["placement"]
+            z1, z2 = max(float(rod["z1"]), hp["z1"]), min(float(rod["z2"]), hp["z2"])
+            for z in _spread(z1 + 25, z2 - 25, 200)[:3]:
+                holes.append(_hole(host["name"], "штангодержатель (саморез)",
+                                   xc, hp["y1"], z, 3.5, 12, "y", 1))
+        else:
+            for edge_x, want in ((float(rod["x1"]), "x2"), (float(rod["x2"]), "x1")):
+                v = min((v for v in verticals if abs(v["placement"][want] - edge_x) < 1.0),
+                        key=lambda v: abs(v["placement"][want] - edge_x), default=None)
+                if v is None:
+                    continue
+                into = -1 if want == "x2" else 1
+                for dy in (-14, 14):
+                    holes.append(_hole(v["name"], "штангодержатель (саморез)",
+                                       edge_x, yc + dy, zc, 3.5, 14, "x", into))
+
     # --- Замки (AKD-137): цилиндр Ø18 сквозь фасад. Дверь — сторона ручки;
     #     ящики — центральный замок в верхнем фасаде ---
     if hw.get("locks"):
@@ -507,6 +539,7 @@ _FASTENER_MAP = {
     "фасадная стяжка (эксцентрик Ø15)": ("Стяжка фасадная (эксцентрик+шток)", "эксцентрик", 1.0),
     "фасадная стяжка (шток)": ("Стяжка фасадная (эксцентрик+шток)", "эксцентрик", 0.0),
     "замок (цилиндр Ø18)": ("Замок мебельный", "замок", 1.0),
+    "штангодержатель (саморез)": ("Штангодержатель (комплект)", "штангодержатель", 0.5),
 }
 
 

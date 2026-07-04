@@ -95,6 +95,29 @@ def compute_hardware_geometry(project: dict[str, Any]) -> list[dict[str, Any]]:
                 out.append(_box("guide_drawer", f"{d['id']} направляющая (ящик, {side})",
                                 COL_RAIL, bxo, bxo + 6, y1, dy2, bz1, bz1 + min(L, bd)))
 
+    # --- штанга-вешало (AKD-177): труба + держатели/рельса ---
+    for rod in hw.get("rods") or []:
+        rid = rod.get("id", "rod")
+        x1, x2 = float(rod["x1"]), float(rod["x2"])
+        y1, y2 = float(rod["y1"]), float(rod["y2"])
+        z1, z2 = float(rod["z1"]), float(rod["z2"])
+        out.append(_box("rod", f"{rid}: штанга", COL_RAIL, x1, x2, y1, y2, z1, z2))
+        yc, zc, xc = (y1 + y2) / 2, (z1 + z2) / 2, (x1 + x2) / 2
+        if rod.get("axis") == "z":
+            # выдвижная: монтажная рельса над трубой до горизонта выше
+            host_y = min((p["placement"]["y1"] for p in panels
+                          if p.get("type") in ("shelf", "top", "bottom")
+                          and 5 <= p["placement"]["y1"] - y2 <= 120
+                          and p["placement"]["x1"] - 1 <= xc <= p["placement"]["x2"] + 1),
+                         default=y2 + 20)
+            out.append(_box("rod_bracket", f"{rid}: рельса", COL_HINGE,
+                            xc - 16, xc + 16, y2, host_y, z1, z2))
+        else:
+            for ex in (x1, x2):
+                px1, px2 = (ex, ex + 5) if ex == x1 else (ex - 5, ex)
+                out.append(_box("rod_bracket", f"{rid}: держатель", COL_HINGE,
+                                px1, px2, yc - 25, yc + 25, zc - 25, zc + 25))
+
     # --- петли: чашка + плечо + ответная планка на каждую точку ---
     for p in panels:
         if p.get("type") != "door_front":

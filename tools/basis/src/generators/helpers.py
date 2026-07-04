@@ -135,7 +135,8 @@ def build_project(spec: dict[str, Any], panels: list[dict[str, Any]], *,
                   sections: list[dict[str, Any]] | None = None,
                   drawers: list[dict[str, Any]] | None = None,
                   doors: list[dict[str, Any]] | None = None,
-                  carcass_calc: dict[str, Any] | None = None) -> dict[str, Any]:
+                  carcass_calc: dict[str, Any] | None = None,
+                  rods: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """Собрать project.json по furniture.schema.json из панелей и ParamSpec."""
     dim = spec["dimensions"]
     m = spec["materials"]
@@ -183,6 +184,8 @@ def build_project(spec: dict[str, Any], panels: list[dict[str, Any]], *,
         "warnings": spec.get("warnings", []),
         "estimated_values": spec.get("estimated_values", []),
     }
+    if rods:
+        project["hardware"]["rods"] = rods
     if hw.get("drawer_guides"):
         project["hardware"]["drawer_guides"] = hw["drawer_guides"]
     if hw.get("hinges"):

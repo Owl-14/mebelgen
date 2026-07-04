@@ -94,6 +94,20 @@ def _hardware_bom(project: dict[str, Any]) -> list[dict[str, str]]:
             h = lg.get("height")
             out.append({"slot": "Опоры/ножки",
                         "name": f"{lt}" + (f", H={h} мм" if h else ""), "art": "—"})
+    # штанги-вешала (AKD-177): покупная фурнитура из hardware.rods
+    for rod in (project.get("hardware") or {}).get("rods") or []:
+        kind = "Штанга выдвижная" if rod.get("axis") == "z" else "Штанга d25"
+        name = f"{kind}, L={round(float(rod.get('length', 0)))} мм"
+        art = "—"
+        try:
+            from .materials import search_base
+            hit = search_base("штанга выдвижная" if rod.get("axis") == "z" else "штанга",
+                              limit=1)
+            if hit:
+                art = str(hit[0].get("article") or "—")
+        except Exception:
+            pass
+        out.append({"slot": "Штанга", "name": name, "art": art})
     # крепёж по присадкам (конфирматы/гвозди/саморезы/заглушки — реверс готовых
     # изделий БАЗИС, docs/BASIS_FASTENERS_REVERSE.md)
     try:

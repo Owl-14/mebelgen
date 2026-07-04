@@ -220,6 +220,36 @@
             "type": "number",
             "minimum": 0,
             "description": "Высота верхней открытой ниши над содержимым (с полкой-отбивкой)"
+          },
+          "rod": {
+            "description": "Штанга-вешало (AKD-177): true или объект. axis x — поперечная между боковинами; z — продольная выдвижная (малая глубина). height — ось по Y (иначе верх проёма − 80).",
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "axis": {
+                    "type": "string",
+                    "enum": [
+                      "x",
+                      "z"
+                    ]
+                  },
+                  "height": {
+                    "type": "number"
+                  },
+                  "diameter": {
+                    "type": "number"
+                  },
+                  "length": {
+                    "type": "number"
+                  }
+                }
+              }
+            ]
           }
         }
       }

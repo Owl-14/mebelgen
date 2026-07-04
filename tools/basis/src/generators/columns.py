@@ -61,6 +61,36 @@ def shelves_in_column(cx1, cx2, levels, T, z1, z2, mat, sid, label) -> list[dict
     return out
 
 
+def rod_in_column(cx1, cx2, sec, yt, iz1, iz2, sid) -> dict[str, Any] | None:
+    """Штанга-вешало (AKD-177): метаданные фурнитуры (не панель) для
+    hardware.rods. axis=x — поперечная между боковинами/перегородками;
+    axis=z — продольная выдвижная (для малой глубины), крепится к
+    горизонту над ней. height — ось штанги по Y (иначе верх проёма − 80)."""
+    r = sec.get("rod")
+    if not r:
+        return None
+    r = r if isinstance(r, dict) else {}
+    dia = float(r.get("diameter", 25))
+    axis = r.get("axis", "x")
+    y = float(r.get("height", yt - 80))
+    zc = iz1 + (iz2 - iz1) / 2
+    rod: dict[str, Any] = {"id": f"rod_{sid}", "section_id": sid, "axis": axis,
+                           "diameter": dia}
+    if axis == "z":
+        ln = float(r.get("length", min(450.0, iz2 - iz1 - 100)))
+        xc = (cx1 + cx2) / 2
+        z1 = iz1 + 60
+        rod.update({"x1": round(xc - dia / 2, 2), "x2": round(xc + dia / 2, 2),
+                    "y1": round(y - dia / 2, 2), "y2": round(y + dia / 2, 2),
+                    "z1": round(z1, 2), "z2": round(z1 + ln, 2), "length": ln})
+    else:
+        rod.update({"x1": round(cx1, 2), "x2": round(cx2, 2),
+                    "y1": round(y - dia / 2, 2), "y2": round(y + dia / 2, 2),
+                    "z1": round(zc - dia / 2, 2), "z2": round(zc + dia / 2, 2),
+                    "length": round(cx2 - cx1, 2)})
+    return rod
+
+
 def door_in_column(cx1, cx2, y1, y2, T, mat, sid, name, *, z_mode="overlay") -> dict[str, Any]:
     # накладной фасад — ПЕРЕД корпусом (z −T..0), иначе врезается в боковину/дно.
     z = (0, T) if z_mode == "inset" else (-T, 0)

@@ -36,7 +36,11 @@
      параметры короба (guide_gap, box_depth, box_height, box_z1, box_y_offset,
      box_back_thickness, box_bottom_thickness, box_bottom_mode, box_back_mode,
      box_sides_on_bottom, boxes:false если только фасады);
-   - door 1|2, door_name(s), door_z (overlay|front), door_below_shelf.
+   - door 1|2, door_name(s), door_z (overlay|front), door_below_shelf;
+   - rod — ШТАНГА-ВЕШАЛО в гардеробной секции: true или {axis, height, diameter,
+     length}. НИКОГДА не заменяй штангу полкой! axis: "x" — поперечная между
+     боковинами (глубина ≥ 500), "z" — продольная выдвижная (глубина < 500);
+     height — ось штанги по Y (обычно на 50–80 ниже полки/крышки над ней).
 
 4. hardware {handles, drawer_guides, hinges, locks} — типы/ссылки, без координат.
    Ручки: count>0 чтобы генератор их учитывал.

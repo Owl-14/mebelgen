@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from .base import read_carcass
+from .columns import rod_in_column
 from .corpus import carcass_calc, cavity_section
 from .helpers import build_project, carcass, overlay_door, panel, shelf_levels, shelves
 
@@ -45,6 +46,13 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
                        "dimensions": {"width": c.W - 2 * g, "height": y2 - y1},
                        "position": {"x": g, "y": y1, "z": 0}, "estimated": False}]
 
-    sec = [cavity_section(c, [p["name"] for p in panels], stype="door")]
+    rods_meta = []
+    rod = rod_in_column(c.T, c.W - c.T, section, c.H - c.T, 0, c.D - c.T_back, "main")
+    if rod:
+        rods_meta.append(rod)
+
+    sec = [cavity_section(c, [p["name"] for p in panels] + (["Штанга"] if rods_meta else []),
+                          stype="door")]
     cc = carcass_calc(c)
-    return build_project(spec, panels, sections=sec, doors=doors_meta, carcass_calc=cc)
+    return build_project(spec, panels, sections=sec, doors=doors_meta,
+                         carcass_calc=cc, rods=rods_meta)

@@ -10,7 +10,7 @@ from typing import Any
 
 from .base import read_carcass
 from .corpus import carcass_calc
-from .columns import column_bounds, door_in_column, drawer_stack, facade_x_span, partitions, shelves_in_column
+from .columns import column_bounds, door_in_column, drawer_stack, facade_x_span, partitions, rod_in_column, shelves_in_column
 from .helpers import build_project, carcass, facade_band, panel, shelf_levels
 
 
@@ -40,6 +40,7 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
 
     drawers_meta: list[dict[str, Any]] = []
     sections_meta: list[dict[str, Any]] = []
+    rods_meta: list[dict[str, Any]] = []
 
     for idx, (sec, (cx1, cx2)) in enumerate(zip(sections, bounds), start=1):
         sid = sec.get("id", f"col{idx}")
@@ -82,6 +83,10 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
                 sp = shelves_in_column(cx1, cx2, levels, c.T, iz1, iz2, c.mat, sid, lbl)
                 panels += sp
                 names += [p["name"] for p in sp]
+            rod = rod_in_column(cx1, cx2, sec, yt, iz1, iz2, sid)
+            if rod:
+                rods_meta.append(rod)
+                names.append(f"Штанга ({sid})" if len(sections) > 1 else "Штанга")
             nd = sec.get("door", 0)
             if nd:
                 z_mode = sec.get("door_z", "overlay")
@@ -110,4 +115,5 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
 
     cc = carcass_calc(c)
     cc["columns"] = [{"x": b, "kind": s["kind"]} for s, b in zip(sections, bounds)]
-    return build_project(spec, panels, sections=sections_meta, drawers=drawers_meta, carcass_calc=cc)
+    return build_project(spec, panels, sections=sections_meta, drawers=drawers_meta,
+                         carcass_calc=cc, rods=rods_meta)
