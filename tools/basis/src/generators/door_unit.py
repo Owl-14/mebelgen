@@ -15,8 +15,11 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     panels = carcass(c.W, c.D, c.H, c.T, c.T_back, c.Hleg, c.mat, c.mat_back,
                      leg_as_panel=c.leg_as_panel, leg_type=c.leg_type)
 
-    if section.get("shelves"):
-        levels = section.get("shelf_levels") or shelf_levels(c.Hleg + c.T, c.H - c.T, section["shelves"], c.T)
+    # полки: явные уровни имеют приоритет; счётчик shelves — раскладка равномерно
+    levels = section.get("shelf_levels")
+    if levels is None and section.get("shelves"):
+        levels = shelf_levels(c.Hleg + c.T, c.H - c.T, section["shelves"], c.T)
+    if levels:
         panels += shelves(levels, c.W, c.D, c.T, c.T_back, c.mat, "main")
 
     ndoor = section.get("door", 1)
