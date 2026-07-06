@@ -80,10 +80,15 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     # доходит до крышки (cover_top: false — отключить явно)
     ny1 = fb + sum(heights) + (n - 1) * g         # верх верхнего фасада
     if section.get("cover_top", True) and ny1 + c.T <= (c.H - c.T) - 40:
-        # полка до фасадной плоскости (AKD-191): перекрывает торец фасада
         panels.append(panel("Полка под нишей", "shelf", "horizont", (c.T, c.W - c.T), (ny1, ny1 + c.T),
-                            (section.get("niche_z_front", -c.T), c.D - c.T_back),
+                            (section.get("niche_z_front", 0), c.D - c.T_back),
                             thickness=c.T, material=c.mat, section_id="top_open", estimated=True))
+        # верхний фасад продлевается на T и перекрывает торец полки (AKD-191)
+        top_f = max((q for q in panels if q.get("type") == "drawer_front"),
+                    key=lambda q: q["placement"]["y2"], default=None)
+        if top_f is not None:
+            top_f["placement"]["y2"] = round(ny1 + c.T, 2)
+            top_f["dimensions"]["height"] = round(top_f["dimensions"]["height"] + c.T, 2)
         sections_meta.append({"id": "top_open", "type": "open",
                               "dimensions": {"width": c.W - 2 * c.T, "height": round((c.H - c.T) - (ny1 + c.T), 2),
                                              "depth": round(c.D - c.T_back, 2), "estimated": True},

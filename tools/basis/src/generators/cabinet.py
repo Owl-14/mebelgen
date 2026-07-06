@@ -36,7 +36,10 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
                      socle_full=spec.get("socle_full", False),
                      socle_recess=spec.get("socle_recess", 50))
     bounds = column_bounds(c.W, c.T, sections)
-    panels += partitions(bounds, c.H, c.T, c.Hleg, c.mat, iz1, iz2)
+    # перегородки — конструктив: всегда до фронта корпуса (AKD-192);
+    # interior_z_front утапливает только наполнение (полки)
+    panels += partitions(bounds, c.H, c.T, c.Hleg, c.mat,
+                         spec.get("carcass_z_front", 0), iz2)
 
     drawers_meta: list[dict[str, Any]] = []
     sections_meta: list[dict[str, Any]] = []
@@ -73,13 +76,19 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
             # верхний ящик открыт сверху — полка над стеком строится всегда
             # (cover_top: false — отключить явно)
             if sec.get("cover_top", True) and topy + c.T <= yt - 40:
-                # полка до фасадной плоскости (AKD-191): перекрывает верхний
-                # торец фасада ящика, иначе сверху видна щель глубиной T
                 sh = panel("Полка под нишей", "shelf", "horizont", (cx1, cx2), (topy, topy + c.T),
-                           (sec.get("niche_z_front", -c.T), iz2), thickness=c.T, material=c.mat,
+                           (sec.get("niche_z_front", 0), iz2), thickness=c.T, material=c.mat,
                            section_id=sid, estimated=True)
                 panels.append(sh)
                 names.append(sh["name"])
+                # верхний фасад продлевается на T и перекрывает торец полки
+                # (AKD-191: полка остаётся в корпусе, фасад — поверх, как с дном)
+                top_f = max((q for q in ps if q.get("type") == "drawer_front"),
+                            key=lambda q: q["placement"]["y2"], default=None)
+                if top_f is not None:
+                    top_f["placement"]["y2"] = round(topy + c.T, 2)
+                    top_f["dimensions"]["height"] = round(
+                        top_f["dimensions"]["height"] + c.T, 2)
         else:
             if levels:
                 base_label = sec.get("shelf_label", "Полка")

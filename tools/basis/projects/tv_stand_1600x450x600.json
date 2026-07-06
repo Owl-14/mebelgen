@@ -282,7 +282,7 @@
       "material": "ЛДСП",
       "thickness": 16,
       "dimensions": {
-        "width": 430.8,
+        "width": 446.8,
         "height": 454
       },
       "placement": {
@@ -290,13 +290,13 @@
         "x2": 446,
         "y1": 130,
         "y2": 584,
-        "z1": 16,
+        "z1": 0,
         "z2": 446.8
       },
       "position": {
         "x": 430,
         "y": 130,
-        "z": 16
+        "z": 0
       },
       "rotation": {
         "x": 0,
@@ -318,7 +318,7 @@
       "material": "ЛДСП",
       "thickness": 16,
       "dimensions": {
-        "width": 430.8,
+        "width": 446.8,
         "height": 454
       },
       "placement": {
@@ -326,13 +326,13 @@
         "x2": 1170,
         "y1": 130,
         "y2": 584,
-        "z1": 16,
+        "z1": 0,
         "z2": 446.8
       },
       "position": {
         "x": 1154,
         "y": 130,
-        "z": 16
+        "z": 0
       },
       "rotation": {
         "x": 0,

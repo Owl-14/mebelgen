@@ -606,13 +606,13 @@
       "thickness": 16,
       "dimensions": {
         "width": 400,
-        "height": 155
+        "height": 171
       },
       "placement": {
         "x1": 2,
         "x2": 402,
         "y1": 384,
-        "y2": 539,
+        "y2": 555,
         "z1": -16,
         "z2": 0
       },
@@ -791,20 +791,20 @@
       "thickness": 16,
       "dimensions": {
         "width": 372,
-        "height": 502.8
+        "height": 486.8
       },
       "placement": {
         "x1": 16,
         "x2": 388,
         "y1": 539,
         "y2": 555,
-        "z1": -16,
+        "z1": 0,
         "z2": 486.8
       },
       "position": {
         "x": 16,
         "y": 539,
-        "z": -16
+        "z": 0
       },
       "rotation": {
         "x": 0,
