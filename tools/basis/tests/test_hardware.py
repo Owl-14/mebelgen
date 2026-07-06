@@ -30,7 +30,8 @@ def test_shkaf_has_hinges_shelfpins_handles():
     assert s.get("ручка (винт)") == 4                      # 2 двери × 2
     assert s.get("петля (чашка Ø35)", 0) >= 4              # ≥2 петли на дверь
     assert s.get("полкодержатель", 0) == 32               # 8 полок × 4
-    assert s.get("стяжка (конфирмат)", 0) > 0
+    assert s.get("шкант 8×30 (торец)", 0) > 0              # система 32 (AKD-202)
+    assert s.get("эксцентрик (канал Ø8)", 0) > 0
 
 
 def test_tumba_drawers_has_guides_and_handles():
@@ -71,8 +72,11 @@ def test_fasteners_reverse_patterns():
     assert sw["задник (гвоздь)"] >= 8           # стойки/полки до задника
     bom = fastener_bom(holes, resolve=True)
     names = {b["name"]: b for b in bom}
-    assert names["Конфирмат 7×50"].get("article")       # позиция из базы
-    assert names["Заглушка самоклеящаяся D13"]["qty"] == names["Конфирмат 7×50"]["qty"]
+    # система 32 (AKD-202): межпанельный крепёж — шкант Ø8 + эксцентрик,
+    # конфирматов и заглушек в BOM больше нет
+    assert "Конфирмат 7×50" not in names and "Заглушка самоклеящаяся D13" not in names
+    assert names["Шкант 8×30"]["qty"] >= 2
+    assert names["Эксцентрик Ø15 + шток"].get("article")   # позиция из базы
 
 
 def test_desk_joints_covered():
@@ -82,21 +86,29 @@ def test_desk_joints_covered():
     spec = json.loads((ROOT / "paramspecs" / "stol_ofisny_foto.json").read_text(encoding="utf-8"))
     holes = compute_drilling(generate_from_paramspec(spec))
     s = drilling_summary(holes)
-    assert s.get("шкант 8×30 (торец)") == 4 and s.get("шкант 8×30 (пласть)") == 4
-    assert s.get("эксцентрик (чашка Ø15)") == 4 and s.get("эксцентрик (шток)") == 4
-    assert s.get("стяжка (конфирмат)") == 4          # царга ↔ боковины, пары 64
+    # столешница ↔ 2 опоры + царга ↔ 2 опоры: по 2 шканта и 2 стяжки на стык
+    assert s.get("шкант 8×30 (торец)") == 8 and s.get("шкант 8×30 (пласть)") == 8
+    assert s.get("эксцентрик (чашка Ø15)") == 8
+    assert s.get("эксцентрик (шток)") == 8 and s.get("эксцентрик (канал Ø8)") == 8
     bom = {b["name"]: b["qty"] for b in fastener_bom(holes)}
-    assert bom["Шкант 8×30"] == 4                    # 2 отверстия = 1 шкант
-    assert bom["Эксцентрик Ø15 + шток"] == 4
+    assert bom["Шкант 8×30"] == 8                    # 2 отверстия = 1 шкант
+    assert bom["Эксцентрик Ø15 + шток"] == 8
 
 
-def test_confirmat_pairs_64():
-    """Конфирматы идут парами с шагом 64 мм (реверс готовых изделий БАЗИС)."""
+def test_system32_grid():
+    """Система 32 (AKD-202): шаги между стяжками стыка кратны 32, присадка Ø8."""
     import json
     from src.generators import generate_from_paramspec
     spec = json.loads((ROOT / "paramspecs" / "komi_72_tumba_podkatnaya.json").read_text(encoding="utf-8"))
-    holes = [h for h in compute_drilling(generate_from_paramspec(spec))
-             if h["purpose"] == "стяжка (конфирмат)"]
-    zs = sorted({round(h["z"], 1) for h in holes})
-    diffs = [round(b - a, 1) for a, b in zip(zs, zs[1:])]
-    assert 64.0 in diffs, f"нет шага 64 в {diffs}"
+    holes = compute_drilling(generate_from_paramspec(spec))
+    joints = [h for h in holes if h["purpose"] in ("шкант 8×30 (торец)", "эксцентрик (канал Ø8)")]
+    assert joints and all(h["diameter"] == 8 for h in joints)
+    # кратность шага 32 проверяет drilling_check по каждому стыку
+    from src.drilling_check import check_drilling_geometry
+    spec2 = json.loads((ROOT / "paramspecs" / "komi_72_tumba_podkatnaya.json").read_text(encoding="utf-8"))
+    r = check_drilling_geometry(generate_from_paramspec(spec2), holes)
+    assert not [w for w in r["warnings"] if "не кратен 32" in w], r["warnings"]
+    # конфирматов Ø7 и присадок Ø5 в стяжках больше нет
+    assert not [h for h in holes if h["diameter"] in (5, 7)
+                and "стяжк" in h["purpose"]]
+    assert all(h["diameter"] == 8 for h in holes if h["purpose"] == "полкодержатель")

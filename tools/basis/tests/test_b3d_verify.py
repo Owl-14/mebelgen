@@ -26,11 +26,12 @@ def test_cfrn_has_fastener_bodies():
     p = _project("stol_ofisny_foto")
     z = zipfile.ZipFile(io.BytesIO(project_to_cfrn_bytes(p)))
     objs = [n for n in z.namelist() if n.endswith(".obj")]
-    assert len(objs) >= 4                                # шкант/чашка/шток/конфирмат
+    assert len(objs) >= 3                                # шкант/чашка/шток (система 32)
     d = json.loads(z.read("file.json"))
     mats = [m["name"] for m in d["table"]["materials"]]
-    assert any("Конфирмат" in m for m in mats)
+    assert any("Эксцентрик" in m for m in mats)
     assert any("Шкант" in m for m in mats)
+    assert not any("Конфирмат" in m for m in mats)       # AKD-202: конфирматов нет
     # triangleData — int-индексы в table.triangles (формат эталона)
     f5 = [o for o in d["table"]["objects"] if o.get("objType") == 5 and o.get("holes")]
     assert f5 and all(isinstance(o["triangleData"], int) for o in f5)
@@ -56,6 +57,8 @@ def test_verify_parity_on_built_b3d():
     b3d = Path(r"D:\claude\bazis\out\stol_metizy.b3d")
     if not b3d.is_file():
         import pytest
+        # артефакты до системы 32 (AKD-202) переименованы в *_pre32.b3d —
+        # для возобновления теста пересобрать: main.py build-b3d (платно)
         pytest.skip("нет собранного .b3d (платный артефакт)")
     from src.materials import resolve_project_materials
     from src.b3d_verify import verify_b3d_parity

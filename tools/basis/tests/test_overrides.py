@@ -76,5 +76,5 @@ def test_downstream_recomputes():
     base = {(h["purpose"], h["y"]) for h in compute_drilling(generate_from_paramspec(spec))}
     spec["overrides"] = [{"panel": "Царга задняя", "move": [0, -100, 0]}]
     moved = compute_drilling(generate_from_paramspec(spec))
-    tsar_holes = [h for h in moved if h["purpose"] == "стяжка (конфирмат)"]
+    tsar_holes = [h for h in moved if h["purpose"] == "эксцентрик (канал Ø8)"]
     assert tsar_holes and {(h["purpose"], h["y"]) for h in moved} != base

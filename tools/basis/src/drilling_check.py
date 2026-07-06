@@ -21,7 +21,7 @@ _THROUGH = ("стяжка (конфирмат)", "задник (гвоздь)", 
             "короб ящика (саморез)")
 # встречные пары: (purpose_a, purpose_b) должны быть соосны
 _COAXIAL = (("шкант 8×30 (торец)", "шкант 8×30 (пласть)"),
-            ("эксцентрик (шток)", "эксцентрик (чашка Ø15)"))
+            ("эксцентрик (шток)", "эксцентрик (канал Ø8)"))
 
 
 def _axes(axis: str) -> tuple[str, str, str]:
@@ -112,32 +112,24 @@ def check_drilling_geometry(project: dict[str, Any],
                 errors.append(f"{pa} ({ha['x']:.0f},{ha['y']:.0f},{ha['z']:.0f}): "
                               f"нет соосного «{pb}»")
 
-    # 5) конфирматы: пара с шагом 64 существует хотя бы по одной поперечной оси
-    #    (группа: панель+ось сверления+уровень по другой поперечной)
-    conf = by_purpose.get("стяжка (конфирмат)", [])
+    # 5) система 32 (AKD-202): шаг между стяжками одного стыка кратен 32
+    #    (шканты и каналы эксцентриков на одной панели+оси+уровне)
     checked: set[tuple] = set()
-    for h in conf:
-        ax, t1, t2 = _axes(h["axis"])
-        for long_t, lvl_t in ((t1, t2), (t2, t1)):
-            key = (h.get("panel"), h["axis"], long_t, round(h[lvl_t], 0))
-            if key in checked:
-                continue
-            checked.add(key)
-            xs = sorted(x[long_t] for x in conf
-                        if x.get("panel") == h.get("panel") and x["axis"] == h["axis"]
-                        and abs(x[lvl_t] - h[lvl_t]) < 0.5)
-            if len(xs) >= 2:
-                diffs = [round(b - a, 1) for a, b in zip(xs, xs[1:])]
-                if any(abs(df - 64.0) < 1.5 for df in diffs):
-                    key2 = (h.get("panel"), h["axis"])
-                    checked.add(("ok",) + key2)
-    for h in conf:
-        kp = (h.get("panel"), h["axis"])
-        if ("ok",) + kp not in checked and ("warned",) + kp not in checked:
-            xs_all = sorted({round(x["x"], 1) for x in conf if (x.get("panel"), x["axis"]) == kp} |
-                            {round(x["y"], 1) for x in conf if (x.get("panel"), x["axis"]) == kp})
-            n = sum(1 for x in conf if (x.get("panel"), x["axis"]) == kp)
-            if n >= 2:
-                warnings.append(f"конфирматы @ {kp[0]} ось {kp[1]}: нет пары с шагом 64 ({n} шт)")
-            checked.add(("warned",) + kp)
+    for purpose in ("шкант 8×30 (торец)", "эксцентрик (канал Ø8)"):
+        for h in by_purpose.get(purpose, []):
+            ax, t1, t2 = _axes(h["axis"])
+            for long_t, lvl_t in ((t1, t2), (t2, t1)):
+                key = (purpose, h.get("panel"), h["axis"], long_t, round(h[lvl_t], 0))
+                if key in checked:
+                    continue
+                checked.add(key)
+                xs = sorted(x[long_t] for x in by_purpose[purpose]
+                            if x.get("panel") == h.get("panel") and x["axis"] == h["axis"]
+                            and abs(x[lvl_t] - h[lvl_t]) < 0.5)
+                for a, b in zip(xs, xs[1:]):
+                    df = b - a
+                    if df > 1 and abs(df / 32 - round(df / 32)) * 32 > 1.5:
+                        warnings.append(f"{purpose} @ {h.get('panel')}: шаг {df:.0f} "
+                                        f"не кратен 32 (система 32)")
+                        break
     return {"errors": errors, "warnings": warnings}
