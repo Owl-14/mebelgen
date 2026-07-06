@@ -76,8 +76,10 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
                       "dimensions": {"width": c.W - 2 * c.T, "height": round(y - g - fb, 2), "depth": box_depth, "estimated": True},
                       "elements": front_names}]
 
-    if section.get("open_top"):
-        ny1 = fb + sum(heights) + (n - 1) * g     # верх верхнего фасада
+    # перекрытие стека (AKD-187): полка над ящиками всегда, когда стек не
+    # доходит до крышки (cover_top: false — отключить явно)
+    ny1 = fb + sum(heights) + (n - 1) * g         # верх верхнего фасада
+    if section.get("cover_top", True) and ny1 + c.T <= (c.H - c.T) - 40:
         panels.append(panel("Полка под нишей", "shelf", "horizont", (c.T, c.W - c.T), (ny1, ny1 + c.T), (0, c.D - c.T_back),
                             thickness=c.T, material=c.mat, section_id="top_open", estimated=True))
         sections_meta.append({"id": "top_open", "type": "open",

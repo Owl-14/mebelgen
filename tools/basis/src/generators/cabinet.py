@@ -69,7 +69,10 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
             panels += ps
             drawers_meta += dm
             names += [p["name"] for p in ps]
-            if sec.get("open_top"):
+            # перекрытие стека (AKD-187): если ящики не доходят до крышки,
+            # верхний ящик открыт сверху — полка над стеком строится всегда
+            # (cover_top: false — отключить явно)
+            if sec.get("cover_top", True) and topy + c.T <= yt - 40:
                 sh = panel("Полка под нишей", "shelf", "horizont", (cx1, cx2), (topy, topy + c.T),
                            (sec.get("niche_z_front", 0), iz2), thickness=c.T, material=c.mat,
                            section_id=sid, estimated=True)
@@ -83,10 +86,6 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
                 sp = shelves_in_column(cx1, cx2, levels, c.T, iz1, iz2, c.mat, sid, lbl)
                 panels += sp
                 names += [p["name"] for p in sp]
-            rod = rod_in_column(cx1, cx2, sec, yt, iz1, iz2, sid)
-            if rod:
-                rods_meta.append(rod)
-                names.append(f"Штанга ({sid})" if len(sections) > 1 else "Штанга")
             nd = sec.get("door", 0)
             if nd:
                 z_mode = sec.get("door_z", "overlay")
@@ -107,6 +106,22 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
                 else:
                     one = sec.get("door_name") if isinstance(sec.get("door_name"), str) else f"Дверь {sid}"
                     panels.append(door_in_column(fx1, fx2, dy1, dy2, c.T, c.mat, sid, one, z_mode=z_mode))
+
+        # штанга (AKD-177/186) — в любой секции, включая над стеком ящиков
+        rod = rod_in_column(cx1, cx2, sec, yt, iz1, iz2, sid)
+        if rod:
+            rods_meta.append(rod)
+            names.append(f"Штанга ({sid})" if len(sections) > 1 else "Штанга")
+            # зона подвеса (~900 вниз от штанги) должна быть свободной
+            hang_lo = rod["y1"] - 900
+            busy = [p["name"] for p in panels
+                    if p.get("section_id") == sid and p.get("type") == "shelf"
+                    and p["placement"]["y2"] > hang_lo + 1
+                    and p["placement"]["y1"] < rod["y1"] - 1]
+            if busy:
+                spec.setdefault("warnings", []).append(
+                    f"Штанга ({sid}): зона подвеса занята ({', '.join(busy[:3])}) — "
+                    "одежде на плечиках нужно ~900 мм свободной высоты")
 
         sections_meta.append({"id": sid, "type": kind,
                               "dimensions": {"width": round(cx2 - cx1, 2), "height": round(yt - yb, 2),

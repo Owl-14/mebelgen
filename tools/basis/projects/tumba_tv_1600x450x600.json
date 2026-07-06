@@ -723,6 +723,43 @@
       "section_id": "middle"
     },
     {
+      "name": "Полка под нишей",
+      "type": "shelf",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 708,
+        "height": 446.8
+      },
+      "placement": {
+        "x1": 446,
+        "x2": 1154,
+        "y1": 460,
+        "y2": 476,
+        "z1": 0,
+        "z2": 446.8
+      },
+      "position": {
+        "x": 446,
+        "y": 460,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.4,
+        "bottom": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
+      "estimated": true,
+      "section_id": "middle"
+    },
+    {
       "name": "Дверь правая",
       "type": "door_front",
       "basis_orientation": "front",

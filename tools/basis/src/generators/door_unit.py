@@ -50,6 +50,15 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     rod = rod_in_column(c.T, c.W - c.T, section, c.H - c.T, 0, c.D - c.T_back, "main")
     if rod:
         rods_meta.append(rod)
+        # зона подвеса (~900 вниз) должна быть свободной (AKD-186)
+        hang_lo = rod["y1"] - 900
+        busy = [p["name"] for p in panels if p.get("type") == "shelf"
+                and p["placement"]["y2"] > hang_lo + 1
+                and p["placement"]["y1"] < rod["y1"] - 1]
+        if busy:
+            spec.setdefault("warnings", []).append(
+                f"Штанга: зона подвеса занята ({', '.join(busy[:3])}) — "
+                "одежде на плечиках нужно ~900 мм свободной высоты")
 
     sec = [cavity_section(c, [p["name"] for p in panels] + (["Штанга"] if rods_meta else []),
                           stype="door")]
