@@ -149,6 +149,7 @@ def project_to_cfrn_json(project: dict[str, Any]) -> dict[str, Any]:
     table: dict[str, Any] = {"materials": materials, "objects": objects}
     models: dict[str, str] = {}
     _encode_drilling(project, objects, children, table, models)
+    _encode_hardware_bodies(project, objects, children, table, models)   # AKD-183
     _encode_catalog_hardware(project, materials, objects, children, table)
     children = _group_assemblies(project, objects, children)   # узлы ящик/дверь (AKD-137)
     return {
@@ -272,6 +273,54 @@ def _encode_drilling(project: dict[str, Any], objects: list[dict[str, Any]],
         objects.append({"objType": 5, "materialIndex": mat_index[mname],
                         "triangleData": tri_idx, "holes": obj_holes})
         for mtx in fo["instances"]:
+            children.append({"tableIndex": idx, "matrix": mtx})
+
+
+def _encode_hardware_bodies(project: dict[str, Any], objects: list[dict[str, Any]],
+                            children: list[dict[str, Any]], table: dict[str, Any],
+                            models: dict[str, str] | None = None) -> None:
+    """Тела фурнитуры (AKD-183): штанга, держатели, опоры, металлокаркас —
+    та же механика, что у метизов (_encode_drilling): objType 5 + OBJ в
+    models/ + инстансы матрицами. Без них .b3d терял штангу и опоры,
+    которые Studio уже показывает."""
+    try:
+        from .fasteners3d import _BODY_KINDS, build_hardware_bodies
+        bodies = build_hardware_bodies(project)
+    except Exception:
+        return
+    if not bodies:
+        return
+    # артикулы из производственной базы (опционально, офлайн-безопасно)
+    arts: dict[str, str] = {}
+    try:
+        from .materials import search_base
+        for label, query, _c, _s in _BODY_KINDS.values():
+            hit = search_base(query, limit=1)
+            if hit and hit[0].get("article"):
+                arts[label] = str(hit[0]["article"])
+    except Exception:
+        pass
+    triangles: list[str] = table.setdefault("triangles", [])
+    materials: list[dict[str, Any]] = table["materials"]
+    mat_index = {m.get("name"): i for i, m in enumerate(materials)}
+    for bo in bodies:
+        mname = bo["name"]
+        if mname not in mat_index:
+            mat_index[mname] = len(materials)
+            mat = {"name": mname}
+            art = arts.get(bo.get("label", "")) or bo.get("art")
+            if art:
+                mat["art"] = str(art)
+            materials.append(mat)
+        tri_idx = len(triangles)
+        triangles.append(bo["obj_name"])
+        if models is not None:
+            models[f"models/{bo['obj_name']}"] = bo["obj_text"]
+            models[f"models/{bo['obj_name'][:-4]}.mtl"] = bo["mtl_text"]
+        idx = len(objects)
+        objects.append({"objType": 5, "materialIndex": mat_index[mname],
+                        "triangleData": tri_idx, "holes": []})
+        for mtx in bo["instances"]:
             children.append({"tableIndex": idx, "matrix": mtx})
 
 

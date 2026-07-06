@@ -70,3 +70,37 @@ def test_paramspec_cfrn_holes_match_drilling():
         if issues:
             bad[name] = issues[:3]
     assert not bad, "присадки .cfrn ≠ compute_drilling:\n" + json.dumps(bad, ensure_ascii=False, indent=2)
+
+
+def test_hardware_bodies_in_cfrn():
+    """AKD-183: штанга/держатели/опоры/каркас кодируются в .cfrn телами objType 5."""
+    import io as _io
+    import zipfile
+    from src.cfrn import project_to_cfrn_bytes, project_to_cfrn_json
+
+    spec = json.loads((ROOT / "paramspecs" / "wardrobe_demo.json").read_text(encoding="utf-8"))
+    pr = generate_from_paramspec(spec)
+    d = project_to_cfrn_json(pr)
+    tobjs = d["table"]["objects"]
+    tri = d["table"].get("triangles", [])
+    counts = {}
+    for n in d["model"]["objs"][0]["objs"]:
+        o = tobjs[n["tableIndex"]]
+        if o.get("objType") == 5 and o.get("triangleData") is not None:
+            counts[tri[o["triangleData"]]] = counts.get(tri[o["triangleData"]], 0) + 1
+    assert sum(v for k, v in counts.items() if "Штанга-вешало" in k) == 1
+    assert sum(v for k, v in counts.items() if "Штангодержатель" in k) == 2
+    assert sum(v for k, v in counts.items() if "Опора" in k) == 4
+    # OBJ тел лежат в zip .cfrn
+    z = zipfile.ZipFile(_io.BytesIO(project_to_cfrn_bytes(pr)))
+    assert any("Штанга" in n for n in z.namelist())
+    assert any("Опора" in n for n in z.namelist())
+    # кодирование панелей и присадок не пострадало
+    assert not check_cfrn_encoding(pr)
+    assert not check_cfrn_holes(pr)
+
+    # металлокаркас стола
+    dspec = json.loads((ROOT / "paramspecs" / "komi_38_stol_direktora.json").read_text(encoding="utf-8"))
+    dd = project_to_cfrn_json(generate_from_paramspec(dspec))
+    names = chr(10).join(dd["table"].get("triangles", []))
+    assert "стойка 40×40" in names and "царга 40×40" in names
