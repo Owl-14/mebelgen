@@ -68,6 +68,40 @@ def _hinge_levels(y1: float, y2: float, n: int, margin: float = 100.0) -> list[f
     return [lo + (hi - lo) * k / (n - 1) for k in range(n)]
 
 
+def _shelf_spans(panels: list[dict[str, Any]], x1: float, x2: float) -> list[tuple[float, float]]:
+    """Y-интервалы полок, пересекающих X-пролёт [x1, x2] — запретные зоны петель."""
+    out: list[tuple[float, float]] = []
+    for p in panels:
+        if p.get("type") != "shelf" or not isinstance(p.get("placement"), dict):
+            continue
+        pl = p["placement"]
+        if min(pl["x2"], x2) - max(pl["x1"], x1) < 30:
+            continue
+        out.append((pl["y1"], pl["y2"]))
+    return out
+
+
+def hinge_levels_clear(y1: float, y2: float, n: int,
+                       spans: list[tuple[float, float]],
+                       margin: float = 100.0, half: float = 35.0) -> list[float]:
+    """Уровни петель, обходящие полки (AKD-185): равномерная раскладка, но
+    петля, попавшая в зону полки ±half (планка 60 высотой + зазор), сдвигается
+    к ближайшему свободному краю зоны."""
+    lo, hi = y1 + 60, y2 - 60
+    out: list[float] = []
+    for y in _hinge_levels(y1, y2, n, margin):
+        for _ in range(3):                      # каскад зон — до 3 сдвигов
+            hit = next(((a, b) for a, b in spans if a - half < y < b + half), None)
+            if hit is None:
+                break
+            cand = [c for c in (hit[0] - half, hit[1] + half) if lo <= c <= hi]
+            if not cand:
+                break
+            y = min(cand, key=lambda c: abs(c - y))
+        out.append(round(y, 1))
+    return out
+
+
 def leg_positions(project: dict[str, Any]) -> list[dict[str, Any]]:
     """Точки регулируемых опор/подпятников (AKD-178): [{x, z, y_top, panel}].
 
@@ -152,7 +186,7 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
         # ближайшая вертикаль со стороны петель
         side_x = pl["x1"] if hinge_left else pl["x2"]
         side = min(verticals, key=lambda v: abs(((v["placement"]["x1"] + v["placement"]["x2"]) / 2) - side_x), default=None)
-        for y in _hinge_levels(pl["y1"], pl["y2"], n):
+        for y in hinge_levels_clear(pl["y1"], pl["y2"], n, _shelf_spans(panels, pl["x1"], pl["x2"])):
             # чашка сверлится с ВНУТРЕННЕЙ (задней) грани двери, глухая 12 мм
             holes.append(_hole(p["name"], "петля (чашка Ø35)", cup_x, y, pl["z2"], 35, 12, "z", -1))
             if side is not None:

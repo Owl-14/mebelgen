@@ -82,6 +82,20 @@ def check_drilling_geometry(project: dict[str, Any],
                 errors.append(f"{tag}: сквозное уходит в пустоту "
                               f"(конец на {tip[ax]:.0f} по {ax})")
 
+    # 3б) петли не на уровне полок (AKD-185): планка на боковине не должна
+    #     попадать в тело примыкающей полки
+    shelves = [p["placement"] for p in project.get("panels", [])
+               if p.get("type") == "shelf" and isinstance(p.get("placement"), dict)]
+    for h in holes:
+        if h["purpose"] != "петля (планка)":
+            continue
+        for sp in shelves:
+            if sp["y1"] - 0.5 <= h["y"] <= sp["y2"] + 0.5 \
+                    and sp["x1"] - 30 <= h["x"] <= sp["x2"] + 30:
+                errors.append(f'петля (планка) @ {h.get("panel")} y={h["y"]:.0f}: '
+                              f'на уровне полки [{sp["y1"]:.0f},{sp["y2"]:.0f}]')
+                break
+
     # 4) соосность встречных отверстий (поперёк общей оси)
     def _key(h):  # координаты поперёк оси сверления
         _, t1, t2 = _axes(h["axis"])

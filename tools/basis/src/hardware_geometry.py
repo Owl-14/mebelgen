@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .hardware import _hinge_levels, _n_hinges, leg_positions
+from .hardware import _n_hinges, _shelf_spans, hinge_levels_clear, leg_positions
 
 _VERT = ("side_left", "side_right", "vertical_partition")
 
@@ -96,6 +96,37 @@ def compute_hardware_geometry(project: dict[str, Any]) -> list[dict[str, Any]]:
                 out.append(_box("guide_drawer", f"{d['id']} направляющая (ящик, {side})",
                                 COL_RAIL, bxo, bxo + 6, y1, dy2, bz1, bz1 + min(L, bd)))
 
+    # --- ручки (AKD-184): скоба на фасадах, позиции = compute_drilling ---
+    handles = hw.get("handles") or {}
+    hsize = float(handles.get("size") or 0)
+    hoff = float(handles.get("offset_from_top", 40) or 40)
+    if (handles.get("count") or 0) > 0 and hsize > 0:
+        for p in panels:
+            t = p.get("type")
+            if t not in ("door_front", "drawer_front"):
+                continue
+            pl = p["placement"]
+            zf = pl["z1"]                               # наружная грань фасада
+            if t == "drawer_front":
+                cx = (pl["x1"] + pl["x2"]) / 2
+                y = pl["y2"] - hoff
+                for x in (cx - hsize / 2, cx + hsize / 2):
+                    out.append(_box("handle", f"{p['name']}: ручка стойка", COL_CUP,
+                                    x - 6, x + 6, y - 6, y + 6, zf - 28, zf))
+                out.append(_box("handle", f"{p['name']}: ручка", COL_RAIL,
+                                cx - hsize / 2 - 12, cx + hsize / 2 + 12,
+                                y - 7, y + 7, zf - 40, zf - 28))
+            else:                                       # дверь: скоба вертикально у кромки
+                nm = str(p.get("name", "")).lower()
+                hx = pl["x1"] + 40 if "прав" in nm else pl["x2"] - 40
+                cy = (pl["y1"] + pl["y2"]) / 2
+                for y in (cy - hsize / 2, cy + hsize / 2):
+                    out.append(_box("handle", f"{p['name']}: ручка стойка", COL_CUP,
+                                    hx - 6, hx + 6, y - 6, y + 6, zf - 28, zf))
+                out.append(_box("handle", f"{p['name']}: ручка", COL_RAIL,
+                                hx - 7, hx + 7, cy - hsize / 2 - 12, cy + hsize / 2 + 12,
+                                zf - 40, zf - 28))
+
     # --- опоры/подпятники (AKD-178): цилиндры от пола до опорной панели ---
     for i, leg in enumerate(leg_positions(project), start=1):
         r = 20.0
@@ -163,7 +194,7 @@ def compute_hardware_geometry(project: dict[str, Any]) -> list[dict[str, Any]]:
         side = min(verticals,
                    key=lambda v: abs(((v["placement"]["x1"] + v["placement"]["x2"]) / 2) - side_x),
                    default=None)
-        for y in _hinge_levels(pl["y1"], pl["y2"], n):
+        for y in hinge_levels_clear(pl["y1"], pl["y2"], n, _shelf_spans(panels, pl["x1"], pl["x2"])):
             out.append(_box("hinge_cup", f"{p['name']}: петля чашка", COL_CUP,
                             cup_x - 17.5, cup_x + 17.5, y - 17.5, y + 17.5,
                             door_in - 12, door_in))

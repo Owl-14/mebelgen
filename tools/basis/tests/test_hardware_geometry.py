@@ -122,3 +122,89 @@ def test_legs_and_metal_frame_modeled():
     sd = drilling_summary(hd)
     assert sd.get("каркас (саморез)", 0) >= 8           # подстолье + экран
     assert not check_drilling_geometry(pd, hd)["errors"]
+
+
+def test_handles_visible_and_encoded():
+    """AKD-184: ручки видимы (Studio) и кодируются телами в .cfrn."""
+    import json
+    from src.generators import generate_from_paramspec
+    from src.hardware_geometry import compute_hardware_geometry
+    from src.cfrn import project_to_cfrn_json
+
+    w = json.loads((ROOT / "paramspecs" / "wardrobe_demo.json").read_text(encoding="utf-8"))
+    p = generate_from_paramspec(w)
+    handles = [g for g in compute_hardware_geometry(p) if g["kind"] == "handle"]
+    assert len(handles) == 12                     # 4 ручки × (2 стойки + скоба)
+    tri = chr(10).join(project_to_cfrn_json(p)["table"].get("triangles", []))
+    assert "Ручка-скоба" in tri
+    # push-to-open (count=0) — ручек нет
+    t = json.loads((ROOT / "paramspecs" / "tz_tumba_dokumenty.json").read_text(encoding="utf-8"))
+    pt = generate_from_paramspec(t)
+    assert not [g for g in compute_hardware_geometry(pt) if g["kind"] == "handle"]
+
+
+def test_hinges_avoid_shelves():
+    """AKD-185: планки петель не попадают на уровни полок."""
+    import json
+    from src.generators import generate_from_paramspec
+    from src.hardware import compute_drilling
+    from src.drilling_check import check_drilling_geometry
+
+    for name in ("komi_46_shkaf_dokumenty", "wardrobe_demo", "komi_47_shkaf_garderobny"):
+        spec = json.loads((ROOT / "paramspecs" / f"{name}.json").read_text(encoding="utf-8"))
+        p = generate_from_paramspec(spec)
+        holes = compute_drilling(p)
+        shelves = [q["placement"] for q in p["panels"] if q.get("type") == "shelf"]
+        for h in holes:
+            if h["purpose"] != "петля (планка)":
+                continue
+            hit = [sp for sp in shelves if sp["y1"] - 0.5 <= h["y"] <= sp["y2"] + 0.5
+                   and sp["x1"] - 30 <= h["x"] <= sp["x2"] + 30]
+            assert not hit, f"{name}: планка y={h['y']} на полке {hit}"
+        assert not check_drilling_geometry(p, holes)["errors"]
+
+
+def test_rod_over_drawers_and_cover_shelf():
+    """AKD-186/187: штанга над стеком ящиков; стек перекрыт полкой."""
+    import json
+    from src.generators import generate_from_paramspec
+
+    w = json.loads((ROOT / "paramspecs" / "wardrobe_demo.json").read_text(encoding="utf-8"))
+    p = generate_from_paramspec(w)
+    rods = p["hardware"]["rods"]
+    assert rods and rods[0]["section_id"] == "right"      # над ящиками
+    cover = [q for q in p["panels"] if q["name"] == "Полка под нишей"]
+    assert len(cover) == 1                                # стек перекрыт
+    assert not any("зона подвеса" in str(x) for x in p["warnings"])
+    # штанга над полками — предупреждение
+    w["sections"][0]["rod"] = {"height": 1830}
+    p2 = generate_from_paramspec(w)
+    assert any("зона подвеса" in str(x) for x in p2["warnings"])
+
+
+def test_cfrn_front_faces_viewer():
+    """AKD-188: фасады в сырых матрицах .cfrn — на +Z-стороне сцены (к камере)."""
+    import json
+    from src.generators import generate_from_paramspec
+    from src.cfrn import project_to_cfrn_json, check_cfrn_encoding, check_cfrn_holes
+
+    w = json.loads((ROOT / "paramspecs" / "wardrobe_demo.json").read_text(encoding="utf-8"))
+    p = generate_from_paramspec(w)
+    d = project_to_cfrn_json(p)
+    tobjs = d["table"]["objects"]
+    tz = {}
+    for nd in d["model"]["objs"][0]["objs"]:
+        def walk(n):
+            if n.get("objs"):
+                for q in n["objs"]:
+                    walk(q)
+            else:
+                g = tobjs[n["tableIndex"]]
+                if "contour" in g:
+                    tz[g.get("name")] = n["matrix"][14]
+        walk(nd)
+    back_z = tz["Задняя стенка"]
+    front_z = max(v for k, v in tz.items() if "Дверь" in k or "Фасад" in k)
+    assert front_z > back_z                               # фронт ближе к +Z
+    assert not check_cfrn_encoding(p)                     # инволюция чекеров цела
+    assert not check_cfrn_holes(p)
