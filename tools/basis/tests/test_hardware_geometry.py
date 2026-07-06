@@ -193,6 +193,7 @@ def test_cfrn_front_faces_viewer():
     d = project_to_cfrn_json(p)
     tobjs = d["table"]["objects"]
     tz = {}
+    tx = {}
     for nd in d["model"]["objs"][0]["objs"]:
         def walk(n):
             if n.get("objs"):
@@ -202,9 +203,15 @@ def test_cfrn_front_faces_viewer():
                 g = tobjs[n["tableIndex"]]
                 if "contour" in g:
                     tz[g.get("name")] = n["matrix"][14]
+                    tx[g.get("name")] = n["matrix"][12]
         walk(nd)
     back_z = tz["Задняя стенка"]
     front_z = max(v for k, v in tz.items() if "Дверь" in k or "Фасад" in k)
     assert front_z > back_z                               # фронт ближе к +Z
+    # секции НЕ зеркалятся: «Дверь левая» остаётся на малых X (слева на
+    # «виде спереди» просмотрщика), ящики правой секции — на больших X
+    door_x = min(m for k, m in tx.items() if "Дверь" in k)
+    drawer_x = min(m for k, m in tx.items() if "Фасад ящик" in k)
+    assert door_x < drawer_x
     assert not check_cfrn_encoding(p)                     # инволюция чекеров цела
     assert not check_cfrn_holes(p)

@@ -152,13 +152,15 @@ def project_to_cfrn_json(project: dict[str, Any]) -> dict[str, Any]:
     _encode_hardware_bodies(project, objects, children, table, models)   # AKD-183
     _encode_catalog_hardware(project, materials, objects, children, table)
     children = _group_assemblies(project, objects, children)   # узлы ящик/дверь (AKD-137)
-    # AKD-188: камера просмотрщика БАЗИС по умолчанию смотрит на +Z-сторону
-    # сцены — разворачиваем модель на 180° вокруг Y (поворот, не зеркало),
-    # чтобы изделие открывалось фасадами к зрителю. Чекеры (cfrn_world_boxes,
-    # cfrn_holes) применяют ту же инволюцию при реконструкции.
-    W0, D0 = _model_wd(project)
+    # AKD-188: камера просмотрщика БАЗИС («вид спереди» и дефолт конвертации)
+    # смотрит на +Z-сторону сцены — инвертируем Z (фасады к зрителю), X не
+    # трогаем (секции «слева направо» как в Studio). Чекеры (cfrn_world_boxes,
+    # cfrn_holes) применяют обратную инволюцию при реконструкции.
+    _W0, D0 = _model_wd(project)
     for nd in _leaf_nodes(children):
-        nd["matrix"] = _flip_front_matrix(nd["matrix"], W0, D0)
+        g = objects[nd["tableIndex"]]
+        sy = float(g["contour"]["size"]["y"]) if "contour" in g else 0.0
+        nd["matrix"] = _flip_front_matrix(nd["matrix"], sy, D0)
     return {
         "model": {"tableIndex": -1, "objs": [{"tableIndex": 0, "objs": children}]},
         "table": table,
@@ -179,16 +181,31 @@ def _model_wd(project: dict[str, Any]) -> tuple[float, float]:
             max(p["placement"]["z2"] for p in panels))
 
 
-def _flip_front_matrix(M: list[float], W: float, D: float) -> list[float]:
-    """Композиция M·F, где F — поворот на 180° вокруг Y через центр (W/2, D/2):
-    мировая точка (x,y,z) → (W−x, y, D−z). Инволюция: применить дважды = identity."""
-    C = list(M)
-    for r in range(4):
-        C[4 * r] = -M[4 * r]
-        C[4 * r + 2] = -M[4 * r + 2]
-    C[12] = _r(C[12] + W)
-    C[14] = _r(C[14] + D)
+def _mat_mul(A: list[float], B: list[float]) -> list[float]:
+    """C = A·B для row-major 4×4 (row-vector: сначала A, затем B)."""
+    C = [0.0] * 16
+    for i in range(4):
+        for j in range(4):
+            C[4 * i + j] = sum(A[4 * i + k] * B[4 * k + j] for k in range(4))
     return C
+
+
+def _flip_front_matrix(M: list[float], sy: float, D: float) -> list[float]:
+    """Разворот модели фасадами к камере просмотрщика (AKD-188): мировая
+    инверсия Z (x, y, z) → (x, y, D−z) БЕЗ инверсии X — секции остаются
+    «слева направо» как в ParamSpec и Studio.
+
+    Инверсия Z сама по себе — зеркало (лево-матрицы БАЗИС не примет), поэтому
+    компонуем её с СОБСТВЕННОЙ симметрией детали (локальное зеркало по Y:
+    панель — прямоугольная коробка, метиз — тело вращения/центрованный бокс).
+    Произведение двух отражений = поворот, матрица остаётся правой:
+        M' = S_y(sy) · M · F_z(D)
+    где S_y — локальное y→sy−y (sy=0 для центрованных метизов), F_z — мировое
+    z→D−z. Результат: applied дважды с теми же параметрами → identity."""
+    S = [1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1, 0, 0, sy, 0, 1]
+    F = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -1, 0, 0, 0, D, 1]
+    C = _mat_mul(_mat_mul(S, M), F)
+    return [_r(v) for v in C]
 
 
 def _group_assemblies(project: dict[str, Any], objects: list[dict[str, Any]],
@@ -464,7 +481,7 @@ def cfrn_world_boxes(project: dict[str, Any]) -> list[dict[str, Any]]:
         M = nd["matrix"]
         corners = [(x, y, z) for x in (0, sz["x"]) for y in (0, sz["y"]) for z in (0, th)]
         ws = [xf(M, c) for c in corners]
-        xs = [W0 - w[0] for w in ws]            # разворот 180° — инволюция
+        xs = [w[0] for w in ws]                 # обратная инволюция: только Z
         ys = [w[1] for w in ws]
         zs = [D0 - w[2] for w in ws]
         out.append({"name": g.get("name"), "x1": min(xs), "x2": max(xs),
@@ -498,8 +515,8 @@ def cfrn_holes(project: dict[str, Any]) -> list[dict[str, Any]]:
         for h in obj.get("holes", []):
             w0 = xf(h["pos"])
             d0 = xf(h["dir"], translate=False)        # направление — только поворот
-            w = (W0 - w0[0], w0[1], D0 - w0[2])       # разворот 180° — инволюция
-            dv = (-d0[0], d0[1], -d0[2])
+            w = (w0[0], w0[1], D0 - w0[2])            # обратная инволюция: только Z
+            dv = (d0[0], d0[1], -d0[2])
             cat = catalog[h["infoIndex"]] if h["infoIndex"] < len(catalog) else {}
             out.append({"x": w[0], "y": w[1], "z": w[2],
                         "dir": {"x": round(dv[0], 3), "y": round(dv[1], 3), "z": round(dv[2], 3)},

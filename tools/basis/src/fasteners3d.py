@@ -119,9 +119,11 @@ def _vec(h: dict[str, Any]) -> tuple[float, float, float]:
 
 
 def _box_obj(sx: float, sy: float, sz: float) -> str:
-    """Wavefront OBJ бокса 0..sx × 0..sy × 0..sz (грани наружу)."""
-    v = [(0, 0, 0), (sx, 0, 0), (sx, sy, 0), (0, sy, 0),
-         (0, 0, sz), (sx, 0, sz), (sx, sy, sz), (0, sy, sz)]
+    """Wavefront OBJ бокса 0..sx × −sy/2..sy/2 × 0..sz (центрован по Y —
+    симметрия нужна развороту модели правыми матрицами, AKD-188)."""
+    y0, y1 = -sy / 2, sy / 2
+    v = [(0, y0, 0), (sx, y0, 0), (sx, y1, 0), (0, y1, 0),
+         (0, y0, sz), (sx, y0, sz), (sx, y1, sz), (0, y1, sz)]
     faces = [(1, 4, 3, 2), (5, 6, 7, 8), (1, 2, 6, 5),
              (2, 3, 7, 6), (3, 4, 8, 7), (4, 1, 5, 8)]
     lines = [f"v {p[0]} {p[1]} {p[2]}" for p in v]
@@ -190,7 +192,8 @@ def build_hardware_bodies(project: dict[str, Any],
                     "obj_body": _box_obj(sx, sy, sz), "holes": [], "instances": [],
                 }
             grp["instances"].append(_matrix16(
-                [[1.0, 0, 0], [0, 1.0, 0], [0, 0, 1.0]], (g["x1"], g["y1"], g["z1"])))
+                [[1.0, 0, 0], [0, 1.0, 0], [0, 0, 1.0]],
+                (g["x1"], (g["y1"] + g["y2"]) / 2, g["z1"])))   # бокс центрован по Y
 
     out: list[dict[str, Any]] = []
     for g in groups.values():
