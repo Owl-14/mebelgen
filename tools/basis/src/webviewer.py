@@ -94,11 +94,19 @@ def _hardware(project: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _openables(project: dict[str, Any], panels: list[dict[str, Any]],
-               hardware: list[dict[str, Any]]) -> list[dict[str, Any]]:
+               hardware: list[dict[str, Any]],
+               holes: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     """Открывающиеся узлы для анимации: ящики (фасад+короб+полоз ящика, выезд по Z)
-    и двери (поворот вокруг оси петель). Индексы — в массивы panels/hardware."""
+    и двери (поворот вокруг оси петель). Индексы — в массивы panels/hardware/holes.
+
+    AKD-189: ручки и присадки, принадлежащие панелям узла, едут вместе с ним."""
     groups: list[dict[str, Any]] = []
+    holes = holes or []
     box_types = ("drawer_bottom", "drawer_side_left", "drawer_side_right", "drawer_back")
+
+    def _own_holes(panel_idxs: list[int]) -> list[int]:
+        names = {str(panels[i].get("name")) for i in panel_idxs}
+        return [k for k, h in enumerate(holes) if str(h.get("panel")) in names]
 
     for d in project.get("drawers", []):
         pos, dim = d.get("position") or {}, d.get("dimensions") or {}
@@ -118,10 +126,13 @@ def _openables(project: dict[str, Any], panels: list[dict[str, Any]],
                 facade = i
         if facade is None:
             continue
+        fname = str(panels[facade].get("name"))
         hw = [j for j, h in enumerate(hardware)
-              if h["kind"] == "guide_drawer" and str(d.get("id")) in str(h.get("name"))]
+              if (h["kind"] == "guide_drawer" and str(d.get("id")) in str(h.get("name")))
+              or (h["kind"] == "handle" and str(h.get("name", "")).startswith(fname))]
+        gpanels = sorted(set(idxs + [facade]))
         groups.append({"kind": "drawer", "id": str(d.get("id")),
-                       "panels": sorted(set(idxs + [facade])), "hardware": hw,
+                       "panels": gpanels, "hardware": hw, "holes": _own_holes(gpanels),
                        "travel": round(min(float(dim["depth"]) * 0.75, 380), 1)})
 
     for i, p in enumerate(panels):
@@ -131,9 +142,11 @@ def _openables(project: dict[str, Any], panels: list[dict[str, Any]],
         hinge = "right" if "прав" in nm else "left"
         hx = p["x1"] if hinge == "left" else p["x2"]
         hw = [j for j, h in enumerate(hardware)
-              if h["kind"] == "hinge_cup" and str(p.get("name")) in str(h.get("name"))]
+              if h["kind"] in ("hinge_cup", "handle")
+              and str(h.get("name", "")).startswith(str(p.get("name")))]
         groups.append({"kind": "door", "id": str(p.get("name") or f"door{i}"),
-                       "panels": [i], "hardware": hw, "hinge": hinge,
+                       "panels": [i], "hardware": hw, "holes": _own_holes([i]),
+                       "hinge": hinge,
                        "ax": p["x1"] if hinge == "left" else p["x2"],
                        "az": max(p["z1"], p["z2"]), "swing": 100})
     return groups
@@ -156,7 +169,8 @@ def viewer_payload(project: dict[str, Any], *, include_holes: bool = True) -> di
     holes = _holes(project) if include_holes else []
     hardware = _hardware(project)
     return {"panels": panels, "colors": _palette(project), "holes": holes,
-            "hardware": hardware, "openables": _openables(project, panels, hardware)}
+            "hardware": hardware,
+            "openables": _openables(project, panels, hardware, holes)}
 
 
 def _esc(s: str) -> str:
@@ -416,10 +430,11 @@ function MebelScene(container){
     // левосторонняя БАЗИС → правосторонняя three.js, угол модели в (0,0,0)
     const TX=x=>x-bb.x0, TY=y=>y-bb.y0, TZ=z=>bb.z1 - z;
 
-    // владельцы: панель/фурнитура → индекс открывающегося узла
-    const ownP={}, ownH={};
+    // владельцы: панель/фурнитура/присадка → индекс открывающегося узла
+    const ownP={}, ownH={}, ownHole={};
     OPEN.forEach((o,gi)=>{(o.panels||[]).forEach(i=>ownP[i]=gi);
-                          (o.hardware||[]).forEach(j=>ownH[j]=gi);});
+                          (o.hardware||[]).forEach(j=>ownH[j]=gi);
+                          (o.holes||[]).forEach(k=>ownHole[k]=gi);});
     // группы-узлы: ящик — трансляция по Z; дверь — поворот вокруг оси петель
     OPEN.forEach(o=>{
       const node=new THREE.Group();
@@ -464,9 +479,15 @@ function MebelScene(container){
       while(tmp.children.length) holder(gi).add(tmp.children[0]);
     });
     holeGroup=new THREE.Group();
-    HOLES.forEach(hp=>{
+    HOLES.forEach((hp,k)=>{
       const g=fastenerGroup(hp);                  // отверстие с глубиной + метиз
-      g.position.set(TX(hp.x),TY(hp.y),TZ(hp.z)); holeGroup.add(g);});
+      g.position.set(TX(hp.x),TY(hp.y),TZ(hp.z));
+      g.userData.holepart=1;
+      const gi=ownHole[k];                        // присадки узла едут с ним (AKD-189)
+      if(gi!==undefined){
+        if(groups[gi].kind==='door'){g.position.x-=groups[gi].pivot.x; g.position.z-=groups[gi].pivot.z;}
+        groups[gi].node.add(g);
+      } else holeGroup.add(g);});
     world.add(holeGroup);
     world.add(new THREE.AxesHelper(R*1.08));
     dimGroup=buildDims(W,H,D,R); world.add(dimGroup);
@@ -628,7 +649,8 @@ function MebelScene(container){
   const api={
     setPayload,
     setXray(on){panelMats.forEach(m=>{m.transparent=on;m.opacity=on?0.2:1;m.depthWrite=!on;m.needsUpdate=true;});},
-    setHoles(on){if(holeGroup)holeGroup.visible=on;},
+    setHoles(on){if(holeGroup)holeGroup.visible=on;
+      world&&world.traverse(o=>{ if(o.userData&&o.userData.holepart) o.visible=on; });},
     setHw(on){hwVisible=on;
       world&&world.traverse(o=>{ if(o.userData&&o.userData.hwpart) o.visible=on; });},
     openAll(){groups.forEach(g=>g.target=1);},

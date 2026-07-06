@@ -43,10 +43,12 @@ def test_openables_groups():
     drawers = [o for o in v["openables"] if o["kind"] == "drawer"]
     assert len(drawers) == 3
     for o in drawers:
-        assert len(o["panels"]) == 5 and len(o["hardware"]) == 2   # фасад+4 короба; 2 полоза
+        assert len(o["panels"]) == 5                    # фасад + 4 детали короба
+        assert len(o["hardware"]) == 5                  # 2 полоза + ручка (2 стойки + скоба)
         assert 0 < o["travel"] <= 380
         kinds = {v["hardware"][j]["kind"] for j in o["hardware"]}
-        assert kinds == {"guide_drawer"}                            # корпусный полоз не едет
+        assert kinds == {"guide_drawer", "handle"}      # корпусный полоз не едет
+        assert o["holes"], "присадки узла едут с ним (AKD-189)"
 
     s = json.loads((ROOT / "paramspecs" / "komi_46_shkaf_dokumenty.json").read_text(encoding="utf-8"))
     v = viewer_payload(generate_from_paramspec(s))
@@ -55,5 +57,6 @@ def test_openables_groups():
     hinges = {o["hinge"] for o in doors}
     assert hinges == {"left", "right"}                              # левая/правая навеска
     for o in doors:
-        assert len(o["hardware"]) == 4                              # 4 чашки на дверь ~1664 мм
-        assert {v["hardware"][j]["kind"] for j in o["hardware"]} == {"hinge_cup"}
+        assert len(o["hardware"]) == 7                  # 4 чашки + ручка (2 стойки + скоба)
+        assert {v["hardware"][j]["kind"] for j in o["hardware"]} == {"hinge_cup", "handle"}
+        assert o["holes"], "присадки двери едут с ней (AKD-189)"

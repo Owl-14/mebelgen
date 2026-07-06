@@ -730,20 +730,20 @@
       "thickness": 16,
       "dimensions": {
         "width": 708,
-        "height": 446.8
+        "height": 462.8
       },
       "placement": {
         "x1": 446,
         "x2": 1154,
         "y1": 460,
         "y2": 476,
-        "z1": 0,
+        "z1": -16,
         "z2": 446.8
       },
       "position": {
         "x": 446,
         "y": 460,
-        "z": 0
+        "z": -16
       },
       "rotation": {
         "x": 0,

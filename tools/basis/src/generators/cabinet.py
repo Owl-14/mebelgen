@@ -73,8 +73,10 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
             # верхний ящик открыт сверху — полка над стеком строится всегда
             # (cover_top: false — отключить явно)
             if sec.get("cover_top", True) and topy + c.T <= yt - 40:
+                # полка до фасадной плоскости (AKD-191): перекрывает верхний
+                # торец фасада ящика, иначе сверху видна щель глубиной T
                 sh = panel("Полка под нишей", "shelf", "horizont", (cx1, cx2), (topy, topy + c.T),
-                           (sec.get("niche_z_front", 0), iz2), thickness=c.T, material=c.mat,
+                           (sec.get("niche_z_front", -c.T), iz2), thickness=c.T, material=c.mat,
                            section_id=sid, estimated=True)
                 panels.append(sh)
                 names.append(sh["name"])
@@ -127,6 +129,26 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
                               "dimensions": {"width": round(cx2 - cx1, 2), "height": round(yt - yb, 2),
                                              "depth": round(iz2 - iz1, 2), "estimated": False},
                               "elements": names})
+
+    # выравнивание полок между секциями (AKD-190): полка, отличающаяся от
+    # структурного уровня (перекрытие стека) на ≤25 мм, приводится к нему —
+    # перепад в пару сантиметров между соседними секциями бьёт по глазам
+    anchors = [p["placement"]["y1"] for p in panels
+               if p["type"] == "shelf" and p["name"] == "Полка под нишей"]
+    if anchors:
+        for p in panels:
+            if p["type"] != "shelf" or p["name"] == "Полка под нишей":
+                continue
+            pl = p["placement"]
+            near = next((a for a in anchors if 0 < abs(pl["y1"] - a) <= 25), None)
+            if near is None:
+                continue
+            dy = round(near - pl["y1"], 2)
+            pl["y1"], pl["y2"] = round(pl["y1"] + dy, 2), round(pl["y2"] + dy, 2)
+            p["position"]["y"] = pl["y1"]
+            spec.setdefault("warnings", []).append(
+                f"«{p['name']}» выровнена с перекрытием стека соседней секции "
+                f"({dy:+g} мм) — визуальная стыковка уровней")
 
     cc = carcass_calc(c)
     cc["columns"] = [{"x": b, "kind": s["kind"]} for s, b in zip(sections, bounds)]
