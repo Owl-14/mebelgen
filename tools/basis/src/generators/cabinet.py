@@ -69,6 +69,16 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
             sec_dr = {**sec, "back_limit": c.D - c.T_back}
             ps, dm, topy = drawer_stack(cx1, cx2, fb, heights, g, sec_dr, c.T, c.mat, sid,
                                         sec.get("prefix", ""), facade_bounds=fspan)
+            # нижний фасад перекрывает торец дна (как дверь): если фасад
+            # начинается ровно с верха дна, открытый угол дна — брак
+            bot_f = min((q for q in ps if q.get("type") == "drawer_front"),
+                        key=lambda q: q["placement"]["y1"], default=None)
+            if bot_f is not None and abs(bot_f["placement"]["y1"] - yb) <= 2 \
+                    and fb_bottom < bot_f["placement"]["y1"]:
+                dy = round(bot_f["placement"]["y1"] - fb_bottom, 2)
+                bot_f["placement"]["y1"] = fb_bottom
+                bot_f["position"]["y"] = fb_bottom
+                bot_f["dimensions"]["height"] = round(bot_f["dimensions"]["height"] + dy, 2)
             panels += ps
             drawers_meta += dm
             names += [p["name"] for p in ps]

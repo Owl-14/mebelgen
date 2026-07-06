@@ -331,19 +331,19 @@
       "thickness": 16,
       "dimensions": {
         "width": 354,
-        "height": 224
+        "height": 240.0
       },
       "placement": {
         "x1": 2,
         "x2": 356,
-        "y1": 56,
+        "y1": 40.0,
         "y2": 280,
         "z1": -16,
         "z2": 0
       },
       "position": {
         "x": 2,
-        "y": 56,
+        "y": 40.0,
         "z": -16
       },
       "rotation": {

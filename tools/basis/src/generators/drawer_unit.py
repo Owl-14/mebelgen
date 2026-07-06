@@ -76,6 +76,16 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
                       "dimensions": {"width": c.W - 2 * c.T, "height": round(y - g - fb, 2), "depth": box_depth, "estimated": True},
                       "elements": front_names}]
 
+    # нижний фасад перекрывает торец дна: старт ровно с верха дна — брак
+    bot_f = min((q for q in panels if q.get("type") == "drawer_front"),
+                key=lambda q: q["placement"]["y1"], default=None)
+    if bot_f is not None and abs(bot_f["placement"]["y1"] - (c.Hleg + c.T)) <= 2 \
+            and band_bottom < bot_f["placement"]["y1"]:
+        dy = round(bot_f["placement"]["y1"] - band_bottom, 2)
+        bot_f["placement"]["y1"] = band_bottom
+        bot_f["position"]["y"] = band_bottom
+        bot_f["dimensions"]["height"] = round(bot_f["dimensions"]["height"] + dy, 2)
+
     # перекрытие стека (AKD-187): полка над ящиками всегда, когда стек не
     # доходит до крышки (cover_top: false — отключить явно)
     ny1 = fb + sum(heights) + (n - 1) * g         # верх верхнего фасада

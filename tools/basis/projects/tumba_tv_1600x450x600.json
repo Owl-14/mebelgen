@@ -360,19 +360,19 @@
       "thickness": 16,
       "dimensions": {
         "width": 722,
-        "height": 180
+        "height": 196.0
       },
       "placement": {
         "x1": 439,
         "x2": 1161,
-        "y1": 98,
+        "y1": 82.0,
         "y2": 278,
         "z1": -16,
         "z2": 0
       },
       "position": {
         "x": 439,
-        "y": 98,
+        "y": 82.0,
         "z": -16
       },
       "rotation": {
