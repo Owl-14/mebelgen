@@ -356,7 +356,8 @@ def make_handler(st: _Studio):
                     from .spec_chat import chat_edit
                     self._json(chat_edit(spec, str(body.get("message", "")),
                                          body.get("history") or [],
-                                         body.get("context") or None))
+                                         body.get("context") or None,
+                                         body.get("images") or None))
                 elif self.path == "/api/import-tz":   # drag&drop ТЗ (D4)
                     import base64
                     import os
@@ -540,9 +541,22 @@ PAGE = r"""<!DOCTYPE html>
         --ok:#2fa84f;--bad:#e5484d;--accent:#3b82f6}
   *{box-sizing:border-box} html,body{margin:0;height:100%;font-family:Segoe UI,Arial,sans-serif;
     background:var(--bg);color:var(--ink);font-size:13px;overflow:hidden}
-  #app{display:grid;grid-template-columns:340px 1fr;height:100%}
-  #side{background:var(--card);border-right:1px solid var(--line);overflow-y:auto;padding:12px}
+  /* AKD-207: 3 колонки — слева проект/чат/деталь, центр 3D, справа параметры/смета.
+     grid-column задаём явно, чтобы порядок в DOM не влиял на раскладку. */
+  #app{display:grid;grid-template-columns:340px 1fr 360px;grid-template-rows:100%;height:100%}
+  /* grid-row:1 всем — иначе #main (col2) после #rightside (col3) в DOM уходит в row2 */
+  #side{grid-column:1;grid-row:1;background:var(--card);border-right:1px solid var(--line);overflow-y:auto;padding:12px}
+  #main{grid-column:2;grid-row:1;position:relative;min-height:0}
+  #rightside{grid-column:3;grid-row:1;background:var(--card);border-left:1px solid var(--line);overflow-y:auto;padding:12px}
   #side h1{font-size:15px;margin:2px 0 10px}
+  #chatImgs{display:flex;gap:5px;flex-wrap:wrap;margin:4px 0}
+  #chatImgs .chip{position:relative}
+  #chatImgs .chip img{height:38px;border-radius:5px;border:1px solid var(--line);display:block}
+  #chatImgs .chip b{position:absolute;top:-6px;right:-6px;background:var(--bad);color:#fff;
+    width:16px;height:16px;border-radius:50%;font-size:11px;line-height:16px;text-align:center;cursor:pointer}
+  #chatMsg.drop{outline:2px dashed var(--accent);outline-offset:2px}
+  #partChatRow{display:flex;gap:5px;margin-top:8px;border-top:1px solid var(--line);padding-top:8px}
+  #partChat{flex:1;padding:4px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px}
   fieldset{border:1px solid var(--line);border-radius:8px;margin:0 0 10px;padding:8px 10px}
   legend{font-size:11px;text-transform:uppercase;color:var(--mut);padding:0 4px}
   .row{display:flex;gap:6px;align-items:center;margin:4px 0}
@@ -628,16 +642,21 @@ PAGE = r"""<!DOCTYPE html>
 
   <fieldset id="fs_chat"><legend>Чат с ИИ</legend>
     <div id="chatlog"></div>
+    <div id="chatImgs"></div>
     <div class="row" style="gap:6px">
       <input type="text" id="chatMsg" placeholder="напр.: сделай глубину 600, цвет дуб вотан">
+      <button id="chatAttach" title="прикрепить фото/скан ТЗ">📎</button>
       <button id="chatSend" title="отправить">➤</button>
+      <input type="file" id="chatFile" accept="image/*" multiple style="display:none">
     </div>
     <div class="row" style="gap:6px;margin-top:2px">
       <button id="btnUndo" disabled>⟲ Откатить</button>
-      <span class="mini">правки применяются к модели сразу</span>
+      <span class="mini">фото ТЗ: 📎, Ctrl+V или перетащить в поле</span>
     </div>
   </fieldset>
+</div>
 
+<div id="rightside">
   <fieldset><legend>Габариты, мм</legend>
     <div class="row"><label>Ширина</label><input type="number" id="f_w" step="10"></div>
     <div class="row"><label>Глубина</label><input type="number" id="f_d" step="10"></div>
@@ -1006,6 +1025,12 @@ let lastPayload=null;
 scene3d.onSelect=sel=>{
   const fs=$('fs_part'), card=$('partCard');
   document.querySelectorAll('#draw rect.sel').forEach(r=>r.classList.remove('sel'));
+  if(typeof SELECTED_PART!=='undefined'){        // контекст чата (AKD-208)
+    SELECTED_PART = sel ? sel.panel : null;
+    const cm=$('chatMsg'); if(cm) cm.placeholder = sel
+      ? `правка изделия — или напишите про «${sel.panel.name}» в карточке детали`
+      : 'напр.: сделай глубину 600, цвет дуб вотан';
+  }
   if(!sel){fs.style.display='none';card.innerHTML='';return;}
   const p=sel.panel;
   const dx=p.x2-p.x1, dy=p.y2-p.y1, dz=p.z2-p.z1;
@@ -1035,8 +1060,15 @@ scene3d.onSelect=sel=>{
     </div>
     <div class="mini" style="margin-top:4px">Shift+перетаскивание в 3D — двигать деталь.
     Правки хранятся в спеке и переживают смену габаритов; чертёж, присадки,
-    смета и .b3d пересчитываются.</div>`;
+    смета и .b3d пересчитываются.</div>
+    <div id="partChatRow">
+      <input type="text" id="partChat" placeholder="изменить эту деталь словами: «сделай глубже на 50», «удали»">
+      <button id="partChatSend" title="применить к этой детали">➤</button>
+    </div>`;
   fs.style.display='';
+  const pc=$('partChat'), pcSend=()=>{const v=pc.value.trim(); if(!v)return; pc.value=''; runChat(v);};
+  $('partChatSend').onclick=pcSend;
+  pc.addEventListener('keydown',e=>{if(e.key==='Enter')pcSend();});
   $('ovApply').onclick=()=>{
     const pl={};
     card.querySelectorAll('input[data-ov]').forEach(i=>{
@@ -1257,20 +1289,40 @@ function addMsg(who,text,changes){
     df.textContent=changes.join('\n'); d.appendChild(df);
   }
   $('chatlog').appendChild(d); $('chatlog').scrollTop=1e9; return d;}
-let chatBusy=false;
-async function sendChat(){
-  const m=$('chatMsg').value.trim();
-  if(!m||chatBusy)return;
-  chatBusy=true; $('chatMsg').value=''; addMsg('user',m);
+let chatBusy=false, SELECTED_PART=null;
+const PENDING_IMGS=[];                       // фото ТЗ: [{mime,data(base64)}]
+function renderImgs(){
+  $('chatImgs').innerHTML=PENDING_IMGS.map((im,i)=>
+    `<span class="chip"><img src="data:${im.mime};base64,${im.data}">`+
+    `<b data-rm="${i}" title="убрать">×</b></span>`).join('');
+  $('chatImgs').querySelectorAll('b[data-rm]').forEach(b=>
+    b.onclick=()=>{PENDING_IMGS.splice(+b.dataset.rm,1);renderImgs();});
+}
+function addImgFile(file){
+  const r=new FileReader();
+  r.onload=()=>{const s=String(r.result),c=s.indexOf(',');
+    PENDING_IMGS.push({mime:(file.type||'image/png'),data:s.slice(c+1)});renderImgs();};
+  r.readAsDataURL(file);
+}
+async function runChat(text){
+  const m=(text||'').trim();
+  if((!m&&!PENDING_IMGS.length)||chatBusy)return;
+  chatBusy=true;
+  const imgs=PENDING_IMGS.splice(0); renderImgs();
+  addMsg('user',m+(imgs.length?`  📎×${imgs.length}`:''));
   const wait=addMsg('ai','думаю…');
   try{
     const ctx=lastPayload?{n_panels:lastPayload.stats&&lastPayload.stats.n_panels,
       n_holes:lastPayload.stats&&lastPayload.stats.n_holes,
       dims:lastPayload.stats&&lastPayload.stats.dims,
-      estimate_total:lastPayload.estimate&&lastPayload.estimate.total}:null;
+      estimate_total:lastPayload.estimate&&lastPayload.estimate.total}:{};
+    if(SELECTED_PART) ctx.selected_part={name:SELECTED_PART.name,type:SELECTED_PART.type,
+      placement:{x1:SELECTED_PART.x1,x2:SELECTED_PART.x2,y1:SELECTED_PART.y1,
+                 y2:SELECTED_PART.y2,z1:SELECTED_PART.z1,z2:SELECTED_PART.z2}};
     const r=await fetch('/api/chat',{method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({spec:SPEC,message:m,history:CHAT_HISTORY,context:ctx})});
+      body:JSON.stringify({spec:SPEC,message:m,history:CHAT_HISTORY,context:ctx,
+                           images:imgs.length?imgs:null})});
     const p=await r.json();
     wait.remove();
     addMsg('ai',p.reply||'(пусто)',p.changes);
@@ -1280,8 +1332,18 @@ async function sendChat(){
   }catch(e){wait.remove(); addMsg('ai','Ошибка: '+e.message);}
   finally{chatBusy=false;}
 }
+function sendChat(){const v=$('chatMsg').value; $('chatMsg').value=''; runChat(v);}
 $('chatSend').onclick=sendChat;
 $('chatMsg').addEventListener('keydown',e=>{if(e.key==='Enter')sendChat();});
+// фото ТЗ: кнопка-скрепка, выбор файла, вставка из буфера, drag&drop
+$('chatAttach').onclick=()=>$('chatFile').click();
+$('chatFile').onchange=e=>{[...e.target.files].forEach(addImgFile); e.target.value='';};
+$('chatMsg').addEventListener('paste',e=>{
+  for(const it of e.clipboardData.items) if(it.type.startsWith('image/')) addImgFile(it.getAsFile());});
+$('chatMsg').addEventListener('dragover',e=>{e.preventDefault();$('chatMsg').classList.add('drop');});
+$('chatMsg').addEventListener('dragleave',()=>$('chatMsg').classList.remove('drop'));
+$('chatMsg').addEventListener('drop',e=>{e.preventDefault();$('chatMsg').classList.remove('drop');
+  [...e.dataTransfer.files].forEach(f=>{if(f.type.startsWith('image/'))addImgFile(f);});});
 
 /* ---------- экспорт ---------- */
 async function post(url){const r=await fetch(url,{method:'POST',

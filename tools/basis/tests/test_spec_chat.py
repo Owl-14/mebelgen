@@ -94,3 +94,36 @@ def test_question_about_model():
     r2 = chat_edit(SPEC, "сколько деталей в изделии?",
                    context={"n_panels": 4, "n_holes": 20})
     assert r2["spec"] is None and "4" in r2["reply"] and "20" in r2["reply"]
+
+
+def test_gemini_provider_parses_response(monkeypatch):
+    """AKD-203: GeminiChatProvider формирует запрос (с фото) и парсит JSON-ответ."""
+    import src.spec_chat as sc
+
+    captured = {}
+
+    class _Resp:
+        status_code = 200
+        def raise_for_status(self): pass
+        def json(self):
+            return {"candidates": [{"content": {"parts": [
+                {"text": json.dumps({"reply": "Глубина 600.",
+                                     "spec": {**SPEC, "dimensions": {**SPEC["dimensions"], "depth": 600}}})}]}}]}
+
+    def _post(url, params=None, json=None, timeout=None):
+        captured["url"] = url; captured["key"] = (params or {}).get("key")
+        captured["payload"] = json
+        return _Resp()
+
+    monkeypatch.setattr(sc, "get_chat_provider", lambda name=None: sc.GeminiChatProvider())
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    import requests
+    monkeypatch.setattr(requests, "post", _post)
+
+    r = chat_edit(SPEC, "сделай глубину 600",
+                  images=[{"mime": "image/png", "data": "QUJD"}])
+    assert r["spec"] and r["spec"]["dimensions"]["depth"] == 600
+    # фото ушло в inline_data, ключ — в query
+    assert captured["key"] == "test-key"
+    parts = captured["payload"]["contents"][-1]["parts"]
+    assert any("inline_data" in p for p in parts)

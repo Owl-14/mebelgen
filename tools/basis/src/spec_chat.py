@@ -157,7 +157,12 @@ class MockChatProvider:
 
     def chat(self, spec: dict[str, Any], message: str,
              history: list[dict[str, str]] | None = None,
-             context: dict[str, Any] | None = None) -> dict[str, Any]:
+             context: dict[str, Any] | None = None,
+             images: list[dict[str, str]] | None = None) -> dict[str, Any]:
+        if images:                                    # rule-based не видит картинок
+            return {"reply": "Распознавание фото ТЗ требует нейросети — задайте "
+                             "GEMINI_API_KEY в tools/basis/.env (бесплатно, "
+                             "aistudio.google.com).", "spec": None}
         msg = message.lower()
         created = _try_create(msg)
         if created is not None:
@@ -258,34 +263,100 @@ class OpenAIChatProvider:
                 "spec": data.get("spec") if isinstance(data.get("spec"), dict) else None}
 
 
+class GeminiChatProvider:
+    """Google Gemini (AKD-203): бесплатный tier, понимает фото/сканы ТЗ.
+
+    Ключ — env GEMINI_API_KEY (aistudio.google.com), модель — GEMINI_MODEL
+    (по умолчанию gemini-2.0-flash). REST без SDK; ответ — строго JSON
+    {reply, spec} (response_mime_type). Изображения — inline_data base64."""
+
+    URL = "https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent"
+
+    def __init__(self) -> None:
+        self.api_key = os.environ.get("GEMINI_API_KEY")
+        if not self.api_key:
+            raise ValueError("Нет GEMINI_API_KEY для SPEC_CHAT_PROVIDER=gemini")
+        self.model = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+
+    def chat(self, spec: dict[str, Any], message: str,
+             history: list[dict[str, str]] | None = None,
+             context: dict[str, Any] | None = None,
+             images: list[dict[str, str]] | None = None) -> dict[str, Any]:
+        import requests
+        system = CHAT_PROMPT_PATH.read_text(encoding="utf-8").replace(
+            "__SCHEMA__", PARAMSPEC_SCHEMA_PATH.read_text(encoding="utf-8"))
+        contents: list[dict[str, Any]] = []
+        for h in (history or [])[-8:]:
+            role = "model" if h.get("role") == "assistant" else "user"
+            contents.append({"role": role, "parts": [{"text": h.get("text", "")}]})
+        ctx = f"\nСостояние модели: {json.dumps(context, ensure_ascii=False)}\n" if context else ""
+        parts: list[dict[str, Any]] = [{"text":
+            f"Текущий ParamSpec:\n```json\n{json.dumps(spec, ensure_ascii=False, indent=2)}\n```\n{ctx}\n"
+            f"Запрос пользователя: {message or '(см. приложенные изображения ТЗ)'}"}]
+        for img in images or []:                     # фото/скан ТЗ
+            parts.append({"inline_data": {"mime_type": img.get("mime", "image/png"),
+                                          "data": img.get("data", "")}})
+        contents.append({"role": "user", "parts": parts})
+        payload = {
+            "system_instruction": {"parts": [{"text": system}]},
+            "contents": contents,
+            "generationConfig": {"temperature": 0.1,
+                                 "response_mime_type": "application/json"},
+        }
+        r = requests.post(self.URL.format(m=self.model),
+                          params={"key": self.api_key}, json=payload, timeout=120)
+        if r.status_code == 429:
+            raise RuntimeError("Лимит бесплатного тарифа Gemini исчерпан — "
+                               "попробуйте через минуту (или завтра)")
+        r.raise_for_status()
+        cand = (r.json().get("candidates") or [{}])[0]
+        text = "".join(p.get("text", "") for p in
+                       (cand.get("content") or {}).get("parts") or [])
+        data = json.loads(text or "{}")
+        return {"reply": str(data.get("reply") or "Готово."),
+                "spec": data.get("spec") if isinstance(data.get("spec"), dict) else None,
+                "created": bool(data.get("created"))}
+
+
 def get_chat_provider(name: str | None = None) -> Any:
     name = (name or os.environ.get("SPEC_CHAT_PROVIDER")
             or os.environ.get("PARAMSPEC_PROVIDER")
-            # авто: есть ключ — настоящая нейронка, нет — rule-based mock
-            or ("openai" if os.environ.get("OPENAI_API_KEY") else "mock")).lower()
+            # авто: есть ключ — настоящая нейронка (gemini бесплатный — первым),
+            # нет — rule-based mock
+            or ("gemini" if os.environ.get("GEMINI_API_KEY")
+                else "openai" if os.environ.get("OPENAI_API_KEY") else "mock")).lower()
+    if name == "gemini":
+        return GeminiChatProvider()
     if name == "openai":
         return OpenAIChatProvider()
     if name == "mock":
         return MockChatProvider()
-    raise ValueError(f"Неизвестный SPEC_CHAT_PROVIDER={name!r} (mock|openai)")
+    raise ValueError(f"Неизвестный SPEC_CHAT_PROVIDER={name!r} (mock|openai|gemini)")
 
 
 # ------------------------------------------------------------------ вход
 
 def chat_edit(spec: dict[str, Any], message: str,
               history: list[dict[str, str]] | None = None,
-              context: dict[str, Any] | None = None) -> dict[str, Any]:
+              context: dict[str, Any] | None = None,
+              images: list[dict[str, str]] | None = None) -> dict[str, Any]:
     """Команда словами → {reply, spec|None, changes[], created?}. Невалидное не отдаём.
 
     Гарантии: PROTECTED_KEYS не меняются; новая спека проходит validate_paramspec,
     иначе spec=None и причина в reply (AKD-110). created=True — изделие с нуля (D3).
+    images — фото/сканы ТЗ [{mime, data(base64)}] для vision-провайдера (AKD-203).
     """
     from .paramspec import validate_paramspec
 
+    provider = get_chat_provider()
     try:
-        res = get_chat_provider().chat(spec, message, history, context)
-    except TypeError:
-        res = get_chat_provider().chat(spec, message, history)
+        if images:
+            res = provider.chat(spec, message, history, context, images=images)
+        else:
+            try:
+                res = provider.chat(spec, message, history, context)
+            except TypeError:
+                res = provider.chat(spec, message, history)
     except Exception as e:                            # сеть/ключ/парсинг — в чат, не 500
         return {"reply": f"Ошибка провайдера: {e}", "spec": None, "changes": []}
 
