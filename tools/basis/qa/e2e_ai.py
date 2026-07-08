@@ -101,6 +101,14 @@ CASES = [
     ("диагностика: всё зелёное — не выдумывать", None, "проверь модель на ошибки",
      _expect_no_spec(("зелен", "нет ошибок", "ошибок нет", "не обнаруж", "в порядке", "корректн"))),
     # --- каверзные ---
+    ("правка: дверь открывается вверх", 
+     {"schemaVersion": "paramspec-v1", "project_name": "Бар", "furniture_type": "шкаф",
+      "archetype": "door_unit", "dimensions": {"width": 800, "depth": 350, "height": 400},
+      "materials": {"board_thickness": 16}, "sections": [{"kind": "door", "door": 1}]},
+     "сделай чтобы дверь открывалась вверх",
+     _expect_spec(lambda s: None if any(str(sec.get("door_swing", "")).lower() == "up"
+                                        for sec in s.get("sections", []))
+                  else f"door_swing нет: {s.get('sections')}")),
     ("каверза: отрицательная ширина", None, "сделай ширину -100",
      lambda r: None if (not r.get("spec")) or r["spec"]["dimensions"]["width"] > 0
      else f"приняла ширину {r['spec']['dimensions']['width']}"),
