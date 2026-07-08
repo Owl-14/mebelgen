@@ -368,9 +368,12 @@ def make_handler(st: _Studio):
                         ext = name.rsplit(".", 1)[-1].lower()
                         mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
                                 "webp": "image/webp", "gif": "image/gif"}.get(ext, "image/png")
-                        res = chat_edit(st.spec or {},
-                                        "Распознай это ТЗ (фото/скан) и собери по нему полный "
-                                        "ParamSpec изделия с нуля (created).",
+                        # пустой базовый спек — иначе модель якорится на текущее
+                        # изделие и копирует его секции вместо чистой сборки по ТЗ
+                        res = chat_edit({},
+                                        "Собери ParamSpec ТОЛЬКО по этому ТЗ (фото/скан): "
+                                        "определи тип изделия, габариты, секции, материал по "
+                                        "изображению. НЕ бери ничего из других изделий. created=true.",
                                         images=[{"mime": mime, "data": str(body.get("data", ""))}])
                         new_spec = res.get("spec")
                         if not new_spec:
