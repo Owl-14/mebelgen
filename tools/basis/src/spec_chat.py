@@ -337,10 +337,27 @@ class GigaChatProvider:
         if not self.auth_key:
             raise ValueError("Нет GIGACHAT_AUTH_KEY для SPEC_CHAT_PROVIDER=gigachat")
         self.scope = os.environ.get("GIGACHAT_SCOPE", "GIGACHAT_API_PERS")
-        self.model = os.environ.get("GIGACHAT_MODEL", "GigaChat")
-        self.verify = os.environ.get("GIGACHAT_VERIFY", "0") not in ("0", "false", "no")
+        self.model = os.environ.get("GIGACHAT_MODEL", "GigaChat")   # текст (900k free)
+        self.vision_model = os.environ.get("GIGACHAT_VISION_MODEL", "GigaChat-Max")
+        # verify: False — отключить; иначе путь к CA-бандлу с корневым Минцифры
+        # (requests при verify=True берёт certifi и не видит системное хранилище)
+        _v = os.environ.get("GIGACHAT_VERIFY", "0")
+        if _v in ("0", "false", "no"):
+            self.verify: Any = False
+        else:
+            self.verify = (os.environ.get("GIGACHAT_CA")
+                           or os.environ.get("REQUESTS_CA_BUNDLE") or True)
         self._token = None
         self._exp = 0.0
+
+    def balance(self) -> list[dict[str, Any]]:
+        """Остаток бесплатных токенов по моделям: [{usage, value}] (для счётчика)."""
+        import requests
+        r = requests.get(f"{self.BASE}/balance",
+                         headers={"Authorization": f"Bearer {self._access_token()}"},
+                         timeout=20, verify=self.verify)
+        r.raise_for_status()
+        return r.json().get("balance", [])
 
     def _now(self) -> float:
         import time
@@ -394,23 +411,30 @@ class GigaChatProvider:
             f"Текущий ParamSpec:\n```json\n{json.dumps(spec, ensure_ascii=False, indent=2)}\n```\n{ctx}\n"
             f"Запрос: {message or '(см. приложенные изображения ТЗ)'}\n"
             "Ответь строго JSON-объектом {\"reply\":..., \"spec\":...}."}
-        if images:
+        model = self.model
+        if images:                                       # фото ТЗ — vision-модель
             user_msg["attachments"] = self._upload_images(images)
+            model = self.vision_model
         msgs.append(user_msg)
         r = requests.post(f"{self.BASE}/chat/completions",
                           headers={"Authorization": f"Bearer {self._access_token()}",
                                    "Content-Type": "application/json"},
-                          json={"model": self.model, "messages": msgs, "temperature": 0.1},
+                          json={"model": model, "messages": msgs, "temperature": 0.1},
                           timeout=120, verify=self.verify)
         if r.status_code == 429:
             raise RuntimeError("Лимит GigaChat исчерпан — попробуйте позже")
         r.raise_for_status()
-        text = r.json()["choices"][0]["message"]["content"]
+        body = r.json()
+        text = body["choices"][0]["message"]["content"]
         c1, c2 = text.find("{"), text.rfind("}")        # вычленить JSON из ответа
         data = json.loads(text[c1:c2 + 1]) if c1 >= 0 else {}
+        usage = body.get("usage") or {}
         return {"reply": str(data.get("reply") or "Готово."),
                 "spec": data.get("spec") if isinstance(data.get("spec"), dict) else None,
-                "created": bool(data.get("created"))}
+                "created": bool(data.get("created")),
+                "usage": {"model": model, "total": usage.get("total_tokens"),
+                          "prompt": usage.get("prompt_tokens"),
+                          "completion": usage.get("completion_tokens")}}
 
 
 def get_chat_provider(name: str | None = None) -> Any:
@@ -457,9 +481,10 @@ def chat_edit(spec: dict[str, Any], message: str,
     except Exception as e:                            # сеть/ключ/парсинг — в чат, не 500
         return {"reply": f"Ошибка провайдера: {e}", "spec": None, "changes": []}
 
+    usage = res.get("usage")                          # расход токенов (для счётчика)
     new = res.get("spec")
     if not new:
-        return {"reply": res.get("reply", ""), "spec": None, "changes": []}
+        return {"reply": res.get("reply", ""), "spec": None, "changes": [], "usage": usage}
 
     created = bool(res.get("created"))
     if not created:
@@ -469,11 +494,23 @@ def chat_edit(spec: dict[str, Any], message: str,
     errors = validate_paramspec(new)
     if errors:
         return {"reply": "Правка отклонена — спека не прошла схему:\n"
-                         + "\n".join(errors[:5]), "spec": None, "changes": []}
+                         + "\n".join(errors[:5]), "spec": None, "changes": [], "usage": usage}
     if created:
         return {"reply": res.get("reply", "Создано."), "spec": new,
-                "changes": ["новое изделие с нуля"], "created": True}
+                "changes": ["новое изделие с нуля"], "created": True, "usage": usage}
     changes = spec_diff(spec, new)
     if not changes:
-        return {"reply": res.get("reply", "Изменений нет."), "spec": None, "changes": []}
-    return {"reply": res.get("reply", "Готово."), "spec": new, "changes": changes}
+        return {"reply": res.get("reply", "Изменений нет."), "spec": None, "changes": [], "usage": usage}
+    return {"reply": res.get("reply", "Готово."), "spec": new, "changes": changes, "usage": usage}
+
+
+def token_balance() -> dict[str, Any]:
+    """Остаток бесплатных токенов провайдера (для UI-счётчика). Пусто, если
+    провайдер без баланса (mock/openai/gemini)."""
+    try:
+        p = get_chat_provider()
+        if hasattr(p, "balance"):
+            return {"provider": type(p).__name__, "balance": p.balance()}
+    except Exception as e:
+        return {"error": str(e)}
+    return {}

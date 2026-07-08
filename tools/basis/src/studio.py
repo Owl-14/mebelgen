@@ -358,6 +358,9 @@ def make_handler(st: _Studio):
                                          body.get("history") or [],
                                          body.get("context") or None,
                                          body.get("images") or None))
+                elif self.path == "/api/token-balance":   # счётчик бесплатных токенов
+                    from .spec_chat import token_balance
+                    self._json(token_balance())
                 elif self.path == "/api/import-tz":   # drag&drop ТЗ (D4)
                     import base64
                     import os
@@ -653,6 +656,7 @@ PAGE = r"""<!DOCTYPE html>
       <button id="btnUndo" disabled>⟲ Откатить</button>
       <span class="mini">фото ТЗ: 📎, Ctrl+V или перетащить в поле</span>
     </div>
+    <div id="tokenCount" class="mini" style="margin-top:5px"></div>
   </fieldset>
 </div>
 
@@ -1326,6 +1330,8 @@ async function runChat(text){
     const p=await r.json();
     wait.remove();
     addMsg('ai',p.reply||'(пусто)',p.changes);
+    if(p.usage&&p.usage.total){SESSION_TOKENS+=p.usage.total; renderTokens();}
+    refreshBalance();                              // остаток бесплатных токенов
     CHAT_HISTORY.push({role:'user',text:m},{role:'assistant',text:p.reply||''});
     if(CHAT_HISTORY.length>16)CHAT_HISTORY.splice(0,CHAT_HISTORY.length-16);
     if(p.spec){pushUndo(); SPEC=p.spec; fillForm(); apply();}
@@ -1344,6 +1350,28 @@ $('chatMsg').addEventListener('dragover',e=>{e.preventDefault();$('chatMsg').cla
 $('chatMsg').addEventListener('dragleave',()=>$('chatMsg').classList.remove('drop'));
 $('chatMsg').addEventListener('drop',e=>{e.preventDefault();$('chatMsg').classList.remove('drop');
   [...e.dataTransfer.files].forEach(f=>{if(f.type.startsWith('image/'))addImgFile(f);});});
+// счётчик токенов: расход за сессию + остаток бесплатного пакета (GigaChat)
+let SESSION_TOKENS=0, FREE_LEFT=null, FREE_PROVIDER=null;
+function renderTokens(){
+  const el=$('tokenCount'); if(!el) return;
+  const parts=[];
+  if(SESSION_TOKENS) parts.push('за сессию: '+SESSION_TOKENS.toLocaleString('ru-RU')+' ток.');
+  if(FREE_LEFT!=null) parts.push('бесплатно осталось: '+FREE_LEFT.toLocaleString('ru-RU')+' ток.');
+  el.textContent=parts.join('  ·  ');
+  el.style.color=(FREE_LEFT!=null&&FREE_LEFT<10000)?'var(--bad)':'var(--mut)';
+}
+async function refreshBalance(){
+  try{
+    const r=await fetch('/api/token-balance',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:'{}'});
+    const d=await r.json();
+    if(d.balance&&d.balance.length){
+      const b=d.balance.find(x=>x.usage==='GigaChat')||d.balance[0];
+      FREE_LEFT=b.value; FREE_PROVIDER=d.provider; renderTokens();
+    }
+  }catch(e){}
+}
+refreshBalance();
 
 /* ---------- экспорт ---------- */
 async function post(url){const r=await fetch(url,{method:'POST',
