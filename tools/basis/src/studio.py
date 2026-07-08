@@ -1411,6 +1411,20 @@ async function runChat(text){
       n_holes:lastPayload.stats&&lastPayload.stats.n_holes,
       dims:lastPayload.stats&&lastPayload.stats.dims,
       estimate_total:lastPayload.estimate&&lastPayload.estimate.total}:{};
+    // реальная диагностика для ИИ (AKD-219): тексты ошибок чеков + слоты базы
+    if(lastPayload&&lastPayload.issues){
+      const bad={};
+      for(const k of Object.keys(lastPayload.issues)){
+        const v=lastPayload.issues[k]||[];
+        if(v.length) bad[k]=v.slice(0,3);
+      }
+      ctx.check_errors=Object.keys(bad).length?bad:'нет — все проверки зелёные';
+    }
+    if(lastPayload&&lastPayload.refs){
+      const un=Object.entries(lastPayload.refs)
+        .filter(([k,r])=>r&&typeof r==='object'&&!r.resolved).map(([k])=>k);
+      ctx.base_unresolved=un.length?un:'все позиции подобраны';
+    }
     if(SELECTED_PART) ctx.selected_part={name:SELECTED_PART.name,type:SELECTED_PART.type,
       placement:{x1:SELECTED_PART.x1,x2:SELECTED_PART.x2,y1:SELECTED_PART.y1,
                  y2:SELECTED_PART.y2,z1:SELECTED_PART.z1,z2:SELECTED_PART.z2}};
