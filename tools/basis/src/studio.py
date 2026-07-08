@@ -1,4 +1,4 @@
-"""BAZIS Studio: локальный редактор-предпросмотр единицы мебели (AKD-94…97).
+"""Akeda Studio (ранее BAZIS Studio): редактор-предпросмотр единицы мебели (AKD-94…97).
 
 Идея: «функционал БАЗИСа, который нам нужен» уже реализован в конвейере на Python
 (генераторы, материалы, присадки, фурнитура, проверки). Studio отдаёт его в наш
@@ -541,7 +541,7 @@ def run_studio(spec_path: str | Path, *, port: int = 8765, out_dir: str | Path |
     st = _Studio(spec_path, out)
     srv = ThreadingHTTPServer(("127.0.0.1", port), make_handler(st))
     url = f"http://127.0.0.1:{port}/"
-    print(f"BAZIS Studio: {url}  (спека: {spec_path.name}; Ctrl+C — стоп)")
+    print(f"Akeda Studio: {url}  (спека: {spec_path.name}; Ctrl+C — стоп)")
     if open_browser:
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()
     try:
@@ -555,7 +555,7 @@ def run_studio(spec_path: str | Path, *, port: int = 8765, out_dir: str | Path |
 # ------------------------------------------------------------------ страница
 
 PAGE = r"""<!DOCTYPE html>
-<html lang="ru"><head><meta charset="utf-8"><title>BAZIS Studio — предпросмотр и правки</title>
+<html lang="ru"><head><meta charset="utf-8"><title>Akeda Studio — предпросмотр и правки</title>
 <style>
   :root{--ink:#1a1d21;--mut:#6b7280;--line:#dfe3e8;--bg:#f4f6f8;--card:#fff;
         --ok:#2fa84f;--bad:#e5484d;--accent:#3b82f6}
@@ -650,7 +650,7 @@ PAGE = r"""<!DOCTYPE html>
 </style></head><body>
 <div id="app">
 <div id="side">
-  <h1>BAZIS Studio <span class="mini">— правки до платной сборки</span></h1>
+  <h1>Akeda Studio <span class="mini">— от ТЗ до производства</span></h1>
 
   <fieldset><legend>Проект</legend>
     <div class="row"><label>Изделие</label><select id="projSel"></select></div>
