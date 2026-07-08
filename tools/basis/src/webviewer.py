@@ -675,6 +675,15 @@ function MebelScene(container){
     setXray(on){panelMats.forEach(m=>{m.transparent=on;m.opacity=on?0.2:1;m.depthWrite=!on;m.needsUpdate=true;});},
     setHoles(on){if(holeGroup)holeGroup.visible=on;
       world&&world.traverse(o=>{ if(o.userData&&o.userData.holepart) o.visible=on; });},
+    snapshot(w){ // миниатюра для каталога (AKD-217): рендер + даунскейл
+      try{
+        renderer.render(scene,camera);              // свежий кадр в буфере
+        const src=renderer.domElement, W=w||320, H=Math.round(W*src.height/src.width);
+        const cv=document.createElement('canvas'); cv.width=W; cv.height=H;
+        cv.getContext('2d').drawImage(src,0,0,W,H);
+        return cv.toDataURL('image/png');
+      }catch(e){return null;}
+    },
     setHw(on){hwVisible=on;
       world&&world.traverse(o=>{ if(o.userData&&o.userData.hwpart) o.visible=on; });},
     openAll(){groups.forEach(g=>g.target=1);},

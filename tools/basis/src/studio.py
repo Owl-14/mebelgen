@@ -163,15 +163,20 @@ def _list_projects(spec_dir: Path) -> list[dict[str, Any]]:
         if not isinstance(s, dict) or s.get("schemaVersion") != "paramspec-v1":
             continue
         d = s.get("dimensions", {})
+        has_prev = (spec_dir / ".previews" / (f.stem + ".png")).is_file()
         if s.get("draft"):                            # черновик (AKD-214)
             out.append({"file": f.name, "name": s.get("project_name", f.stem),
-                        "archetype": "черновик", "dims": "—", "decor": ""})
+                        "archetype": "черновик", "dims": "—", "decor": "",
+                        "draft": True, "preview": False,
+                        "ftype": s.get("furniture_type", "")})
             continue
         out.append({"file": f.name,
                     "name": s.get("project_name", f.stem),
                     "archetype": s.get("archetype", "?"),
                     "dims": f'{d.get("width", "?")}×{d.get("depth", "?")}×{d.get("height", "?")}',
-                    "decor": (s.get("materials") or {}).get("color", "")})
+                    "decor": (s.get("materials") or {}).get("color", ""),
+                    "preview": has_prev,
+                    "ftype": s.get("furniture_type", "")})
     return out
 
 
@@ -345,6 +350,15 @@ def make_handler(st: _Studio):
                         .replace("__SPEC__", json.dumps(st.spec, ensure_ascii=False)
                                  .replace("</", "<\\/")))
                 self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
+            elif self.path.startswith("/preview/"):   # миниатюры каталога (AKD-217)
+                from urllib.parse import unquote
+                name = unquote(self.path[len("/preview/"):])
+                p = (st.spec_path.parent / ".previews" / name).resolve()
+                if (p.parent == (st.spec_path.parent / ".previews").resolve()
+                        and p.suffix == ".png" and p.is_file()):
+                    self._send(200, p.read_bytes(), "image/png")
+                else:
+                    self._send(404, b"{}")
             else:
                 self._send(404, b"{}")
 
@@ -496,6 +510,16 @@ def make_handler(st: _Studio):
                     st.spec = spec
                     st.spec_path.write_text(json.dumps(spec, ensure_ascii=False, indent=2),
                                             encoding="utf-8")
+                    prev = body.get("preview")         # снапшот 3D для каталога (AKD-217)
+                    if isinstance(prev, str) and prev.startswith("data:image/png;base64,"):
+                        try:
+                            import base64
+                            pd = st.spec_path.parent / ".previews"
+                            pd.mkdir(exist_ok=True)
+                            (pd / (st.spec_path.stem + ".png")).write_bytes(
+                                base64.b64decode(prev.split(",", 1)[1]))
+                        except Exception:
+                            pass
                     if spec.get("draft"):              # черновик: только файл, без модели
                         self._json({"ok": True, "spec": str(st.spec_path), "project": None})
                         return
@@ -632,6 +656,29 @@ PAGE = r"""<!DOCTYPE html>
   #tabs button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
   #draw{position:absolute;inset:48px 12px 12px;z-index:4;background:#fff;border:1px solid var(--line);
         border-radius:8px;overflow:auto;display:none;padding:8px}
+  /* AKD-217: каталог изделий */
+  #catalog{position:absolute;inset:0;z-index:8;display:none;flex-direction:column;
+    background:var(--bg);padding:14px 18px;overflow:hidden}
+  #catalog.on{display:flex}
+  #catHead{display:flex;gap:10px;align-items:center;margin-bottom:10px}
+  #catHead input{flex:1;max-width:360px;padding:6px 10px;border:1px solid var(--line);border-radius:8px}
+  #catCats{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+  .catchip{padding:4px 12px;border:1px solid var(--line);border-radius:16px;background:#fff;
+    cursor:pointer;font-size:12px}
+  .catchip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  #catGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;
+    overflow-y:auto;padding-bottom:20px}
+  .catCard{background:var(--card);border:1px solid var(--line);border-radius:10px;
+    cursor:pointer;overflow:hidden;transition:box-shadow .15s}
+  .catCard:hover{box-shadow:0 4px 14px rgba(0,0,0,.12)}
+  .catCard .img{height:130px;background:#eef1f4;display:flex;align-items:center;
+    justify-content:center;color:var(--mut);font-size:30px}
+  .catCard .img img{width:100%;height:100%;object-fit:contain;background:#fff}
+  .catCard .nm{padding:7px 10px 2px;font-weight:600;font-size:12.5px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .catCard .sub{padding:0 10px 8px;font-size:11px;color:var(--mut)}
+  .catCard .dr{display:inline-block;background:#c78a2b;color:#fff;border-radius:8px;
+    padding:0 6px;font-size:10px;margin-left:4px}
   /* AKD-214: пустое рабочее пространство нового изделия */
   #emptyState{position:absolute;inset:0;z-index:6;display:none;align-items:center;justify-content:center;background:var(--bg)}
   #emptyState.on{display:flex}
@@ -687,6 +734,7 @@ PAGE = r"""<!DOCTYPE html>
       <button id="projNew">+ Новое</button>
       <button id="projRen" title="переименовать текущее изделие">✎</button>
       <button id="projDup">Дублировать</button>
+      <button id="projCat" title="каталог всех изделий">🗂 Каталог</button>
     </div>
   </fieldset>
 
@@ -814,6 +862,15 @@ PAGE = r"""<!DOCTYPE html>
       <input type="range" id="explode" min="0" max="100" value="0" style="width:90px;vertical-align:middle"></label>
   </div>
   <div id="draw"></div>
+  <div id="catalog">
+    <div id="catHead">
+      <b style="font-size:16px">Каталог изделий</b>
+      <input type="text" id="catQ" placeholder="поиск по названию…">
+      <button id="catClose">✕ Закрыть</button>
+    </div>
+    <div id="catCats"></div>
+    <div id="catGrid"></div>
+  </div>
   <div id="emptyState">
     <div class="es-box">
       <div class="es-title">Новое изделие</div>
@@ -1290,6 +1347,58 @@ $('projRen').onclick=async()=>{   // переименовать текущее �
   if(p.ok){loadProjects(); toast('Переименовано: '+name);}
   else toast('Ошибка: '+(p.error||''),true);
 };
+/* ---------- каталог изделий (AKD-217) ---------- */
+const CAT_RULES=[  // раздел ← archetype/furniture_type
+  ['Тумбы',   p=>/тумб/i.test(p.ftype)||['drawer_unit'].includes(p.archetype)],
+  ['Столы',   p=>/стол/i.test(p.ftype)||['desk','table','round_table'].includes(p.archetype)],
+  ['Шкафы',   p=>/шкаф|гардероб/i.test(p.ftype)||['wardrobe','door_unit','cabinet'].includes(p.archetype)],
+  ['Стеллажи',p=>/стеллаж|полк/i.test(p.ftype)||['shelving'].includes(p.archetype)],
+  ['Черновики',p=>p.draft],
+];
+let CAT_ITEMS=[], CAT_SEL='Все';
+function catSection(p){
+  if(p.draft) return 'Черновики';
+  for(const [nm,fn] of CAT_RULES) if(fn(p)) return nm;
+  return 'Прочее';
+}
+function renderCatalog(){
+  const q=($('catQ').value||'').toLowerCase().trim();
+  const secs=['Все',...new Set(CAT_ITEMS.map(catSection))];
+  $('catCats').innerHTML=secs.map(s=>
+    `<span class="catchip ${s===CAT_SEL?'on':''}" data-s="${s}">${s}</span>`).join('');
+  $('catCats').querySelectorAll('.catchip').forEach(ch=>
+    ch.onclick=()=>{CAT_SEL=ch.dataset.s; renderCatalog();});
+  const items=CAT_ITEMS.filter(p=>
+    (CAT_SEL==='Все'||catSection(p)===CAT_SEL)&&
+    (!q||String(p.name).toLowerCase().includes(q)));
+  $('catGrid').innerHTML=items.map(p=>`
+    <div class="catCard" data-f="${p.file}">
+      <div class="img">${p.preview
+        ?`<img src="/preview/${encodeURIComponent(p.file.replace(/\.json$/,'.png'))}" loading="lazy">`
+        :'🪑'}</div>
+      <div class="nm" title="${p.name}">${p.name}${p.draft?'<span class="dr">черновик</span>':''}</div>
+      <div class="sub">${p.dims}${p.decor?' · '+p.decor:''}</div>
+    </div>`).join('')||'<div class="mini">ничего не найдено</div>';
+  $('catGrid').querySelectorAll('.catCard').forEach(c=>
+    c.onclick=async()=>{
+      const r=await fetch('/api/open',{method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({file:c.dataset.f})});
+      const p=await r.json();
+      if(p.ok){$('catalog').classList.remove('on'); adoptSpec(p);}
+      else toast('Ошибка: '+(p.error||''),true);
+    });
+}
+$('projCat').onclick=async()=>{
+  const r=await fetch('/api/projects',{method:'POST',
+    headers:{'Content-Type':'application/json'},body:'{}'});
+  const p=await r.json();
+  CAT_ITEMS=p.projects||[]; CAT_SEL='Все'; $('catQ').value='';
+  $('catalog').classList.add('on'); renderCatalog();
+};
+$('catClose').onclick=()=>$('catalog').classList.remove('on');
+$('catQ').addEventListener('input',renderCatalog);
+
 $('projDup').onclick=async()=>{
   const r=await fetch('/api/duplicate',{method:'POST',
     headers:{'Content-Type':'application/json'},body:JSON.stringify({spec:SPEC})});
@@ -1484,10 +1593,9 @@ async function runChat(text){
     if(CHAT_HISTORY.length>16)CHAT_HISTORY.splice(0,CHAT_HISTORY.length-16);
     if(p.spec){
       const wasDraft=!!(SPEC&&SPEC.draft);
-      pushUndo(); SPEC=p.spec; showEmpty(false); fillForm(); apply();
+      pushUndo(); SPEC=p.spec; showEmpty(false); fillForm(); await apply();
       if(wasDraft||p.created){                     // создано из черновика — в базу сразу
-        await fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({spec:SPEC})});
+        await saveSpec();                          // с превью для каталога
         loadProjects();
       }
     }
@@ -1582,7 +1690,15 @@ loadProviders();
 async function post(url){const r=await fetch(url,{method:'POST',
   headers:{'Content-Type':'application/json'},body:JSON.stringify({spec:SPEC})});
   return await r.json();}
-$('btnSave').onclick=async()=>{const p=await post('/api/save');
+// сохранение со снапшотом-превью для каталога (AKD-217)
+async function saveSpec(){
+  const prev=(scene3d.snapshot&&!EMPTY)?scene3d.snapshot(320):null;
+  const r=await fetch('/api/save',{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({spec:SPEC,preview:prev})});
+  return await r.json();
+}
+$('btnSave').onclick=async()=>{const p=await saveSpec();
   toast(p.ok?('Сохранено: '+p.spec):('Ошибка: '+p.error),!p.ok);
   loadVersions();};
 $('btnCfrn').onclick=async()=>{const p=await post('/api/export-cfrn');
