@@ -230,37 +230,86 @@ class MockChatProvider:
         return {"reply": "Применил: " + "; ".join(done), "spec": new}
 
 
-# ------------------------------------------------------------------ openai
+# ------------------------------------------------------------------ openai-совместимые
 
-class OpenAIChatProvider:
-    """Свободные формулировки через OpenAI (OPENAI_API_KEY, OPENAI_MODEL)."""
+# Пресеты OpenAI-совместимых сервисов (AKD-209): китайские модели доступны с
+# РФ-серверов и сильнее GigaChat в следовании инструкциям. base_url/model можно
+# переопределить env-ами LLM_BASE_URL / LLM_MODEL / LLM_VISION_MODEL.
+_OAI_PRESETS = {
+    "openai":   {"base": None, "key": "OPENAI_API_KEY", "model": "gpt-4o",
+                 "vision": "gpt-4o", "json_mode": True},
+    "kimi":     {"base": "https://api.moonshot.ai/v1", "key": "KIMI_API_KEY",
+                 "model": "moonshot-v1-8k", "vision": "moonshot-v1-8k-vision-preview",
+                 "json_mode": True},
+    "glm":      {"base": "https://open.bigmodel.cn/api/paas/v4", "key": "GLM_API_KEY",
+                 "model": "glm-4-flash", "vision": "glm-4v-flash", "json_mode": False},
+    "deepseek": {"base": "https://api.deepseek.com", "key": "DEEPSEEK_API_KEY",
+                 "model": "deepseek-chat", "vision": "deepseek-chat", "json_mode": True},
+}
 
-    def __init__(self) -> None:
-        api_key = os.environ.get("OPENAI_API_KEY")
+
+class OpenAICompatProvider:
+    """Любой OpenAI-совместимый чат (OpenAI, Kimi/Moonshot, GLM/Zhipu, DeepSeek).
+
+    Понимает фото ТЗ (vision-модель, формат image_url data-URI) и возвращает
+    расход токенов для счётчика. JSON вытаскиваем лениво — часть сервисов не
+    поддерживает response_format."""
+
+    def __init__(self, preset: str = "openai") -> None:
+        p = _OAI_PRESETS.get(preset, _OAI_PRESETS["openai"])
+        api_key = os.environ.get("LLM_API_KEY") or os.environ.get(p["key"])
         if not api_key:
-            raise ValueError("Нет OPENAI_API_KEY для SPEC_CHAT_PROVIDER=openai")
+            raise ValueError(f"Нет {p['key']} (или LLM_API_KEY) для SPEC_CHAT_PROVIDER={preset}")
+        base = os.environ.get("LLM_BASE_URL", p["base"])
         from openai import OpenAI
-        self.client = OpenAI(api_key=api_key)
-        self.model = os.environ.get("OPENAI_MODEL", "gpt-4o")
+        self.client = OpenAI(api_key=api_key, **({"base_url": base} if base else {}))
+        self.model = os.environ.get("LLM_MODEL", p["model"])
+        self.vision_model = os.environ.get("LLM_VISION_MODEL", p["vision"])
+        self.json_mode = os.environ.get("LLM_JSON_MODE",
+                                        "1" if p["json_mode"] else "0") not in ("0", "false", "no")
 
     def chat(self, spec: dict[str, Any], message: str,
              history: list[dict[str, str]] | None = None,
-             context: dict[str, Any] | None = None) -> dict[str, Any]:
+             context: dict[str, Any] | None = None,
+             images: list[dict[str, str]] | None = None) -> dict[str, Any]:
         system = CHAT_PROMPT_PATH.read_text(encoding="utf-8").replace(
             "__SCHEMA__", PARAMSPEC_SCHEMA_PATH.read_text(encoding="utf-8"))
         msgs: list[dict[str, Any]] = [{"role": "system", "content": system}]
         for h in (history or [])[-8:]:               # короткая память диалога
             msgs.append({"role": h.get("role", "user"), "content": h.get("text", "")})
         ctx = f"\nСостояние модели: {json.dumps(context, ensure_ascii=False)}\n" if context else ""
-        msgs.append({"role": "user", "content":
-                     f"Текущий ParamSpec:\n```json\n{json.dumps(spec, ensure_ascii=False, indent=2)}\n```\n{ctx}\n"
-                     f"Запрос пользователя: {message}"})
-        r = self.client.chat.completions.create(
-            model=self.model, temperature=0.1, messages=msgs,
-            response_format={"type": "json_object"})
-        data = json.loads(r.choices[0].message.content or "{}")
+        text = (f"Текущий ParamSpec:\n```json\n{json.dumps(spec, ensure_ascii=False, indent=2)}\n```\n{ctx}\n"
+                f"Запрос пользователя: {message or '(см. приложенные изображения ТЗ)'}\n"
+                "Ответь строго JSON-объектом {\"reply\":..., \"spec\":...}.")
+        if images:                                   # vision-формат OpenAI: content-массив
+            content: list[dict[str, Any]] = [{"type": "text", "text": text}]
+            for im in images:
+                content.append({"type": "image_url", "image_url":
+                                {"url": f"data:{im.get('mime','image/png')};base64,{im.get('data','')}"}})
+            msgs.append({"role": "user", "content": content})
+        else:
+            msgs.append({"role": "user", "content": text})
+        model = self.vision_model if images else self.model
+        kw: dict[str, Any] = {"model": model, "temperature": 0.1, "messages": msgs}
+        if self.json_mode and not images:
+            kw["response_format"] = {"type": "json_object"}
+        r = self.client.chat.completions.create(**kw)
+        out = r.choices[0].message.content or "{}"
+        c1, c2 = out.find("{"), out.rfind("}")
+        data = json.loads(out[c1:c2 + 1]) if c1 >= 0 else {}
+        usage = getattr(r, "usage", None)
         return {"reply": str(data.get("reply") or "Готово."),
-                "spec": data.get("spec") if isinstance(data.get("spec"), dict) else None}
+                "spec": data.get("spec") if isinstance(data.get("spec"), dict) else None,
+                "created": bool(data.get("created")),
+                "usage": {"model": model,
+                          "total": getattr(usage, "total_tokens", None),
+                          "prompt": getattr(usage, "prompt_tokens", None),
+                          "completion": getattr(usage, "completion_tokens", None)} if usage else None}
+
+
+# обратная совместимость: SPEC_CHAT_PROVIDER=openai
+def OpenAIChatProvider() -> "OpenAICompatProvider":  # noqa: N802
+    return OpenAICompatProvider("openai")
 
 
 class GeminiChatProvider:
@@ -448,11 +497,12 @@ def get_chat_provider(name: str | None = None) -> Any:
         return GigaChatProvider()
     if name == "gemini":
         return GeminiChatProvider()
-    if name == "openai":
-        return OpenAIChatProvider()
+    if name in ("openai", "kimi", "glm", "deepseek"):   # OpenAI-совместимые (AKD-209)
+        return OpenAICompatProvider(name)
     if name == "mock":
         return MockChatProvider()
-    raise ValueError(f"Неизвестный SPEC_CHAT_PROVIDER={name!r} (mock|openai|gemini|gigachat)")
+    raise ValueError(f"Неизвестный SPEC_CHAT_PROVIDER={name!r} "
+                     "(mock|openai|kimi|glm|deepseek|gemini|gigachat)")
 
 
 # ------------------------------------------------------------------ вход
