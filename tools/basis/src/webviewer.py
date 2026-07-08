@@ -69,6 +69,7 @@ def _panels(project: dict[str, Any]) -> list[dict[str, Any]]:
                     "x1": pl["x1"], "x2": pl["x2"], "y1": pl["y1"],
                     "y2": pl["y2"], "z1": pl["z1"], "z2": pl["z2"],
                     "thickness": p.get("thickness"), "material": p.get("material"),
+                    **({"swing": p["swing"]} if p.get("swing") else {}),
                     "edges": ", ".join(f"{k}:{v}" for k, v in eb.items() if v) or "—"})
     return out
 
@@ -135,20 +136,27 @@ def _openables(project: dict[str, Any], panels: list[dict[str, Any]],
                        "panels": gpanels, "hardware": hw, "holes": _own_holes(gpanels),
                        "travel": round(min(float(dim["depth"]) * 0.75, 380), 1)})
 
+    from .hardware import door_hinge_side
+    model_w = max((q["x2"] for q in panels), default=0)
     for i, p in enumerate(panels):
         if p["type"] != "door_front":
             continue
-        nm = str(p.get("name") or "").lower()
-        hinge = "right" if "прав" in nm else "left"
-        hx = p["x1"] if hinge == "left" else p["x2"]
+        # сторона петель — общий хелпер (положение секции/swing), AKD-223/224
+        hinge = door_hinge_side(
+            {"name": p.get("name"), "swing": p.get("swing"),
+             "placement": {"x1": p["x1"], "x2": p["x2"]}}, model_w)
         hw = [j for j, h in enumerate(hardware)
               if h["kind"] in ("hinge_cup", "handle")
               and str(h.get("name", "")).startswith(str(p.get("name")))]
-        groups.append({"kind": "door", "id": str(p.get("name") or f"door{i}"),
-                       "panels": [i], "hardware": hw, "holes": _own_holes([i]),
-                       "hinge": hinge,
-                       "ax": p["x1"] if hinge == "left" else p["x2"],
-                       "az": max(p["z1"], p["z2"]), "swing": 100})
+        g = {"kind": "door", "id": str(p.get("name") or f"door{i}"),
+             "panels": [i], "hardware": hw, "holes": _own_holes([i]),
+             "hinge": hinge, "az": max(p["z1"], p["z2"]), "swing": 100}
+        if hinge in ("up", "down"):                    # откидная: ось X по кромке
+            g["ay"] = p["y2"] if hinge == "up" else p["y1"]
+            g["ax"] = 0
+        else:
+            g["ax"] = p["x1"] if hinge == "left" else p["x2"]
+        groups.append(g)
     return groups
 
 
@@ -436,17 +444,26 @@ function MebelScene(container){
                           (o.hardware||[]).forEach(j=>ownH[j]=gi);
                           (o.holes||[]).forEach(k=>ownHole[k]=gi);});
     // группы-узлы: ящик — трансляция по Z; дверь — поворот вокруг оси петель
+    // (вертикальной left/right или горизонтальной up/down — AKD-224)
     OPEN.forEach(o=>{
       const node=new THREE.Group();
-      if(o.kind==='door'){node.position.set(TX(o.ax),0,TZ(o.az));}
+      const vert=(o.hinge==='up'||o.hinge==='down');
+      if(o.kind==='door'){
+        if(vert) node.position.set(0,TY(o.ay||0),TZ(o.az));
+        else     node.position.set(TX(o.ax),0,TZ(o.az));
+      }
       world.add(node);
-      groups.push({node,kind:o.kind,travel:o.travel||300,
-                   sign:(o.hinge==='right')?1:-1,swing:(o.swing||100)*Math.PI/180,
-                   t:0,target:0,pivot:{x:TX(o.ax||0),z:TZ(o.az||0)}});
+      groups.push({node,kind:o.kind,travel:o.travel||300,axis:vert?'x':'y',
+                   sign:(o.hinge==='right'||o.hinge==='down')?1:-1,
+                   swing:(o.swing||100)*Math.PI/180,
+                   t:0,target:0,
+                   pivot:{x:TX(o.ax||0),y:TY(o.ay||0),z:TZ(o.az||0),vert}});
     });
     const holder=gi=>gi===undefined?world:groups[gi].node;
     const place=(m,gi)=>{ if(gi!==undefined&&groups[gi].kind==='door'){
-        m.position.x-=groups[gi].pivot.x; m.position.z-=groups[gi].pivot.z;} };
+        const pv=groups[gi].pivot;
+        if(pv.vert){m.position.y-=pv.y; m.position.z-=pv.z;}
+        else{m.position.x-=pv.x; m.position.z-=pv.z;}} };
 
     PANELS.forEach((p,i)=>{
       const gi=ownP[i];
@@ -475,7 +492,9 @@ function MebelScene(container){
       const tmp=new THREE.Group();
       buildHw(h,TX,TY,TZ,tmp,gi);
       tmp.children.forEach(m=>{ if(gi!==undefined&&groups[gi].kind==='door'){
-          m.position.x-=groups[gi].pivot.x; m.position.z-=groups[gi].pivot.z;} });
+          const pv=groups[gi].pivot;
+          if(pv.vert){m.position.y-=pv.y; m.position.z-=pv.z;}
+          else{m.position.x-=pv.x; m.position.z-=pv.z;}} });
       while(tmp.children.length) holder(gi).add(tmp.children[0]);
     });
     holeGroup=new THREE.Group();
@@ -485,7 +504,11 @@ function MebelScene(container){
       g.userData.holepart=1;
       const gi=ownHole[k];                        // присадки узла едут с ним (AKD-189)
       if(gi!==undefined){
-        if(groups[gi].kind==='door'){g.position.x-=groups[gi].pivot.x; g.position.z-=groups[gi].pivot.z;}
+        if(groups[gi].kind==='door'){
+          const pv=groups[gi].pivot;
+          if(pv.vert){g.position.y-=pv.y; g.position.z-=pv.z;}
+          else{g.position.x-=pv.x; g.position.z-=pv.z;}
+        }
         groups[gi].node.add(g);
       } else holeGroup.add(g);});
     world.add(holeGroup);
@@ -641,6 +664,7 @@ function MebelScene(container){
       g.t+=(g.target-g.t)*0.14;
       if(Math.abs(g.target-g.t)<0.002) g.t=g.target;
       if(g.kind==='drawer'){g.node.position.z=g.t*g.travel;}
+      else if(g.axis==='x'){g.node.rotation.x=g.sign*g.t*g.swing;}
       else{g.node.rotation.y=g.sign*g.t*g.swing;}
     });
     controls.update(); renderer.render(scene,camera);

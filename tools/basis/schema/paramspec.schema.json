@@ -258,6 +258,16 @@
                 }
               }
             ]
+          },
+          "door_swing": {
+            "type": "string",
+            "enum": [
+              "left",
+              "right",
+              "up",
+              "down"
+            ],
+            "description": "Направление открывания одиночной двери секции (AKD-224): left/right — сторона петель; up/down — откидная вверх/вниз"
           }
         }
       }

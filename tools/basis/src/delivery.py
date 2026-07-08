@@ -94,6 +94,12 @@ def _hardware_bom(project: dict[str, Any]) -> list[dict[str, str]]:
             h = lg.get("height")
             out.append({"slot": "Опоры/ножки",
                         "name": f"{lt}" + (f", H={h} мм" if h else ""), "art": "—"})
+    # газлифт откидной двери (AKD-224): открывание вверх требует подъёмника
+    n_up = sum(1 for p in project.get("panels", [])
+               if p.get("type") == "door_front" and str(p.get("swing", "")).lower() == "up")
+    if n_up:
+        out.append({"slot": "Газлифт", "name": f"Подъёмник газовый (дверь вверх) × {n_up * 2}",
+                    "art": "—"})
     # штанги-вешала (AKD-177): покупная фурнитура из hardware.rods
     for rod in (project.get("hardware") or {}).get("rods") or []:
         kind = "Штанга выдвижная" if rod.get("axis") == "z" else "Штанга d25"

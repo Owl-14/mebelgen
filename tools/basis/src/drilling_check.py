@@ -87,7 +87,9 @@ def check_drilling_geometry(project: dict[str, Any],
     shelves = [p["placement"] for p in project.get("panels", [])
                if p.get("type") == "shelf" and isinstance(p.get("placement"), dict)]
     for h in holes:
-        if h["purpose"] != "петля (планка)":
+        # только распашные (ось X): у откидных (AKD-224) планка в пласти
+        # горизонта (ось Y) — это норма, не коллизия
+        if h["purpose"] != "петля (планка)" or h["axis"] != "x":
             continue
         for sp in shelves:
             if sp["y1"] - 0.5 <= h["y"] <= sp["y2"] + 0.5 \

@@ -215,3 +215,53 @@ def test_cfrn_front_faces_viewer():
     assert door_x < drawer_x
     assert not check_cfrn_encoding(p)                     # инволюция чекеров цела
     assert not check_cfrn_holes(p)
+
+
+def test_door_hinge_by_position_and_swing():
+    """AKD-223/224: петли по положению секции; door_swing up — откидная."""
+    import json
+    from src.generators import generate_from_paramspec
+    from src.hardware import compute_drilling
+    from src.drilling_check import check_drilling_geometry
+
+    # одиночная дверь в ПРАВОЙ секции: петли на правой кромке (наружу),
+    # ручка и замок — на левой (к центру тумбы)
+    spec = {"schemaVersion": "paramspec-v1", "project_name": "Т", "furniture_type": "тумба",
+            "archetype": "cabinet", "dimensions": {"width": 800, "depth": 400, "height": 900},
+            "materials": {"board_thickness": 16},
+            "hardware": {"handles": {"type": "ручка", "material": "металл", "color": "—",
+                                     "size": 128, "count": 1, "offset_from_top": 40},
+                         "locks": [{"type": "замок", "target": "right_door"}]},
+            "sections": [{"kind": "shelves", "shelves": 2}, {"kind": "door", "door": 1}]}
+    p = generate_from_paramspec(spec)
+    holes = compute_drilling(p)
+    door = next(q for q in p["panels"] if q["type"] == "door_front")
+    dx1, dx2 = door["placement"]["x1"], door["placement"]["x2"]
+    cups = [h for h in holes if h["purpose"] == "петля (чашка Ø35)"]
+    assert cups and all(abs(h["x"] - (dx2 - 22)) < 1 for h in cups),         f"чашки не на правой кромке: {[h['x'] for h in cups]} (дверь {dx1}..{dx2})"
+    grips = [h for h in holes if h["purpose"] == "ручка (винт)"]
+    assert grips and all(abs(h["x"] - (dx1 + 40)) < 1 for h in grips)   # ручка слева
+    locks = [h for h in holes if h["purpose"].startswith("замок")]
+    assert len(locks) == 1 and abs(locks[0]["x"] - (dx1 + 30)) < 1
+    assert not check_drilling_geometry(p, holes)["errors"]
+
+    # откидная вверх: чашки вдоль ВЕРХНЕЙ кромки, планки в крышку (ось Y),
+    # ручка снизу по центру, газлифт в BOM
+    spec2 = {"schemaVersion": "paramspec-v1", "project_name": "Бар", "furniture_type": "шкаф",
+             "archetype": "door_unit", "dimensions": {"width": 800, "depth": 350, "height": 400},
+             "materials": {"board_thickness": 16},
+             "hardware": {"handles": {"type": "ручка", "material": "металл", "color": "—",
+                                      "size": 128, "count": 1, "offset_from_top": 40}},
+             "sections": [{"kind": "door", "door": 1, "door_swing": "up"}]}
+    p2 = generate_from_paramspec(spec2)
+    h2 = compute_drilling(p2)
+    door2 = next(q for q in p2["panels"] if q["type"] == "door_front")
+    cups2 = [h for h in h2 if h["purpose"] == "петля (чашка Ø35)"]
+    assert cups2 and all(abs(h["y"] - (door2["placement"]["y2"] - 22)) < 1 for h in cups2)
+    plates2 = [h for h in h2 if h["purpose"] == "петля (планка)"]
+    assert plates2 and all(h["axis"] == "y" for h in plates2)
+    grips2 = [h for h in h2 if h["purpose"] == "ручка (винт)"]
+    assert grips2 and all(abs(h["y"] - (door2["placement"]["y1"] + 40)) < 1 for h in grips2)
+    assert not check_drilling_geometry(p2, h2)["errors"]
+    from src.delivery import _hardware_bom
+    assert any(b["slot"] == "Газлифт" for b in _hardware_bom(p2))

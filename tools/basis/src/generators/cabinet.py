@@ -126,7 +126,10 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
                     panels.append(door_in_column(mid + g / 2, fx2, dy1, dy2, c.T, c.mat, sid, names[1], z_mode=z_mode))
                 else:
                     one = sec.get("door_name") if isinstance(sec.get("door_name"), str) else f"Дверь {sid}"
-                    panels.append(door_in_column(fx1, fx2, dy1, dy2, c.T, c.mat, sid, one, z_mode=z_mode))
+                    dpanel = door_in_column(fx1, fx2, dy1, dy2, c.T, c.mat, sid, one, z_mode=z_mode)
+                    if sec.get("door_swing"):          # направление открывания (AKD-224)
+                        dpanel["swing"] = str(sec["door_swing"]).lower()
+                    panels.append(dpanel)
 
         # штанга (AKD-177/186) — в любой секции, включая над стеком ящиков
         rod = rod_in_column(cx1, cx2, sec, yt, iz1, iz2, sid)

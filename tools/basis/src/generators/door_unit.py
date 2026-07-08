@@ -41,7 +41,10 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
                        "dimensions": {"width": round(c.W - g - (mid + g / 2), 2), "height": y2 - y1},
                        "position": {"x": mid + g / 2, "y": y1, "z": 0}, "estimated": False}]
     elif ndoor == 1:
-        panels.append(overlay_door(c.W, c.H, c.T, c.Hleg, g, c.mat, "main", y1=y1, y2=y2))
+        dpanel = overlay_door(c.W, c.H, c.T, c.Hleg, g, c.mat, "main", y1=y1, y2=y2)
+        if section.get("door_swing"):                  # направление открывания (AKD-224)
+            dpanel["swing"] = str(section["door_swing"]).lower()
+        panels.append(dpanel)
         doors_meta = [{"id": "door_1", "type": "распашная", "hinges": "накладные", "lock": False,
                        "dimensions": {"width": c.W - 2 * g, "height": y2 - y1},
                        "position": {"x": g, "y": y1, "z": 0}, "estimated": False}]

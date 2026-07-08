@@ -51,6 +51,33 @@ def _sys32_pts(a: float, b: float) -> tuple[list[float], list[float]]:
     return dws, cams
 
 
+def door_hinge_side(p: dict[str, Any], model_w: float | None = None) -> str:
+    """Сторона петель фасада двери: 'left'|'right'|'up'|'down' (AKD-223/224).
+
+    Приоритет: явный p['swing'] (sections[].door_swing) → имя («прав»/«лев») →
+    ПО ПОЛОЖЕНИЮ: дверь в правой половине изделия навешивается справа
+    (открывание наружу), в левой — слева. Раньше решало только имя, и
+    одиночная дверь правой секции всегда открывалась в центр тумбы."""
+    sw = str(p.get("swing") or "").lower()
+    if sw in ("left", "right", "up", "down"):
+        return sw
+    nm = str(p.get("name", "")).lower()
+    if "прав" in nm:
+        return "right"
+    if "лев" in nm:
+        return "left"
+    pl = p.get("placement") or {}
+    if model_w and pl:
+        c = (pl.get("x1", 0) + pl.get("x2", 0)) / 2
+        return "right" if c > model_w / 2 + 1 else "left"
+    return "left"
+
+
+def _model_width(panels: list[dict[str, Any]]) -> float:
+    return max((p["placement"]["x2"] for p in panels
+                if isinstance(p.get("placement"), dict)), default=0.0)
+
+
 def _n_hinges(h: float) -> int:
     if h <= 900:
         return 2
@@ -166,22 +193,57 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
                 y = pl["y2"] - off
                 for dx in (-size / 2, size / 2):
                     holes.append(_hole(p["name"], "ручка (винт)", cx + dx, y, z_in, 5, t_f, "z", -1))
-            else:  # door_front: ручка у кромки открывания, 2 винта по вертикали
-                nm = p["name"].lower()
-                hx = pl["x1"] + 40 if "прав" in nm else pl["x2"] - 40
+            else:  # door_front: ручка у кромки, ПРОТИВОПОЛОЖНОЙ петлям (AKD-223)
+                sd = door_hinge_side(p, _model_width(panels))
                 cy = (pl["y1"] + pl["y2"]) / 2
-                for dy in (-size / 2, size / 2):
-                    holes.append(_hole(p["name"], "ручка (винт)", hx, cy + dy, z_in, 5, t_f, "z", -1))
+                if sd in ("up", "down"):              # откидная: ручка снизу/сверху по центру
+                    cx = (pl["x1"] + pl["x2"]) / 2
+                    hy = pl["y1"] + 40 if sd == "up" else pl["y2"] - 40
+                    for dx in (-size / 2, size / 2):
+                        holes.append(_hole(p["name"], "ручка (винт)", cx + dx, hy, z_in, 5, t_f, "z", -1))
+                else:
+                    hx = pl["x1"] + 40 if sd == "right" else pl["x2"] - 40
+                    for dy in (-size / 2, size / 2):
+                        holes.append(_hole(p["name"], "ручка (винт)", hx, cy + dy, z_in, 5, t_f, "z", -1))
 
-    # --- Петли: чашка Ø35 на фасаде + 2 отв ответной планки на боковине ---
+    # --- Петли: чашка Ø35 на фасаде + 2 отв ответной планки. Сторона — по
+    #     положению секции/параметру swing (AKD-223/224), не по имени ---
+    _mw = _model_width(panels)
     for p in panels:
         if p.get("type") != "door_front":
             continue
         pl = p["placement"]
+        sd = door_hinge_side(p, _mw)
+        if sd in ("up", "down"):
+            # откидная дверь: чашки вдоль верхней/нижней кромки, планки —
+            # на пласти примыкающего горизонта (крышка/дно/полка)
+            n = _n_hinges(pl["x2"] - pl["x1"])
+            cup_y = pl["y2"] - 22 if sd == "up" else pl["y1"] + 22
+            edge_y = pl["y2"] if sd == "up" else pl["y1"]
+            host = None
+            for q in panels:                          # горизонт за/над кромкой двери
+                if q.get("type") not in ("top", "bottom", "shelf"):
+                    continue
+                qp = q["placement"]
+                near = (qp["y1"] - 1 <= edge_y <= qp["y2"] + 1
+                        or (sd == "up" and 0 <= qp["y1"] - edge_y <= 6)     # зазор фасада
+                        or (sd == "down" and 0 <= edge_y - qp["y2"] <= 6))
+                if near and min(qp["x2"], pl["x2"]) - max(qp["x1"], pl["x1"]) > 60:
+                    host = q
+                    break
+            for x in _hinge_levels(pl["x1"], pl["x2"], n):
+                holes.append(_hole(p["name"], "петля (чашка Ø35)", x, cup_y, pl["z2"], 35, 12, "z", -1))
+                if host is not None:
+                    hp = host["placement"]
+                    hy = hp["y1"] if sd == "up" else hp["y2"]
+                    hdir = 1 if sd == "up" else -1    # с пласти внутрь тела горизонта
+                    z_pl = hp["z1"] + 37
+                    for dx in (-16, 16):
+                        holes.append(_hole(host["name"], "петля (планка)", x + dx, hy, z_pl, 5, 12, "y", hdir))
+            continue
+        hinge_left = sd == "left"
         h = pl["y2"] - pl["y1"]
         n = _n_hinges(h)
-        nm = p["name"].lower()
-        hinge_left = "прав" not in nm            # левая дверь — петли слева
         cup_x = pl["x1"] + 22 if hinge_left else pl["x2"] - 22
         # ближайшая вертикаль со стороны петель
         side_x = pl["x1"] if hinge_left else pl["x2"]
@@ -610,14 +672,36 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
                     holes.append(_hole(v["name"], "штангодержатель (саморез)",
                                        edge_x, yc + dy, zc, 3.5, 14, "x", into))
 
-    # --- Замки (AKD-137): цилиндр Ø18 сквозь фасад. Дверь — сторона ручки;
-    #     ящики — центральный замок в верхнем фасаде ---
+    # --- Замки (AKD-137/223): цилиндр Ø18 сквозь фасад, сторона ручки.
+    #     locks.target (right_door/left_door/имя) — замок ТОЛЬКО на этой двери ---
     if hw.get("locks"):
+        # цели из спеки: right_door/left_door/точное имя фасада; без target — все
+        targets: list[str] = []
+        for lk in (hw.get("locks") if isinstance(hw.get("locks"), list) else []):
+            if isinstance(lk, dict) and lk.get("target"):
+                targets.append(str(lk["target"]).lower())
         doors = [p for p in panels if p.get("type") == "door_front"]
+
+        def _lock_matches(p: dict[str, Any]) -> bool:
+            if not targets:
+                return True
+            nm = str(p.get("name", "")).lower()
+            sdp = door_hinge_side(p, _mw)
+            for t in targets:
+                if t in ("right_door", "правая") and (sdp == "right" or "прав" in nm):
+                    return True
+                if t in ("left_door", "левая") and (sdp == "left" or "лев" in nm):
+                    return True
+                if t not in ("right_door", "left_door") and t in nm:
+                    return True
+            return False
+
         for p in doors:
+            if not _lock_matches(p):
+                continue
             pl = p["placement"]
-            nm = p["name"].lower()
-            lx = pl["x2"] - 30 if "прав" not in nm else pl["x1"] + 30
+            sdl = door_hinge_side(p, _mw)
+            lx = pl["x1"] + 30 if sdl == "right" else pl["x2"] - 30
             ly = (pl["y1"] + pl["y2"]) / 2
             holes.append(_hole(p["name"], "замок (цилиндр Ø18)", lx, ly, pl["z2"],
                                18, pl["z2"] - pl["z1"], "z", -1))
