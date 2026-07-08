@@ -318,20 +318,117 @@ class GeminiChatProvider:
                 "created": bool(data.get("created"))}
 
 
+class GigaChatProvider:
+    """Сбер GigaChat (AKD-203): работает с российских серверов (в отличие от
+    Gemini). Ключ авторизации (Base64 Client:Secret) — env GIGACHAT_AUTH_KEY;
+    обмен на OAuth-токен (~30 мин, кэшируем). Модель — GIGACHAT_MODEL
+    (GigaChat / GigaChat-Pro / GigaChat-Max). Фото ТЗ — загрузка файла +
+    attachments (нужна vision-модель, напр. GigaChat-Max).
+
+    SSL: сертификаты Сбера выпущены Минцифры РФ — если корневой не установлен
+    в системе, GIGACHAT_VERIFY=0 отключает проверку (демо; для прод — поставить
+    корневой сертификат Russian Trusted CA)."""
+
+    OAUTH = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
+    BASE = "https://gigachat.devices.sberbank.ru/api/v1"
+
+    def __init__(self) -> None:
+        self.auth_key = os.environ.get("GIGACHAT_AUTH_KEY")
+        if not self.auth_key:
+            raise ValueError("Нет GIGACHAT_AUTH_KEY для SPEC_CHAT_PROVIDER=gigachat")
+        self.scope = os.environ.get("GIGACHAT_SCOPE", "GIGACHAT_API_PERS")
+        self.model = os.environ.get("GIGACHAT_MODEL", "GigaChat")
+        self.verify = os.environ.get("GIGACHAT_VERIFY", "0") not in ("0", "false", "no")
+        self._token = None
+        self._exp = 0.0
+
+    def _now(self) -> float:
+        import time
+        return time.time()
+
+    def _access_token(self) -> str:
+        import uuid
+        import requests
+        if self._token and self._now() < self._exp - 60:
+            return self._token
+        if not self.verify:
+            import urllib3
+            urllib3.disable_warnings()
+        r = requests.post(self.OAUTH, headers={
+            "Authorization": f"Basic {self.auth_key}",
+            "RqUID": str(uuid.uuid4()),
+            "Content-Type": "application/x-www-form-urlencoded",
+        }, data={"scope": self.scope}, timeout=30, verify=self.verify)
+        r.raise_for_status()
+        d = r.json()
+        self._token = d["access_token"]
+        self._exp = float(d.get("expires_at", 0)) / 1000 or (self._now() + 1500)
+        return self._token
+
+    def _upload_images(self, images: list[dict[str, str]]) -> list[str]:
+        import base64
+        import requests
+        ids: list[str] = []
+        for im in images:
+            raw = base64.b64decode(im.get("data", ""))
+            r = requests.post(f"{self.BASE}/files",
+                              headers={"Authorization": f"Bearer {self._access_token()}"},
+                              files={"file": ("tz.png", raw, im.get("mime", "image/png"))},
+                              data={"purpose": "general"}, timeout=60, verify=self.verify)
+            r.raise_for_status()
+            ids.append(r.json().get("id"))
+        return ids
+
+    def chat(self, spec: dict[str, Any], message: str,
+             history: list[dict[str, str]] | None = None,
+             context: dict[str, Any] | None = None,
+             images: list[dict[str, str]] | None = None) -> dict[str, Any]:
+        import requests
+        system = CHAT_PROMPT_PATH.read_text(encoding="utf-8").replace(
+            "__SCHEMA__", PARAMSPEC_SCHEMA_PATH.read_text(encoding="utf-8"))
+        msgs: list[dict[str, Any]] = [{"role": "system", "content": system}]
+        for h in (history or [])[-8:]:
+            msgs.append({"role": h.get("role", "user"), "content": h.get("text", "")})
+        ctx = f"\nСостояние модели: {json.dumps(context, ensure_ascii=False)}\n" if context else ""
+        user_msg: dict[str, Any] = {"role": "user", "content":
+            f"Текущий ParamSpec:\n```json\n{json.dumps(spec, ensure_ascii=False, indent=2)}\n```\n{ctx}\n"
+            f"Запрос: {message or '(см. приложенные изображения ТЗ)'}\n"
+            "Ответь строго JSON-объектом {\"reply\":..., \"spec\":...}."}
+        if images:
+            user_msg["attachments"] = self._upload_images(images)
+        msgs.append(user_msg)
+        r = requests.post(f"{self.BASE}/chat/completions",
+                          headers={"Authorization": f"Bearer {self._access_token()}",
+                                   "Content-Type": "application/json"},
+                          json={"model": self.model, "messages": msgs, "temperature": 0.1},
+                          timeout=120, verify=self.verify)
+        if r.status_code == 429:
+            raise RuntimeError("Лимит GigaChat исчерпан — попробуйте позже")
+        r.raise_for_status()
+        text = r.json()["choices"][0]["message"]["content"]
+        c1, c2 = text.find("{"), text.rfind("}")        # вычленить JSON из ответа
+        data = json.loads(text[c1:c2 + 1]) if c1 >= 0 else {}
+        return {"reply": str(data.get("reply") or "Готово."),
+                "spec": data.get("spec") if isinstance(data.get("spec"), dict) else None,
+                "created": bool(data.get("created"))}
+
+
 def get_chat_provider(name: str | None = None) -> Any:
     name = (name or os.environ.get("SPEC_CHAT_PROVIDER")
             or os.environ.get("PARAMSPEC_PROVIDER")
-            # авто: есть ключ — настоящая нейронка (gemini бесплатный — первым),
-            # нет — rule-based mock
-            or ("gemini" if os.environ.get("GEMINI_API_KEY")
+            # авто по наличию ключа; gigachat работает с РФ-серверов (Gemini — нет)
+            or ("gigachat" if os.environ.get("GIGACHAT_AUTH_KEY")
+                else "gemini" if os.environ.get("GEMINI_API_KEY")
                 else "openai" if os.environ.get("OPENAI_API_KEY") else "mock")).lower()
+    if name == "gigachat":
+        return GigaChatProvider()
     if name == "gemini":
         return GeminiChatProvider()
     if name == "openai":
         return OpenAIChatProvider()
     if name == "mock":
         return MockChatProvider()
-    raise ValueError(f"Неизвестный SPEC_CHAT_PROVIDER={name!r} (mock|openai|gemini)")
+    raise ValueError(f"Неизвестный SPEC_CHAT_PROVIDER={name!r} (mock|openai|gemini|gigachat)")
 
 
 # ------------------------------------------------------------------ вход

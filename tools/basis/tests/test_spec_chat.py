@@ -127,3 +127,32 @@ def test_gemini_provider_parses_response(monkeypatch):
     assert captured["key"] == "test-key"
     parts = captured["payload"]["contents"][-1]["parts"]
     assert any("inline_data" in p for p in parts)
+
+
+def test_gigachat_provider(monkeypatch):
+    """AKD-203: GigaChat — обмен ключа на токен + JSON-ответ (сеть замокана)."""
+    import src.spec_chat as sc
+
+    class _R:
+        def __init__(self, j): self._j = j
+        status_code = 200
+        def raise_for_status(self): pass
+        def json(self): return self._j
+
+    def _post(url, **kw):
+        if "oauth" in url:
+            assert kw["headers"]["Authorization"].startswith("Basic ")
+            return _R({"access_token": "tok123", "expires_at": 9999999999000})
+        assert kw["headers"]["Authorization"] == "Bearer tok123"
+        return _R({"choices": [{"message": {"content":
+            'Готово. {"reply":"Ширина 900.","spec":'
+            + json.dumps({**SPEC, "dimensions": {**SPEC["dimensions"], "width": 900}})
+            + '}'}}]})
+
+    monkeypatch.setenv("GIGACHAT_AUTH_KEY", "YXBwOnNlY3JldA==")
+    monkeypatch.setattr(sc, "get_chat_provider", lambda name=None: sc.GigaChatProvider())
+    import requests
+    monkeypatch.setattr(requests, "post", _post)
+
+    r = chat_edit(SPEC, "сделай ширину 900")
+    assert r["spec"] and r["spec"]["dimensions"]["width"] == 900
