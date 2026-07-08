@@ -285,6 +285,22 @@ class OpenAICompatProvider:
             pass
         return None
 
+    def vision_extract(self, images: list[dict[str, str]]) -> str:
+        """Этап 1 конвейера (AKD-211): факты с фото ТЗ простым текстом."""
+        prompt = (
+            "На изображении — ТЗ или чертёж корпусной мебели. Выпиши ПРОСТЫМ ТЕКСТОМ "
+            "(не JSON, по пунктам) все факты: тип изделия; габариты Ш×Г×В (мм); число и тип "
+            "секций (ящики/полки/двери); материал и толщину плиты; цвет; фурнитуру, штангу, "
+            "опоры. Только то, что реально на изображении, ничего не выдумывай.")
+        content: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
+        for im in images:
+            content.append({"type": "image_url", "image_url":
+                            {"url": f"data:{im.get('mime','image/png')};base64,{im.get('data','')}"}})
+        r = self.client.chat.completions.create(
+            model=self.vision_model, temperature=0.1,
+            messages=[{"role": "user", "content": content}])
+        return r.choices[0].message.content or ""
+
     def chat(self, spec: dict[str, Any], message: str,
              history: list[dict[str, str]] | None = None,
              context: dict[str, Any] | None = None,
@@ -462,6 +478,28 @@ class GigaChatProvider:
             ids.append(r.json().get("id"))
         return ids
 
+    def vision_extract(self, images: list[dict[str, str]]) -> str:
+        """Этап 1 конвейера (AKD-211): распознать фото ТЗ и выписать факты
+        ПРОСТЫМ ТЕКСТОМ (не JSON). Дальше по этим фактам собирает другая модель."""
+        import requests
+        att = self._upload_images(images)
+        prompt = (
+            "На изображении — ТЗ или чертёж корпусной мебели. Внимательно прочитай "
+            "и выпиши ПРОСТЫМ ТЕКСТОМ (не JSON, по пунктам) все факты, которые видно: "
+            "тип изделия; габариты Ширина×Глубина×Высота (мм); количество и тип "
+            "секций (ящики/полки/двери) и сколько их; материал и толщину плиты; цвет/декор; "
+            "фурнитуру (ручки, петли, направляющие), штангу, опоры/цоколь; особые "
+            "требования. Пиши только то, что реально есть на изображении, ничего не выдумывай.")
+        r = requests.post(f"{self.BASE}/chat/completions",
+                          headers={"Authorization": f"Bearer {self._access_token()}",
+                                   "Content-Type": "application/json"},
+                          json={"model": self.vision_model, "temperature": 0.1,
+                                "messages": [{"role": "user", "content": prompt,
+                                              "attachments": att}]},
+                          timeout=120, verify=self.verify)
+        r.raise_for_status()
+        return r.json()["choices"][0]["message"]["content"]
+
     def chat(self, spec: dict[str, Any], message: str,
              history: list[dict[str, str]] | None = None,
              context: dict[str, Any] | None = None,
@@ -503,13 +541,18 @@ class GigaChatProvider:
                           "completion": usage.get("completion_tokens")}}
 
 
-def get_chat_provider(name: str | None = None) -> Any:
-    name = (name or os.environ.get("SPEC_CHAT_PROVIDER")
+def resolve_provider_name(name: str | None = None) -> str:
+    """Имя провайдера, которое реально будет использовано (для конвейера AKD-211)."""
+    return (name or os.environ.get("SPEC_CHAT_PROVIDER")
             or os.environ.get("PARAMSPEC_PROVIDER")
             # авто по наличию ключа; gigachat работает с РФ-серверов (Gemini — нет)
             or ("gigachat" if os.environ.get("GIGACHAT_AUTH_KEY")
                 else "gemini" if os.environ.get("GEMINI_API_KEY")
                 else "openai" if os.environ.get("OPENAI_API_KEY") else "mock")).lower()
+
+
+def get_chat_provider(name: str | None = None) -> Any:
+    name = resolve_provider_name(name)
     if name == "gigachat":
         return GigaChatProvider()
     if name == "gemini":
@@ -538,19 +581,38 @@ def chat_edit(spec: dict[str, Any], message: str,
     """
     from .paramspec import validate_paramspec
 
-    provider = get_chat_provider(provider)
+    build_name = resolve_provider_name(provider)
+    build = get_chat_provider(build_name)
+    # Конвейер «глаза+мозг» (AKD-211): если пришло фото, а сборщик — не тот
+    # провайдер, что назначен на зрение (VISION_EXTRACT_PROVIDER, обычно GigaChat),
+    # то этап 1 — GigaChat распознаёт факты с фото ТЗ текстом, этап 2 — сборщик
+    # (GLM) собирает изделие уже по этим фактам, без картинки.
+    extract_name = (os.environ.get("VISION_EXTRACT_PROVIDER") or "").lower()
+    two_stage = bool(images and extract_name and extract_name != build_name)
     try:
-        if images:
-            res = provider.chat(spec, message, history, context, images=images)
+        if two_stage:
+            vis = get_chat_provider(extract_name)
+            desc = vis.vision_extract(images) if hasattr(vis, "vision_extract") else ""
+            if desc.strip():
+                aug = ((message or "Собери изделие по этому ТЗ.")
+                       + "\n\nРаспознано с фото ТЗ (используй как факты, ничего не додумывай "
+                         "сверх):\n" + desc)
+                res = build.chat(spec, aug, history, context)
+            else:                                     # распознать не вышло — фото напрямую
+                res = build.chat(spec, message, history, context, images=images)
+        elif images:
+            res = build.chat(spec, message, history, context, images=images)
         else:
             try:
-                res = provider.chat(spec, message, history, context)
+                res = build.chat(spec, message, history, context)
             except TypeError:
-                res = provider.chat(spec, message, history)
+                res = build.chat(spec, message, history)
     except Exception as e:                            # сеть/ключ/парсинг — в чат, не 500
         return {"reply": f"Ошибка провайдера: {e}", "spec": None, "changes": []}
 
     usage = res.get("usage")                          # расход токенов (для счётчика)
+    if two_stage and isinstance(res, dict):           # пометка конвейера в ответе
+        res["reply"] = "📷 GigaChat распознал фото → " + str(res.get("reply") or "готово")
     new = res.get("spec")
     if not new:
         return {"reply": res.get("reply", ""), "spec": None, "changes": [], "usage": usage}
