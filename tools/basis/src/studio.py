@@ -593,6 +593,14 @@ PAGE = r"""<!DOCTYPE html>
   #tabs button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
   #draw{position:absolute;inset:48px 12px 12px;z-index:4;background:#fff;border:1px solid var(--line);
         border-radius:8px;overflow:auto;display:none;padding:8px}
+  /* AKD-214: пустое рабочее пространство нового изделия */
+  #emptyState{position:absolute;inset:0;z-index:6;display:none;align-items:center;justify-content:center;background:var(--bg)}
+  #emptyState.on{display:flex}
+  #emptyState .es-box{text-align:center;border:2px dashed var(--line);border-radius:14px;
+    padding:36px 48px;background:var(--card)}
+  #emptyState .es-title{font-size:20px;color:var(--ink);margin-bottom:8px}
+  #emptyState .es-hint{font-size:13px;color:var(--mut);margin-bottom:16px;line-height:1.7}
+  #emptyState.drop .es-box{border-color:var(--accent);background:#eef4ff}
   #view3d{position:absolute;inset:0}
   #hud{position:absolute;right:12px;top:10px;z-index:5;background:rgba(255,255,255,.9);
        border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12px}
@@ -765,6 +773,14 @@ PAGE = r"""<!DOCTYPE html>
       <input type="range" id="explode" min="0" max="100" value="0" style="width:90px;vertical-align:middle"></label>
   </div>
   <div id="draw"></div>
+  <div id="emptyState">
+    <div class="es-box">
+      <div class="es-title">Новое изделие</div>
+      <div class="es-hint">Перетащите сюда фото ТЗ &mdash;<br>или опишите изделие в чате слева</div>
+      <button id="esUpload" class="primary">Загрузить фото ТЗ</button>
+      <input type="file" id="esFile" accept="image/*" style="display:none">
+    </div>
+  </div>
   <div id="toast"></div>
 </div>
 </div>
@@ -1158,10 +1174,41 @@ async function loadProjects(){
     `${x.name.slice(0,38)} · ${x.archetype} ${x.dims}</option>`).join('');
 }
 function adoptSpec(p){
+  showEmpty(false);                                // изделие появилось — прячем пустой экран
   SPEC=p.spec; UNDO.length=0; $('btnUndo').disabled=true;
   scene3d.select(null); fillForm(); apply(); loadProjects(); loadBuilds();
   toast('Открыто: '+p.file);
 }
+// пустое рабочее пространство (AKD-214): «Новое» → чистый экран с приглашением загрузить ТЗ
+let EMPTY=false;
+function showEmpty(on){
+  EMPTY=on; $('emptyState').classList.toggle('on',on);
+  if(on){                                          // чистый экран: 3D, бейджи, статистика
+    if(scene3d.setPayload) scene3d.setPayload({panels:[]});
+    ['badges','stats','errors'].forEach(id=>{const e=$(id); if(e) e.innerHTML='';});
+    const fp=$('fs_part'); if(fp) fp.style.display='none';
+  }
+}
+// распознавание фото ТЗ через FileReader — надёжно на больших файлах (AKD-214)
+function importTzFile(f){
+  if(!f) return;
+  if(!/\.(png|jpe?g|webp|gif)$/i.test(f.name)){toast('Нужно изображение ТЗ (png/jpg/webp)',true);return;}
+  toast('Распознаю ТЗ…');
+  const rd=new FileReader();
+  rd.onload=async()=>{
+    const s=String(rd.result), b64=s.slice(s.indexOf(',')+1);
+    try{
+      const r=await fetch('/api/import-tz',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({name:f.name,data:b64,provider:CHAT_PROVIDER})});
+      const p=await r.json();
+      if(p.ok){adoptSpec(p); toast('ТЗ распознано → '+p.file);}
+      else toast(p.error||'не удалось распознать',true);
+    }catch(e){toast('Ошибка: '+e.message,true);}
+  };
+  rd.readAsDataURL(f);
+}
+$('esUpload').onclick=()=>$('esFile').click();
+$('esFile').onchange=e=>{importTzFile(e.target.files[0]); e.target.value='';};
 $('projSel').onchange=async e=>{
   const r=await fetch('/api/open',{method:'POST',
     headers:{'Content-Type':'application/json'},
@@ -1169,16 +1216,9 @@ $('projSel').onchange=async e=>{
   const p=await r.json();
   if(p.ok) adoptSpec(p); else toast('Ошибка: '+(p.error||''),true);
 };
-$('projNew').onclick=async()=>{
-  const arch=prompt('Архетип нового изделия:\n(desk, cabinet, wardrobe, shelving, drawer_unit, door_unit, round_table, corpus)','cabinet');
-  if(!arch) return;
-  const name=prompt('Название изделия:','Новое изделие');
-  if(name===null) return;
-  const r=await fetch('/api/new',{method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({archetype:arch.trim(),name})});
-  const p=await r.json();
-  if(p.ok) adoptSpec(p); else toast('Ошибка: '+(p.error||''),true);
+$('projNew').onclick=()=>{        // пустой воркспейс: без 3D, с приглашением загрузить ТЗ
+  showEmpty(true);
+  toast('Новое изделие — загрузите ТЗ или опишите в чате');
 };
 $('projDup').onclick=async()=>{
   const r=await fetch('/api/duplicate',{method:'POST',
@@ -1418,26 +1458,14 @@ $('btnB3d').onclick=async()=>{
       await fetch('/api/open-file',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({path:p.b3d})});}};
 
-/* ---------- drag&drop ТЗ (AKD-135) ---------- */
+/* ---------- drag&drop ТЗ в область 3D / пустой экран (AKD-135/214) ---------- */
 const stage=$('main');
 stage.addEventListener('dragover',e=>{e.preventDefault();
-  stage.style.outline='3px dashed var(--accent)';});
-stage.addEventListener('dragleave',()=>{stage.style.outline='';});
-stage.addEventListener('drop',async e=>{
-  e.preventDefault(); stage.style.outline='';
-  const f=e.dataTransfer.files&&e.dataTransfer.files[0];
-  if(!f) return;
-  if(!/[.](png|jpe?g|webp|gif)$/i.test(f.name)){
-    toast('Поддерживаются изображения ТЗ (png/jpg/webp)',true); return;}
-  toast('Распознаю ТЗ…');
-  const buf=await f.arrayBuffer();
-  const b64=btoa(String.fromCharCode(...new Uint8Array(buf)));
-  const r=await fetch('/api/import-tz',{method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({name:f.name,data:b64,provider:CHAT_PROVIDER})});
-  const p=await r.json();
-  if(p.ok){adoptSpec(p); toast('ТЗ распознано → '+p.file);}
-  else toast(p.error||'не удалось распознать',true);
+  stage.style.outline='3px dashed var(--accent)'; $('emptyState').classList.add('drop');});
+stage.addEventListener('dragleave',()=>{stage.style.outline=''; $('emptyState').classList.remove('drop');});
+stage.addEventListener('drop',e=>{
+  e.preventDefault(); stage.style.outline=''; $('emptyState').classList.remove('drop');
+  importTzFile(e.dataTransfer.files && e.dataTransfer.files[0]);   // FileReader — без краха на больших фото
 });
 
 /* ---------- версии (AKD-133) ---------- */
