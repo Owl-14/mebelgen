@@ -241,8 +241,11 @@ _OAI_PRESETS = {
     "kimi":     {"base": "https://api.moonshot.ai/v1", "key": "KIMI_API_KEY",
                  "model": "moonshot-v1-8k", "vision": "moonshot-v1-8k-vision-preview",
                  "json_mode": True},
+    # glm-4.5-flash — thinking-модель: без отключения размышлений «думает»
+    # минутами на больших промптах (extra_body поддержан OpenAI SDK)
     "glm":      {"base": "https://open.bigmodel.cn/api/paas/v4", "key": "GLM_API_KEY",
-                 "model": "glm-4.5-flash", "vision": "glm-4.5v", "json_mode": False},
+                 "model": "glm-4.5-flash", "vision": "glm-4.5v", "json_mode": False,
+                 "extra": {"thinking": {"type": "disabled"}}},
     "deepseek": {"base": "https://api.deepseek.com", "key": "DEEPSEEK_API_KEY",
                  "model": "deepseek-chat", "vision": "deepseek-chat", "json_mode": True},
 }
@@ -267,6 +270,7 @@ class OpenAICompatProvider:
         self.vision_model = os.environ.get("LLM_VISION_MODEL", p["vision"])
         self.json_mode = os.environ.get("LLM_JSON_MODE",
                                         "1" if p["json_mode"] else "0") not in ("0", "false", "no")
+        self.extra = p.get("extra") or {}             # extra_body (напр. thinking off)
 
     def balance(self) -> dict[str, Any] | None:
         """Денежный баланс аккаунта (Moonshot-стиль GET /users/me/balance).
@@ -326,6 +330,8 @@ class OpenAICompatProvider:
         kw: dict[str, Any] = {"model": model, "temperature": 0.1, "messages": msgs}
         if self.json_mode and not images:
             kw["response_format"] = {"type": "json_object"}
+        if self.extra:
+            kw["extra_body"] = self.extra
         r = self.client.chat.completions.create(**kw)
         out = r.choices[0].message.content or "{}"
         c1, c2 = out.find("{"), out.rfind("}")
@@ -485,11 +491,13 @@ class GigaChatProvider:
         att = self._upload_images(images)
         prompt = (
             "На изображении — ТЗ или чертёж корпусной мебели. Внимательно прочитай "
-            "и выпиши ПРОСТЫМ ТЕКСТОМ (не JSON, по пунктам) все факты, которые видно: "
-            "тип изделия; габариты Ширина×Глубина×Высота (мм); количество и тип "
-            "секций (ящики/полки/двери) и сколько их; материал и толщину плиты; цвет/декор; "
-            "фурнитуру (ручки, петли, направляющие), штангу, опоры/цоколь; особые "
-            "требования. Пиши только то, что реально есть на изображении, ничего не выдумывай.")
+            "ТЕКСТ (таблицу) и выпиши ПРОСТЫМ ТЕКСТОМ (не JSON, по пунктам) все факты: "
+            "тип изделия; габариты Ширина×Глубина×Высота (мм); ТОЧНОЕ ЧИСЛО полок, "
+            "ящиков и дверей ЦИФРОЙ (как написано в тексте: «одна полка» = полок: 1); "
+            "материал и толщину плиты (и отдельно толщину крышки/столешницы, если отличается); "
+            "цвет/декор; ручки (тип, цвет, межцентровое L в мм), замки (на какой двери), "
+            "петли; штангу; опоры/цоколь; особые требования. Числа из текста важнее "
+            "картинки-превью: превью — только иллюстрация. Ничего не выдумывай.")
         r = requests.post(f"{self.BASE}/chat/completions",
                           headers={"Authorization": f"Bearer {self._access_token()}",
                                    "Content-Type": "application/json"},
