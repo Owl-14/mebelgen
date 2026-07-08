@@ -163,6 +163,10 @@ def _list_projects(spec_dir: Path) -> list[dict[str, Any]]:
         if not isinstance(s, dict) or s.get("schemaVersion") != "paramspec-v1":
             continue
         d = s.get("dimensions", {})
+        if s.get("draft"):                            # черновик (AKD-214)
+            out.append({"file": f.name, "name": s.get("project_name", f.stem),
+                        "archetype": "черновик", "dims": "—", "decor": ""})
+            continue
         out.append({"file": f.name,
                     "name": s.get("project_name", f.stem),
                     "archetype": s.get("archetype", "?"),
@@ -385,12 +389,15 @@ def make_handler(st: _Studio):
                             self._json({"ok": False, "error":
                                         res.get("reply") or "не удалось распознать ТЗ"})
                             return
-                        title = new_spec.get("project_name", "Из ТЗ")
-                        out = st.spec_path.parent / f"{_slugify(title)}.json"
-                        i = 2
-                        while out.exists():
-                            out = st.spec_path.parent / f"{_slugify(title)}_{i}.json"
-                            i += 1
+                        if isinstance(st.spec, dict) and st.spec.get("draft"):
+                            out = st.spec_path        # ТЗ в черновик — тот же файл
+                        else:
+                            title = new_spec.get("project_name", "Из ТЗ")
+                            out = st.spec_path.parent / f"{_slugify(title)}.json"
+                            i = 2
+                            while out.exists():
+                                out = st.spec_path.parent / f"{_slugify(title)}_{i}.json"
+                                i += 1
                         out.write_text(json.dumps(new_spec, ensure_ascii=False, indent=2),
                                        encoding="utf-8")
                         st.spec, st.spec_path = new_spec, out
@@ -417,10 +424,10 @@ def make_handler(st: _Studio):
                     st.spec = json.loads(p.read_text(encoding="utf-8"))
                     st.spec_path = p
                     self._json({"ok": True, "spec": st.spec, "file": p.name})
-                elif self.path == "/api/new":         # новое изделие (D1)
-                    arch = str(body.get("archetype", "cabinet"))
-                    name = str(body.get("name") or f"Новое изделие ({arch})")
-                    new_spec = _default_spec(arch, name)
+                elif self.path == "/api/new":         # новое изделие: черновик (AKD-214)
+                    name = str(body.get("name") or "Новое изделие")
+                    new_spec = {"schemaVersion": "paramspec-v1", "draft": True,
+                                "project_name": name}
                     p = st.spec_path.parent / f"{_slugify(name)}.json"
                     i = 2
                     while p.exists():
@@ -460,6 +467,9 @@ def make_handler(st: _Studio):
                     st.spec = spec
                     st.spec_path.write_text(json.dumps(spec, ensure_ascii=False, indent=2),
                                             encoding="utf-8")
+                    if spec.get("draft"):              # черновик: только файл, без модели
+                        self._json({"ok": True, "spec": str(st.spec_path), "project": None})
+                        return
                     _snapshot_version(st.spec_path, spec)          # версия (D2)
                     from .generators import generate_from_paramspec
                     project = generate_from_paramspec(spec)
@@ -646,6 +656,7 @@ PAGE = r"""<!DOCTYPE html>
     <div class="row"><label>Изделие</label><select id="projSel"></select></div>
     <div class="row" style="gap:6px">
       <button id="projNew">+ Новое</button>
+      <button id="projRen" title="переименовать текущее изделие">✎</button>
       <button id="projDup">Дублировать</button>
     </div>
   </fieldset>
@@ -793,8 +804,9 @@ let SPEC = __SPEC__;
 const FIELDS = __FIELDS__;                 // archetype -> [{key,label,type,...}]
 const SECTION_ARCHS = __SECTION_ARCHS__;   // архетипы с секциями
 const $ = id => document.getElementById(id);
-const toast = (m,bad)=>{const t=$('toast');t.textContent=m;t.style.background=bad?'#b3261e':'#1a1d21';
-  t.style.opacity=1;clearTimeout(t._h);t._h=setTimeout(()=>t.style.opacity=0,2600);};
+const toast = (m,bad,sticky)=>{const t=$('toast');t.textContent=m;t.style.background=bad?'#b3261e':'#1a1d21';
+  t.style.opacity=1;clearTimeout(t._h);
+  if(!sticky) t._h=setTimeout(()=>t.style.opacity=0,bad?5000:2600);};
 
 /* ---------- 3D: общий движок MebelScene (как webviewer, + анимация открытия) ---------- */
 const view=$('view3d');
@@ -967,6 +979,7 @@ $('applyRaw').onclick=()=>{try{SPEC=JSON.parse($('rawspec').value);fillForm();ap
 let timer=null, lastOk=false;
 function schedule(){clearTimeout(timer);timer=setTimeout(apply,400);}
 async function apply(){
+  if(SPEC&&SPEC.draft){showEmpty(true);return;}    // черновик не генерируем
   const r=await fetch('/api/generate',{method:'POST',
     headers:{'Content-Type':'application/json'},body:JSON.stringify({spec:SPEC})});
   const p=await r.json(); paint(p);
@@ -1174,9 +1187,12 @@ async function loadProjects(){
     `${x.name.slice(0,38)} · ${x.archetype} ${x.dims}</option>`).join('');
 }
 function adoptSpec(p){
-  showEmpty(false);                                // изделие появилось — прячем пустой экран
   SPEC=p.spec; UNDO.length=0; $('btnUndo').disabled=true;
-  scene3d.select(null); fillForm(); apply(); loadProjects(); loadBuilds();
+  const dr=!!(SPEC&&SPEC.draft);                   // черновик — пустой экран без модели
+  showEmpty(dr);
+  scene3d.select(null); fillForm();
+  if(!dr) apply();
+  loadProjects(); loadBuilds();
   toast('Открыто: '+p.file);
 }
 // пустое рабочее пространство (AKD-214): «Новое» → чистый экран с приглашением загрузить ТЗ
@@ -1190,20 +1206,29 @@ function showEmpty(on){
   }
 }
 // распознавание фото ТЗ через FileReader — надёжно на больших файлах (AKD-214)
+let TZ_BUSY=false;
 function importTzFile(f){
-  if(!f) return;
+  if(!f||TZ_BUSY) return;
   if(!/\.(png|jpe?g|webp|gif)$/i.test(f.name)){toast('Нужно изображение ТЗ (png/jpg/webp)',true);return;}
-  toast('Распознаю ТЗ…');
+  TZ_BUSY=true;
+  const btn=$('esUpload'), btnTxt=btn.textContent;
+  btn.disabled=true; btn.textContent='⏳ Распознаю…';
+  const hint=$('emptyState').querySelector('.es-hint'), hintHtml=hint.innerHTML;
+  hint.innerHTML='Нейросеть читает ТЗ и собирает модель.<br>Обычно 15–40 секунд…';
+  toast('⏳ Распознаю ТЗ — нейросеть читает изображение (15–40 сек)…',false,true);
+  const done=()=>{TZ_BUSY=false; btn.disabled=false; btn.textContent=btnTxt; hint.innerHTML=hintHtml;};
   const rd=new FileReader();
+  rd.onerror=()=>{done(); toast('Не удалось прочитать файл',true);};
   rd.onload=async()=>{
     const s=String(rd.result), b64=s.slice(s.indexOf(',')+1);
     try{
       const r=await fetch('/api/import-tz',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({name:f.name,data:b64,provider:CHAT_PROVIDER})});
       const p=await r.json();
-      if(p.ok){adoptSpec(p); toast('ТЗ распознано → '+p.file);}
-      else toast(p.error||'не удалось распознать',true);
-    }catch(e){toast('Ошибка: '+e.message,true);}
+      done();
+      if(p.ok){adoptSpec(p); toast('✅ ТЗ распознано → '+(p.spec&&p.spec.project_name||p.file));}
+      else toast('❌ Не удалось распознать ТЗ: '+(p.error||'нет ответа нейросети'),true);
+    }catch(e){done(); toast('❌ Ошибка распознавания: '+e.message,true);}
   };
   rd.readAsDataURL(f);
 }
@@ -1216,9 +1241,24 @@ $('projSel').onchange=async e=>{
   const p=await r.json();
   if(p.ok) adoptSpec(p); else toast('Ошибка: '+(p.error||''),true);
 };
-$('projNew').onclick=()=>{        // пустой воркспейс: без 3D, с приглашением загрузить ТЗ
-  showEmpty(true);
-  toast('Новое изделие — загрузите ТЗ или опишите в чате');
+$('projNew').onclick=async()=>{   // черновик: запись в каталоге + пустой воркспейс (AKD-214)
+  const name=prompt('Название нового изделия:','Новое изделие');
+  if(name===null) return;
+  const r=await fetch('/api/new',{method:'POST',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+  const p=await r.json();
+  if(p.ok){adoptSpec(p); toast('Создано «'+(name||'Новое изделие')+'» — загрузите ТЗ или опишите в чате');}
+  else toast('Ошибка: '+(p.error||''),true);
+};
+$('projRen').onclick=async()=>{   // переименовать текущее изделие
+  const name=prompt('Название изделия:',SPEC&&SPEC.project_name||'');
+  if(!name) return;
+  SPEC.project_name=name;
+  const r=await fetch('/api/save',{method:'POST',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({spec:SPEC})});
+  const p=await r.json();
+  if(p.ok){loadProjects(); toast('Переименовано: '+name);}
+  else toast('Ошибка: '+(p.error||''),true);
 };
 $('projDup').onclick=async()=>{
   const r=await fetch('/api/duplicate',{method:'POST',
@@ -1385,7 +1425,15 @@ async function runChat(text){
     refreshBalance();                              // остаток бесплатных токенов
     CHAT_HISTORY.push({role:'user',text:m},{role:'assistant',text:p.reply||''});
     if(CHAT_HISTORY.length>16)CHAT_HISTORY.splice(0,CHAT_HISTORY.length-16);
-    if(p.spec){pushUndo(); SPEC=p.spec; fillForm(); apply();}
+    if(p.spec){
+      const wasDraft=!!(SPEC&&SPEC.draft);
+      pushUndo(); SPEC=p.spec; showEmpty(false); fillForm(); apply();
+      if(wasDraft||p.created){                     // создано из черновика — в базу сразу
+        await fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({spec:SPEC})});
+        loadProjects();
+      }
+    }
   }catch(e){wait.remove(); addMsg('ai','Ошибка: '+e.message);}
   finally{chatBusy=false;}
 }
