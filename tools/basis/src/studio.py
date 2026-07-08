@@ -358,9 +358,38 @@ def make_handler(st: _Studio):
                     self._json(techview_svg(spec, body.get("panel")))
                 elif self.path == "/api/chat":
                     from .spec_chat import chat_edit
+                    ctx = body.get("context") or None
+                    # ИИ не знает содержимого производственной базы: для
+                    # нерешённых слотов даём РЕАЛЬНЫХ кандидатов (иначе модель
+                    # выдумывает артикулы и «починка базы» не работает)
+                    if isinstance(ctx, dict) and isinstance(ctx.get("base_unresolved"), list):
+                        try:
+                            from .materials import list_sheet_decors, search_base
+                            queries = {"handles": "ручка", "hinges": "петля наклад",
+                                       "drawer_guides": "направляющ", "guides": "направляющ",
+                                       "legs": "опора", "locks": "замок", "edge": "кромка"}
+                            cand: dict[str, Any] = {}
+                            _th = ((spec or {}).get("materials") or {}).get("board_thickness")
+                            for slot in ctx["base_unresolved"][:6]:
+                                if slot in ("board", "facade", "back"):
+                                    # только листы нужной толщины — иначе ИИ
+                                    # выберет 3-мм ХДФ для корпуса 16
+                                    items = list_sheet_decors(
+                                        "", thickness=float(_th) if _th and slot != "back" else None,
+                                        limit=5)
+                                    cand[slot] = [{"name": i.get("name"),
+                                                   "article": i.get("article")} for i in items]
+                                elif slot in queries:
+                                    items = search_base(queries[slot], limit=4)
+                                    cand[slot] = [{"name": i.get("name"),
+                                                   "article": i.get("article")} for i in items]
+                            if cand:
+                                ctx["base_candidates"] = cand
+                        except Exception:
+                            pass
                     self._json(chat_edit(spec, str(body.get("message", "")),
                                          body.get("history") or [],
-                                         body.get("context") or None,
+                                         ctx,
                                          body.get("images") or None,
                                          body.get("provider") or None))
                 elif self.path == "/api/providers":       # список нейросетей для селектора

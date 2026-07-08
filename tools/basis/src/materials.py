@@ -188,7 +188,8 @@ def find_board(thickness: float | None = None, query: str | None = None,
 # имеет сотни вариантов на тип → отдаём шорт-лист реальных кандидатов из нужной
 # группы, не выбирая артикул принудительно (это делает технолог/каталог БАЗИС).
 
-_GENERIC_COLOR = ("соглас", "уточн", "не задан", "любой", "по цвету")
+_GENERIC_COLOR = ("соглас", "уточн", "не задан", "любой", "по цвету",
+                  "палитр", "каталог", "выбира")   # «цвет из палитры NSC» и т.п.
 
 
 def _is_generic_color(color: str | None) -> bool:
@@ -326,9 +327,25 @@ def resolve_project_materials(project: dict[str, Any], base: dict[str, Any] | No
     m = project.get("materials", {}) or {}
     hw = project.get("hardware", {}) or {}
     refs: dict[str, Any] = {
-        "board": resolve_board_ref(m.get("board_thickness"), m.get("color"), m.get("color_code"), base=base),
         "back": resolve_back_ref(m.get("back_wall_material"), base=base),
     }
+    # точный артикул плиты корпуса (выбор пользователя/ИИ) — высший приоритет,
+    # но с проверкой толщины: позиция другой толщины слот не «решает»
+    if m.get("board_article"):
+        item = by_article(str(m["board_article"]), base=base)
+        bt = m.get("board_thickness")
+        if item is None:
+            refs["board"] = _unresolved(f"плита арт. {m['board_article']}",
+                                        "артикул не найден в базе")
+        elif bt and item.get("thickness") and abs(float(item["thickness"]) - float(bt)) > 0.5:
+            refs["board"] = _unresolved(
+                f"плита арт. {m['board_article']}",
+                f"толщина позиции {item.get('thickness')} мм ≠ плите {bt} мм")
+        else:
+            refs["board"] = _ref(item, "артикул плиты (выбор)", "high")
+    else:
+        refs["board"] = resolve_board_ref(m.get("board_thickness"), m.get("color"),
+                                          m.get("color_code"), base=base)
     # отдельный декор фасадов (C4): точный артикул или подбор по цвету/коду
     if m.get("facade_article"):
         item = by_article(str(m["facade_article"]), base=base)
