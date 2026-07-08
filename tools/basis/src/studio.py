@@ -361,34 +361,33 @@ def make_handler(st: _Studio):
                 elif self.path == "/api/token-balance":   # счётчик бесплатных токенов
                     from .spec_chat import token_balance
                     self._json(token_balance())
-                elif self.path == "/api/import-tz":   # drag&drop ТЗ (D4)
-                    import base64
-                    import os
-                    import tempfile
-                    if not os.environ.get("OPENAI_API_KEY"):
-                        self._json({"ok": False, "error":
-                                    "Для распознавания ТЗ нужен OPENAI_API_KEY "
-                                    "в tools/basis/.env (сейчас пустой)."})
-                        return
+                elif self.path == "/api/import-tz":   # drag&drop ТЗ (D4) → провайдер чата
                     try:
-                        raw = base64.b64decode(str(body.get("data", "")))
-                        suffix = "." + str(body.get("name", "tz.png")).rsplit(".", 1)[-1]
-                        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
-                            f.write(raw)
-                            tmp = Path(f.name)
-                        from .converter import FurnitureConverter
-                        new_spec = FurnitureConverter().convert_paramspec(tmp)
-                        tmp.unlink(missing_ok=True)
-                        name = new_spec.get("project_name", "Из ТЗ")
-                        out = st.spec_path.parent / f"{_slugify(name)}.json"
+                        from .spec_chat import chat_edit
+                        name = str(body.get("name", "tz.png"))
+                        ext = name.rsplit(".", 1)[-1].lower()
+                        mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+                                "webp": "image/webp", "gif": "image/gif"}.get(ext, "image/png")
+                        res = chat_edit(st.spec or {},
+                                        "Распознай это ТЗ (фото/скан) и собери по нему полный "
+                                        "ParamSpec изделия с нуля (created).",
+                                        images=[{"mime": mime, "data": str(body.get("data", ""))}])
+                        new_spec = res.get("spec")
+                        if not new_spec:
+                            self._json({"ok": False, "error":
+                                        res.get("reply") or "не удалось распознать ТЗ"})
+                            return
+                        title = new_spec.get("project_name", "Из ТЗ")
+                        out = st.spec_path.parent / f"{_slugify(title)}.json"
                         i = 2
                         while out.exists():
-                            out = st.spec_path.parent / f"{_slugify(name)}_{i}.json"
+                            out = st.spec_path.parent / f"{_slugify(title)}_{i}.json"
                             i += 1
                         out.write_text(json.dumps(new_spec, ensure_ascii=False, indent=2),
                                        encoding="utf-8")
                         st.spec, st.spec_path = new_spec, out
-                        self._json({"ok": True, "spec": new_spec, "file": out.name})
+                        self._json({"ok": True, "spec": new_spec, "file": out.name,
+                                    "usage": res.get("usage")})
                     except Exception as e:
                         self._json({"ok": False, "error": str(e)[:300]})
                 elif self.path == "/api/versions":    # версии спеки (D2)
