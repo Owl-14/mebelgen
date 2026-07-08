@@ -31,6 +31,10 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     guide_gap = section.get("guide_gap", 14.5)
     box_z1 = section.get("box_z1", 0)                             # короб прижат к фасаду (z=0)
     box_depth = section.get("box_depth", round(c.D - c.T_back - box_z1 - 30, 2))
+    # кламп: короб (с задней стенкой) не должен упереться в задник корпуса —
+    # защита от завышенного box_depth из ТЗ/чата (AKD-221)
+    box_back_lim = c.D - c.T_back - box_z1 - section.get("box_back_thickness", c.T)
+    box_depth = max(50, min(box_depth, round(box_back_lim, 2)))
     box_y_off = section.get("box_y_offset", c.T)
     box_h = section.get("box_height", round(min(heights) * 0.52, 2))
     box_back = section.get("box_back_thickness", c.T)

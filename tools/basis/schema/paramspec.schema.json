@@ -49,15 +49,21 @@
       "properties": {
         "width": {
           "type": "number",
-          "exclusiveMinimum": 0
+          "exclusiveMinimum": 0,
+          "minimum": 50,
+          "maximum": 10000
         },
         "depth": {
           "type": "number",
-          "exclusiveMinimum": 0
+          "exclusiveMinimum": 0,
+          "minimum": 50,
+          "maximum": 10000
         },
         "height": {
           "type": "number",
-          "exclusiveMinimum": 0
+          "exclusiveMinimum": 0,
+          "minimum": 50,
+          "maximum": 10000
         },
         "depth_carcass": {
           "type": "number",
@@ -187,7 +193,8 @@
           },
           "shelves": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 20
           },
           "shelf_levels": {
             "type": "array",
@@ -198,7 +205,8 @@
           },
           "drawers": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 20
           },
           "drawer_heights": {
             "type": "array",
