@@ -242,7 +242,7 @@ _OAI_PRESETS = {
                  "model": "moonshot-v1-8k", "vision": "moonshot-v1-8k-vision-preview",
                  "json_mode": True},
     "glm":      {"base": "https://open.bigmodel.cn/api/paas/v4", "key": "GLM_API_KEY",
-                 "model": "glm-4-flash", "vision": "glm-4v-flash", "json_mode": False},
+                 "model": "glm-4.5-flash", "vision": "glm-4.5v", "json_mode": False},
     "deepseek": {"base": "https://api.deepseek.com", "key": "DEEPSEEK_API_KEY",
                  "model": "deepseek-chat", "vision": "deepseek-chat", "json_mode": True},
 }
