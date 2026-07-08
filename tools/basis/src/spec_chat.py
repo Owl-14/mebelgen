@@ -268,6 +268,23 @@ class OpenAICompatProvider:
         self.json_mode = os.environ.get("LLM_JSON_MODE",
                                         "1" if p["json_mode"] else "0") not in ("0", "false", "no")
 
+    def balance(self) -> dict[str, Any] | None:
+        """Денежный баланс аккаунта (Moonshot-стиль GET /users/me/balance).
+        Не у всех сервисов есть — тогда None."""
+        import requests
+        try:
+            base = str(self.client.base_url).rstrip("/")
+            r = requests.get(f"{base}/users/me/balance",
+                             headers={"Authorization": f"Bearer {self.client.api_key}"},
+                             timeout=15)
+            if r.ok:
+                d = r.json().get("data") or {}
+                if "available_balance" in d:
+                    return {"value": d["available_balance"], "unit": "¥"}
+        except Exception:
+            pass
+        return None
+
     def chat(self, spec: dict[str, Any], message: str,
              history: list[dict[str, str]] | None = None,
              context: dict[str, Any] | None = None,
@@ -510,16 +527,18 @@ def get_chat_provider(name: str | None = None) -> Any:
 def chat_edit(spec: dict[str, Any], message: str,
               history: list[dict[str, str]] | None = None,
               context: dict[str, Any] | None = None,
-              images: list[dict[str, str]] | None = None) -> dict[str, Any]:
+              images: list[dict[str, str]] | None = None,
+              provider: str | None = None) -> dict[str, Any]:
     """Команда словами → {reply, spec|None, changes[], created?}. Невалидное не отдаём.
 
     Гарантии: PROTECTED_KEYS не меняются; новая спека проходит validate_paramspec,
     иначе spec=None и причина в reply (AKD-110). created=True — изделие с нуля (D3).
     images — фото/сканы ТЗ [{mime, data(base64)}] для vision-провайдера (AKD-203).
+    provider — явный выбор нейросети из UI (AKD-210); None → из env.
     """
     from .paramspec import validate_paramspec
 
-    provider = get_chat_provider()
+    provider = get_chat_provider(provider)
     try:
         if images:
             res = provider.chat(spec, message, history, context, images=images)
@@ -554,13 +573,50 @@ def chat_edit(spec: dict[str, Any], message: str,
     return {"reply": res.get("reply", "Готово."), "spec": new, "changes": changes, "usage": usage}
 
 
-def token_balance() -> dict[str, Any]:
-    """Остаток бесплатных токенов провайдера (для UI-счётчика). Пусто, если
-    провайдер без баланса (mock/openai/gemini)."""
+_PROVIDER_META = {          # id → (человекочитаемое имя, env-ключ наличия)
+    "gigachat": ("GigaChat (Сбер)", "GIGACHAT_AUTH_KEY"),
+    "kimi": ("Kimi (Moonshot)", "KIMI_API_KEY"),
+    "glm": ("GLM (Zhipu)", "GLM_API_KEY"),
+    "deepseek": ("DeepSeek", "DEEPSEEK_API_KEY"),
+    "gemini": ("Gemini (Google)", "GEMINI_API_KEY"),
+    "openai": ("OpenAI", "OPENAI_API_KEY"),
+}
+
+
+def available_providers() -> dict[str, Any]:
+    """Список доступных нейросетей (по наличию ключей в env) + активная по
+    умолчанию — для селектора в UI (AKD-210)."""
+    out = [{"id": "mock", "name": "Базовый (правила, без ИИ)"}]
+    for pid, (label, envk) in _PROVIDER_META.items():
+        if os.environ.get(envk) or os.environ.get("LLM_API_KEY"):
+            out.append({"id": pid, "name": label})
+    active = (os.environ.get("SPEC_CHAT_PROVIDER") or "").lower()
+    if active not in {p["id"] for p in out}:
+        active = out[1]["id"] if len(out) > 1 else "mock"
+    return {"active": active, "providers": out}
+
+
+def token_balance(provider: str | None = None) -> dict[str, Any]:
+    """Лимиты/баланс выбранного провайдера для счётчика (AKD-210):
+    GigaChat — бесплатные токены по моделям; Kimi/OpenAI-совместимые — денежный
+    баланс аккаунта (¥/$). Пусто — если провайдер без баланса."""
     try:
-        p = get_chat_provider()
-        if hasattr(p, "balance"):
-            return {"provider": type(p).__name__, "balance": p.balance()}
+        p = get_chat_provider(provider)
     except Exception as e:
         return {"error": str(e)}
-    return {}
+    try:
+        if isinstance(p, GigaChatProvider):
+            bal = p.balance()                         # [{usage, value}]
+            items = [{"label": b.get("usage"), "value": b.get("value"), "unit": "ток."}
+                     for b in bal]
+            return {"provider": "gigachat", "kind": "tokens", "items": items}
+        if isinstance(p, OpenAICompatProvider):
+            b = p.balance()                           # {value, unit} | None
+            if b:
+                return {"provider": "openai_compat", "kind": "money",
+                        "items": [{"label": "Баланс аккаунта", "value": b["value"],
+                                   "unit": b["unit"]}]}
+            return {"provider": "openai_compat", "kind": "none", "items": []}
+    except Exception as e:
+        return {"error": str(e)}
+    return {"kind": "none", "items": []}

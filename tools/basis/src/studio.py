@@ -357,10 +357,14 @@ def make_handler(st: _Studio):
                     self._json(chat_edit(spec, str(body.get("message", "")),
                                          body.get("history") or [],
                                          body.get("context") or None,
-                                         body.get("images") or None))
-                elif self.path == "/api/token-balance":   # счётчик бесплатных токенов
+                                         body.get("images") or None,
+                                         body.get("provider") or None))
+                elif self.path == "/api/providers":       # список нейросетей для селектора
+                    from .spec_chat import available_providers
+                    self._json(available_providers())
+                elif self.path == "/api/token-balance":   # лимиты/баланс выбранной сети
                     from .spec_chat import token_balance
-                    self._json(token_balance())
+                    self._json(token_balance(body.get("provider") or None))
                 elif self.path == "/api/import-tz":   # drag&drop ТЗ (D4) → провайдер чата
                     try:
                         from .spec_chat import chat_edit
@@ -374,7 +378,8 @@ def make_handler(st: _Studio):
                                         "Собери ParamSpec ТОЛЬКО по этому ТЗ (фото/скан): "
                                         "определи тип изделия, габариты, секции, материал по "
                                         "изображению. НЕ бери ничего из других изделий. created=true.",
-                                        images=[{"mime": mime, "data": str(body.get("data", ""))}])
+                                        images=[{"mime": mime, "data": str(body.get("data", ""))}],
+                                        provider=body.get("provider") or None)
                         new_spec = res.get("spec")
                         if not new_spec:
                             self._json({"ok": False, "error":
@@ -646,6 +651,10 @@ PAGE = r"""<!DOCTYPE html>
   </fieldset>
 
   <fieldset id="fs_chat"><legend>Чат с ИИ</legend>
+    <div class="row" style="gap:6px;margin-bottom:5px">
+      <label style="flex:0 0 auto;color:var(--mut)">Нейросеть</label>
+      <select id="aiProvider" style="flex:1"></select>
+    </div>
     <div id="chatlog"></div>
     <div id="chatImgs"></div>
     <div class="row" style="gap:6px">
@@ -1328,7 +1337,7 @@ async function runChat(text){
     const r=await fetch('/api/chat',{method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({spec:SPEC,message:m,history:CHAT_HISTORY,context:ctx,
-                           images:imgs.length?imgs:null})});
+                           images:imgs.length?imgs:null,provider:CHAT_PROVIDER})});
     const p=await r.json();
     wait.remove();
     addMsg('ai',p.reply||'(пусто)',p.changes);
@@ -1352,28 +1361,42 @@ $('chatMsg').addEventListener('dragover',e=>{e.preventDefault();$('chatMsg').cla
 $('chatMsg').addEventListener('dragleave',()=>$('chatMsg').classList.remove('drop'));
 $('chatMsg').addEventListener('drop',e=>{e.preventDefault();$('chatMsg').classList.remove('drop');
   [...e.dataTransfer.files].forEach(f=>{if(f.type.startsWith('image/'))addImgFile(f);});});
-// счётчик токенов: расход за сессию + остаток бесплатного пакета (GigaChat)
-let SESSION_TOKENS=0, FREE_LEFT=null, FREE_PROVIDER=null;
+// выбор нейросети (AKD-210) + счётчик токенов/лимитов выбранного провайдера
+let CHAT_PROVIDER=null, SESSION_TOKENS=0, BAL_ITEMS=null, BAL_ERR=null;
 function renderTokens(){
   const el=$('tokenCount'); if(!el) return;
-  const parts=[];
+  const parts=[]; let low=false;
   if(SESSION_TOKENS) parts.push('за сессию: '+SESSION_TOKENS.toLocaleString('ru-RU')+' ток.');
-  if(FREE_LEFT!=null) parts.push('бесплатно осталось: '+FREE_LEFT.toLocaleString('ru-RU')+' ток.');
-  el.textContent=parts.join('  ·  ');
-  el.style.color=(FREE_LEFT!=null&&FREE_LEFT<10000)?'var(--bad)':'var(--mut)';
+  (BAL_ITEMS||[]).forEach(it=>{
+    const v=Number(it.value);
+    parts.push(it.label+': '+v.toLocaleString('ru-RU')+' '+(it.unit||''));
+    if((it.unit==='ток.'&&v<10000)||(it.unit&&it.unit!=='ток.'&&v<=0)) low=true;  // мало/нет
+  });
+  if(BAL_ERR){parts.push('лимит: '+BAL_ERR); low=true;}
+  el.textContent=parts.join('  ·  ')+(low?'   ⚠ пополнить/лимит':'');
+  el.style.color=low?'var(--bad)':'var(--mut)';
 }
 async function refreshBalance(){
   try{
     const r=await fetch('/api/token-balance',{method:'POST',
-      headers:{'Content-Type':'application/json'},body:'{}'});
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({provider:CHAT_PROVIDER})});
     const d=await r.json();
-    if(d.balance&&d.balance.length){
-      const b=d.balance.find(x=>x.usage==='GigaChat')||d.balance[0];
-      FREE_LEFT=b.value; FREE_PROVIDER=d.provider; renderTokens();
-    }
+    BAL_ITEMS=d.items||null; BAL_ERR=d.error?String(d.error).slice(0,60):null; renderTokens();
   }catch(e){}
 }
-refreshBalance();
+async function loadProviders(){
+  try{
+    const r=await fetch('/api/providers',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:'{}'});
+    const d=await r.json();
+    const sel=$('aiProvider');
+    sel.innerHTML=(d.providers||[]).map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+    CHAT_PROVIDER=d.active; sel.value=d.active;
+    sel.onchange=()=>{CHAT_PROVIDER=sel.value; SESSION_TOKENS=0; refreshBalance();};
+  }catch(e){}
+  refreshBalance();
+}
+loadProviders();
 
 /* ---------- экспорт ---------- */
 async function post(url){const r=await fetch(url,{method:'POST',
@@ -1411,7 +1434,7 @@ stage.addEventListener('drop',async e=>{
   const b64=btoa(String.fromCharCode(...new Uint8Array(buf)));
   const r=await fetch('/api/import-tz',{method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({name:f.name,data:b64})});
+    body:JSON.stringify({name:f.name,data:b64,provider:CHAT_PROVIDER})});
   const p=await r.json();
   if(p.ok){adoptSpec(p); toast('ТЗ распознано → '+p.file);}
   else toast(p.error||'не удалось распознать',true);
