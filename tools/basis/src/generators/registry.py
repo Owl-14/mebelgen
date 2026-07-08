@@ -38,8 +38,12 @@ def generate_from_paramspec(spec: dict[str, Any]) -> dict[str, Any]:
 
     spec = apply_material_policy(spec)
     project = get_generator(spec["archetype"])(spec)
-    # конструкция задника (AKD-137): overlay = накладной поверх торцов
-    project = apply_back_mount(project, spec.get("back_mount"))
+    # конструкция задника (AKD-137): overlay = накладной поверх торцов.
+    # Для composite задник накладывается поблочно (внутри generate каждого
+    # блока); повторный вызов на собранном проекте раздул бы один задник на
+    # габарит всей композиции (перекрытие с соседними модулями) — пропускаем.
+    if spec["archetype"] != "composite":
+        project = apply_back_mount(project, spec.get("back_mount"))
     # точечные правки деталей поверх генератора (AKD-121) — до валидаторов,
     # чтобы чертёж/присадки/смета/cfrn считались по итоговой геометрии
     return apply_overrides(project, spec.get("overrides"))

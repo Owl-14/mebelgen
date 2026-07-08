@@ -34,7 +34,8 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
                      z_front=spec.get("carcass_z_front", 0),
                      top_z=tuple(top_z) if top_z else None,
                      socle_full=spec.get("socle_full", False),
-                     socle_recess=spec.get("socle_recess", 50))
+                     socle_recess=spec.get("socle_recess", 50),
+                     sides_over_top=spec.get("sides_over_top", False))
     bounds = column_bounds(c.W, c.T, sections)
     # перегородки — конструктив: всегда до фронта корпуса (AKD-192);
     # interior_z_front утапливает только наполнение (полки)

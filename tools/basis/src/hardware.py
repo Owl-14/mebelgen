@@ -51,26 +51,39 @@ def _sys32_pts(a: float, b: float) -> tuple[list[float], list[float]]:
     return dws, cams
 
 
-def door_hinge_side(p: dict[str, Any], model_w: float | None = None) -> str:
+def door_hinge_side(p: dict[str, Any], model_w: float | None = None,
+                    siblings: int = 1) -> str:
     """Сторона петель фасада двери: 'left'|'right'|'up'|'down' (AKD-223/224).
 
-    Приоритет: явный p['swing'] (sections[].door_swing) → имя («прав»/«лев») →
+    Приоритет: явный p['swing'] (sections[].door_swing) → имя («прав»/«лев»,
+    только для ДВУСТВОРКИ siblings>=2 — там имена парные и осмысленные) →
     ПО ПОЛОЖЕНИЮ: дверь в правой половине изделия навешивается справа
-    (открывание наружу), в левой — слева. Раньше решало только имя, и
-    одиночная дверь правой секции всегда открывалась в центр тумбы."""
+    (открывание наружу). Для одиночной двери имя игнорируется: шаблонное
+    «Дверь левая» в правой секции не должно вешать петли внутрь."""
     sw = str(p.get("swing") or "").lower()
     if sw in ("left", "right", "up", "down"):
         return sw
     nm = str(p.get("name", "")).lower()
-    if "прав" in nm:
-        return "right"
-    if "лев" in nm:
-        return "left"
+    if siblings >= 2:
+        if "прав" in nm:
+            return "right"
+        if "лев" in nm:
+            return "left"
     pl = p.get("placement") or {}
     if model_w and pl:
         c = (pl.get("x1", 0) + pl.get("x2", 0)) / 2
         return "right" if c > model_w / 2 + 1 else "left"
+    # позиция неизвестна — падаем на имя, потом на left
+    if "прав" in nm:
+        return "right"
     return "left"
+
+
+def _door_siblings(p: dict[str, Any], panels: list[dict[str, Any]]) -> int:
+    """Число дверей той же секции (для приоритета имени в двустворках)."""
+    sid = p.get("section_id")
+    return sum(1 for q in panels if q.get("type") == "door_front"
+               and (q.get("section_id") == sid if sid else True))
 
 
 def _model_width(panels: list[dict[str, Any]]) -> float:
@@ -194,7 +207,7 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
                 for dx in (-size / 2, size / 2):
                     holes.append(_hole(p["name"], "ручка (винт)", cx + dx, y, z_in, 5, t_f, "z", -1))
             else:  # door_front: ручка у кромки, ПРОТИВОПОЛОЖНОЙ петлям (AKD-223)
-                sd = door_hinge_side(p, _model_width(panels))
+                sd = door_hinge_side(p, _model_width(panels), _door_siblings(p, panels))
                 cy = (pl["y1"] + pl["y2"]) / 2
                 if sd in ("up", "down"):              # откидная: ручка снизу/сверху по центру
                     cx = (pl["x1"] + pl["x2"]) / 2
@@ -213,7 +226,7 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
         if p.get("type") != "door_front":
             continue
         pl = p["placement"]
-        sd = door_hinge_side(p, _mw)
+        sd = door_hinge_side(p, _mw, _door_siblings(p, panels))
         if sd in ("up", "down"):
             # откидная дверь: чашки вдоль верхней/нижней кромки, планки —
             # на пласти примыкающего горизонта (крышка/дно/полка)
@@ -341,9 +354,11 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
                 continue
             cy1, cy2 = max(pl["y1"], vp["y1"]), min(pl["y2"], vp["y2"])
             cz1, cz2 = max(pl["z1"], vp["z1"]), min(pl["z2"], vp["z2"])
-            # у задника в проём контакт по Z = его толщина (16 < 20) — порог
-            # по короткой стороне снижаем, иначе задник остаётся без крепежа
-            thin = min(20.0, float(p.get("thickness", 16)) - 2) if p["type"] == "back" else 20.0
+            # у задника в проём (и крышки/дна между боковинами, sides_over_top)
+            # контакт = толщина панели (16 < 20) — порог по короткой стороне
+            # снижаем, иначе панель остаётся без крепежа
+            thin = (min(20.0, float(p.get("thickness", 16)) - 2)
+                    if p["type"] in ("back", "top", "bottom") else 20.0)
             if cy2 - cy1 < min(20.0, thin) or cz2 - cz1 < thin:   # нет полноценного контакта
                 continue
             # раскладка вдоль длинной стороны зоны контакта; чашка — в пласти
@@ -686,7 +701,7 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
             if not targets:
                 return True
             nm = str(p.get("name", "")).lower()
-            sdp = door_hinge_side(p, _mw)
+            sdp = door_hinge_side(p, _mw, _door_siblings(p, panels))
             for t in targets:
                 if t in ("right_door", "правая") and (sdp == "right" or "прав" in nm):
                     return True
@@ -700,7 +715,7 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
             if not _lock_matches(p):
                 continue
             pl = p["placement"]
-            sdl = door_hinge_side(p, _mw)
+            sdl = door_hinge_side(p, _mw, _door_siblings(p, panels))
             lx = pl["x1"] + 30 if sdl == "right" else pl["x2"] - 30
             ly = (pl["y1"] + pl["y2"]) / 2
             holes.append(_hole(p["name"], "замок (цилиндр Ø18)", lx, ly, pl["z2"],

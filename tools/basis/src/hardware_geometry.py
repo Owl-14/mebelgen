@@ -13,8 +13,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from .hardware import (_hinge_levels, _model_width, _n_hinges, _shelf_spans,
-                       door_hinge_side, hinge_levels_clear, leg_positions)
+from .hardware import (_door_siblings, _hinge_levels, _model_width, _n_hinges,
+                       _shelf_spans, door_hinge_side, hinge_levels_clear, leg_positions)
 
 _VERT = ("side_left", "side_right", "vertical_partition")
 
@@ -118,7 +118,7 @@ def compute_hardware_geometry(project: dict[str, Any]) -> list[dict[str, Any]]:
                                 cx - hsize / 2 - 12, cx + hsize / 2 + 12,
                                 y - 7, y + 7, zf - 40, zf - 28))
             else:                                       # дверь: скоба у кромки, противоположной петлям
-                sd = door_hinge_side(p, _model_width(panels))
+                sd = door_hinge_side(p, _model_width(panels), _door_siblings(p, panels))
                 if sd in ("up", "down"):                # откидная: горизонтально снизу/сверху
                     cx = (pl["x1"] + pl["x2"]) / 2
                     hy = pl["y1"] + 40 if sd == "up" else pl["y2"] - 40
@@ -196,7 +196,7 @@ def compute_hardware_geometry(project: dict[str, Any]) -> list[dict[str, Any]]:
             continue
         pl = p["placement"]
         door_in = pl["z2"]                                  # внутренняя плоскость фасада
-        sd = door_hinge_side(p, _model_width(panels))
+        sd = door_hinge_side(p, _model_width(panels), _door_siblings(p, panels))
         if sd in ("up", "down"):                            # откидная (AKD-224)
             n = _n_hinges(pl["x2"] - pl["x1"])
             cup_y = pl["y2"] - 22 if sd == "up" else pl["y1"] + 22

@@ -265,3 +265,28 @@ def test_door_hinge_by_position_and_swing():
     assert not check_drilling_geometry(p2, h2)["errors"]
     from src.delivery import _hardware_bom
     assert any(b["slot"] == "Газлифт" for b in _hardware_bom(p2))
+
+
+def test_sides_over_top_scheme():
+    """AKD-226: sides_over_top — боковины до верха, крышка в проём, крепёж есть."""
+    import json
+    from src.generators import generate_from_paramspec
+    from src.hardware import compute_drilling
+    from src.drilling_check import check_drilling_geometry
+    from src.completeness_check import check_completeness
+
+    spec = {"schemaVersion": "paramspec-v1", "project_name": "К", "furniture_type": "тумба",
+            "archetype": "corpus", "dimensions": {"width": 600, "depth": 400, "height": 700},
+            "materials": {"board_thickness": 16}, "sides_over_top": True}
+    p = generate_from_paramspec(spec)
+    by = {q["name"]: q["placement"] for q in p["panels"]}
+    assert by["Боковина левая"]["y2"] == 700          # боковина до самого верха
+    assert by["Крышка"]["x1"] == 16 and by["Крышка"]["x2"] == 584   # крышка в проём
+    holes = compute_drilling(p)
+    assert not check_drilling_geometry(p, holes)["errors"]
+    assert not check_completeness(p, spec)            # крышка закреплена (X-стык)
+    # одиночная дверь: имя «Дверь левая» в ПРАВОЙ секции игнорируется — позиция важнее
+    from src.hardware import door_hinge_side
+    fake = {"name": "Дверь левая", "placement": {"x1": 600, "x2": 990}}
+    assert door_hinge_side(fake, 1000, siblings=1) == "right"
+    assert door_hinge_side(fake, 1000, siblings=2) == "left"   # двустворка — по имени

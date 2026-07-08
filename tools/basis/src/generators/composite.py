@@ -5,13 +5,14 @@ from __future__ import annotations
 from typing import Any
 
 
-def _shift(panel: dict[str, Any], ox: float, oz: float) -> dict[str, Any]:
+def _shift(panel: dict[str, Any], ox: float, oy: float, oz: float) -> dict[str, Any]:
     pl = panel["placement"]
     pl["x1"] += ox; pl["x2"] += ox
+    pl["y1"] += oy; pl["y2"] += oy
     pl["z1"] += oz; pl["z2"] += oz
     pos = panel.get("position")
     if isinstance(pos, dict):
-        pos["x"] += ox; pos["z"] += oz
+        pos["x"] += ox; pos["y"] = pos.get("y", 0) + oy; pos["z"] += oz
     return panel
 
 
@@ -31,12 +32,13 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
             raise ValueError("composite внутри composite не поддерживается")
         sub = generate_from_paramspec(sub_spec)
         ox = float(b.get("origin", {}).get("x", 0))
+        oy = float(b.get("origin", {}).get("y", 0))
         oz = float(b.get("origin", {}).get("z", 0))
         prefix = b.get("name", "")
         for p in sub["panels"]:
             if prefix:
                 p["name"] = f"{prefix}: {p['name']}"
-            panels.append(_shift(p, ox, oz))
+            panels.append(_shift(p, ox, oy, oz))
         for d in sub.get("drawers", []):
             drawers.append(d)
         for s in sub.get("sections", []):
