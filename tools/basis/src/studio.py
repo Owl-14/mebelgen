@@ -713,7 +713,8 @@ PAGE = r"""<!DOCTYPE html>
     </div>
     <div class="row" style="gap:6px;margin-top:2px">
       <button id="btnUndo" disabled>⟲ Откатить</button>
-      <span class="mini">фото ТЗ: 📎, Ctrl+V или перетащить в поле</span>
+      <button id="btnFixAll" title="ИИ чинит ошибки проверок и подбирает базу до зелёных бейджей">⚕ Починить всё</button>
+      <span class="mini">фото ТЗ: 📎, Ctrl+V</span>
     </div>
     <div id="tokenCount" class="mini" style="margin-top:5px"></div>
   </fieldset>
@@ -1428,6 +1429,36 @@ function addImgFile(file){
     PENDING_IMGS.push({mime:(file.type||'image/png'),data:s.slice(c+1)});renderImgs();};
   r.readAsDataURL(file);
 }
+// реальная диагностика для ИИ (AKD-219): тексты ошибок чеков + слоты базы
+function diagCtx(){
+  const ctx=lastPayload?{n_panels:lastPayload.stats&&lastPayload.stats.n_panels,
+    n_holes:lastPayload.stats&&lastPayload.stats.n_holes,
+    dims:lastPayload.stats&&lastPayload.stats.dims,
+    estimate_total:lastPayload.estimate&&lastPayload.estimate.total}:{};
+  if(lastPayload&&lastPayload.issues){
+    const bad={};
+    for(const k of Object.keys(lastPayload.issues)){
+      const v=lastPayload.issues[k]||[];
+      if(v.length) bad[k]=v.slice(0,3);
+    }
+    ctx.check_errors=Object.keys(bad).length?bad:'нет — все проверки зелёные';
+  }
+  if(lastPayload&&lastPayload.refs){
+    const un=Object.entries(lastPayload.refs)
+      .filter(([k,r])=>r&&typeof r==='object'&&!r.resolved).map(([k])=>k);
+    ctx.base_unresolved=un.length?un:'все позиции подобраны';
+  }
+  return ctx;
+}
+// сколько проблем осталось (для автоцикла починки)
+function issueCount(){
+  let n=0;
+  if(lastPayload&&lastPayload.issues)
+    for(const k of Object.keys(lastPayload.issues)) n+=(lastPayload.issues[k]||[]).length;
+  if(lastPayload&&lastPayload.refs)
+    n+=Object.values(lastPayload.refs).filter(r=>r&&typeof r==='object'&&!r.resolved).length;
+  return n;
+}
 async function runChat(text){
   const m=(text||'').trim();
   if((!m&&!PENDING_IMGS.length)||chatBusy)return;
@@ -1436,24 +1467,7 @@ async function runChat(text){
   addMsg('user',m+(imgs.length?`  📎×${imgs.length}`:''));
   const wait=addMsg('ai','думаю…');
   try{
-    const ctx=lastPayload?{n_panels:lastPayload.stats&&lastPayload.stats.n_panels,
-      n_holes:lastPayload.stats&&lastPayload.stats.n_holes,
-      dims:lastPayload.stats&&lastPayload.stats.dims,
-      estimate_total:lastPayload.estimate&&lastPayload.estimate.total}:{};
-    // реальная диагностика для ИИ (AKD-219): тексты ошибок чеков + слоты базы
-    if(lastPayload&&lastPayload.issues){
-      const bad={};
-      for(const k of Object.keys(lastPayload.issues)){
-        const v=lastPayload.issues[k]||[];
-        if(v.length) bad[k]=v.slice(0,3);
-      }
-      ctx.check_errors=Object.keys(bad).length?bad:'нет — все проверки зелёные';
-    }
-    if(lastPayload&&lastPayload.refs){
-      const un=Object.entries(lastPayload.refs)
-        .filter(([k,r])=>r&&typeof r==='object'&&!r.resolved).map(([k])=>k);
-      ctx.base_unresolved=un.length?un:'все позиции подобраны';
-    }
+    const ctx=diagCtx();
     if(SELECTED_PART) ctx.selected_part={name:SELECTED_PART.name,type:SELECTED_PART.type,
       placement:{x1:SELECTED_PART.x1,x2:SELECTED_PART.x2,y1:SELECTED_PART.y1,
                  y2:SELECTED_PART.y2,z1:SELECTED_PART.z1,z2:SELECTED_PART.z2}};
@@ -1481,6 +1495,41 @@ async function runChat(text){
   finally{chatBusy=false;}
 }
 function sendChat(){const v=$('chatMsg').value; $('chatMsg').value=''; runChat(v);}
+// автоцикл «Починить всё» (AKD-222): ИИ правит → регенерация → перепроверка,
+// до зелёных бейджей / отсутствия прогресса / 3 итераций
+async function fixAll(){
+  if(chatBusy) return;
+  let before=issueCount();
+  if(!before){toast('Все проверки зелёные, база подобрана — чинить нечего');return;}
+  const btn=$('btnFixAll'); btn.disabled=true;
+  addMsg('user','⚕ Починить всё (автоцикл)');
+  try{
+    for(let it=1; it<=3; it++){
+      const wait=addMsg('ai',`итерация ${it}: чиню (осталось проблем: ${before})…`);
+      const r=await fetch('/api/chat',{method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({spec:SPEC,
+          message:'Почини все перечисленные проблемы: ошибки проверок и неподобранные '
+                 +'позиции базы. Меняй только то, что нужно для починки.',
+          history:[],context:diagCtx(),provider:CHAT_PROVIDER})});
+      const p=await r.json();
+      wait.remove();
+      if(p.usage&&p.usage.total){SESSION_TOKENS+=p.usage.total; renderTokens();}
+      if(!p.spec){addMsg('ai',p.reply||'ИИ не предложил правку — нужна ручная починка');break;}
+      pushUndo(); SPEC=p.spec; fillForm();
+      await apply();                               // регенерация + свежие бейджи
+      const after=issueCount();
+      addMsg('ai',`итерация ${it}: ${p.reply||'правка применена'}`,
+             p.changes&&p.changes.concat([`проблем: ${before} → ${after}`]));
+      if(!after){toast('✅ Всё починено — проверки зелёные'); break;}
+      if(after>=before){addMsg('ai','прогресса нет — дальше чинить вручную '
+        +'(правка деталей/выбор позиций в «Фурнитуре»)'); break;}
+      before=after;
+    }
+  }catch(e){addMsg('ai','Ошибка автопочинки: '+e.message);}
+  finally{btn.disabled=false; refreshBalance();}
+}
+$('btnFixAll').onclick=fixAll;
 $('chatSend').onclick=sendChat;
 $('chatMsg').addEventListener('keydown',e=>{if(e.key==='Enter')sendChat();});
 // фото ТЗ: кнопка-скрепка, выбор файла, вставка из буфера, drag&drop
