@@ -43,7 +43,8 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     panels = carcass(c.W, c.D, c.H, c.T, c.T_back, c.Hleg, c.mat, c.mat_back,
                      leg_as_panel=c.leg_as_panel, leg_type=c.leg_type,
                      socle_recess=spec.get("socle_recess", 50),
-                     sides_over_top=spec.get("sides_over_top", False))
+                     sides_over_top=spec.get("sides_over_top", False),
+                     t_top=c.T_top)
 
     ox1, ox2 = c.T, c.W - c.T                # внутренний проём (короб между боковинами)
     fx1, fx2 = round(reveal, 2), round(c.W - reveal, 2)   # накладной фасад — во всю ширину
@@ -94,7 +95,7 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     # перекрытие стека (AKD-187): полка над ящиками всегда, когда стек не
     # доходит до крышки (cover_top: false — отключить явно)
     ny1 = fb + sum(heights) + (n - 1) * g         # верх верхнего фасада
-    if section.get("cover_top", True) and ny1 + c.T <= (c.H - c.T) - 40:
+    if section.get("cover_top", True) and ny1 + c.T <= (c.H - c.T_top) - 40:
         panels.append(panel("Полка под нишей", "shelf", "horizont", (c.T, c.W - c.T), (ny1, ny1 + c.T),
                             (section.get("niche_z_front", 0), c.D - c.T_back),
                             thickness=c.T, material=c.mat, section_id="top_open", estimated=True))

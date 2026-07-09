@@ -120,6 +120,20 @@
         "facade_article": {
           "type": "string",
           "description": "Артикул плиты фасадов из производственной базы"
+        },
+        "top_thickness": {
+          "type": "number",
+          "minimum": 3,
+          "maximum": 60,
+          "description": "Толщина крышки/столешницы, если отличается от плиты (AKD-218): «корпус 16, крышка МДФ 25»"
+        },
+        "texture_direction": {
+          "type": "string",
+          "enum": [
+            "along",
+            "across"
+          ],
+          "description": "Направление текстуры: along — по длине (деф.), across — поперёк (textureOrientation в .cfrn)"
         }
       }
     },

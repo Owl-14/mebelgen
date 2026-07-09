@@ -16,18 +16,19 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     panels = carcass(c.W, c.D, c.H, c.T, c.T_back, c.Hleg, c.mat, c.mat_back,
                      leg_as_panel=c.leg_as_panel, leg_type=c.leg_type,
                      socle_recess=spec.get("socle_recess", 50),
-                     sides_over_top=spec.get("sides_over_top", False))
+                     sides_over_top=spec.get("sides_over_top", False),
+                     t_top=c.T_top)
 
     # полки: явные уровни имеют приоритет; счётчик shelves — раскладка равномерно
     levels = section.get("shelf_levels")
     if levels is None and section.get("shelves"):
-        levels = shelf_levels(c.Hleg + c.T, c.H - c.T, section["shelves"], c.T)
+        levels = shelf_levels(c.Hleg + c.T, c.H - c.T_top, section["shelves"], c.T)
     if levels:
         panels += shelves(levels, c.W, c.D, c.T, c.T_back, c.mat, "main")
 
     ndoor = section.get("door", 1)
     g = c.gap
-    y1, y2 = c.Hleg + c.T + g, c.H - c.T - g
+    y1, y2 = c.Hleg + c.T + g, c.H - c.T_top - g
     doors_meta: list[dict[str, Any]] = []
     if ndoor == 2:
         mid = c.W / 2
@@ -51,7 +52,7 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
                        "position": {"x": g, "y": y1, "z": 0}, "estimated": False}]
 
     rods_meta = []
-    rod = rod_in_column(c.T, c.W - c.T, section, c.H - c.T, 0, c.D - c.T_back, "main")
+    rod = rod_in_column(c.T, c.W - c.T, section, c.H - c.T_top, 0, c.D - c.T_back, "main")
     if rod:
         rods_meta.append(rod)
         # зона подвеса (~900 вниз) должна быть свободной (AKD-186)

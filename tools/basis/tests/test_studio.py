@@ -52,3 +52,13 @@ def test_payload_reacts_to_edit():
 def test_techview_svg_clean():
     r = techview_svg(SPEC)
     assert r["svg"].startswith("<svg") and r["issues"] == []
+
+
+def test_axon_svg_thumbnail():
+    from src.studio import _axon_svg
+    svg = _axon_svg(SPEC)
+    assert svg and svg.startswith("<svg")
+    # 20 панелей × 3 видимые грани изометрии
+    assert svg.count("<polygon") == 60
+    # аксонометрия не строится на битой спеке — карточка получит заглушку
+    assert _axon_svg({"schemaVersion": "paramspec-v1"}) is None

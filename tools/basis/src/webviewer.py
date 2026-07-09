@@ -193,7 +193,11 @@ SCENE_JS = r"""
 function MebelScene(container){
   const scene=new THREE.Scene(); scene.background=new THREE.Color(0xeceff3);
   const FOV=42;
-  const camera=new THREE.PerspectiveCamera(FOV,1,1,100000);
+  // две камеры: перспектива (по умолчанию) и ортографическая — для аксонометрии
+  // и проекций сверху/спереди/слева (setView); переключение — controls.object
+  const persp=new THREE.PerspectiveCamera(FOV,1,1,100000);
+  const ortho=new THREE.OrthographicCamera(-1,1,1,-1,-100000,100000);
+  let camera=persp, orthoR=1000;
   const renderer=new THREE.WebGLRenderer({antialias:true});
   renderer.setPixelRatio(devicePixelRatio); container.appendChild(renderer.domElement);
   const controls=new THREE.OrbitControls(camera,renderer.domElement);
@@ -208,8 +212,39 @@ function MebelScene(container){
   let dimGroup=null, dimsOn=true;                       // размерные линии (AKD-125)
 
   function size(){const w=container.clientWidth||innerWidth,h=container.clientHeight||innerHeight;
-    camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h);}
+    persp.aspect=w/h;persp.updateProjectionMatrix();
+    // орто-фрустум вписывает сферу модели по ОБЕИМ осям (узкие окна — тоже)
+    const a=w/h, oh=orthoR*Math.max(1,1/a);
+    ortho.left=-oh*a;ortho.right=oh*a;ortho.top=oh;ortho.bottom=-oh;
+    ortho.updateProjectionMatrix();
+    renderer.setSize(w,h);}
   addEventListener('resize',size);
+
+  // --- ракурсы: аксонометрия/перспектива/сверху/спереди/слева ---
+  let curView='persp', MW=0, MH=0, MD=0;
+  function setView(name){
+    curView=name;
+    const c=new THREE.Vector3(MW/2,MH/2,MD/2);
+    const sphere=0.5*Math.sqrt(MW*MW+MH*MH+MD*MD)||600;
+    if(name==='persp'){
+      camera=persp;
+      const vfov=FOV*Math.PI/180;
+      const hfov=2*Math.atan(Math.tan(vfov/2)*(container.clientWidth||innerWidth)/(container.clientHeight||innerHeight));
+      const dist=sphere/Math.sin(Math.min(vfov,hfov)/2)*1.12;
+      camera.position.copy(c).add(new THREE.Vector3(0.62,0.42,0.92).normalize().multiplyScalar(dist));
+    }else{
+      camera=ortho; orthoR=sphere*1.12; ortho.zoom=1;
+      // сцена: +Z — фронт модели, +X — вправо (вид спереди), поэтому
+      // «слева» — камера в -X; сверху/спереди — с лёгким сдвигом от вырожденной оси
+      // top: микросдвиг к фронту (+Z), чтобы вид сверху не крутился по азимуту
+      const dirs={axon:[1,0.72,1],top:[0,1,0.001],front:[0,0.001,1],left:[-1,0.001,0]};
+      const d=new THREE.Vector3(...(dirs[name]||dirs.axon)).normalize().multiplyScalar(sphere*4);
+      camera.position.copy(c).add(d);
+    }
+    camera.up.set(0,1,0);
+    size();
+    controls.object=camera; controls.target.copy(c); controls.update();
+  }
 
   function edge(mesh,color){const e=new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry),
       new THREE.LineBasicMaterial({color:color||0x5a4326}));
@@ -523,15 +558,8 @@ function MebelScene(container){
       new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthWrite:false}));
     sh.rotation.x=-Math.PI/2; sh.position.set(W/2,0.5,D/2); world.add(sh);
     api.setHw(hwVisible);
-    if(!fitted||opts.refit){
-      size();
-      const c=new THREE.Vector3(W/2,H/2,D/2);
-      const sphere=0.5*Math.sqrt(W*W+H*H+D*D), vfov=FOV*Math.PI/180;
-      const hfov=2*Math.atan(Math.tan(vfov/2)*(container.clientWidth||innerWidth)/(container.clientHeight||innerHeight));
-      const dist=sphere/Math.sin(Math.min(vfov,hfov)/2)*1.12;
-      const dir=new THREE.Vector3(0.62,0.42,0.92).normalize().multiplyScalar(dist);
-      camera.position.copy(c).add(dir); controls.target.copy(c); controls.update(); fitted=true;
-    }
+    MW=W; MH=H; MD=D;
+    if(!fitted||opts.refit){ setView(curView); fitted=true; }
   }
 
   // клик по узлу — открыть/закрыть (отличаем от вращения по сдвигу мыши)
@@ -695,6 +723,7 @@ function MebelScene(container){
     setTextures(on){texOn=on; panelMeshes.forEach(m=>m&&applyTexture(m));},
     setDims(on){dimsOn=on; if(dimGroup) dimGroup.visible=on;},
     setExplode,
+    setView,                           // 'axon'|'persp'|'top'|'front'|'left'
     resize:size,
   };
   size();

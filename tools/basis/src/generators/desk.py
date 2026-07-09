@@ -26,10 +26,10 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     c = read_carcass(spec)
     top_z = spec.get("top_overhang")
     tz = tuple(top_z) if top_z else (0, c.D)
-    top_bottom = c.H - c.T
+    top_bottom = c.H - c.T_top
 
     panels = [panel("Столешница", "top", "horizont", (0, c.W), (top_bottom, c.H), tz,
-                    thickness=c.T, material=c.mat)]
+                    thickness=c.T_top, material=c.mat)]
 
     if _is_metal(spec):
         construction = "top_on_metal_frame"          # опоры — фурнитура (труба), не панель

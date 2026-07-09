@@ -18,7 +18,7 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     c = read_carcass(spec)
     sections = spec.get("sections") or [{"kind": "open"}]
     g = c.gap
-    yb, yt = c.Hleg + c.T, c.H - c.T
+    yb, yt = c.Hleg + c.T, c.H - c.T_top
     # фронт полок/перегородок = фронт корпуса (дно/крышка), а не утоплен на T:
     # иначе полки посередине не доходят до переднего края изделия
     iz1 = spec.get("interior_z_front", spec.get("carcass_z_front", 0))
@@ -35,7 +35,8 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
                      top_z=tuple(top_z) if top_z else None,
                      socle_full=spec.get("socle_full", False),
                      socle_recess=spec.get("socle_recess", 50),
-                     sides_over_top=spec.get("sides_over_top", False))
+                     sides_over_top=spec.get("sides_over_top", False),
+                     t_top=c.T_top)
     bounds = column_bounds(c.W, c.T, sections)
     # перегородки — конструктив: всегда до фронта корпуса (AKD-192);
     # interior_z_front утапливает только наполнение (полки)

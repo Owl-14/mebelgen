@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ru"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Akeda Studio — мебель из ТЗ за минуты</title>
+<style>
+  :root{--ink:#1a1d21;--mut:#6b7280;--accent:#2b62c4;--bg:#f6f8fa;--card:#fff;--line:#e5e9ef}
+  *{box-sizing:border-box;margin:0}
+  body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.55}
+  .wrap{max-width:980px;margin:0 auto;padding:0 22px}
+  header{padding:18px 0;display:flex;align-items:center;justify-content:space-between}
+  .logo{font-weight:700;font-size:18px}.logo span{color:var(--accent)}
+  .hero{padding:64px 0 46px;text-align:center}
+  h1{font-size:clamp(28px,5vw,44px);line-height:1.15;margin-bottom:16px}
+  h1 em{font-style:normal;color:var(--accent)}
+  .sub{font-size:17px;color:var(--mut);max-width:640px;margin:0 auto 30px}
+  .cta{display:inline-block;background:var(--accent);color:#fff;text-decoration:none;
+       font-size:16px;font-weight:600;padding:13px 34px;border-radius:10px;
+       box-shadow:0 6px 18px rgba(43,98,196,.3);transition:transform .12s}
+  .cta:hover{transform:translateY(-2px)}
+  .flow{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:34px 0 8px;
+        font-size:14px;color:var(--mut)}
+  .flow b{background:var(--card);border:1px solid var(--line);border-radius:18px;
+          padding:6px 14px;font-weight:600;color:var(--ink);white-space:nowrap}
+  .flow i{align-self:center;font-style:normal;color:var(--accent)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;
+        padding:34px 0 10px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px}
+  .card .ic{font-size:26px;margin-bottom:8px}
+  .card h3{font-size:15.5px;margin-bottom:6px}
+  .card p{font-size:13.5px;color:var(--mut)}
+  footer{padding:38px 0 30px;text-align:center;color:var(--mut);font-size:13px}
+  footer a{color:var(--accent);text-decoration:none}
+</style></head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">Akeda <span>Studio</span></div>
+    <a class="cta" style="padding:8px 20px;font-size:14px" href="/index.html">Открыть демо</a>
+  </header>
+
+  <section class="hero">
+    <h1>Корпусная мебель из ТЗ —<br><em>за минуты, а не дни</em></h1>
+    <p class="sub">Загрузите техническое задание (даже фото или скан) — система
+       распознает его, соберёт точную 3D-модель с крепежом и присадкой,
+       посчитает смету и подготовит данные для производства.</p>
+    <a class="cta" href="/index.html">Открыть демо&nbsp;→</a>
+    <div class="flow">
+      <b>📄 ТЗ / фото</b> <i>→</i>
+      <b>🤖 ИИ-распознавание</b> <i>→</i>
+      <b>🪑 3D-модель</b> <i>→</i>
+      <b>📐 Чертежи и присадка</b> <i>→</i>
+      <b>💰 Смета</b> <i>→</i>
+      <b>🏭 Производство</b>
+    </div>
+  </section>
+
+  <section class="grid">
+    <div class="card"><div class="ic">🤖</div>
+      <h3>Чат с ИИ-конструктором</h3>
+      <p>«Сделай глубину 600», «добавь штангу», «дверь пусть открывается вверх» —
+         модель перестраивается мгновенно. ИИ сам находит и чинит ошибки сборки.</p></div>
+    <div class="card"><div class="ic">🔩</div>
+      <h3>Производственная точность</h3>
+      <p>Система 32: присадка Ø8, шканты и эксцентрики, петли, направляющие,
+         раскрой с пропилом — всё по стандартам производства, с проверками физики.</p></div>
+    <div class="card"><div class="ic">📦</div>
+      <h3>От модели до станка</h3>
+      <p>Чертежи деталей, карта раскроя, BOM фурнитуры, смета материалов и выгрузка
+         в формат БАЗИС (.b3d) — готовый пакет для цеха.</p></div>
+  </section>
+
+  <footer>
+    Akeda Studio · демо-версия ·
+    <a href="/index.html">открыть редактор</a>
+  </footer>
+</div>
+</body></html>

@@ -112,6 +112,8 @@ def project_to_cfrn_json(project: dict[str, Any]) -> dict[str, Any]:
         back_idx = len(materials) - 1
     materials += _hardware_entries(project)   # фурнитура с артикулами (spec)
 
+    # направление текстуры (AKD-218): across → 1, along/нет → 0
+    tex_orient = 1 if str(m.get("texture_direction", "")).lower() == "across" else 0
     objects: list[dict[str, Any]] = [{"objType": 7, "name": name, "isAssemblyUnit": False}]
     children: list[dict[str, Any]] = []
 
@@ -132,7 +134,7 @@ def project_to_cfrn_json(project: dict[str, Any]) -> dict[str, Any]:
             "materialWidth": 0,
             "contour": {"size": cont, "pos": {"x": 0, "y": 0}},
             "thickness": _r(p.get("thickness", 16)),
-            "textureOrientation": 0,
+            "textureOrientation": tex_orient,
             "frontFace": 2,
             "sourceContour": {"size": cont, "pos": {"x": 0, "y": 0}},
             "clippedSourceContour": {"size": cont, "pos": {"x": 0, "y": 0}},

@@ -290,3 +290,36 @@ def test_sides_over_top_scheme():
     fake = {"name": "Дверь левая", "placement": {"x1": 600, "x2": 990}}
     assert door_hinge_side(fake, 1000, siblings=1) == "right"
     assert door_hinge_side(fake, 1000, siblings=2) == "left"   # двустворка — по имени
+
+
+def test_top_thickness_and_texture():
+    """AKD-218: крышка своей толщины (корпус 16, крышка 25) + текстура в .cfrn."""
+    import json
+    from src.generators import generate_from_paramspec
+    from src.hardware import compute_drilling
+    from src.drilling_check import check_drilling_geometry
+    from src.completeness_check import check_completeness
+    from src.cfrn import project_to_cfrn_json, check_cfrn_encoding
+
+    spec = {"schemaVersion": "paramspec-v1", "project_name": "Тумба25",
+            "furniture_type": "тумба", "archetype": "door_unit",
+            "dimensions": {"width": 800, "depth": 400, "height": 900},
+            "materials": {"board_thickness": 16, "top_thickness": 25,
+                          "texture_direction": "along"},
+            "sections": [{"kind": "door", "door": 2, "shelves": 1}]}
+    p = generate_from_paramspec(spec)
+    by = {q["name"]: q for q in p["panels"]}
+    top = by["Крышка"]
+    assert top["thickness"] == 25 and top["placement"]["y1"] == 875   # 900-25
+    assert by["Боковина левая"]["placement"]["y2"] == 875             # до низа крышки
+    holes = compute_drilling(p)
+    assert not check_drilling_geometry(p, holes)["errors"]
+    assert not check_completeness(p, spec)
+    assert not check_cfrn_encoding(p)
+    d = project_to_cfrn_json(p)
+    tex = {o.get("textureOrientation") for o in d["table"]["objects"] if o.get("objType") == 2}
+    assert tex == {0}                                                  # along → 0
+    spec["materials"]["texture_direction"] = "across"
+    d2 = project_to_cfrn_json(generate_from_paramspec(spec))
+    tex2 = {o.get("textureOrientation") for o in d2["table"]["objects"] if o.get("objType") == 2}
+    assert tex2 == {1}

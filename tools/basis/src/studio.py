@@ -143,6 +143,112 @@ def techview_svg(spec: dict[str, Any], panel: str | None = None) -> dict[str, An
         return {"svg": "", "issues": [str(e)]}
 
 
+# ------------------------------------------------------------------ аксонометрия для карточек каталога
+
+def _shade(hexcol: str, k: float) -> str:
+    """Осветлить (k>0) / затемнить (k<0) цвет #rrggbb — грани аксонометрии."""
+    h = (hexcol or "#c9a06a").lstrip("#")
+    if len(h) != 6:
+        h = "c9a06a"
+    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+    if k >= 0:
+        r, g, b = (round(c + (255 - c) * k) for c in (r, g, b))
+    else:
+        r, g, b = (round(c * (1 + k)) for c in (r, g, b))
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def _axon_svg(spec: dict[str, Any]) -> str | None:
+    """Изометрическая проекция изделия в SVG — превью карточки каталога (AKD-217).
+
+    Камера как в 3D по умолчанию: фронт + верх + правый бок; painter-сортировка
+    панелей по глубине. Ошибки не бросают — None (карточка покажет заглушку).
+    """
+    try:
+        from .generators import generate_from_paramspec
+        from .webviewer import _palette, _panels
+        project = generate_from_paramspec(spec)
+        panels = _panels(project)
+        colors = _palette(project)
+    except Exception:
+        return None
+    if not panels:
+        return None
+    zmax = max(p["z2"] for p in panels)
+    C, S = 0.866, 0.5                     # изометрия: cos30 / sin30
+
+    def pt(x: float, y: float, z: float) -> tuple[float, float]:
+        # z уже в показных координатах (фронт → большие z); Y экрана вниз
+        return (x - z) * C, (x + z) * S - y
+
+    boxes = []
+    for p in panels:
+        x1, x2, y1, y2 = p["x1"], p["x2"], p["y1"], p["y2"]
+        z1, z2 = zmax - p["z2"], zmax - p["z1"]     # БАЗИС → фронт модели в +Z
+        depth = x1 + x2 + y1 + y2 + z1 + z2         # ~2×центр вдоль луча (1,1,1)
+        boxes.append((depth, p["type"], x1, x2, y1, y2, z1, z2))
+    boxes.sort(key=lambda b: b[0])                  # дальние — первыми
+
+    base_col = colors.get("_default", "#c9a06a")
+    edge = colors.get("_edge", "#5a4326")
+    span = max(max(p["x2"] for p in panels), max(p["y2"] for p in panels), zmax, 1)
+    sw = round(span * 0.004, 2)                     # толщина контура ∝ габариту
+    xs: list[float] = []
+    ys: list[float] = []
+    polys: list[str] = []
+    for _, ptype, x1, x2, y1, y2, z1, z2 in boxes:
+        col = colors.get(ptype, base_col)
+        faces = (
+            # верх (y2) — светлее, фронт (z2) — базовый, правый бок (x2) — темнее
+            (((x1, y2, z1), (x2, y2, z1), (x2, y2, z2), (x1, y2, z2)), _shade(col, 0.18)),
+            (((x1, y1, z2), (x2, y1, z2), (x2, y2, z2), (x1, y2, z2)), col),
+            (((x2, y1, z2), (x2, y1, z1), (x2, y2, z1), (x2, y2, z2)), _shade(col, -0.22)),
+        )
+        for corners, fill in faces:
+            pts = []
+            for cx, cy, cz in corners:
+                sx, sy = pt(cx, cy, cz)
+                xs.append(sx); ys.append(sy)
+                pts.append(f"{sx:.1f},{sy:.1f}")
+            polys.append(f'<polygon points="{" ".join(pts)}" fill="{fill}" '
+                         f'stroke="{edge}" stroke-width="{sw}" stroke-linejoin="round"/>')
+    m = span * 0.03                                 # поля вокруг изделия
+    x0, y0 = min(xs) - m, min(ys) - m
+    w, h = max(xs) - x0 + m, max(ys) - y0 + m
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" '
+            f'viewBox="{x0:.1f} {y0:.1f} {w:.1f} {h:.1f}">{"".join(polys)}</svg>')
+
+
+def _thumb_svg_cached(spec_dir: Path, fname: str) -> bytes | None:
+    """SVG-превью по имени спеки; кэш в .previews, инвалидация по mtime спеки."""
+    src = _safe_spec_file(spec_dir, fname)
+    if not src.is_file():
+        return None
+    pd = spec_dir / ".previews"
+    cache = pd / (src.stem + ".axon.svg")
+    try:
+        if cache.is_file() and cache.stat().st_mtime >= src.stat().st_mtime:
+            return cache.read_bytes()
+    except OSError:
+        pass
+    try:
+        spec = json.loads(src.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(spec, dict) or spec.get("draft"):
+        return None
+    svg = _axon_svg(spec)
+    if not svg:
+        return None
+    data = svg.encode("utf-8")
+    try:
+        pd.mkdir(exist_ok=True)
+        cache.write_bytes(data)
+    except OSError:
+        pass
+    return data
+
+
 # ------------------------------------------------------------------ каталог проектов (D1)
 
 def _slugify(name: str) -> str:
@@ -350,6 +456,17 @@ def make_handler(st: _Studio):
                         .replace("__SPEC__", json.dumps(st.spec, ensure_ascii=False)
                                  .replace("</", "<\\/")))
                 self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
+            elif self.path.startswith("/thumb/"):     # аксонометрия карточки (AKD-217)
+                from urllib.parse import unquote
+                try:
+                    data = _thumb_svg_cached(st.spec_path.parent,
+                                             unquote(self.path[len("/thumb/"):]))
+                except Exception:
+                    data = None
+                if data:
+                    self._send(200, data, "image/svg+xml; charset=utf-8")
+                else:
+                    self._send(404, b"{}")
             elif self.path.startswith("/preview/"):   # миниатюры каталога (AKD-217)
                 from urllib.parse import unquote
                 name = unquote(self.path[len("/preview/"):])
@@ -690,6 +807,8 @@ PAGE = r"""<!DOCTYPE html>
   #view3d{position:absolute;inset:0}
   #hud{position:absolute;right:12px;top:10px;z-index:5;background:rgba(255,255,255,.9);
        border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12px}
+  #views .vw{font-size:11px;padding:2px 7px}
+  #views .vw.on{background:var(--accent);border-color:var(--accent);color:#fff}
   #toast{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:9;
          background:#1a1d21;color:#fff;padding:7px 14px;border-radius:8px;font-size:12.5px;
          opacity:0;transition:opacity .25s;pointer-events:none;max-width:80%}
@@ -851,6 +970,13 @@ PAGE = r"""<!DOCTYPE html>
     <button id="btnPrint" title="печать открытого чертежа/раскроя">⎙</button>
   </div>
   <div id="hud">
+    <div id="views" style="margin-bottom:5px">Вид:
+      <button class="vw" data-view="axon" title="аксонометрия (без перспективы)">аксон</button>
+      <button class="vw on" data-view="persp" title="перспектива ¾">персп</button>
+      <button class="vw" data-view="top" title="вид сверху">сверху</button>
+      <button class="vw" data-view="front" title="вид спереди">спереди</button>
+      <button class="vw" data-view="left" title="вид слева">слева</button>
+    </div>
     <label><input type="checkbox" id="cbHoles" checked> присадки</label>
     <label><input type="checkbox" id="cbHw" checked> фурнитура</label>
     <label><input type="checkbox" id="cbTex" checked> текстура</label>
@@ -913,6 +1039,14 @@ $('cbXray').onchange=e=>scene3d.setXray(e.target.checked);
 $('explode').oninput=e=>scene3d.setExplode(e.target.value/100);
 $('btnOpenAll').onclick=()=>scene3d.openAll();
 $('btnCloseAll').onclick=()=>scene3d.closeAll();
+// ракурсы: аксонометрия/перспектива/сверху/спереди/слева
+document.querySelectorAll('#views .vw').forEach(b=>b.onclick=()=>{
+  scene3d.setView(b.dataset.view);
+  document.querySelectorAll('#views .vw').forEach(x=>x.classList.toggle('on',x===b));
+});
+// ручное вращение — ракурс больше не соответствует пресету, снимаем подсветку
+view.addEventListener('pointerdown',()=>
+  document.querySelectorAll('#views .vw').forEach(x=>x.classList.remove('on')));
 
 /* ---------- формы ← spec ---------- */
 function fillForm(){
@@ -1348,6 +1482,12 @@ $('projRen').onclick=async()=>{   // переименовать текущее �
   else toast('Ошибка: '+(p.error||''),true);
 };
 /* ---------- каталог изделий (AKD-217) ---------- */
+// аксонометрия не собралась (битая спека) → PNG-снапшот, если был, иначе заглушка
+function thumbErr(img){
+  const png=img.dataset.png;
+  if(png){img.removeAttribute('data-png'); img.onerror=()=>{img.parentNode.textContent='🪑';}; img.src=png;}
+  else img.parentNode.textContent='🪑';
+}
 const CAT_RULES=[  // раздел ← archetype/furniture_type
   ['Тумбы',   p=>/тумб/i.test(p.ftype)||['drawer_unit'].includes(p.archetype)],
   ['Столы',   p=>/стол/i.test(p.ftype)||['desk','table','round_table'].includes(p.archetype)],
@@ -1373,9 +1513,10 @@ function renderCatalog(){
     (!q||String(p.name).toLowerCase().includes(q)));
   $('catGrid').innerHTML=items.map(p=>`
     <div class="catCard" data-f="${p.file}">
-      <div class="img">${p.preview
-        ?`<img src="/preview/${encodeURIComponent(p.file.replace(/\.json$/,'.png'))}" loading="lazy">`
-        :'🪑'}</div>
+      <div class="img">${p.draft?'✏️'
+        :`<img src="/thumb/${encodeURIComponent(p.file)}" loading="lazy"
+            data-png="${p.preview?`/preview/${encodeURIComponent(p.file.replace(/\.json$/,'.png'))}`:''}"
+            onerror="thumbErr(this)">`}</div>
       <div class="nm" title="${p.name}">${p.name}${p.draft?'<span class="dr">черновик</span>':''}</div>
       <div class="sub">${p.dims}${p.decor?' · '+p.decor:''}</div>
     </div>`).join('')||'<div class="mini">ничего не найдено</div>';
