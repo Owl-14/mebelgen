@@ -58,7 +58,20 @@ def test_axon_svg_thumbnail():
     from src.studio import _axon_svg
     svg = _axon_svg(SPEC)
     assert svg and svg.startswith("<svg")
-    # 20 панелей × 3 видимые грани изометрии
-    assert svg.count("<polygon") == 60
+    # 20 панелей × 3 видимые грани изометрии + тень-подложка + тела фурнитуры
+    assert svg.count("<polygon") >= 61
     # аксонометрия не строится на битой спеке — карточка получит заглушку
     assert _axon_svg({"schemaVersion": "paramspec-v1"}) is None
+
+
+def test_axon_svg_round_shapes():
+    # круглый стол: столешница/пьедестал — эллипсы, не коробки
+    round_spec = json.loads((ROOT / "paramspecs" /
+                             "komi_41_stol_peregovorny_round.json").read_text(encoding="utf-8"))
+    svg = _import_axon()(round_spec)
+    assert svg and "<ellipse" in svg
+
+
+def _import_axon():
+    from src.studio import _axon_svg
+    return _axon_svg

@@ -166,16 +166,22 @@ def _axon_svg(spec: dict[str, Any]) -> str | None:
     """
     try:
         from .generators import generate_from_paramspec
-        from .webviewer import _palette, _panels
+        from .webviewer import _hardware, _palette, _panels
         project = generate_from_paramspec(spec)
         panels = _panels(project)
         colors = _palette(project)
+        # тела фурнитуры (металлокаркас, опоры, ручки) — иначе стол «висит в воздухе»
+        for hw in _hardware(project):
+            panels.append({"type": "_hw", "color": hw.get("color") or "#8f969e",
+                           "x1": hw["x1"], "x2": hw["x2"], "y1": hw["y1"],
+                           "y2": hw["y2"], "z1": hw["z1"], "z2": hw["z2"]})
     except Exception:
         return None
     if not panels:
         return None
     zmax = max(p["z2"] for p in panels)
     C, S = 0.866, 0.5                     # изометрия: cos30 / sin30
+    RX, RY = C * 1.41421356, S * 1.41421356   # круг в плане → эллипс rx=1.22r, ry=0.71r
 
     def pt(x: float, y: float, z: float) -> tuple[float, float]:
         # z уже в показных координатах (фронт → большие z); Y экрана вниз
@@ -186,7 +192,7 @@ def _axon_svg(spec: dict[str, Any]) -> str | None:
         x1, x2, y1, y2 = p["x1"], p["x2"], p["y1"], p["y2"]
         z1, z2 = zmax - p["z2"], zmax - p["z1"]     # БАЗИС → фронт модели в +Z
         depth = x1 + x2 + y1 + y2 + z1 + z2         # ~2×центр вдоль луча (1,1,1)
-        boxes.append((depth, p["type"], x1, x2, y1, y2, z1, z2))
+        boxes.append((depth, p, x1, x2, y1, y2, z1, z2))
     boxes.sort(key=lambda b: b[0])                  # дальние — первыми
 
     base_col = colors.get("_default", "#c9a06a")
@@ -196,8 +202,44 @@ def _axon_svg(spec: dict[str, Any]) -> str | None:
     xs: list[float] = []
     ys: list[float] = []
     polys: list[str] = []
-    for _, ptype, x1, x2, y1, y2, z1, z2 in boxes:
-        col = colors.get(ptype, base_col)
+
+    def emit(tag: str, pts_flat: list[tuple[float, float]]) -> None:
+        xs.extend(px for px, _ in pts_flat); ys.extend(py for _, py in pts_flat)
+        polys.append(tag)
+
+    # тень-подложка на полу (y=0) — модель «стоит», а не висит на белом
+    gx0 = min(b[2] for b in boxes); gx1 = max(b[3] for b in boxes)
+    gz0 = min(b[6] for b in boxes); gz1 = max(b[7] for b in boxes)
+    gm = span * 0.04
+    sh = [pt(x, 0, z) for x, z in ((gx0 - gm, gz0 - gm), (gx1 + gm, gz0 - gm),
+                                   (gx1 + gm, gz1 + gm), (gx0 - gm, gz1 + gm))]
+    emit('<polygon points="' + " ".join(f"{px:.1f},{py:.1f}" for px, py in sh)
+         + '" fill="#000" fill-opacity="0.07"/>', sh)
+
+    for _, p, x1, x2, y1, y2, z1, z2 in boxes:
+        col = p.get("color") or colors.get(p["type"], base_col)
+        if p.get("shape") in ("circle", "cylinder"):
+            # круглые детали (round_table): цилиндр = низ-эллипс + тело + верх-эллипс
+            r = float(p.get("radius") or (x2 - x1) / 2)
+            cx, cz = (x1 + x2) / 2, (z1 + z2) / 2
+            ecx, ety = pt(cx, y2, cz)
+            _, eby = pt(cx, y1, cz)
+            rx, ry = r * RX, r * RY
+            side = _shade(col, -0.12)
+            emit(f'<ellipse cx="{ecx:.1f}" cy="{eby:.1f}" rx="{rx:.1f}" ry="{ry:.1f}" '
+                 f'fill="{side}" stroke="{edge}" stroke-width="{sw}"/>',
+                 [(ecx - rx, eby - ry), (ecx + rx, eby + ry)])
+            if eby - ety > 0.5:                     # тело, если есть высота
+                emit(f'<rect x="{ecx - rx:.1f}" y="{ety:.1f}" width="{2 * rx:.1f}" '
+                     f'height="{eby - ety:.1f}" fill="{side}"/>',
+                     [(ecx - rx, ety), (ecx + rx, eby)])
+                for lx in (ecx - rx, ecx + rx):     # образующие
+                    emit(f'<line x1="{lx:.1f}" y1="{ety:.1f}" x2="{lx:.1f}" y2="{eby:.1f}" '
+                         f'stroke="{edge}" stroke-width="{sw}"/>', [(lx, ety)])
+            emit(f'<ellipse cx="{ecx:.1f}" cy="{ety:.1f}" rx="{rx:.1f}" ry="{ry:.1f}" '
+                 f'fill="{_shade(col, 0.18)}" stroke="{edge}" stroke-width="{sw}"/>',
+                 [(ecx - rx, ety - ry), (ecx + rx, ety + ry)])
+            continue
         faces = (
             # верх (y2) — светлее, фронт (z2) — базовый, правый бок (x2) — темнее
             (((x1, y2, z1), (x2, y2, z1), (x2, y2, z2), (x1, y2, z2)), _shade(col, 0.18)),
@@ -205,18 +247,18 @@ def _axon_svg(spec: dict[str, Any]) -> str | None:
             (((x2, y1, z2), (x2, y1, z1), (x2, y2, z1), (x2, y2, z2)), _shade(col, -0.22)),
         )
         for corners, fill in faces:
-            pts = []
-            for cx, cy, cz in corners:
-                sx, sy = pt(cx, cy, cz)
-                xs.append(sx); ys.append(sy)
-                pts.append(f"{sx:.1f},{sy:.1f}")
-            polys.append(f'<polygon points="{" ".join(pts)}" fill="{fill}" '
-                         f'stroke="{edge}" stroke-width="{sw}" stroke-linejoin="round"/>')
+            pp = [pt(*c) for c in corners]
+            emit('<polygon points="' + " ".join(f"{px:.1f},{py:.1f}" for px, py in pp)
+                 + f'" fill="{fill}" stroke="{edge}" stroke-width="{sw}" '
+                 'stroke-linejoin="round"/>', pp)
     m = span * 0.03                                 # поля вокруг изделия
     x0, y0 = min(xs) - m, min(ys) - m
     w, h = max(xs) - x0 + m, max(ys) - y0 + m
     return (f'<svg xmlns="http://www.w3.org/2000/svg" '
             f'viewBox="{x0:.1f} {y0:.1f} {w:.1f} {h:.1f}">{"".join(polys)}</svg>')
+
+
+_AXON_VERSION = 3      # менять при правке _axon_svg — инвалидирует кэш миниатюр
 
 
 def _thumb_svg_cached(spec_dir: Path, fname: str) -> bytes | None:
@@ -225,7 +267,7 @@ def _thumb_svg_cached(spec_dir: Path, fname: str) -> bytes | None:
     if not src.is_file():
         return None
     pd = spec_dir / ".previews"
-    cache = pd / (src.stem + ".axon.svg")
+    cache = pd / f"{src.stem}.axon{_AXON_VERSION}.svg"
     try:
         if cache.is_file() and cache.stat().st_mtime >= src.stat().st_mtime:
             return cache.read_bytes()
@@ -788,9 +830,9 @@ PAGE = r"""<!DOCTYPE html>
   .catCard{background:var(--card);border:1px solid var(--line);border-radius:10px;
     cursor:pointer;overflow:hidden;transition:box-shadow .15s}
   .catCard:hover{box-shadow:0 4px 14px rgba(0,0,0,.12)}
-  .catCard .img{height:130px;background:#eef1f4;display:flex;align-items:center;
-    justify-content:center;color:var(--mut);font-size:30px}
-  .catCard .img img{width:100%;height:100%;object-fit:contain;background:#fff}
+  .catCard .img{height:130px;background:linear-gradient(180deg,#f8fafc,#e6ebf1);
+    display:flex;align-items:center;justify-content:center;color:var(--mut);font-size:30px}
+  .catCard .img img{width:100%;height:100%;object-fit:contain;padding:6px;box-sizing:border-box}
   .catCard .nm{padding:7px 10px 2px;font-weight:600;font-size:12.5px;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .catCard .sub{padding:0 10px 8px;font-size:11px;color:var(--mut)}

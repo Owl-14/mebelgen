@@ -70,6 +70,8 @@ def _panels(project: dict[str, Any]) -> list[dict[str, Any]]:
                     "y2": pl["y2"], "z1": pl["z1"], "z2": pl["z2"],
                     "thickness": p.get("thickness"), "material": p.get("material"),
                     **({"swing": p["swing"]} if p.get("swing") else {}),
+                    **({"shape": p["shape"], "radius": p.get("radius")}
+                       if p.get("shape") else {}),
                     "edges": ", ".join(f"{k}:{v}" for k, v in eb.items() if v) or "—"})
     return out
 
@@ -246,7 +248,7 @@ function MebelScene(container){
     controls.object=camera; controls.target.copy(c); controls.update();
   }
 
-  function edge(mesh,color){const e=new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry),
+  function edge(mesh,color,th){const e=new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry,th||1),
       new THREE.LineBasicMaterial({color:color||0x5a4326}));
     e.position.copy(mesh.position); e.rotation.copy(mesh.rotation); return e;}
 
@@ -506,7 +508,11 @@ function MebelScene(container){
       const col=new THREE.Color(COLORS[p.type]||COLORS._default||'#c9a06a'); col.offsetHSL(0,0,((i%5)-2)*0.009);
       const mat=new THREE.MeshLambertMaterial({color:col,side:THREE.DoubleSide});
       panelMats.push(mat);
-      const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);
+      // круглые детали (столешница/пьедестал round_table) — цилиндры, не боксы
+      const geo=(p.shape==='circle'||p.shape==='cylinder')
+        ? new THREE.CylinderGeometry(p.radius||Math.max(w,d)/2, p.radius||Math.max(w,d)/2, h, 48)
+        : new THREE.BoxGeometry(w,h,d);
+      const mesh=new THREE.Mesh(geo,mat);
       mesh.position.set(TX((p.x1+p.x2)/2),TY((p.y1+p.y2)/2),TZ((p.z1+p.z2)/2));
       if(gi!==undefined) mesh.userData.gi=gi;
       mesh.userData.pi=i; panelMeshes[i]=mesh;
@@ -517,7 +523,8 @@ function MebelScene(container){
       mesh.userData.longDim=Math.max(w,h,d);
       applyTexture(mesh);
       place(mesh,gi); holder(gi).add(mesh);
-      const e=edge(mesh,COLORS._edge); holder(gi).add(e);
+      // у цилиндров порог 15° — иначе EdgesGeometry рисует «клетку» из образующих
+      const e=edge(mesh,COLORS._edge,p.shape?15:1); holder(gi).add(e);
       mesh.userData.edgeObj=e;
       mesh.userData.basePos=mesh.position.clone();
     });
@@ -754,6 +761,13 @@ _TEMPLATE = r"""<!DOCTYPE html>
   <label><input type="checkbox" id="toggleHoles" checked> показывать присадки</label><br>
   <label><input type="checkbox" id="toggleHw" checked> фурнитура (направляющие, петли)</label><br>
   <label><input type="checkbox" id="toggleXray"> прозрачный режим (механизмы внутри)</label><br>
+  <div style="margin-top:6px">Вид:
+    <button class="vw" data-view="axon" title="аксонометрия (без перспективы)">аксон</button>
+    <button class="vw" data-view="persp" title="перспектива ¾">персп</button>
+    <button class="vw" data-view="top">сверху</button>
+    <button class="vw" data-view="front">спереди</button>
+    <button class="vw" data-view="left">слева</button>
+  </div>
   <button id="btnOpen" style="margin-top:6px">Открыть всё</button>
   <button id="btnClose">Закрыть всё</button>
 </div>
@@ -773,4 +787,6 @@ document.getElementById('toggleHw').addEventListener('change',e=>scene3d.setHw(e
 document.getElementById('toggleXray').addEventListener('change',e=>scene3d.setXray(e.target.checked));
 document.getElementById('btnOpen').addEventListener('click',()=>scene3d.openAll());
 document.getElementById('btnClose').addEventListener('click',()=>scene3d.closeAll());
+document.querySelectorAll('#info .vw').forEach(b=>
+  b.addEventListener('click',()=>scene3d.setView(b.dataset.view)));
 </script></body></html>"""
