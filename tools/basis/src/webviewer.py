@@ -69,6 +69,9 @@ def _panels(project: dict[str, Any]) -> list[dict[str, Any]]:
                     "x1": pl["x1"], "x2": pl["x2"], "y1": pl["y1"],
                     "y2": pl["y2"], "z1": pl["z1"], "z2": pl["z2"],
                     "thickness": p.get("thickness"), "material": p.get("material"),
+                    **({"swing": p["swing"]} if p.get("swing") else {}),
+                    **({"shape": p["shape"], "radius": p.get("radius")}
+                       if p.get("shape") else {}),
                     "edges": ", ".join(f"{k}:{v}" for k, v in eb.items() if v) or "—"})
     return out
 
@@ -94,11 +97,19 @@ def _hardware(project: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _openables(project: dict[str, Any], panels: list[dict[str, Any]],
-               hardware: list[dict[str, Any]]) -> list[dict[str, Any]]:
+               hardware: list[dict[str, Any]],
+               holes: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     """Открывающиеся узлы для анимации: ящики (фасад+короб+полоз ящика, выезд по Z)
-    и двери (поворот вокруг оси петель). Индексы — в массивы panels/hardware."""
+    и двери (поворот вокруг оси петель). Индексы — в массивы panels/hardware/holes.
+
+    AKD-189: ручки и присадки, принадлежащие панелям узла, едут вместе с ним."""
     groups: list[dict[str, Any]] = []
+    holes = holes or []
     box_types = ("drawer_bottom", "drawer_side_left", "drawer_side_right", "drawer_back")
+
+    def _own_holes(panel_idxs: list[int]) -> list[int]:
+        names = {str(panels[i].get("name")) for i in panel_idxs}
+        return [k for k, h in enumerate(holes) if str(h.get("panel")) in names]
 
     for d in project.get("drawers", []):
         pos, dim = d.get("position") or {}, d.get("dimensions") or {}
@@ -118,24 +129,36 @@ def _openables(project: dict[str, Any], panels: list[dict[str, Any]],
                 facade = i
         if facade is None:
             continue
+        fname = str(panels[facade].get("name"))
         hw = [j for j, h in enumerate(hardware)
-              if h["kind"] == "guide_drawer" and str(d.get("id")) in str(h.get("name"))]
+              if (h["kind"] == "guide_drawer" and str(d.get("id")) in str(h.get("name")))
+              or (h["kind"] == "handle" and str(h.get("name", "")).startswith(fname))]
+        gpanels = sorted(set(idxs + [facade]))
         groups.append({"kind": "drawer", "id": str(d.get("id")),
-                       "panels": sorted(set(idxs + [facade])), "hardware": hw,
+                       "panels": gpanels, "hardware": hw, "holes": _own_holes(gpanels),
                        "travel": round(min(float(dim["depth"]) * 0.75, 380), 1)})
 
+    from .hardware import door_hinge_side
+    model_w = max((q["x2"] for q in panels), default=0)
     for i, p in enumerate(panels):
         if p["type"] != "door_front":
             continue
-        nm = str(p.get("name") or "").lower()
-        hinge = "right" if "прав" in nm else "left"
-        hx = p["x1"] if hinge == "left" else p["x2"]
+        # сторона петель — общий хелпер (положение секции/swing), AKD-223/224
+        hinge = door_hinge_side(
+            {"name": p.get("name"), "swing": p.get("swing"),
+             "placement": {"x1": p["x1"], "x2": p["x2"]}}, model_w)
         hw = [j for j, h in enumerate(hardware)
-              if h["kind"] == "hinge_cup" and str(p.get("name")) in str(h.get("name"))]
-        groups.append({"kind": "door", "id": str(p.get("name") or f"door{i}"),
-                       "panels": [i], "hardware": hw, "hinge": hinge,
-                       "ax": p["x1"] if hinge == "left" else p["x2"],
-                       "az": max(p["z1"], p["z2"]), "swing": 100})
+              if h["kind"] in ("hinge_cup", "handle")
+              and str(h.get("name", "")).startswith(str(p.get("name")))]
+        g = {"kind": "door", "id": str(p.get("name") or f"door{i}"),
+             "panels": [i], "hardware": hw, "holes": _own_holes([i]),
+             "hinge": hinge, "az": max(p["z1"], p["z2"]), "swing": 100}
+        if hinge in ("up", "down"):                    # откидная: ось X по кромке
+            g["ay"] = p["y2"] if hinge == "up" else p["y1"]
+            g["ax"] = 0
+        else:
+            g["ax"] = p["x1"] if hinge == "left" else p["x2"]
+        groups.append(g)
     return groups
 
 
@@ -156,7 +179,8 @@ def viewer_payload(project: dict[str, Any], *, include_holes: bool = True) -> di
     holes = _holes(project) if include_holes else []
     hardware = _hardware(project)
     return {"panels": panels, "colors": _palette(project), "holes": holes,
-            "hardware": hardware, "openables": _openables(project, panels, hardware)}
+            "hardware": hardware,
+            "openables": _openables(project, panels, hardware, holes)}
 
 
 def _esc(s: str) -> str:
@@ -171,7 +195,11 @@ SCENE_JS = r"""
 function MebelScene(container){
   const scene=new THREE.Scene(); scene.background=new THREE.Color(0xeceff3);
   const FOV=42;
-  const camera=new THREE.PerspectiveCamera(FOV,1,1,100000);
+  // две камеры: перспектива (по умолчанию) и ортографическая — для аксонометрии
+  // и проекций сверху/спереди/слева (setView); переключение — controls.object
+  const persp=new THREE.PerspectiveCamera(FOV,1,1,100000);
+  const ortho=new THREE.OrthographicCamera(-1,1,1,-1,-100000,100000);
+  let camera=persp, orthoR=1000;
   const renderer=new THREE.WebGLRenderer({antialias:true});
   renderer.setPixelRatio(devicePixelRatio); container.appendChild(renderer.domElement);
   const controls=new THREE.OrbitControls(camera,renderer.domElement);
@@ -186,10 +214,41 @@ function MebelScene(container){
   let dimGroup=null, dimsOn=true;                       // размерные линии (AKD-125)
 
   function size(){const w=container.clientWidth||innerWidth,h=container.clientHeight||innerHeight;
-    camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h);}
+    persp.aspect=w/h;persp.updateProjectionMatrix();
+    // орто-фрустум вписывает сферу модели по ОБЕИМ осям (узкие окна — тоже)
+    const a=w/h, oh=orthoR*Math.max(1,1/a);
+    ortho.left=-oh*a;ortho.right=oh*a;ortho.top=oh;ortho.bottom=-oh;
+    ortho.updateProjectionMatrix();
+    renderer.setSize(w,h);}
   addEventListener('resize',size);
 
-  function edge(mesh,color){const e=new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry),
+  // --- ракурсы: аксонометрия/перспектива/сверху/спереди/слева ---
+  let curView='persp', MW=0, MH=0, MD=0;
+  function setView(name){
+    curView=name;
+    const c=new THREE.Vector3(MW/2,MH/2,MD/2);
+    const sphere=0.5*Math.sqrt(MW*MW+MH*MH+MD*MD)||600;
+    if(name==='persp'){
+      camera=persp;
+      const vfov=FOV*Math.PI/180;
+      const hfov=2*Math.atan(Math.tan(vfov/2)*(container.clientWidth||innerWidth)/(container.clientHeight||innerHeight));
+      const dist=sphere/Math.sin(Math.min(vfov,hfov)/2)*1.12;
+      camera.position.copy(c).add(new THREE.Vector3(0.62,0.42,0.92).normalize().multiplyScalar(dist));
+    }else{
+      camera=ortho; orthoR=sphere*1.12; ortho.zoom=1;
+      // сцена: +Z — фронт модели, +X — вправо (вид спереди), поэтому
+      // «слева» — камера в -X; сверху/спереди — с лёгким сдвигом от вырожденной оси
+      // top: микросдвиг к фронту (+Z), чтобы вид сверху не крутился по азимуту
+      const dirs={axon:[1,0.72,1],top:[0,1,0.001],front:[0,0.001,1],left:[-1,0.001,0]};
+      const d=new THREE.Vector3(...(dirs[name]||dirs.axon)).normalize().multiplyScalar(sphere*4);
+      camera.position.copy(c).add(d);
+    }
+    camera.up.set(0,1,0);
+    size();
+    controls.object=camera; controls.target.copy(c); controls.update();
+  }
+
+  function edge(mesh,color,th){const e=new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry,th||1),
       new THREE.LineBasicMaterial({color:color||0x5a4326}));
     e.position.copy(mesh.position); e.rotation.copy(mesh.rotation); return e;}
 
@@ -416,22 +475,32 @@ function MebelScene(container){
     // левосторонняя БАЗИС → правосторонняя three.js, угол модели в (0,0,0)
     const TX=x=>x-bb.x0, TY=y=>y-bb.y0, TZ=z=>bb.z1 - z;
 
-    // владельцы: панель/фурнитура → индекс открывающегося узла
-    const ownP={}, ownH={};
+    // владельцы: панель/фурнитура/присадка → индекс открывающегося узла
+    const ownP={}, ownH={}, ownHole={};
     OPEN.forEach((o,gi)=>{(o.panels||[]).forEach(i=>ownP[i]=gi);
-                          (o.hardware||[]).forEach(j=>ownH[j]=gi);});
+                          (o.hardware||[]).forEach(j=>ownH[j]=gi);
+                          (o.holes||[]).forEach(k=>ownHole[k]=gi);});
     // группы-узлы: ящик — трансляция по Z; дверь — поворот вокруг оси петель
+    // (вертикальной left/right или горизонтальной up/down — AKD-224)
     OPEN.forEach(o=>{
       const node=new THREE.Group();
-      if(o.kind==='door'){node.position.set(TX(o.ax),0,TZ(o.az));}
+      const vert=(o.hinge==='up'||o.hinge==='down');
+      if(o.kind==='door'){
+        if(vert) node.position.set(0,TY(o.ay||0),TZ(o.az));
+        else     node.position.set(TX(o.ax),0,TZ(o.az));
+      }
       world.add(node);
-      groups.push({node,kind:o.kind,travel:o.travel||300,
-                   sign:(o.hinge==='right')?1:-1,swing:(o.swing||100)*Math.PI/180,
-                   t:0,target:0,pivot:{x:TX(o.ax||0),z:TZ(o.az||0)}});
+      groups.push({node,kind:o.kind,travel:o.travel||300,axis:vert?'x':'y',
+                   sign:(o.hinge==='right'||o.hinge==='down')?1:-1,
+                   swing:(o.swing||100)*Math.PI/180,
+                   t:0,target:0,
+                   pivot:{x:TX(o.ax||0),y:TY(o.ay||0),z:TZ(o.az||0),vert}});
     });
     const holder=gi=>gi===undefined?world:groups[gi].node;
     const place=(m,gi)=>{ if(gi!==undefined&&groups[gi].kind==='door'){
-        m.position.x-=groups[gi].pivot.x; m.position.z-=groups[gi].pivot.z;} };
+        const pv=groups[gi].pivot;
+        if(pv.vert){m.position.y-=pv.y; m.position.z-=pv.z;}
+        else{m.position.x-=pv.x; m.position.z-=pv.z;}} };
 
     PANELS.forEach((p,i)=>{
       const gi=ownP[i];
@@ -439,7 +508,11 @@ function MebelScene(container){
       const col=new THREE.Color(COLORS[p.type]||COLORS._default||'#c9a06a'); col.offsetHSL(0,0,((i%5)-2)*0.009);
       const mat=new THREE.MeshLambertMaterial({color:col,side:THREE.DoubleSide});
       panelMats.push(mat);
-      const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);
+      // круглые детали (столешница/пьедестал round_table) — цилиндры, не боксы
+      const geo=(p.shape==='circle'||p.shape==='cylinder')
+        ? new THREE.CylinderGeometry(p.radius||Math.max(w,d)/2, p.radius||Math.max(w,d)/2, h, 48)
+        : new THREE.BoxGeometry(w,h,d);
+      const mesh=new THREE.Mesh(geo,mat);
       mesh.position.set(TX((p.x1+p.x2)/2),TY((p.y1+p.y2)/2),TZ((p.z1+p.z2)/2));
       if(gi!==undefined) mesh.userData.gi=gi;
       mesh.userData.pi=i; panelMeshes[i]=mesh;
@@ -450,7 +523,8 @@ function MebelScene(container){
       mesh.userData.longDim=Math.max(w,h,d);
       applyTexture(mesh);
       place(mesh,gi); holder(gi).add(mesh);
-      const e=edge(mesh,COLORS._edge); holder(gi).add(e);
+      // у цилиндров порог 15° — иначе EdgesGeometry рисует «клетку» из образующих
+      const e=edge(mesh,COLORS._edge,p.shape?15:1); holder(gi).add(e);
       mesh.userData.edgeObj=e;
       mesh.userData.basePos=mesh.position.clone();
     });
@@ -460,13 +534,25 @@ function MebelScene(container){
       const tmp=new THREE.Group();
       buildHw(h,TX,TY,TZ,tmp,gi);
       tmp.children.forEach(m=>{ if(gi!==undefined&&groups[gi].kind==='door'){
-          m.position.x-=groups[gi].pivot.x; m.position.z-=groups[gi].pivot.z;} });
+          const pv=groups[gi].pivot;
+          if(pv.vert){m.position.y-=pv.y; m.position.z-=pv.z;}
+          else{m.position.x-=pv.x; m.position.z-=pv.z;}} });
       while(tmp.children.length) holder(gi).add(tmp.children[0]);
     });
     holeGroup=new THREE.Group();
-    HOLES.forEach(hp=>{
+    HOLES.forEach((hp,k)=>{
       const g=fastenerGroup(hp);                  // отверстие с глубиной + метиз
-      g.position.set(TX(hp.x),TY(hp.y),TZ(hp.z)); holeGroup.add(g);});
+      g.position.set(TX(hp.x),TY(hp.y),TZ(hp.z));
+      g.userData.holepart=1;
+      const gi=ownHole[k];                        // присадки узла едут с ним (AKD-189)
+      if(gi!==undefined){
+        if(groups[gi].kind==='door'){
+          const pv=groups[gi].pivot;
+          if(pv.vert){g.position.y-=pv.y; g.position.z-=pv.z;}
+          else{g.position.x-=pv.x; g.position.z-=pv.z;}
+        }
+        groups[gi].node.add(g);
+      } else holeGroup.add(g);});
     world.add(holeGroup);
     world.add(new THREE.AxesHelper(R*1.08));
     dimGroup=buildDims(W,H,D,R); world.add(dimGroup);
@@ -479,15 +565,8 @@ function MebelScene(container){
       new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthWrite:false}));
     sh.rotation.x=-Math.PI/2; sh.position.set(W/2,0.5,D/2); world.add(sh);
     api.setHw(hwVisible);
-    if(!fitted||opts.refit){
-      size();
-      const c=new THREE.Vector3(W/2,H/2,D/2);
-      const sphere=0.5*Math.sqrt(W*W+H*H+D*D), vfov=FOV*Math.PI/180;
-      const hfov=2*Math.atan(Math.tan(vfov/2)*(container.clientWidth||innerWidth)/(container.clientHeight||innerHeight));
-      const dist=sphere/Math.sin(Math.min(vfov,hfov)/2)*1.12;
-      const dir=new THREE.Vector3(0.62,0.42,0.92).normalize().multiplyScalar(dist);
-      camera.position.copy(c).add(dir); controls.target.copy(c); controls.update(); fitted=true;
-    }
+    MW=W; MH=H; MD=D;
+    if(!fitted||opts.refit){ setView(curView); fitted=true; }
   }
 
   // клик по узлу — открыть/закрыть (отличаем от вращения по сдвигу мыши)
@@ -620,6 +699,7 @@ function MebelScene(container){
       g.t+=(g.target-g.t)*0.14;
       if(Math.abs(g.target-g.t)<0.002) g.t=g.target;
       if(g.kind==='drawer'){g.node.position.z=g.t*g.travel;}
+      else if(g.axis==='x'){g.node.rotation.x=g.sign*g.t*g.swing;}
       else{g.node.rotation.y=g.sign*g.t*g.swing;}
     });
     controls.update(); renderer.render(scene,camera);
@@ -628,7 +708,17 @@ function MebelScene(container){
   const api={
     setPayload,
     setXray(on){panelMats.forEach(m=>{m.transparent=on;m.opacity=on?0.2:1;m.depthWrite=!on;m.needsUpdate=true;});},
-    setHoles(on){if(holeGroup)holeGroup.visible=on;},
+    setHoles(on){if(holeGroup)holeGroup.visible=on;
+      world&&world.traverse(o=>{ if(o.userData&&o.userData.holepart) o.visible=on; });},
+    snapshot(w){ // миниатюра для каталога (AKD-217): рендер + даунскейл
+      try{
+        renderer.render(scene,camera);              // свежий кадр в буфере
+        const src=renderer.domElement, W=w||320, H=Math.round(W*src.height/src.width);
+        const cv=document.createElement('canvas'); cv.width=W; cv.height=H;
+        cv.getContext('2d').drawImage(src,0,0,W,H);
+        return cv.toDataURL('image/png');
+      }catch(e){return null;}
+    },
     setHw(on){hwVisible=on;
       world&&world.traverse(o=>{ if(o.userData&&o.userData.hwpart) o.visible=on; });},
     openAll(){groups.forEach(g=>g.target=1);},
@@ -640,6 +730,7 @@ function MebelScene(container){
     setTextures(on){texOn=on; panelMeshes.forEach(m=>m&&applyTexture(m));},
     setDims(on){dimsOn=on; if(dimGroup) dimGroup.visible=on;},
     setExplode,
+    setView,                           // 'axon'|'persp'|'top'|'front'|'left'
     resize:size,
   };
   size();
@@ -670,6 +761,13 @@ _TEMPLATE = r"""<!DOCTYPE html>
   <label><input type="checkbox" id="toggleHoles" checked> показывать присадки</label><br>
   <label><input type="checkbox" id="toggleHw" checked> фурнитура (направляющие, петли)</label><br>
   <label><input type="checkbox" id="toggleXray"> прозрачный режим (механизмы внутри)</label><br>
+  <div style="margin-top:6px">Вид:
+    <button class="vw" data-view="axon" title="аксонометрия (без перспективы)">аксон</button>
+    <button class="vw" data-view="persp" title="перспектива ¾">персп</button>
+    <button class="vw" data-view="top">сверху</button>
+    <button class="vw" data-view="front">спереди</button>
+    <button class="vw" data-view="left">слева</button>
+  </div>
   <button id="btnOpen" style="margin-top:6px">Открыть всё</button>
   <button id="btnClose">Закрыть всё</button>
 </div>
@@ -689,4 +787,6 @@ document.getElementById('toggleHw').addEventListener('change',e=>scene3d.setHw(e
 document.getElementById('toggleXray').addEventListener('change',e=>scene3d.setXray(e.target.checked));
 document.getElementById('btnOpen').addEventListener('click',()=>scene3d.openAll());
 document.getElementById('btnClose').addEventListener('click',()=>scene3d.closeAll());
+document.querySelectorAll('#info .vw').forEach(b=>
+  b.addEventListener('click',()=>scene3d.setView(b.dataset.view)));
 </script></body></html>"""

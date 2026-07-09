@@ -59,7 +59,8 @@ def panel(
 def carcass(W: float, D: float, H: float, T: float, T_back: float, Hleg: float, mat: str, mat_back: str,
             *, leg_as_panel: bool = False, leg_type: str = "", z_front: float = 0,
             top_z: tuple[float, float] | None = None, socle_full: bool = False,
-            socle_recess: float = 50) -> list[dict[str, Any]]:
+            socle_recess: float = 50, sides_over_top: bool = False,
+            t_top: float = 0) -> list[dict[str, Any]]:
     """Короб top_bottom_over_sides: дно, крышка, боковины, задник (+ опц. цоколь-панель).
 
     z_front — фронтальный инсет дна/боковин/задника (по умолчанию 0, заподлицо).
@@ -67,14 +68,21 @@ def carcass(W: float, D: float, H: float, T: float, T_back: float, Hleg: float, 
     socle_full — цоколь на всю ширину (для tv-тумб).
     socle_recess — утопление цоколя от фронта (AKD-180): фасады выступают
     перед корпусом, цоколь заподлицо читался «ступенькой»; 0 = заподлицо.
+    sides_over_top — схема стыка ВЕРХА (AKD-226): боковины идут до самого
+    верха (H) и перекрывают крышку, крышка — в проём между ними.
+    t_top — толщина крышки, если отличается от плиты (AKD-218): «корпус 16,
+    крышка МДФ 25» из реальных ТЗ; 0 → равна T.
     """
-    yb, yt = Hleg + T, H - T
+    tt = t_top or T
+    yb, yt = Hleg + T, H - tt
     tz = top_z if top_z is not None else (z_front, D)
+    side_y2 = H if sides_over_top else yt
+    top_x = (T, W - T) if sides_over_top else (0, W)
     out = [
         panel("Дно", "bottom", "horizont", (0, W), (Hleg, Hleg + T), (z_front, D), thickness=T, material=mat),
-        panel("Крышка", "top", "horizont", (0, W), (H - T, H), tz, thickness=T, material=mat),
-        panel("Боковина левая", "side_left", "vertical", (0, T), (yb, yt), (z_front, D), thickness=T, material=mat),
-        panel("Боковина правая", "side_right", "vertical", (W - T, W), (yb, yt), (z_front, D), thickness=T, material=mat),
+        panel("Крышка", "top", "horizont", top_x, (H - tt, H), tz, thickness=tt, material=mat),
+        panel("Боковина левая", "side_left", "vertical", (0, T), (yb, side_y2), (z_front, D), thickness=T, material=mat),
+        panel("Боковина правая", "side_right", "vertical", (W - T, W), (yb, side_y2), (z_front, D), thickness=T, material=mat),
         panel("Задняя стенка", "back", "front", (T, W - T), (yb, yt), (D - T_back, D), thickness=T_back, material=mat_back),
     ]
     if Hleg > 0 and leg_as_panel:
@@ -168,8 +176,9 @@ def build_project(spec: dict[str, Any], panels: list[dict[str, Any]], *,
             "color": m.get("color", "по согласованию"),
             "color_code": m.get("color_code", ""),
             # Привязка к производственной базе + отдельный декор фасадов (опц.)
-            **{k: m[k] for k in ("board_article", "facade_color",
-                                 "facade_color_code", "facade_article") if m.get(k)},
+            **{k: m[k] for k in ("board_article", "facade_color", "facade_color_code",
+                                 "facade_article", "top_thickness", "texture_direction")
+               if m.get(k)},
         },
         "sections": sections or [],
         "panels": panels,

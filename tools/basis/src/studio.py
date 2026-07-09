@@ -1,4 +1,4 @@
-"""BAZIS Studio: локальный редактор-предпросмотр единицы мебели (AKD-94…97).
+"""Akeda Studio (ранее BAZIS Studio): редактор-предпросмотр единицы мебели (AKD-94…97).
 
 Идея: «функционал БАЗИСа, который нам нужен» уже реализован в конвейере на Python
 (генераторы, материалы, присадки, фурнитура, проверки). Studio отдаёт его в наш
@@ -143,6 +143,154 @@ def techview_svg(spec: dict[str, Any], panel: str | None = None) -> dict[str, An
         return {"svg": "", "issues": [str(e)]}
 
 
+# ------------------------------------------------------------------ аксонометрия для карточек каталога
+
+def _shade(hexcol: str, k: float) -> str:
+    """Осветлить (k>0) / затемнить (k<0) цвет #rrggbb — грани аксонометрии."""
+    h = (hexcol or "#c9a06a").lstrip("#")
+    if len(h) != 6:
+        h = "c9a06a"
+    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+    if k >= 0:
+        r, g, b = (round(c + (255 - c) * k) for c in (r, g, b))
+    else:
+        r, g, b = (round(c * (1 + k)) for c in (r, g, b))
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def _axon_svg(spec: dict[str, Any]) -> str | None:
+    """Изометрическая проекция изделия в SVG — превью карточки каталога (AKD-217).
+
+    Камера как в 3D по умолчанию: фронт + верх + правый бок; painter-сортировка
+    панелей по глубине. Ошибки не бросают — None (карточка покажет заглушку).
+    """
+    try:
+        from .generators import generate_from_paramspec
+        from .webviewer import _hardware, _palette, _panels
+        project = generate_from_paramspec(spec)
+        panels = _panels(project)
+        colors = _palette(project)
+        # тела фурнитуры (металлокаркас, опоры, ручки) — иначе стол «висит в воздухе»
+        for hw in _hardware(project):
+            panels.append({"type": "_hw", "color": hw.get("color") or "#8f969e",
+                           "x1": hw["x1"], "x2": hw["x2"], "y1": hw["y1"],
+                           "y2": hw["y2"], "z1": hw["z1"], "z2": hw["z2"]})
+    except Exception:
+        return None
+    if not panels:
+        return None
+    zmax = max(p["z2"] for p in panels)
+    C, S = 0.866, 0.5                     # изометрия: cos30 / sin30
+    RX, RY = C * 1.41421356, S * 1.41421356   # круг в плане → эллипс rx=1.22r, ry=0.71r
+
+    def pt(x: float, y: float, z: float) -> tuple[float, float]:
+        # z уже в показных координатах (фронт → большие z); Y экрана вниз
+        return (x - z) * C, (x + z) * S - y
+
+    boxes = []
+    for p in panels:
+        x1, x2, y1, y2 = p["x1"], p["x2"], p["y1"], p["y2"]
+        z1, z2 = zmax - p["z2"], zmax - p["z1"]     # БАЗИС → фронт модели в +Z
+        depth = x1 + x2 + y1 + y2 + z1 + z2         # ~2×центр вдоль луча (1,1,1)
+        boxes.append((depth, p, x1, x2, y1, y2, z1, z2))
+    boxes.sort(key=lambda b: b[0])                  # дальние — первыми
+
+    base_col = colors.get("_default", "#c9a06a")
+    edge = colors.get("_edge", "#5a4326")
+    span = max(max(p["x2"] for p in panels), max(p["y2"] for p in panels), zmax, 1)
+    sw = round(span * 0.004, 2)                     # толщина контура ∝ габариту
+    xs: list[float] = []
+    ys: list[float] = []
+    polys: list[str] = []
+
+    def emit(tag: str, pts_flat: list[tuple[float, float]]) -> None:
+        xs.extend(px for px, _ in pts_flat); ys.extend(py for _, py in pts_flat)
+        polys.append(tag)
+
+    # тень-подложка на полу (y=0) — модель «стоит», а не висит на белом
+    gx0 = min(b[2] for b in boxes); gx1 = max(b[3] for b in boxes)
+    gz0 = min(b[6] for b in boxes); gz1 = max(b[7] for b in boxes)
+    gm = span * 0.04
+    sh = [pt(x, 0, z) for x, z in ((gx0 - gm, gz0 - gm), (gx1 + gm, gz0 - gm),
+                                   (gx1 + gm, gz1 + gm), (gx0 - gm, gz1 + gm))]
+    emit('<polygon points="' + " ".join(f"{px:.1f},{py:.1f}" for px, py in sh)
+         + '" fill="#000" fill-opacity="0.07"/>', sh)
+
+    for _, p, x1, x2, y1, y2, z1, z2 in boxes:
+        col = p.get("color") or colors.get(p["type"], base_col)
+        if p.get("shape") in ("circle", "cylinder"):
+            # круглые детали (round_table): цилиндр = низ-эллипс + тело + верх-эллипс
+            r = float(p.get("radius") or (x2 - x1) / 2)
+            cx, cz = (x1 + x2) / 2, (z1 + z2) / 2
+            ecx, ety = pt(cx, y2, cz)
+            _, eby = pt(cx, y1, cz)
+            rx, ry = r * RX, r * RY
+            side = _shade(col, -0.12)
+            emit(f'<ellipse cx="{ecx:.1f}" cy="{eby:.1f}" rx="{rx:.1f}" ry="{ry:.1f}" '
+                 f'fill="{side}" stroke="{edge}" stroke-width="{sw}"/>',
+                 [(ecx - rx, eby - ry), (ecx + rx, eby + ry)])
+            if eby - ety > 0.5:                     # тело, если есть высота
+                emit(f'<rect x="{ecx - rx:.1f}" y="{ety:.1f}" width="{2 * rx:.1f}" '
+                     f'height="{eby - ety:.1f}" fill="{side}"/>',
+                     [(ecx - rx, ety), (ecx + rx, eby)])
+                for lx in (ecx - rx, ecx + rx):     # образующие
+                    emit(f'<line x1="{lx:.1f}" y1="{ety:.1f}" x2="{lx:.1f}" y2="{eby:.1f}" '
+                         f'stroke="{edge}" stroke-width="{sw}"/>', [(lx, ety)])
+            emit(f'<ellipse cx="{ecx:.1f}" cy="{ety:.1f}" rx="{rx:.1f}" ry="{ry:.1f}" '
+                 f'fill="{_shade(col, 0.18)}" stroke="{edge}" stroke-width="{sw}"/>',
+                 [(ecx - rx, ety - ry), (ecx + rx, ety + ry)])
+            continue
+        faces = (
+            # верх (y2) — светлее, фронт (z2) — базовый, правый бок (x2) — темнее
+            (((x1, y2, z1), (x2, y2, z1), (x2, y2, z2), (x1, y2, z2)), _shade(col, 0.18)),
+            (((x1, y1, z2), (x2, y1, z2), (x2, y2, z2), (x1, y2, z2)), col),
+            (((x2, y1, z2), (x2, y1, z1), (x2, y2, z1), (x2, y2, z2)), _shade(col, -0.22)),
+        )
+        for corners, fill in faces:
+            pp = [pt(*c) for c in corners]
+            emit('<polygon points="' + " ".join(f"{px:.1f},{py:.1f}" for px, py in pp)
+                 + f'" fill="{fill}" stroke="{edge}" stroke-width="{sw}" '
+                 'stroke-linejoin="round"/>', pp)
+    m = span * 0.03                                 # поля вокруг изделия
+    x0, y0 = min(xs) - m, min(ys) - m
+    w, h = max(xs) - x0 + m, max(ys) - y0 + m
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" '
+            f'viewBox="{x0:.1f} {y0:.1f} {w:.1f} {h:.1f}">{"".join(polys)}</svg>')
+
+
+_AXON_VERSION = 3      # менять при правке _axon_svg — инвалидирует кэш миниатюр
+
+
+def _thumb_svg_cached(spec_dir: Path, fname: str) -> bytes | None:
+    """SVG-превью по имени спеки; кэш в .previews, инвалидация по mtime спеки."""
+    src = _safe_spec_file(spec_dir, fname)
+    if not src.is_file():
+        return None
+    pd = spec_dir / ".previews"
+    cache = pd / f"{src.stem}.axon{_AXON_VERSION}.svg"
+    try:
+        if cache.is_file() and cache.stat().st_mtime >= src.stat().st_mtime:
+            return cache.read_bytes()
+    except OSError:
+        pass
+    try:
+        spec = json.loads(src.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(spec, dict) or spec.get("draft"):
+        return None
+    svg = _axon_svg(spec)
+    if not svg:
+        return None
+    data = svg.encode("utf-8")
+    try:
+        pd.mkdir(exist_ok=True)
+        cache.write_bytes(data)
+    except OSError:
+        pass
+    return data
+
+
 # ------------------------------------------------------------------ каталог проектов (D1)
 
 def _slugify(name: str) -> str:
@@ -163,11 +311,20 @@ def _list_projects(spec_dir: Path) -> list[dict[str, Any]]:
         if not isinstance(s, dict) or s.get("schemaVersion") != "paramspec-v1":
             continue
         d = s.get("dimensions", {})
+        has_prev = (spec_dir / ".previews" / (f.stem + ".png")).is_file()
+        if s.get("draft"):                            # черновик (AKD-214)
+            out.append({"file": f.name, "name": s.get("project_name", f.stem),
+                        "archetype": "черновик", "dims": "—", "decor": "",
+                        "draft": True, "preview": False,
+                        "ftype": s.get("furniture_type", "")})
+            continue
         out.append({"file": f.name,
                     "name": s.get("project_name", f.stem),
                     "archetype": s.get("archetype", "?"),
                     "dims": f'{d.get("width", "?")}×{d.get("depth", "?")}×{d.get("height", "?")}',
-                    "decor": (s.get("materials") or {}).get("color", "")})
+                    "decor": (s.get("materials") or {}).get("color", ""),
+                    "preview": has_prev,
+                    "ftype": s.get("furniture_type", "")})
     return out
 
 
@@ -341,6 +498,26 @@ def make_handler(st: _Studio):
                         .replace("__SPEC__", json.dumps(st.spec, ensure_ascii=False)
                                  .replace("</", "<\\/")))
                 self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
+            elif self.path.startswith("/thumb/"):     # аксонометрия карточки (AKD-217)
+                from urllib.parse import unquote
+                try:
+                    data = _thumb_svg_cached(st.spec_path.parent,
+                                             unquote(self.path[len("/thumb/"):]))
+                except Exception:
+                    data = None
+                if data:
+                    self._send(200, data, "image/svg+xml; charset=utf-8")
+                else:
+                    self._send(404, b"{}")
+            elif self.path.startswith("/preview/"):   # миниатюры каталога (AKD-217)
+                from urllib.parse import unquote
+                name = unquote(self.path[len("/preview/"):])
+                p = (st.spec_path.parent / ".previews" / name).resolve()
+                if (p.parent == (st.spec_path.parent / ".previews").resolve()
+                        and p.suffix == ".png" and p.is_file()):
+                    self._send(200, p.read_bytes(), "image/png")
+                else:
+                    self._send(404, b"{}")
             else:
                 self._send(404, b"{}")
 
@@ -354,37 +531,80 @@ def make_handler(st: _Studio):
                     self._json(techview_svg(spec, body.get("panel")))
                 elif self.path == "/api/chat":
                     from .spec_chat import chat_edit
+                    ctx = body.get("context") or None
+                    # ИИ не знает содержимого производственной базы: для
+                    # нерешённых слотов даём РЕАЛЬНЫХ кандидатов (иначе модель
+                    # выдумывает артикулы и «починка базы» не работает)
+                    if isinstance(ctx, dict) and isinstance(ctx.get("base_unresolved"), list):
+                        try:
+                            from .materials import list_sheet_decors, search_base
+                            queries = {"handles": "ручка", "hinges": "петля наклад",
+                                       "drawer_guides": "направляющ", "guides": "направляющ",
+                                       "legs": "опора", "locks": "замок", "edge": "кромка"}
+                            cand: dict[str, Any] = {}
+                            _th = ((spec or {}).get("materials") or {}).get("board_thickness")
+                            for slot in ctx["base_unresolved"][:6]:
+                                if slot in ("board", "facade", "back"):
+                                    # только листы нужной толщины — иначе ИИ
+                                    # выберет 3-мм ХДФ для корпуса 16
+                                    items = list_sheet_decors(
+                                        "", thickness=float(_th) if _th and slot != "back" else None,
+                                        limit=5)
+                                    cand[slot] = [{"name": i.get("name"),
+                                                   "article": i.get("article")} for i in items]
+                                elif slot in queries:
+                                    items = search_base(queries[slot], limit=4)
+                                    cand[slot] = [{"name": i.get("name"),
+                                                   "article": i.get("article")} for i in items]
+                            if cand:
+                                ctx["base_candidates"] = cand
+                        except Exception:
+                            pass
                     self._json(chat_edit(spec, str(body.get("message", "")),
                                          body.get("history") or [],
-                                         body.get("context") or None))
-                elif self.path == "/api/import-tz":   # drag&drop ТЗ (D4)
-                    import base64
-                    import os
-                    import tempfile
-                    if not os.environ.get("OPENAI_API_KEY"):
-                        self._json({"ok": False, "error":
-                                    "Для распознавания ТЗ нужен OPENAI_API_KEY "
-                                    "в tools/basis/.env (сейчас пустой)."})
-                        return
+                                         ctx,
+                                         body.get("images") or None,
+                                         body.get("provider") or None))
+                elif self.path == "/api/providers":       # список нейросетей для селектора
+                    from .spec_chat import available_providers
+                    self._json(available_providers())
+                elif self.path == "/api/token-balance":   # лимиты/баланс выбранной сети
+                    from .spec_chat import token_balance
+                    self._json(token_balance(body.get("provider") or None))
+                elif self.path == "/api/import-tz":   # drag&drop ТЗ (D4) → провайдер чата
                     try:
-                        raw = base64.b64decode(str(body.get("data", "")))
-                        suffix = "." + str(body.get("name", "tz.png")).rsplit(".", 1)[-1]
-                        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
-                            f.write(raw)
-                            tmp = Path(f.name)
-                        from .converter import FurnitureConverter
-                        new_spec = FurnitureConverter().convert_paramspec(tmp)
-                        tmp.unlink(missing_ok=True)
-                        name = new_spec.get("project_name", "Из ТЗ")
-                        out = st.spec_path.parent / f"{_slugify(name)}.json"
-                        i = 2
-                        while out.exists():
-                            out = st.spec_path.parent / f"{_slugify(name)}_{i}.json"
-                            i += 1
+                        from .spec_chat import chat_edit
+                        name = str(body.get("name", "tz.png"))
+                        ext = name.rsplit(".", 1)[-1].lower()
+                        mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+                                "webp": "image/webp", "gif": "image/gif"}.get(ext, "image/png")
+                        # пустой базовый спек — иначе модель якорится на текущее
+                        # изделие и копирует его секции вместо чистой сборки по ТЗ
+                        res = chat_edit({},
+                                        "Собери ParamSpec ТОЛЬКО по этому ТЗ (фото/скан): "
+                                        "определи тип изделия, габариты, секции, материал по "
+                                        "изображению. НЕ бери ничего из других изделий. created=true.",
+                                        images=[{"mime": mime, "data": str(body.get("data", ""))}],
+                                        provider=body.get("provider") or None)
+                        new_spec = res.get("spec")
+                        if not new_spec:
+                            self._json({"ok": False, "error":
+                                        res.get("reply") or "не удалось распознать ТЗ"})
+                            return
+                        if isinstance(st.spec, dict) and st.spec.get("draft"):
+                            out = st.spec_path        # ТЗ в черновик — тот же файл
+                        else:
+                            title = new_spec.get("project_name", "Из ТЗ")
+                            out = st.spec_path.parent / f"{_slugify(title)}.json"
+                            i = 2
+                            while out.exists():
+                                out = st.spec_path.parent / f"{_slugify(title)}_{i}.json"
+                                i += 1
                         out.write_text(json.dumps(new_spec, ensure_ascii=False, indent=2),
                                        encoding="utf-8")
                         st.spec, st.spec_path = new_spec, out
-                        self._json({"ok": True, "spec": new_spec, "file": out.name})
+                        self._json({"ok": True, "spec": new_spec, "file": out.name,
+                                    "usage": res.get("usage")})
                     except Exception as e:
                         self._json({"ok": False, "error": str(e)[:300]})
                 elif self.path == "/api/versions":    # версии спеки (D2)
@@ -406,10 +626,10 @@ def make_handler(st: _Studio):
                     st.spec = json.loads(p.read_text(encoding="utf-8"))
                     st.spec_path = p
                     self._json({"ok": True, "spec": st.spec, "file": p.name})
-                elif self.path == "/api/new":         # новое изделие (D1)
-                    arch = str(body.get("archetype", "cabinet"))
-                    name = str(body.get("name") or f"Новое изделие ({arch})")
-                    new_spec = _default_spec(arch, name)
+                elif self.path == "/api/new":         # новое изделие: черновик (AKD-214)
+                    name = str(body.get("name") or "Новое изделие")
+                    new_spec = {"schemaVersion": "paramspec-v1", "draft": True,
+                                "project_name": name}
                     p = st.spec_path.parent / f"{_slugify(name)}.json"
                     i = 2
                     while p.exists():
@@ -449,6 +669,19 @@ def make_handler(st: _Studio):
                     st.spec = spec
                     st.spec_path.write_text(json.dumps(spec, ensure_ascii=False, indent=2),
                                             encoding="utf-8")
+                    prev = body.get("preview")         # снапшот 3D для каталога (AKD-217)
+                    if isinstance(prev, str) and prev.startswith("data:image/png;base64,"):
+                        try:
+                            import base64
+                            pd = st.spec_path.parent / ".previews"
+                            pd.mkdir(exist_ok=True)
+                            (pd / (st.spec_path.stem + ".png")).write_bytes(
+                                base64.b64decode(prev.split(",", 1)[1]))
+                        except Exception:
+                            pass
+                    if spec.get("draft"):              # черновик: только файл, без модели
+                        self._json({"ok": True, "spec": str(st.spec_path), "project": None})
+                        return
                     _snapshot_version(st.spec_path, spec)          # версия (D2)
                     from .generators import generate_from_paramspec
                     project = generate_from_paramspec(spec)
@@ -520,7 +753,7 @@ def run_studio(spec_path: str | Path, *, port: int = 8765, out_dir: str | Path |
     st = _Studio(spec_path, out)
     srv = ThreadingHTTPServer(("127.0.0.1", port), make_handler(st))
     url = f"http://127.0.0.1:{port}/"
-    print(f"BAZIS Studio: {url}  (спека: {spec_path.name}; Ctrl+C — стоп)")
+    print(f"Akeda Studio: {url}  (спека: {spec_path.name}; Ctrl+C — стоп)")
     if open_browser:
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()
     try:
@@ -534,15 +767,28 @@ def run_studio(spec_path: str | Path, *, port: int = 8765, out_dir: str | Path |
 # ------------------------------------------------------------------ страница
 
 PAGE = r"""<!DOCTYPE html>
-<html lang="ru"><head><meta charset="utf-8"><title>BAZIS Studio — предпросмотр и правки</title>
+<html lang="ru"><head><meta charset="utf-8"><title>Akeda Studio — предпросмотр и правки</title>
 <style>
   :root{--ink:#1a1d21;--mut:#6b7280;--line:#dfe3e8;--bg:#f4f6f8;--card:#fff;
         --ok:#2fa84f;--bad:#e5484d;--accent:#3b82f6}
   *{box-sizing:border-box} html,body{margin:0;height:100%;font-family:Segoe UI,Arial,sans-serif;
     background:var(--bg);color:var(--ink);font-size:13px;overflow:hidden}
-  #app{display:grid;grid-template-columns:340px 1fr;height:100%}
-  #side{background:var(--card);border-right:1px solid var(--line);overflow-y:auto;padding:12px}
+  /* AKD-207: 3 колонки — слева проект/чат/деталь, центр 3D, справа параметры/смета.
+     grid-column задаём явно, чтобы порядок в DOM не влиял на раскладку. */
+  #app{display:grid;grid-template-columns:340px 1fr 360px;grid-template-rows:100%;height:100%}
+  /* grid-row:1 всем — иначе #main (col2) после #rightside (col3) в DOM уходит в row2 */
+  #side{grid-column:1;grid-row:1;background:var(--card);border-right:1px solid var(--line);overflow-y:auto;padding:12px}
+  #main{grid-column:2;grid-row:1;position:relative;min-height:0}
+  #rightside{grid-column:3;grid-row:1;background:var(--card);border-left:1px solid var(--line);overflow-y:auto;padding:12px}
   #side h1{font-size:15px;margin:2px 0 10px}
+  #chatImgs{display:flex;gap:5px;flex-wrap:wrap;margin:4px 0}
+  #chatImgs .chip{position:relative}
+  #chatImgs .chip img{height:38px;border-radius:5px;border:1px solid var(--line);display:block}
+  #chatImgs .chip b{position:absolute;top:-6px;right:-6px;background:var(--bad);color:#fff;
+    width:16px;height:16px;border-radius:50%;font-size:11px;line-height:16px;text-align:center;cursor:pointer}
+  #chatMsg.drop{outline:2px dashed var(--accent);outline-offset:2px}
+  #partChatRow{display:flex;gap:5px;margin-top:8px;border-top:1px solid var(--line);padding-top:8px}
+  #partChat{flex:1;padding:4px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px}
   fieldset{border:1px solid var(--line);border-radius:8px;margin:0 0 10px;padding:8px 10px}
   legend{font-size:11px;text-transform:uppercase;color:var(--mut);padding:0 4px}
   .row{display:flex;gap:6px;align-items:center;margin:4px 0}
@@ -569,9 +815,42 @@ PAGE = r"""<!DOCTYPE html>
   #tabs button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
   #draw{position:absolute;inset:48px 12px 12px;z-index:4;background:#fff;border:1px solid var(--line);
         border-radius:8px;overflow:auto;display:none;padding:8px}
+  /* AKD-217: каталог изделий */
+  #catalog{position:absolute;inset:0;z-index:8;display:none;flex-direction:column;
+    background:var(--bg);padding:14px 18px;overflow:hidden}
+  #catalog.on{display:flex}
+  #catHead{display:flex;gap:10px;align-items:center;margin-bottom:10px}
+  #catHead input{flex:1;max-width:360px;padding:6px 10px;border:1px solid var(--line);border-radius:8px}
+  #catCats{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+  .catchip{padding:4px 12px;border:1px solid var(--line);border-radius:16px;background:#fff;
+    cursor:pointer;font-size:12px}
+  .catchip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  #catGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;
+    overflow-y:auto;padding-bottom:20px}
+  .catCard{background:var(--card);border:1px solid var(--line);border-radius:10px;
+    cursor:pointer;overflow:hidden;transition:box-shadow .15s}
+  .catCard:hover{box-shadow:0 4px 14px rgba(0,0,0,.12)}
+  .catCard .img{height:130px;background:linear-gradient(180deg,#f8fafc,#e6ebf1);
+    display:flex;align-items:center;justify-content:center;color:var(--mut);font-size:30px}
+  .catCard .img img{width:100%;height:100%;object-fit:contain;padding:6px;box-sizing:border-box}
+  .catCard .nm{padding:7px 10px 2px;font-weight:600;font-size:12.5px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .catCard .sub{padding:0 10px 8px;font-size:11px;color:var(--mut)}
+  .catCard .dr{display:inline-block;background:#c78a2b;color:#fff;border-radius:8px;
+    padding:0 6px;font-size:10px;margin-left:4px}
+  /* AKD-214: пустое рабочее пространство нового изделия */
+  #emptyState{position:absolute;inset:0;z-index:6;display:none;align-items:center;justify-content:center;background:var(--bg)}
+  #emptyState.on{display:flex}
+  #emptyState .es-box{text-align:center;border:2px dashed var(--line);border-radius:14px;
+    padding:36px 48px;background:var(--card)}
+  #emptyState .es-title{font-size:20px;color:var(--ink);margin-bottom:8px}
+  #emptyState .es-hint{font-size:13px;color:var(--mut);margin-bottom:16px;line-height:1.7}
+  #emptyState.drop .es-box{border-color:var(--accent);background:#eef4ff}
   #view3d{position:absolute;inset:0}
   #hud{position:absolute;right:12px;top:10px;z-index:5;background:rgba(255,255,255,.9);
        border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12px}
+  #views .vw{font-size:11px;padding:2px 7px}
+  #views .vw.on{background:var(--accent);border-color:var(--accent);color:#fff}
   #toast{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:9;
          background:#1a1d21;color:#fff;padding:7px 14px;border-radius:8px;font-size:12.5px;
          opacity:0;transition:opacity .25s;pointer-events:none;max-width:80%}
@@ -608,13 +887,15 @@ PAGE = r"""<!DOCTYPE html>
 </style></head><body>
 <div id="app">
 <div id="side">
-  <h1>BAZIS Studio <span class="mini">— правки до платной сборки</span></h1>
+  <h1>Akeda Studio <span class="mini">— от ТЗ до производства</span></h1>
 
   <fieldset><legend>Проект</legend>
     <div class="row"><label>Изделие</label><select id="projSel"></select></div>
     <div class="row" style="gap:6px">
       <button id="projNew">+ Новое</button>
+      <button id="projRen" title="переименовать текущее изделие">✎</button>
       <button id="projDup">Дублировать</button>
+      <button id="projCat" title="каталог всех изделий">🗂 Каталог</button>
     </div>
   </fieldset>
 
@@ -627,17 +908,28 @@ PAGE = r"""<!DOCTYPE html>
   </fieldset>
 
   <fieldset id="fs_chat"><legend>Чат с ИИ</legend>
+    <div class="row" style="gap:6px;margin-bottom:5px">
+      <label style="flex:0 0 auto;color:var(--mut)">Нейросеть</label>
+      <select id="aiProvider" style="flex:1"></select>
+    </div>
     <div id="chatlog"></div>
+    <div id="chatImgs"></div>
     <div class="row" style="gap:6px">
       <input type="text" id="chatMsg" placeholder="напр.: сделай глубину 600, цвет дуб вотан">
+      <button id="chatAttach" title="прикрепить фото/скан ТЗ">📎</button>
       <button id="chatSend" title="отправить">➤</button>
+      <input type="file" id="chatFile" accept="image/*" multiple style="display:none">
     </div>
     <div class="row" style="gap:6px;margin-top:2px">
       <button id="btnUndo" disabled>⟲ Откатить</button>
-      <span class="mini">правки применяются к модели сразу</span>
+      <button id="btnFixAll" title="ИИ чинит ошибки проверок и подбирает базу до зелёных бейджей">⚕ Починить всё</button>
+      <span class="mini">фото ТЗ: 📎, Ctrl+V</span>
     </div>
+    <div id="tokenCount" class="mini" style="margin-top:5px"></div>
   </fieldset>
+</div>
 
+<div id="rightside">
   <fieldset><legend>Габариты, мм</legend>
     <div class="row"><label>Ширина</label><input type="number" id="f_w" step="10"></div>
     <div class="row"><label>Глубина</label><input type="number" id="f_d" step="10"></div>
@@ -720,6 +1012,13 @@ PAGE = r"""<!DOCTYPE html>
     <button id="btnPrint" title="печать открытого чертежа/раскроя">⎙</button>
   </div>
   <div id="hud">
+    <div id="views" style="margin-bottom:5px">Вид:
+      <button class="vw" data-view="axon" title="аксонометрия (без перспективы)">аксон</button>
+      <button class="vw on" data-view="persp" title="перспектива ¾">персп</button>
+      <button class="vw" data-view="top" title="вид сверху">сверху</button>
+      <button class="vw" data-view="front" title="вид спереди">спереди</button>
+      <button class="vw" data-view="left" title="вид слева">слева</button>
+    </div>
     <label><input type="checkbox" id="cbHoles" checked> присадки</label>
     <label><input type="checkbox" id="cbHw" checked> фурнитура</label>
     <label><input type="checkbox" id="cbTex" checked> текстура</label>
@@ -731,6 +1030,23 @@ PAGE = r"""<!DOCTYPE html>
       <input type="range" id="explode" min="0" max="100" value="0" style="width:90px;vertical-align:middle"></label>
   </div>
   <div id="draw"></div>
+  <div id="catalog">
+    <div id="catHead">
+      <b style="font-size:16px">Каталог изделий</b>
+      <input type="text" id="catQ" placeholder="поиск по названию…">
+      <button id="catClose">✕ Закрыть</button>
+    </div>
+    <div id="catCats"></div>
+    <div id="catGrid"></div>
+  </div>
+  <div id="emptyState">
+    <div class="es-box">
+      <div class="es-title">Новое изделие</div>
+      <div class="es-hint">Перетащите сюда фото ТЗ &mdash;<br>или опишите изделие в чате слева</div>
+      <button id="esUpload" class="primary">Загрузить фото ТЗ</button>
+      <input type="file" id="esFile" accept="image/*" style="display:none">
+    </div>
+  </div>
   <div id="toast"></div>
 </div>
 </div>
@@ -743,8 +1059,9 @@ let SPEC = __SPEC__;
 const FIELDS = __FIELDS__;                 // archetype -> [{key,label,type,...}]
 const SECTION_ARCHS = __SECTION_ARCHS__;   // архетипы с секциями
 const $ = id => document.getElementById(id);
-const toast = (m,bad)=>{const t=$('toast');t.textContent=m;t.style.background=bad?'#b3261e':'#1a1d21';
-  t.style.opacity=1;clearTimeout(t._h);t._h=setTimeout(()=>t.style.opacity=0,2600);};
+const toast = (m,bad,sticky)=>{const t=$('toast');t.textContent=m;t.style.background=bad?'#b3261e':'#1a1d21';
+  t.style.opacity=1;clearTimeout(t._h);
+  if(!sticky) t._h=setTimeout(()=>t.style.opacity=0,bad?5000:2600);};
 
 /* ---------- 3D: общий движок MebelScene (как webviewer, + анимация открытия) ---------- */
 const view=$('view3d');
@@ -764,6 +1081,14 @@ $('cbXray').onchange=e=>scene3d.setXray(e.target.checked);
 $('explode').oninput=e=>scene3d.setExplode(e.target.value/100);
 $('btnOpenAll').onclick=()=>scene3d.openAll();
 $('btnCloseAll').onclick=()=>scene3d.closeAll();
+// ракурсы: аксонометрия/перспектива/сверху/спереди/слева
+document.querySelectorAll('#views .vw').forEach(b=>b.onclick=()=>{
+  scene3d.setView(b.dataset.view);
+  document.querySelectorAll('#views .vw').forEach(x=>x.classList.toggle('on',x===b));
+});
+// ручное вращение — ракурс больше не соответствует пресету, снимаем подсветку
+view.addEventListener('pointerdown',()=>
+  document.querySelectorAll('#views .vw').forEach(x=>x.classList.remove('on')));
 
 /* ---------- формы ← spec ---------- */
 function fillForm(){
@@ -917,6 +1242,7 @@ $('applyRaw').onclick=()=>{try{SPEC=JSON.parse($('rawspec').value);fillForm();ap
 let timer=null, lastOk=false;
 function schedule(){clearTimeout(timer);timer=setTimeout(apply,400);}
 async function apply(){
+  if(SPEC&&SPEC.draft){showEmpty(true);return;}    // черновик не генерируем
   const r=await fetch('/api/generate',{method:'POST',
     headers:{'Content-Type':'application/json'},body:JSON.stringify({spec:SPEC})});
   const p=await r.json(); paint(p);
@@ -1006,6 +1332,12 @@ let lastPayload=null;
 scene3d.onSelect=sel=>{
   const fs=$('fs_part'), card=$('partCard');
   document.querySelectorAll('#draw rect.sel').forEach(r=>r.classList.remove('sel'));
+  if(typeof SELECTED_PART!=='undefined'){        // контекст чата (AKD-208)
+    SELECTED_PART = sel ? sel.panel : null;
+    const cm=$('chatMsg'); if(cm) cm.placeholder = sel
+      ? `правка изделия — или напишите про «${sel.panel.name}» в карточке детали`
+      : 'напр.: сделай глубину 600, цвет дуб вотан';
+  }
   if(!sel){fs.style.display='none';card.innerHTML='';return;}
   const p=sel.panel;
   const dx=p.x2-p.x1, dy=p.y2-p.y1, dz=p.z2-p.z1;
@@ -1035,8 +1367,15 @@ scene3d.onSelect=sel=>{
     </div>
     <div class="mini" style="margin-top:4px">Shift+перетаскивание в 3D — двигать деталь.
     Правки хранятся в спеке и переживают смену габаритов; чертёж, присадки,
-    смета и .b3d пересчитываются.</div>`;
+    смета и .b3d пересчитываются.</div>
+    <div id="partChatRow">
+      <input type="text" id="partChat" placeholder="изменить эту деталь словами: «сделай глубже на 50», «удали»">
+      <button id="partChatSend" title="применить к этой детали">➤</button>
+    </div>`;
   fs.style.display='';
+  const pc=$('partChat'), pcSend=()=>{const v=pc.value.trim(); if(!v)return; pc.value=''; runChat(v);};
+  $('partChatSend').onclick=pcSend;
+  pc.addEventListener('keydown',e=>{if(e.key==='Enter')pcSend();});
   $('ovApply').onclick=()=>{
     const pl={};
     card.querySelectorAll('input[data-ov]').forEach(i=>{
@@ -1112,9 +1451,52 @@ async function loadProjects(){
 }
 function adoptSpec(p){
   SPEC=p.spec; UNDO.length=0; $('btnUndo').disabled=true;
-  scene3d.select(null); fillForm(); apply(); loadProjects(); loadBuilds();
+  const dr=!!(SPEC&&SPEC.draft);                   // черновик — пустой экран без модели
+  showEmpty(dr);
+  scene3d.select(null); fillForm();
+  if(!dr) apply();
+  loadProjects(); loadBuilds();
   toast('Открыто: '+p.file);
 }
+// пустое рабочее пространство (AKD-214): «Новое» → чистый экран с приглашением загрузить ТЗ
+let EMPTY=false;
+function showEmpty(on){
+  EMPTY=on; $('emptyState').classList.toggle('on',on);
+  if(on){                                          // чистый экран: 3D, бейджи, статистика
+    if(scene3d.setPayload) scene3d.setPayload({panels:[]});
+    ['badges','stats','errors'].forEach(id=>{const e=$(id); if(e) e.innerHTML='';});
+    const fp=$('fs_part'); if(fp) fp.style.display='none';
+  }
+}
+// распознавание фото ТЗ через FileReader — надёжно на больших файлах (AKD-214)
+let TZ_BUSY=false;
+function importTzFile(f){
+  if(!f||TZ_BUSY) return;
+  if(!/\.(png|jpe?g|webp|gif)$/i.test(f.name)){toast('Нужно изображение ТЗ (png/jpg/webp)',true);return;}
+  TZ_BUSY=true;
+  const btn=$('esUpload'), btnTxt=btn.textContent;
+  btn.disabled=true; btn.textContent='⏳ Распознаю…';
+  const hint=$('emptyState').querySelector('.es-hint'), hintHtml=hint.innerHTML;
+  hint.innerHTML='Нейросеть читает ТЗ и собирает модель.<br>Обычно 15–40 секунд…';
+  toast('⏳ Распознаю ТЗ — нейросеть читает изображение (15–40 сек)…',false,true);
+  const done=()=>{TZ_BUSY=false; btn.disabled=false; btn.textContent=btnTxt; hint.innerHTML=hintHtml;};
+  const rd=new FileReader();
+  rd.onerror=()=>{done(); toast('Не удалось прочитать файл',true);};
+  rd.onload=async()=>{
+    const s=String(rd.result), b64=s.slice(s.indexOf(',')+1);
+    try{
+      const r=await fetch('/api/import-tz',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({name:f.name,data:b64,provider:CHAT_PROVIDER})});
+      const p=await r.json();
+      done();
+      if(p.ok){adoptSpec(p); toast('✅ ТЗ распознано → '+(p.spec&&p.spec.project_name||p.file));}
+      else toast('❌ Не удалось распознать ТЗ: '+(p.error||'нет ответа нейросети'),true);
+    }catch(e){done(); toast('❌ Ошибка распознавания: '+e.message,true);}
+  };
+  rd.readAsDataURL(f);
+}
+$('esUpload').onclick=()=>$('esFile').click();
+$('esFile').onchange=e=>{importTzFile(e.target.files[0]); e.target.value='';};
 $('projSel').onchange=async e=>{
   const r=await fetch('/api/open',{method:'POST',
     headers:{'Content-Type':'application/json'},
@@ -1122,17 +1504,84 @@ $('projSel').onchange=async e=>{
   const p=await r.json();
   if(p.ok) adoptSpec(p); else toast('Ошибка: '+(p.error||''),true);
 };
-$('projNew').onclick=async()=>{
-  const arch=prompt('Архетип нового изделия:\n(desk, cabinet, wardrobe, shelving, drawer_unit, door_unit, round_table, corpus)','cabinet');
-  if(!arch) return;
-  const name=prompt('Название изделия:','Новое изделие');
+$('projNew').onclick=async()=>{   // черновик: запись в каталоге + пустой воркспейс (AKD-214)
+  const name=prompt('Название нового изделия:','Новое изделие');
   if(name===null) return;
   const r=await fetch('/api/new',{method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({archetype:arch.trim(),name})});
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
   const p=await r.json();
-  if(p.ok) adoptSpec(p); else toast('Ошибка: '+(p.error||''),true);
+  if(p.ok){adoptSpec(p); toast('Создано «'+(name||'Новое изделие')+'» — загрузите ТЗ или опишите в чате');}
+  else toast('Ошибка: '+(p.error||''),true);
 };
+$('projRen').onclick=async()=>{   // переименовать текущее изделие
+  const name=prompt('Название изделия:',SPEC&&SPEC.project_name||'');
+  if(!name) return;
+  SPEC.project_name=name;
+  const r=await fetch('/api/save',{method:'POST',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({spec:SPEC})});
+  const p=await r.json();
+  if(p.ok){loadProjects(); toast('Переименовано: '+name);}
+  else toast('Ошибка: '+(p.error||''),true);
+};
+/* ---------- каталог изделий (AKD-217) ---------- */
+// аксонометрия не собралась (битая спека) → PNG-снапшот, если был, иначе заглушка
+function thumbErr(img){
+  const png=img.dataset.png;
+  if(png){img.removeAttribute('data-png'); img.onerror=()=>{img.parentNode.textContent='🪑';}; img.src=png;}
+  else img.parentNode.textContent='🪑';
+}
+const CAT_RULES=[  // раздел ← archetype/furniture_type
+  ['Тумбы',   p=>/тумб/i.test(p.ftype)||['drawer_unit'].includes(p.archetype)],
+  ['Столы',   p=>/стол/i.test(p.ftype)||['desk','table','round_table'].includes(p.archetype)],
+  ['Шкафы',   p=>/шкаф|гардероб/i.test(p.ftype)||['wardrobe','door_unit','cabinet'].includes(p.archetype)],
+  ['Стеллажи',p=>/стеллаж|полк/i.test(p.ftype)||['shelving'].includes(p.archetype)],
+  ['Черновики',p=>p.draft],
+];
+let CAT_ITEMS=[], CAT_SEL='Все';
+function catSection(p){
+  if(p.draft) return 'Черновики';
+  for(const [nm,fn] of CAT_RULES) if(fn(p)) return nm;
+  return 'Прочее';
+}
+function renderCatalog(){
+  const q=($('catQ').value||'').toLowerCase().trim();
+  const secs=['Все',...new Set(CAT_ITEMS.map(catSection))];
+  $('catCats').innerHTML=secs.map(s=>
+    `<span class="catchip ${s===CAT_SEL?'on':''}" data-s="${s}">${s}</span>`).join('');
+  $('catCats').querySelectorAll('.catchip').forEach(ch=>
+    ch.onclick=()=>{CAT_SEL=ch.dataset.s; renderCatalog();});
+  const items=CAT_ITEMS.filter(p=>
+    (CAT_SEL==='Все'||catSection(p)===CAT_SEL)&&
+    (!q||String(p.name).toLowerCase().includes(q)));
+  $('catGrid').innerHTML=items.map(p=>`
+    <div class="catCard" data-f="${p.file}">
+      <div class="img">${p.draft?'✏️'
+        :`<img src="/thumb/${encodeURIComponent(p.file)}" loading="lazy"
+            data-png="${p.preview?`/preview/${encodeURIComponent(p.file.replace(/\.json$/,'.png'))}`:''}"
+            onerror="thumbErr(this)">`}</div>
+      <div class="nm" title="${p.name}">${p.name}${p.draft?'<span class="dr">черновик</span>':''}</div>
+      <div class="sub">${p.dims}${p.decor?' · '+p.decor:''}</div>
+    </div>`).join('')||'<div class="mini">ничего не найдено</div>';
+  $('catGrid').querySelectorAll('.catCard').forEach(c=>
+    c.onclick=async()=>{
+      const r=await fetch('/api/open',{method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({file:c.dataset.f})});
+      const p=await r.json();
+      if(p.ok){$('catalog').classList.remove('on'); adoptSpec(p);}
+      else toast('Ошибка: '+(p.error||''),true);
+    });
+}
+$('projCat').onclick=async()=>{
+  const r=await fetch('/api/projects',{method:'POST',
+    headers:{'Content-Type':'application/json'},body:'{}'});
+  const p=await r.json();
+  CAT_ITEMS=p.projects||[]; CAT_SEL='Все'; $('catQ').value='';
+  $('catalog').classList.add('on'); renderCatalog();
+};
+$('catClose').onclick=()=>$('catalog').classList.remove('on');
+$('catQ').addEventListener('input',renderCatalog);
+
 $('projDup').onclick=async()=>{
   const r=await fetch('/api/duplicate',{method:'POST',
     headers:{'Content-Type':'application/json'},body:JSON.stringify({spec:SPEC})});
@@ -1257,37 +1706,191 @@ function addMsg(who,text,changes){
     df.textContent=changes.join('\n'); d.appendChild(df);
   }
   $('chatlog').appendChild(d); $('chatlog').scrollTop=1e9; return d;}
-let chatBusy=false;
-async function sendChat(){
-  const m=$('chatMsg').value.trim();
-  if(!m||chatBusy)return;
-  chatBusy=true; $('chatMsg').value=''; addMsg('user',m);
+let chatBusy=false, SELECTED_PART=null;
+const PENDING_IMGS=[];                       // фото ТЗ: [{mime,data(base64)}]
+function renderImgs(){
+  $('chatImgs').innerHTML=PENDING_IMGS.map((im,i)=>
+    `<span class="chip"><img src="data:${im.mime};base64,${im.data}">`+
+    `<b data-rm="${i}" title="убрать">×</b></span>`).join('');
+  $('chatImgs').querySelectorAll('b[data-rm]').forEach(b=>
+    b.onclick=()=>{PENDING_IMGS.splice(+b.dataset.rm,1);renderImgs();});
+}
+function addImgFile(file){
+  const r=new FileReader();
+  r.onload=()=>{const s=String(r.result),c=s.indexOf(',');
+    PENDING_IMGS.push({mime:(file.type||'image/png'),data:s.slice(c+1)});renderImgs();};
+  r.readAsDataURL(file);
+}
+// реальная диагностика для ИИ (AKD-219): тексты ошибок чеков + слоты базы
+function diagCtx(){
+  const ctx=lastPayload?{n_panels:lastPayload.stats&&lastPayload.stats.n_panels,
+    n_holes:lastPayload.stats&&lastPayload.stats.n_holes,
+    dims:lastPayload.stats&&lastPayload.stats.dims,
+    estimate_total:lastPayload.estimate&&lastPayload.estimate.total}:{};
+  // реальная геометрия деталей — чтобы ИИ добавлял/двигал панели по фактическим
+  // координатам соседей, а не вслепую (перегородки, полки, примыкание встык)
+  if(lastPayload&&lastPayload.viewer&&lastPayload.viewer.panels)
+    ctx.panels=lastPayload.viewer.panels.slice(0,80).map(p=>({n:p.name,t:p.type,
+      x:[Math.round(p.x1),Math.round(p.x2)],y:[Math.round(p.y1),Math.round(p.y2)],
+      z:[Math.round(p.z1),Math.round(p.z2)]}));
+  if(lastPayload&&lastPayload.issues){
+    const bad={};
+    for(const k of Object.keys(lastPayload.issues)){
+      const v=lastPayload.issues[k]||[];
+      if(v.length) bad[k]=v.slice(0,3);
+    }
+    ctx.check_errors=Object.keys(bad).length?bad:'нет — все проверки зелёные';
+  }
+  if(lastPayload&&lastPayload.refs){
+    const un=Object.entries(lastPayload.refs)
+      .filter(([k,r])=>r&&typeof r==='object'&&!r.resolved).map(([k])=>k);
+    ctx.base_unresolved=un.length?un:'все позиции подобраны';
+  }
+  return ctx;
+}
+// сколько проблем осталось (для автоцикла починки)
+function issueCount(){
+  let n=0;
+  if(lastPayload&&lastPayload.issues)
+    for(const k of Object.keys(lastPayload.issues)) n+=(lastPayload.issues[k]||[]).length;
+  if(lastPayload&&lastPayload.refs)
+    n+=Object.values(lastPayload.refs).filter(r=>r&&typeof r==='object'&&!r.resolved).length;
+  return n;
+}
+async function runChat(text){
+  const m=(text||'').trim();
+  if((!m&&!PENDING_IMGS.length)||chatBusy)return;
+  chatBusy=true;
+  const imgs=PENDING_IMGS.splice(0); renderImgs();
+  addMsg('user',m+(imgs.length?`  📎×${imgs.length}`:''));
   const wait=addMsg('ai','думаю…');
   try{
-    const ctx=lastPayload?{n_panels:lastPayload.stats&&lastPayload.stats.n_panels,
-      n_holes:lastPayload.stats&&lastPayload.stats.n_holes,
-      dims:lastPayload.stats&&lastPayload.stats.dims,
-      estimate_total:lastPayload.estimate&&lastPayload.estimate.total}:null;
+    const ctx=diagCtx();
+    if(SELECTED_PART) ctx.selected_part={name:SELECTED_PART.name,type:SELECTED_PART.type,
+      placement:{x1:SELECTED_PART.x1,x2:SELECTED_PART.x2,y1:SELECTED_PART.y1,
+                 y2:SELECTED_PART.y2,z1:SELECTED_PART.z1,z2:SELECTED_PART.z2}};
     const r=await fetch('/api/chat',{method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({spec:SPEC,message:m,history:CHAT_HISTORY,context:ctx})});
+      body:JSON.stringify({spec:SPEC,message:m,history:CHAT_HISTORY,context:ctx,
+                           images:imgs.length?imgs:null,provider:CHAT_PROVIDER})});
     const p=await r.json();
     wait.remove();
     addMsg('ai',p.reply||'(пусто)',p.changes);
+    if(p.usage&&p.usage.total){SESSION_TOKENS+=p.usage.total; renderTokens();}
+    refreshBalance();                              // остаток бесплатных токенов
     CHAT_HISTORY.push({role:'user',text:m},{role:'assistant',text:p.reply||''});
     if(CHAT_HISTORY.length>16)CHAT_HISTORY.splice(0,CHAT_HISTORY.length-16);
-    if(p.spec){pushUndo(); SPEC=p.spec; fillForm(); apply();}
+    if(p.spec){
+      const wasDraft=!!(SPEC&&SPEC.draft);
+      pushUndo(); SPEC=p.spec; showEmpty(false); fillForm(); await apply();
+      if(wasDraft||p.created){                     // создано из черновика — в базу сразу
+        await saveSpec();                          // с превью для каталога
+        loadProjects();
+      }
+    }
   }catch(e){wait.remove(); addMsg('ai','Ошибка: '+e.message);}
   finally{chatBusy=false;}
 }
+function sendChat(){const v=$('chatMsg').value; $('chatMsg').value=''; runChat(v);}
+// автоцикл «Починить всё» (AKD-222): ИИ правит → регенерация → перепроверка,
+// до зелёных бейджей / отсутствия прогресса / 3 итераций
+async function fixAll(){
+  if(chatBusy) return;
+  let before=issueCount();
+  if(!before){toast('Все проверки зелёные, база подобрана — чинить нечего');return;}
+  const btn=$('btnFixAll'); btn.disabled=true;
+  addMsg('user','⚕ Починить всё (автоцикл)');
+  try{
+    for(let it=1; it<=3; it++){
+      const wait=addMsg('ai',`итерация ${it}: чиню (осталось проблем: ${before})…`);
+      const r=await fetch('/api/chat',{method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({spec:SPEC,
+          message:'Почини все перечисленные проблемы: ошибки проверок и неподобранные '
+                 +'позиции базы. Меняй только то, что нужно для починки. '
+                 +'Детали, добавленные пользователем (overrides с action:"add"), '
+                 +'УДАЛЯТЬ ЗАПРЕЩЕНО — вместо удаления подгони их placement до '
+                 +'примыкания встык по координатам соседей из context.panels.',
+          history:[],context:diagCtx(),provider:CHAT_PROVIDER})});
+      const p=await r.json();
+      wait.remove();
+      if(p.usage&&p.usage.total){SESSION_TOKENS+=p.usage.total; renderTokens();}
+      if(!p.spec){addMsg('ai',p.reply||'ИИ не предложил правку — нужна ручная починка');break;}
+      pushUndo(); SPEC=p.spec; fillForm();
+      await apply();                               // регенерация + свежие бейджи
+      const after=issueCount();
+      addMsg('ai',`итерация ${it}: ${p.reply||'правка применена'}`,
+             p.changes&&p.changes.concat([`проблем: ${before} → ${after}`]));
+      if(!after){toast('✅ Всё починено — проверки зелёные'); break;}
+      if(after>=before){addMsg('ai','прогресса нет — дальше чинить вручную '
+        +'(правка деталей/выбор позиций в «Фурнитуре»)'); break;}
+      before=after;
+    }
+  }catch(e){addMsg('ai','Ошибка автопочинки: '+e.message);}
+  finally{btn.disabled=false; refreshBalance();}
+}
+$('btnFixAll').onclick=fixAll;
 $('chatSend').onclick=sendChat;
 $('chatMsg').addEventListener('keydown',e=>{if(e.key==='Enter')sendChat();});
+// фото ТЗ: кнопка-скрепка, выбор файла, вставка из буфера, drag&drop
+$('chatAttach').onclick=()=>$('chatFile').click();
+$('chatFile').onchange=e=>{[...e.target.files].forEach(addImgFile); e.target.value='';};
+$('chatMsg').addEventListener('paste',e=>{
+  for(const it of e.clipboardData.items) if(it.type.startsWith('image/')) addImgFile(it.getAsFile());});
+$('chatMsg').addEventListener('dragover',e=>{e.preventDefault();$('chatMsg').classList.add('drop');});
+$('chatMsg').addEventListener('dragleave',()=>$('chatMsg').classList.remove('drop'));
+$('chatMsg').addEventListener('drop',e=>{e.preventDefault();$('chatMsg').classList.remove('drop');
+  [...e.dataTransfer.files].forEach(f=>{if(f.type.startsWith('image/'))addImgFile(f);});});
+// выбор нейросети (AKD-210) + счётчик токенов/лимитов выбранного провайдера
+let CHAT_PROVIDER=null, SESSION_TOKENS=0, BAL_ITEMS=null, BAL_ERR=null;
+function renderTokens(){
+  const el=$('tokenCount'); if(!el) return;
+  const parts=[]; let low=false;
+  if(SESSION_TOKENS) parts.push('за сессию: '+SESSION_TOKENS.toLocaleString('ru-RU')+' ток.');
+  (BAL_ITEMS||[]).forEach(it=>{
+    const v=Number(it.value);
+    parts.push(it.label+': '+v.toLocaleString('ru-RU')+' '+(it.unit||''));
+    if((it.unit==='ток.'&&v<10000)||(it.unit&&it.unit!=='ток.'&&v<=0)) low=true;  // мало/нет
+  });
+  if(BAL_ERR){parts.push('лимит: '+BAL_ERR); low=true;}
+  el.textContent=parts.join('  ·  ')+(low?'   ⚠ пополнить/лимит':'');
+  el.style.color=low?'var(--bad)':'var(--mut)';
+}
+async function refreshBalance(){
+  try{
+    const r=await fetch('/api/token-balance',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({provider:CHAT_PROVIDER})});
+    const d=await r.json();
+    BAL_ITEMS=d.items||null; BAL_ERR=d.error?String(d.error).slice(0,60):null; renderTokens();
+  }catch(e){}
+}
+async function loadProviders(){
+  try{
+    const r=await fetch('/api/providers',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:'{}'});
+    const d=await r.json();
+    const sel=$('aiProvider');
+    sel.innerHTML=(d.providers||[]).map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+    CHAT_PROVIDER=d.active; sel.value=d.active;
+    sel.onchange=()=>{CHAT_PROVIDER=sel.value; SESSION_TOKENS=0; refreshBalance();};
+  }catch(e){}
+  refreshBalance();
+}
+loadProviders();
 
 /* ---------- экспорт ---------- */
 async function post(url){const r=await fetch(url,{method:'POST',
   headers:{'Content-Type':'application/json'},body:JSON.stringify({spec:SPEC})});
   return await r.json();}
-$('btnSave').onclick=async()=>{const p=await post('/api/save');
+// сохранение со снапшотом-превью для каталога (AKD-217)
+async function saveSpec(){
+  const prev=(scene3d.snapshot&&!EMPTY)?scene3d.snapshot(320):null;
+  const r=await fetch('/api/save',{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({spec:SPEC,preview:prev})});
+  return await r.json();
+}
+$('btnSave').onclick=async()=>{const p=await saveSpec();
   toast(p.ok?('Сохранено: '+p.spec):('Ошибка: '+p.error),!p.ok);
   loadVersions();};
 $('btnCfrn').onclick=async()=>{const p=await post('/api/export-cfrn');
@@ -1303,26 +1906,14 @@ $('btnB3d').onclick=async()=>{
       await fetch('/api/open-file',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({path:p.b3d})});}};
 
-/* ---------- drag&drop ТЗ (AKD-135) ---------- */
+/* ---------- drag&drop ТЗ в область 3D / пустой экран (AKD-135/214) ---------- */
 const stage=$('main');
 stage.addEventListener('dragover',e=>{e.preventDefault();
-  stage.style.outline='3px dashed var(--accent)';});
-stage.addEventListener('dragleave',()=>{stage.style.outline='';});
-stage.addEventListener('drop',async e=>{
-  e.preventDefault(); stage.style.outline='';
-  const f=e.dataTransfer.files&&e.dataTransfer.files[0];
-  if(!f) return;
-  if(!/[.](png|jpe?g|webp|gif)$/i.test(f.name)){
-    toast('Поддерживаются изображения ТЗ (png/jpg/webp)',true); return;}
-  toast('Распознаю ТЗ…');
-  const buf=await f.arrayBuffer();
-  const b64=btoa(String.fromCharCode(...new Uint8Array(buf)));
-  const r=await fetch('/api/import-tz',{method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({name:f.name,data:b64})});
-  const p=await r.json();
-  if(p.ok){adoptSpec(p); toast('ТЗ распознано → '+p.file);}
-  else toast(p.error||'не удалось распознать',true);
+  stage.style.outline='3px dashed var(--accent)'; $('emptyState').classList.add('drop');});
+stage.addEventListener('dragleave',()=>{stage.style.outline=''; $('emptyState').classList.remove('drop');});
+stage.addEventListener('drop',e=>{
+  e.preventDefault(); stage.style.outline=''; $('emptyState').classList.remove('drop');
+  importTzFile(e.dataTransfer.files && e.dataTransfer.files[0]);   // FileReader — без краха на больших фото
 });
 
 /* ---------- версии (AKD-133) ---------- */

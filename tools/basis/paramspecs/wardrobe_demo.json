@@ -40,10 +40,7 @@
    ],
    "shelf_label": "Полка левая",
    "door": 1,
-   "door_name": "Дверь левая",
-   "rod": {
-    "height": 1830
-   }
+   "door_name": "Дверь левая"
   },
   {
    "id": "right",
@@ -57,7 +54,10 @@
     200
    ],
    "box_depth": 520,
-   "box_height": 160
+   "box_height": 160,
+   "rod": {
+    "height": 1900
+   }
   }
  ],
  "hardware": {

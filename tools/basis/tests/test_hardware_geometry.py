@@ -122,3 +122,204 @@ def test_legs_and_metal_frame_modeled():
     sd = drilling_summary(hd)
     assert sd.get("каркас (саморез)", 0) >= 8           # подстолье + экран
     assert not check_drilling_geometry(pd, hd)["errors"]
+
+
+def test_handles_visible_and_encoded():
+    """AKD-184: ручки видимы (Studio) и кодируются телами в .cfrn."""
+    import json
+    from src.generators import generate_from_paramspec
+    from src.hardware_geometry import compute_hardware_geometry
+    from src.cfrn import project_to_cfrn_json
+
+    w = json.loads((ROOT / "paramspecs" / "wardrobe_demo.json").read_text(encoding="utf-8"))
+    p = generate_from_paramspec(w)
+    handles = [g for g in compute_hardware_geometry(p) if g["kind"] == "handle"]
+    assert len(handles) == 12                     # 4 ручки × (2 стойки + скоба)
+    tri = chr(10).join(project_to_cfrn_json(p)["table"].get("triangles", []))
+    assert "Ручка-скоба" in tri
+    # push-to-open (count=0) — ручек нет
+    t = json.loads((ROOT / "paramspecs" / "tz_tumba_dokumenty.json").read_text(encoding="utf-8"))
+    pt = generate_from_paramspec(t)
+    assert not [g for g in compute_hardware_geometry(pt) if g["kind"] == "handle"]
+
+
+def test_hinges_avoid_shelves():
+    """AKD-185: планки петель не попадают на уровни полок."""
+    import json
+    from src.generators import generate_from_paramspec
+    from src.hardware import compute_drilling
+    from src.drilling_check import check_drilling_geometry
+
+    for name in ("komi_46_shkaf_dokumenty", "wardrobe_demo", "komi_47_shkaf_garderobny"):
+        spec = json.loads((ROOT / "paramspecs" / f"{name}.json").read_text(encoding="utf-8"))
+        p = generate_from_paramspec(spec)
+        holes = compute_drilling(p)
+        shelves = [q["placement"] for q in p["panels"] if q.get("type") == "shelf"]
+        for h in holes:
+            if h["purpose"] != "петля (планка)":
+                continue
+            hit = [sp for sp in shelves if sp["y1"] - 0.5 <= h["y"] <= sp["y2"] + 0.5
+                   and sp["x1"] - 30 <= h["x"] <= sp["x2"] + 30]
+            assert not hit, f"{name}: планка y={h['y']} на полке {hit}"
+        assert not check_drilling_geometry(p, holes)["errors"]
+
+
+def test_rod_over_drawers_and_cover_shelf():
+    """AKD-186/187: штанга над стеком ящиков; стек перекрыт полкой."""
+    import json
+    from src.generators import generate_from_paramspec
+
+    w = json.loads((ROOT / "paramspecs" / "wardrobe_demo.json").read_text(encoding="utf-8"))
+    p = generate_from_paramspec(w)
+    rods = p["hardware"]["rods"]
+    assert rods and rods[0]["section_id"] == "right"      # над ящиками
+    cover = [q for q in p["panels"] if q["name"] == "Полка под нишей"]
+    assert len(cover) == 1                                # стек перекрыт
+    assert not any("зона подвеса" in str(x) for x in p["warnings"])
+    # штанга над полками — предупреждение
+    w["sections"][0]["rod"] = {"height": 1830}
+    p2 = generate_from_paramspec(w)
+    assert any("зона подвеса" in str(x) for x in p2["warnings"])
+
+
+def test_cfrn_front_faces_viewer():
+    """AKD-188: фасады в сырых матрицах .cfrn — на +Z-стороне сцены (к камере)."""
+    import json
+    from src.generators import generate_from_paramspec
+    from src.cfrn import project_to_cfrn_json, check_cfrn_encoding, check_cfrn_holes
+
+    w = json.loads((ROOT / "paramspecs" / "wardrobe_demo.json").read_text(encoding="utf-8"))
+    p = generate_from_paramspec(w)
+    d = project_to_cfrn_json(p)
+    tobjs = d["table"]["objects"]
+    tz = {}
+    tx = {}
+    for nd in d["model"]["objs"][0]["objs"]:
+        def walk(n):
+            if n.get("objs"):
+                for q in n["objs"]:
+                    walk(q)
+            else:
+                g = tobjs[n["tableIndex"]]
+                if "contour" in g:
+                    tz[g.get("name")] = n["matrix"][14]
+                    tx[g.get("name")] = n["matrix"][12]
+        walk(nd)
+    back_z = tz["Задняя стенка"]
+    front_z = max(v for k, v in tz.items() if "Дверь" in k or "Фасад" in k)
+    assert front_z > back_z                               # фронт ближе к +Z
+    # секции НЕ зеркалятся: «Дверь левая» остаётся на малых X (слева на
+    # «виде спереди» просмотрщика), ящики правой секции — на больших X
+    door_x = min(m for k, m in tx.items() if "Дверь" in k)
+    drawer_x = min(m for k, m in tx.items() if "Фасад ящик" in k)
+    assert door_x < drawer_x
+    assert not check_cfrn_encoding(p)                     # инволюция чекеров цела
+    assert not check_cfrn_holes(p)
+
+
+def test_door_hinge_by_position_and_swing():
+    """AKD-223/224: петли по положению секции; door_swing up — откидная."""
+    import json
+    from src.generators import generate_from_paramspec
+    from src.hardware import compute_drilling
+    from src.drilling_check import check_drilling_geometry
+
+    # одиночная дверь в ПРАВОЙ секции: петли на правой кромке (наружу),
+    # ручка и замок — на левой (к центру тумбы)
+    spec = {"schemaVersion": "paramspec-v1", "project_name": "Т", "furniture_type": "тумба",
+            "archetype": "cabinet", "dimensions": {"width": 800, "depth": 400, "height": 900},
+            "materials": {"board_thickness": 16},
+            "hardware": {"handles": {"type": "ручка", "material": "металл", "color": "—",
+                                     "size": 128, "count": 1, "offset_from_top": 40},
+                         "locks": [{"type": "замок", "target": "right_door"}]},
+            "sections": [{"kind": "shelves", "shelves": 2}, {"kind": "door", "door": 1}]}
+    p = generate_from_paramspec(spec)
+    holes = compute_drilling(p)
+    door = next(q for q in p["panels"] if q["type"] == "door_front")
+    dx1, dx2 = door["placement"]["x1"], door["placement"]["x2"]
+    cups = [h for h in holes if h["purpose"] == "петля (чашка Ø35)"]
+    assert cups and all(abs(h["x"] - (dx2 - 22)) < 1 for h in cups),         f"чашки не на правой кромке: {[h['x'] for h in cups]} (дверь {dx1}..{dx2})"
+    grips = [h for h in holes if h["purpose"] == "ручка (винт)"]
+    assert grips and all(abs(h["x"] - (dx1 + 40)) < 1 for h in grips)   # ручка слева
+    locks = [h for h in holes if h["purpose"].startswith("замок")]
+    assert len(locks) == 1 and abs(locks[0]["x"] - (dx1 + 30)) < 1
+    assert not check_drilling_geometry(p, holes)["errors"]
+
+    # откидная вверх: чашки вдоль ВЕРХНЕЙ кромки, планки в крышку (ось Y),
+    # ручка снизу по центру, газлифт в BOM
+    spec2 = {"schemaVersion": "paramspec-v1", "project_name": "Бар", "furniture_type": "шкаф",
+             "archetype": "door_unit", "dimensions": {"width": 800, "depth": 350, "height": 400},
+             "materials": {"board_thickness": 16},
+             "hardware": {"handles": {"type": "ручка", "material": "металл", "color": "—",
+                                      "size": 128, "count": 1, "offset_from_top": 40}},
+             "sections": [{"kind": "door", "door": 1, "door_swing": "up"}]}
+    p2 = generate_from_paramspec(spec2)
+    h2 = compute_drilling(p2)
+    door2 = next(q for q in p2["panels"] if q["type"] == "door_front")
+    cups2 = [h for h in h2 if h["purpose"] == "петля (чашка Ø35)"]
+    assert cups2 and all(abs(h["y"] - (door2["placement"]["y2"] - 22)) < 1 for h in cups2)
+    plates2 = [h for h in h2 if h["purpose"] == "петля (планка)"]
+    assert plates2 and all(h["axis"] == "y" for h in plates2)
+    grips2 = [h for h in h2 if h["purpose"] == "ручка (винт)"]
+    assert grips2 and all(abs(h["y"] - (door2["placement"]["y1"] + 40)) < 1 for h in grips2)
+    assert not check_drilling_geometry(p2, h2)["errors"]
+    from src.delivery import _hardware_bom
+    assert any(b["slot"] == "Газлифт" for b in _hardware_bom(p2))
+
+
+def test_sides_over_top_scheme():
+    """AKD-226: sides_over_top — боковины до верха, крышка в проём, крепёж есть."""
+    import json
+    from src.generators import generate_from_paramspec
+    from src.hardware import compute_drilling
+    from src.drilling_check import check_drilling_geometry
+    from src.completeness_check import check_completeness
+
+    spec = {"schemaVersion": "paramspec-v1", "project_name": "К", "furniture_type": "тумба",
+            "archetype": "corpus", "dimensions": {"width": 600, "depth": 400, "height": 700},
+            "materials": {"board_thickness": 16}, "sides_over_top": True}
+    p = generate_from_paramspec(spec)
+    by = {q["name"]: q["placement"] for q in p["panels"]}
+    assert by["Боковина левая"]["y2"] == 700          # боковина до самого верха
+    assert by["Крышка"]["x1"] == 16 and by["Крышка"]["x2"] == 584   # крышка в проём
+    holes = compute_drilling(p)
+    assert not check_drilling_geometry(p, holes)["errors"]
+    assert not check_completeness(p, spec)            # крышка закреплена (X-стык)
+    # одиночная дверь: имя «Дверь левая» в ПРАВОЙ секции игнорируется — позиция важнее
+    from src.hardware import door_hinge_side
+    fake = {"name": "Дверь левая", "placement": {"x1": 600, "x2": 990}}
+    assert door_hinge_side(fake, 1000, siblings=1) == "right"
+    assert door_hinge_side(fake, 1000, siblings=2) == "left"   # двустворка — по имени
+
+
+def test_top_thickness_and_texture():
+    """AKD-218: крышка своей толщины (корпус 16, крышка 25) + текстура в .cfrn."""
+    import json
+    from src.generators import generate_from_paramspec
+    from src.hardware import compute_drilling
+    from src.drilling_check import check_drilling_geometry
+    from src.completeness_check import check_completeness
+    from src.cfrn import project_to_cfrn_json, check_cfrn_encoding
+
+    spec = {"schemaVersion": "paramspec-v1", "project_name": "Тумба25",
+            "furniture_type": "тумба", "archetype": "door_unit",
+            "dimensions": {"width": 800, "depth": 400, "height": 900},
+            "materials": {"board_thickness": 16, "top_thickness": 25,
+                          "texture_direction": "along"},
+            "sections": [{"kind": "door", "door": 2, "shelves": 1}]}
+    p = generate_from_paramspec(spec)
+    by = {q["name"]: q for q in p["panels"]}
+    top = by["Крышка"]
+    assert top["thickness"] == 25 and top["placement"]["y1"] == 875   # 900-25
+    assert by["Боковина левая"]["placement"]["y2"] == 875             # до низа крышки
+    holes = compute_drilling(p)
+    assert not check_drilling_geometry(p, holes)["errors"]
+    assert not check_completeness(p, spec)
+    assert not check_cfrn_encoding(p)
+    d = project_to_cfrn_json(p)
+    tex = {o.get("textureOrientation") for o in d["table"]["objects"] if o.get("objType") == 2}
+    assert tex == {0}                                                  # along → 0
+    spec["materials"]["texture_direction"] = "across"
+    d2 = project_to_cfrn_json(generate_from_paramspec(spec))
+    tex2 = {o.get("textureOrientation") for o in d2["table"]["objects"] if o.get("objType") == 2}
+    assert tex2 == {1}

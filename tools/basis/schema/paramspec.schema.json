@@ -49,15 +49,21 @@
       "properties": {
         "width": {
           "type": "number",
-          "exclusiveMinimum": 0
+          "exclusiveMinimum": 0,
+          "minimum": 50,
+          "maximum": 10000
         },
         "depth": {
           "type": "number",
-          "exclusiveMinimum": 0
+          "exclusiveMinimum": 0,
+          "minimum": 50,
+          "maximum": 10000
         },
         "height": {
           "type": "number",
-          "exclusiveMinimum": 0
+          "exclusiveMinimum": 0,
+          "minimum": 50,
+          "maximum": 10000
         },
         "depth_carcass": {
           "type": "number",
@@ -114,6 +120,20 @@
         "facade_article": {
           "type": "string",
           "description": "Артикул плиты фасадов из производственной базы"
+        },
+        "top_thickness": {
+          "type": "number",
+          "minimum": 3,
+          "maximum": 60,
+          "description": "Толщина крышки/столешницы, если отличается от плиты (AKD-218): «корпус 16, крышка МДФ 25»"
+        },
+        "texture_direction": {
+          "type": "string",
+          "enum": [
+            "along",
+            "across"
+          ],
+          "description": "Направление текстуры: along — по длине (деф.), across — поперёк (textureOrientation в .cfrn)"
         }
       }
     },
@@ -187,7 +207,8 @@
           },
           "shelves": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 20
           },
           "shelf_levels": {
             "type": "array",
@@ -198,7 +219,8 @@
           },
           "drawers": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 20
           },
           "drawer_heights": {
             "type": "array",
@@ -250,6 +272,16 @@
                 }
               }
             ]
+          },
+          "door_swing": {
+            "type": "string",
+            "enum": [
+              "left",
+              "right",
+              "up",
+              "down"
+            ],
+            "description": "Направление открывания одиночной двери секции (AKD-224): left/right — сторона петель; up/down — откидная вверх/вниз"
           }
         }
       }
@@ -345,6 +377,10 @@
         "overlay"
       ],
       "description": "Конструкция задника: inset (врезной, по умолчанию) | overlay (накладной поверх торцов — гвозди по периметру)"
+    },
+    "sides_over_top": {
+      "type": "boolean",
+      "description": "Схема стыка верха (AKD-226): true — боковины идут до верха и перекрывают крышку (крышка в проём между ними); false/нет — крышка перекрывает боковины (по умолчанию)"
     }
   }
 }

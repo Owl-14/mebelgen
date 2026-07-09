@@ -157,7 +157,12 @@ class MockChatProvider:
 
     def chat(self, spec: dict[str, Any], message: str,
              history: list[dict[str, str]] | None = None,
-             context: dict[str, Any] | None = None) -> dict[str, Any]:
+             context: dict[str, Any] | None = None,
+             images: list[dict[str, str]] | None = None) -> dict[str, Any]:
+        if images:                                    # rule-based не видит картинок
+            return {"reply": "Распознавание фото ТЗ требует нейросети — задайте "
+                             "GEMINI_API_KEY в tools/basis/.env (бесплатно, "
+                             "aistudio.google.com).", "spec": None}
         msg = message.lower()
         created = _try_create(msg)
         if created is not None:
@@ -225,73 +230,404 @@ class MockChatProvider:
         return {"reply": "Применил: " + "; ".join(done), "spec": new}
 
 
-# ------------------------------------------------------------------ openai
+# ------------------------------------------------------------------ openai-совместимые
 
-class OpenAIChatProvider:
-    """Свободные формулировки через OpenAI (OPENAI_API_KEY, OPENAI_MODEL)."""
+# Пресеты OpenAI-совместимых сервисов (AKD-209): китайские модели доступны с
+# РФ-серверов и сильнее GigaChat в следовании инструкциям. base_url/model можно
+# переопределить env-ами LLM_BASE_URL / LLM_MODEL / LLM_VISION_MODEL.
+_OAI_PRESETS = {
+    "openai":   {"base": None, "key": "OPENAI_API_KEY", "model": "gpt-4o",
+                 "vision": "gpt-4o", "json_mode": True},
+    "kimi":     {"base": "https://api.moonshot.ai/v1", "key": "KIMI_API_KEY",
+                 "model": "moonshot-v1-8k", "vision": "moonshot-v1-8k-vision-preview",
+                 "json_mode": True},
+    # glm-4.5-flash — thinking-модель: без отключения размышлений «думает»
+    # минутами на больших промптах (extra_body поддержан OpenAI SDK)
+    "glm":      {"base": "https://open.bigmodel.cn/api/paas/v4", "key": "GLM_API_KEY",
+                 "model": "glm-4.5-flash", "vision": "glm-4.5v", "json_mode": False,
+                 "extra": {"thinking": {"type": "disabled"}}},
+    "deepseek": {"base": "https://api.deepseek.com", "key": "DEEPSEEK_API_KEY",
+                 "model": "deepseek-chat", "vision": "deepseek-chat", "json_mode": True},
+}
 
-    def __init__(self) -> None:
-        api_key = os.environ.get("OPENAI_API_KEY")
+
+class OpenAICompatProvider:
+    """Любой OpenAI-совместимый чат (OpenAI, Kimi/Moonshot, GLM/Zhipu, DeepSeek).
+
+    Понимает фото ТЗ (vision-модель, формат image_url data-URI) и возвращает
+    расход токенов для счётчика. JSON вытаскиваем лениво — часть сервисов не
+    поддерживает response_format."""
+
+    def __init__(self, preset: str = "openai") -> None:
+        p = _OAI_PRESETS.get(preset, _OAI_PRESETS["openai"])
+        api_key = os.environ.get("LLM_API_KEY") or os.environ.get(p["key"])
         if not api_key:
-            raise ValueError("Нет OPENAI_API_KEY для SPEC_CHAT_PROVIDER=openai")
+            raise ValueError(f"Нет {p['key']} (или LLM_API_KEY) для SPEC_CHAT_PROVIDER={preset}")
+        base = os.environ.get("LLM_BASE_URL", p["base"])
         from openai import OpenAI
-        self.client = OpenAI(api_key=api_key)
-        self.model = os.environ.get("OPENAI_MODEL", "gpt-4o")
+        self.client = OpenAI(api_key=api_key, **({"base_url": base} if base else {}))
+        self.model = os.environ.get("LLM_MODEL", p["model"])
+        self.vision_model = os.environ.get("LLM_VISION_MODEL", p["vision"])
+        self.json_mode = os.environ.get("LLM_JSON_MODE",
+                                        "1" if p["json_mode"] else "0") not in ("0", "false", "no")
+        self.extra = p.get("extra") or {}             # extra_body (напр. thinking off)
+
+    def balance(self) -> dict[str, Any] | None:
+        """Денежный баланс аккаунта (Moonshot-стиль GET /users/me/balance).
+        Не у всех сервисов есть — тогда None."""
+        import requests
+        try:
+            base = str(self.client.base_url).rstrip("/")
+            r = requests.get(f"{base}/users/me/balance",
+                             headers={"Authorization": f"Bearer {self.client.api_key}"},
+                             timeout=15)
+            if r.ok:
+                d = r.json().get("data") or {}
+                if "available_balance" in d:
+                    return {"value": d["available_balance"], "unit": "¥"}
+        except Exception:
+            pass
+        return None
+
+    def vision_extract(self, images: list[dict[str, str]]) -> str:
+        """Этап 1 конвейера (AKD-211): факты с фото ТЗ простым текстом."""
+        prompt = (
+            "На изображении — ТЗ или чертёж корпусной мебели. Выпиши ПРОСТЫМ ТЕКСТОМ "
+            "(не JSON, по пунктам) все факты: тип изделия; габариты Ш×Г×В (мм); число и тип "
+            "секций (ящики/полки/двери), их ПОРЯДОК СЛЕВА НАПРАВО по чертежу и все привязки "
+            "сторон из текста («замок на правой двери», «ящики слева»); материал и толщину "
+            "плиты; цвет; фурнитуру, штангу, опоры. Только то, что реально на изображении, "
+            "ничего не выдумывай.")
+        content: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
+        for im in images:
+            content.append({"type": "image_url", "image_url":
+                            {"url": f"data:{im.get('mime','image/png')};base64,{im.get('data','')}"}})
+        r = self.client.chat.completions.create(
+            model=self.vision_model, temperature=0.1,
+            messages=[{"role": "user", "content": content}])
+        return r.choices[0].message.content or ""
 
     def chat(self, spec: dict[str, Any], message: str,
              history: list[dict[str, str]] | None = None,
-             context: dict[str, Any] | None = None) -> dict[str, Any]:
+             context: dict[str, Any] | None = None,
+             images: list[dict[str, str]] | None = None) -> dict[str, Any]:
         system = CHAT_PROMPT_PATH.read_text(encoding="utf-8").replace(
             "__SCHEMA__", PARAMSPEC_SCHEMA_PATH.read_text(encoding="utf-8"))
         msgs: list[dict[str, Any]] = [{"role": "system", "content": system}]
         for h in (history or [])[-8:]:               # короткая память диалога
             msgs.append({"role": h.get("role", "user"), "content": h.get("text", "")})
         ctx = f"\nСостояние модели: {json.dumps(context, ensure_ascii=False)}\n" if context else ""
-        msgs.append({"role": "user", "content":
-                     f"Текущий ParamSpec:\n```json\n{json.dumps(spec, ensure_ascii=False, indent=2)}\n```\n{ctx}\n"
-                     f"Запрос пользователя: {message}"})
-        r = self.client.chat.completions.create(
-            model=self.model, temperature=0.1, messages=msgs,
-            response_format={"type": "json_object"})
-        data = json.loads(r.choices[0].message.content or "{}")
+        text = (f"Текущий ParamSpec:\n```json\n{json.dumps(spec, ensure_ascii=False, indent=2)}\n```\n{ctx}\n"
+                f"Запрос пользователя: {message or '(см. приложенные изображения ТЗ)'}\n"
+                "Ответь строго JSON-объектом {\"reply\":..., \"spec\":...}.")
+        if images:                                   # vision-формат OpenAI: content-массив
+            content: list[dict[str, Any]] = [{"type": "text", "text": text}]
+            for im in images:
+                content.append({"type": "image_url", "image_url":
+                                {"url": f"data:{im.get('mime','image/png')};base64,{im.get('data','')}"}})
+            msgs.append({"role": "user", "content": content})
+        else:
+            msgs.append({"role": "user", "content": text})
+        model = self.vision_model if images else self.model
+        kw: dict[str, Any] = {"model": model, "temperature": 0.1, "messages": msgs}
+        if self.json_mode and not images:
+            kw["response_format"] = {"type": "json_object"}
+        if self.extra:
+            kw["extra_body"] = self.extra
+        r = self.client.chat.completions.create(**kw)
+        out = r.choices[0].message.content or "{}"
+        c1, c2 = out.find("{"), out.rfind("}")
+        data = json.loads(out[c1:c2 + 1]) if c1 >= 0 else {}
+        usage = getattr(r, "usage", None)
         return {"reply": str(data.get("reply") or "Готово."),
-                "spec": data.get("spec") if isinstance(data.get("spec"), dict) else None}
+                "spec": data.get("spec") if isinstance(data.get("spec"), dict) else None,
+                "created": bool(data.get("created")),
+                "usage": {"model": model,
+                          "total": getattr(usage, "total_tokens", None),
+                          "prompt": getattr(usage, "prompt_tokens", None),
+                          "completion": getattr(usage, "completion_tokens", None)} if usage else None}
+
+
+# обратная совместимость: SPEC_CHAT_PROVIDER=openai
+def OpenAIChatProvider() -> "OpenAICompatProvider":  # noqa: N802
+    return OpenAICompatProvider("openai")
+
+
+class GeminiChatProvider:
+    """Google Gemini (AKD-203): бесплатный tier, понимает фото/сканы ТЗ.
+
+    Ключ — env GEMINI_API_KEY (aistudio.google.com), модель — GEMINI_MODEL
+    (по умолчанию gemini-2.0-flash). REST без SDK; ответ — строго JSON
+    {reply, spec} (response_mime_type). Изображения — inline_data base64."""
+
+    URL = "https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent"
+
+    def __init__(self) -> None:
+        self.api_key = os.environ.get("GEMINI_API_KEY")
+        if not self.api_key:
+            raise ValueError("Нет GEMINI_API_KEY для SPEC_CHAT_PROVIDER=gemini")
+        self.model = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+
+    def chat(self, spec: dict[str, Any], message: str,
+             history: list[dict[str, str]] | None = None,
+             context: dict[str, Any] | None = None,
+             images: list[dict[str, str]] | None = None) -> dict[str, Any]:
+        import requests
+        system = CHAT_PROMPT_PATH.read_text(encoding="utf-8").replace(
+            "__SCHEMA__", PARAMSPEC_SCHEMA_PATH.read_text(encoding="utf-8"))
+        contents: list[dict[str, Any]] = []
+        for h in (history or [])[-8:]:
+            role = "model" if h.get("role") == "assistant" else "user"
+            contents.append({"role": role, "parts": [{"text": h.get("text", "")}]})
+        ctx = f"\nСостояние модели: {json.dumps(context, ensure_ascii=False)}\n" if context else ""
+        parts: list[dict[str, Any]] = [{"text":
+            f"Текущий ParamSpec:\n```json\n{json.dumps(spec, ensure_ascii=False, indent=2)}\n```\n{ctx}\n"
+            f"Запрос пользователя: {message or '(см. приложенные изображения ТЗ)'}"}]
+        for img in images or []:                     # фото/скан ТЗ
+            parts.append({"inline_data": {"mime_type": img.get("mime", "image/png"),
+                                          "data": img.get("data", "")}})
+        contents.append({"role": "user", "parts": parts})
+        payload = {
+            "system_instruction": {"parts": [{"text": system}]},
+            "contents": contents,
+            "generationConfig": {"temperature": 0.1,
+                                 "response_mime_type": "application/json"},
+        }
+        r = requests.post(self.URL.format(m=self.model),
+                          params={"key": self.api_key}, json=payload, timeout=120)
+        if r.status_code == 429:
+            raise RuntimeError("Лимит бесплатного тарифа Gemini исчерпан — "
+                               "попробуйте через минуту (или завтра)")
+        r.raise_for_status()
+        cand = (r.json().get("candidates") or [{}])[0]
+        text = "".join(p.get("text", "") for p in
+                       (cand.get("content") or {}).get("parts") or [])
+        data = json.loads(text or "{}")
+        return {"reply": str(data.get("reply") or "Готово."),
+                "spec": data.get("spec") if isinstance(data.get("spec"), dict) else None,
+                "created": bool(data.get("created"))}
+
+
+class GigaChatProvider:
+    """Сбер GigaChat (AKD-203): работает с российских серверов (в отличие от
+    Gemini). Ключ авторизации (Base64 Client:Secret) — env GIGACHAT_AUTH_KEY;
+    обмен на OAuth-токен (~30 мин, кэшируем). Модель — GIGACHAT_MODEL
+    (GigaChat / GigaChat-Pro / GigaChat-Max). Фото ТЗ — загрузка файла +
+    attachments (нужна vision-модель, напр. GigaChat-Max).
+
+    SSL: сертификаты Сбера выпущены Минцифры РФ — если корневой не установлен
+    в системе, GIGACHAT_VERIFY=0 отключает проверку (демо; для прод — поставить
+    корневой сертификат Russian Trusted CA)."""
+
+    OAUTH = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
+    BASE = "https://gigachat.devices.sberbank.ru/api/v1"
+
+    def __init__(self) -> None:
+        self.auth_key = os.environ.get("GIGACHAT_AUTH_KEY")
+        if not self.auth_key:
+            raise ValueError("Нет GIGACHAT_AUTH_KEY для SPEC_CHAT_PROVIDER=gigachat")
+        self.scope = os.environ.get("GIGACHAT_SCOPE", "GIGACHAT_API_PERS")
+        self.model = os.environ.get("GIGACHAT_MODEL", "GigaChat")   # текст (900k free)
+        self.vision_model = os.environ.get("GIGACHAT_VISION_MODEL", "GigaChat-Max")
+        # verify: False — отключить; иначе путь к CA-бандлу с корневым Минцифры
+        # (requests при verify=True берёт certifi и не видит системное хранилище)
+        _v = os.environ.get("GIGACHAT_VERIFY", "0")
+        if _v in ("0", "false", "no"):
+            self.verify: Any = False
+        else:
+            self.verify = (os.environ.get("GIGACHAT_CA")
+                           or os.environ.get("REQUESTS_CA_BUNDLE") or True)
+        self._token = None
+        self._exp = 0.0
+
+    def balance(self) -> list[dict[str, Any]]:
+        """Остаток бесплатных токенов по моделям: [{usage, value}] (для счётчика)."""
+        import requests
+        r = requests.get(f"{self.BASE}/balance",
+                         headers={"Authorization": f"Bearer {self._access_token()}"},
+                         timeout=20, verify=self.verify)
+        r.raise_for_status()
+        return r.json().get("balance", [])
+
+    def _now(self) -> float:
+        import time
+        return time.time()
+
+    def _access_token(self) -> str:
+        import uuid
+        import requests
+        if self._token and self._now() < self._exp - 60:
+            return self._token
+        if not self.verify:
+            import urllib3
+            urllib3.disable_warnings()
+        r = requests.post(self.OAUTH, headers={
+            "Authorization": f"Basic {self.auth_key}",
+            "RqUID": str(uuid.uuid4()),
+            "Content-Type": "application/x-www-form-urlencoded",
+        }, data={"scope": self.scope}, timeout=30, verify=self.verify)
+        r.raise_for_status()
+        d = r.json()
+        self._token = d["access_token"]
+        self._exp = float(d.get("expires_at", 0)) / 1000 or (self._now() + 1500)
+        return self._token
+
+    def _upload_images(self, images: list[dict[str, str]]) -> list[str]:
+        import base64
+        import requests
+        ids: list[str] = []
+        for im in images:
+            raw = base64.b64decode(im.get("data", ""))
+            r = requests.post(f"{self.BASE}/files",
+                              headers={"Authorization": f"Bearer {self._access_token()}"},
+                              files={"file": ("tz.png", raw, im.get("mime", "image/png"))},
+                              data={"purpose": "general"}, timeout=60, verify=self.verify)
+            r.raise_for_status()
+            ids.append(r.json().get("id"))
+        return ids
+
+    def vision_extract(self, images: list[dict[str, str]]) -> str:
+        """Этап 1 конвейера (AKD-211): распознать фото ТЗ и выписать факты
+        ПРОСТЫМ ТЕКСТОМ (не JSON). Дальше по этим фактам собирает другая модель."""
+        import requests
+        att = self._upload_images(images)
+        prompt = (
+            "На изображении — ТЗ или чертёж корпусной мебели. Внимательно прочитай "
+            "ТЕКСТ (таблицу) и выпиши ПРОСТЫМ ТЕКСТОМ (не JSON, по пунктам) все факты: "
+            "тип изделия; габариты Ширина×Глубина×Высота (мм); ТОЧНОЕ ЧИСЛО полок, "
+            "ящиков и дверей ЦИФРОЙ (как написано в тексте: «одна полка» = полок: 1); "
+            "ПОРЯДОК секций СЛЕВА НАПРАВО по чертежу и все привязки сторон из текста "
+            "(«замок на правой двери», «ящики слева» — выписать дословно); "
+            "материал и толщину плиты (и отдельно толщину крышки/столешницы, если отличается); "
+            "цвет/декор; ручки (тип, цвет, межцентровое L в мм), замки (на какой двери), "
+            "петли; штангу; опоры/цоколь; особые требования. Числа из текста важнее "
+            "картинки-превью: превью — только иллюстрация. Ничего не выдумывай.")
+        r = requests.post(f"{self.BASE}/chat/completions",
+                          headers={"Authorization": f"Bearer {self._access_token()}",
+                                   "Content-Type": "application/json"},
+                          json={"model": self.vision_model, "temperature": 0.1,
+                                "messages": [{"role": "user", "content": prompt,
+                                              "attachments": att}]},
+                          timeout=120, verify=self.verify)
+        r.raise_for_status()
+        return r.json()["choices"][0]["message"]["content"]
+
+    def chat(self, spec: dict[str, Any], message: str,
+             history: list[dict[str, str]] | None = None,
+             context: dict[str, Any] | None = None,
+             images: list[dict[str, str]] | None = None) -> dict[str, Any]:
+        import requests
+        system = CHAT_PROMPT_PATH.read_text(encoding="utf-8").replace(
+            "__SCHEMA__", PARAMSPEC_SCHEMA_PATH.read_text(encoding="utf-8"))
+        msgs: list[dict[str, Any]] = [{"role": "system", "content": system}]
+        for h in (history or [])[-8:]:
+            msgs.append({"role": h.get("role", "user"), "content": h.get("text", "")})
+        ctx = f"\nСостояние модели: {json.dumps(context, ensure_ascii=False)}\n" if context else ""
+        user_msg: dict[str, Any] = {"role": "user", "content":
+            f"Текущий ParamSpec:\n```json\n{json.dumps(spec, ensure_ascii=False, indent=2)}\n```\n{ctx}\n"
+            f"Запрос: {message or '(см. приложенные изображения ТЗ)'}\n"
+            "Ответь строго JSON-объектом {\"reply\":..., \"spec\":...}."}
+        model = self.model
+        if images:                                       # фото ТЗ — vision-модель
+            user_msg["attachments"] = self._upload_images(images)
+            model = self.vision_model
+        msgs.append(user_msg)
+        r = requests.post(f"{self.BASE}/chat/completions",
+                          headers={"Authorization": f"Bearer {self._access_token()}",
+                                   "Content-Type": "application/json"},
+                          json={"model": model, "messages": msgs, "temperature": 0.1},
+                          timeout=120, verify=self.verify)
+        if r.status_code == 429:
+            raise RuntimeError("Лимит GigaChat исчерпан — попробуйте позже")
+        r.raise_for_status()
+        body = r.json()
+        text = body["choices"][0]["message"]["content"]
+        c1, c2 = text.find("{"), text.rfind("}")        # вычленить JSON из ответа
+        data = json.loads(text[c1:c2 + 1]) if c1 >= 0 else {}
+        usage = body.get("usage") or {}
+        return {"reply": str(data.get("reply") or "Готово."),
+                "spec": data.get("spec") if isinstance(data.get("spec"), dict) else None,
+                "created": bool(data.get("created")),
+                "usage": {"model": model, "total": usage.get("total_tokens"),
+                          "prompt": usage.get("prompt_tokens"),
+                          "completion": usage.get("completion_tokens")}}
+
+
+def resolve_provider_name(name: str | None = None) -> str:
+    """Имя провайдера, которое реально будет использовано (для конвейера AKD-211)."""
+    return (name or os.environ.get("SPEC_CHAT_PROVIDER")
+            or os.environ.get("PARAMSPEC_PROVIDER")
+            # авто по наличию ключа; gigachat работает с РФ-серверов (Gemini — нет)
+            or ("gigachat" if os.environ.get("GIGACHAT_AUTH_KEY")
+                else "gemini" if os.environ.get("GEMINI_API_KEY")
+                else "openai" if os.environ.get("OPENAI_API_KEY") else "mock")).lower()
 
 
 def get_chat_provider(name: str | None = None) -> Any:
-    name = (name or os.environ.get("SPEC_CHAT_PROVIDER")
-            or os.environ.get("PARAMSPEC_PROVIDER")
-            # авто: есть ключ — настоящая нейронка, нет — rule-based mock
-            or ("openai" if os.environ.get("OPENAI_API_KEY") else "mock")).lower()
-    if name == "openai":
-        return OpenAIChatProvider()
+    name = resolve_provider_name(name)
+    if name == "gigachat":
+        return GigaChatProvider()
+    if name == "gemini":
+        return GeminiChatProvider()
+    if name in ("openai", "kimi", "glm", "deepseek"):   # OpenAI-совместимые (AKD-209)
+        return OpenAICompatProvider(name)
     if name == "mock":
         return MockChatProvider()
-    raise ValueError(f"Неизвестный SPEC_CHAT_PROVIDER={name!r} (mock|openai)")
+    raise ValueError(f"Неизвестный SPEC_CHAT_PROVIDER={name!r} "
+                     "(mock|openai|kimi|glm|deepseek|gemini|gigachat)")
 
 
 # ------------------------------------------------------------------ вход
 
 def chat_edit(spec: dict[str, Any], message: str,
               history: list[dict[str, str]] | None = None,
-              context: dict[str, Any] | None = None) -> dict[str, Any]:
+              context: dict[str, Any] | None = None,
+              images: list[dict[str, str]] | None = None,
+              provider: str | None = None) -> dict[str, Any]:
     """Команда словами → {reply, spec|None, changes[], created?}. Невалидное не отдаём.
 
     Гарантии: PROTECTED_KEYS не меняются; новая спека проходит validate_paramspec,
     иначе spec=None и причина в reply (AKD-110). created=True — изделие с нуля (D3).
+    images — фото/сканы ТЗ [{mime, data(base64)}] для vision-провайдера (AKD-203).
+    provider — явный выбор нейросети из UI (AKD-210); None → из env.
     """
     from .paramspec import validate_paramspec
 
+    build_name = resolve_provider_name(provider)
+    build = get_chat_provider(build_name)
+    # Конвейер «глаза+мозг» (AKD-211): если пришло фото, а сборщик — не тот
+    # провайдер, что назначен на зрение (VISION_EXTRACT_PROVIDER, обычно GigaChat),
+    # то этап 1 — GigaChat распознаёт факты с фото ТЗ текстом, этап 2 — сборщик
+    # (GLM) собирает изделие уже по этим фактам, без картинки.
+    extract_name = (os.environ.get("VISION_EXTRACT_PROVIDER") or "").lower()
+    two_stage = bool(images and extract_name and extract_name != build_name)
     try:
-        res = get_chat_provider().chat(spec, message, history, context)
-    except TypeError:
-        res = get_chat_provider().chat(spec, message, history)
+        if two_stage:
+            vis = get_chat_provider(extract_name)
+            desc = vis.vision_extract(images) if hasattr(vis, "vision_extract") else ""
+            if desc.strip():
+                aug = ((message or "Собери изделие по этому ТЗ.")
+                       + "\n\nРаспознано с фото ТЗ (используй как факты, ничего не додумывай "
+                         "сверх):\n" + desc)
+                res = build.chat(spec, aug, history, context)
+            else:                                     # распознать не вышло — фото напрямую
+                res = build.chat(spec, message, history, context, images=images)
+        elif images:
+            res = build.chat(spec, message, history, context, images=images)
+        else:
+            try:
+                res = build.chat(spec, message, history, context)
+            except TypeError:
+                res = build.chat(spec, message, history)
     except Exception as e:                            # сеть/ключ/парсинг — в чат, не 500
         return {"reply": f"Ошибка провайдера: {e}", "spec": None, "changes": []}
 
+    usage = res.get("usage")                          # расход токенов (для счётчика)
+    if two_stage and isinstance(res, dict):           # пометка конвейера в ответе
+        res["reply"] = "📷 GigaChat распознал фото → " + str(res.get("reply") or "готово")
     new = res.get("spec")
     if not new:
-        return {"reply": res.get("reply", ""), "spec": None, "changes": []}
+        return {"reply": res.get("reply", ""), "spec": None, "changes": [], "usage": usage}
 
     created = bool(res.get("created"))
     if not created:
@@ -301,11 +637,60 @@ def chat_edit(spec: dict[str, Any], message: str,
     errors = validate_paramspec(new)
     if errors:
         return {"reply": "Правка отклонена — спека не прошла схему:\n"
-                         + "\n".join(errors[:5]), "spec": None, "changes": []}
+                         + "\n".join(errors[:5]), "spec": None, "changes": [], "usage": usage}
     if created:
         return {"reply": res.get("reply", "Создано."), "spec": new,
-                "changes": ["новое изделие с нуля"], "created": True}
+                "changes": ["новое изделие с нуля"], "created": True, "usage": usage}
     changes = spec_diff(spec, new)
     if not changes:
-        return {"reply": res.get("reply", "Изменений нет."), "spec": None, "changes": []}
-    return {"reply": res.get("reply", "Готово."), "spec": new, "changes": changes}
+        return {"reply": res.get("reply", "Изменений нет."), "spec": None, "changes": [], "usage": usage}
+    return {"reply": res.get("reply", "Готово."), "spec": new, "changes": changes, "usage": usage}
+
+
+_PROVIDER_META = {          # id → (человекочитаемое имя, env-ключ наличия)
+    "gigachat": ("GigaChat (Сбер)", "GIGACHAT_AUTH_KEY"),
+    "kimi": ("Kimi (Moonshot)", "KIMI_API_KEY"),
+    "glm": ("GLM (Zhipu)", "GLM_API_KEY"),
+    "deepseek": ("DeepSeek", "DEEPSEEK_API_KEY"),
+    "gemini": ("Gemini (Google)", "GEMINI_API_KEY"),
+    "openai": ("OpenAI", "OPENAI_API_KEY"),
+}
+
+
+def available_providers() -> dict[str, Any]:
+    """Список доступных нейросетей (по наличию ключей в env) + активная по
+    умолчанию — для селектора в UI (AKD-210)."""
+    out = [{"id": "mock", "name": "Базовый (правила, без ИИ)"}]
+    for pid, (label, envk) in _PROVIDER_META.items():
+        if os.environ.get(envk) or os.environ.get("LLM_API_KEY"):
+            out.append({"id": pid, "name": label})
+    active = (os.environ.get("SPEC_CHAT_PROVIDER") or "").lower()
+    if active not in {p["id"] for p in out}:
+        active = out[1]["id"] if len(out) > 1 else "mock"
+    return {"active": active, "providers": out}
+
+
+def token_balance(provider: str | None = None) -> dict[str, Any]:
+    """Лимиты/баланс выбранного провайдера для счётчика (AKD-210):
+    GigaChat — бесплатные токены по моделям; Kimi/OpenAI-совместимые — денежный
+    баланс аккаунта (¥/$). Пусто — если провайдер без баланса."""
+    try:
+        p = get_chat_provider(provider)
+    except Exception as e:
+        return {"error": str(e)}
+    try:
+        if isinstance(p, GigaChatProvider):
+            bal = p.balance()                         # [{usage, value}]
+            items = [{"label": b.get("usage"), "value": b.get("value"), "unit": "ток."}
+                     for b in bal]
+            return {"provider": "gigachat", "kind": "tokens", "items": items}
+        if isinstance(p, OpenAICompatProvider):
+            b = p.balance()                           # {value, unit} | None
+            if b:
+                return {"provider": "openai_compat", "kind": "money",
+                        "items": [{"label": "Баланс аккаунта", "value": b["value"],
+                                   "unit": b["unit"]}]}
+            return {"provider": "openai_compat", "kind": "none", "items": []}
+    except Exception as e:
+        return {"error": str(e)}
+    return {"kind": "none", "items": []}

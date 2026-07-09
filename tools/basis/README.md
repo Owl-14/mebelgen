@@ -3,7 +3,14 @@
 Превращает мебельное ТЗ (фото/спецификацию) в строгий JSON, по которому скрипт
 строит готовую модель в **БАЗИС-Мебельщик 2026** (панели + ручки).
 
-Правила построения (координаты, корпус, тумбы, рабочий процесс) — в [RULES.md](RULES.md).
+Навигация по документации:
+
+- **[AGENTS.md](AGENTS.md)** — входная точка для агентов: где что лежит, рабочий
+  процесс, ворота качества, грабли;
+- [rules/architecture.md](rules/architecture.md) — карта модулей, поток данных, проверки;
+- [rules/paramspec.md](rules/paramspec.md) — справочник ParamSpec и правила чтения ТЗ;
+- [RULES.md](RULES.md) — правила построения (координаты, корпус, фурнитура);
+- [STUDIO.md](STUDIO.md) — концепция Studio.
 
 ## Установка
 
@@ -46,11 +53,18 @@ raw-JSON редактор. Кнопки: «Сохранить» (spec + project.
 проверках. Статичный `viewer` (.html) остаётся для отправки файлом.
 
 **Чат с ИИ** (панель в Studio): правки словами — «сделай глубину 600», «замени
-цвет на дуб вотан», «фасады белые», «добавь ножки 100», «стол на металлокаркасе».
+цвет на дуб вотан», «фасады белые», «добавь ножки 100», «дверь открывается вверх».
 LLM меняет только ParamSpec (координаты считает генератор), новая спека
 валидируется схемой ДО применения, к каждой правке — сводка изменений и
-«⟲ Откатить». Провайдер `src/spec_chat.py`: `SPEC_CHAT_PROVIDER=mock|openai`;
-авто — openai при заполненном `OPENAI_API_KEY`, иначе rule-based mock (офлайн).
+«⟲ Откатить». Кнопка «⚕ Починить всё» — автоцикл: ИИ правит спеку по реальным
+текстам ошибок проверок до зелёных бейджей (до 3 итераций).
+
+Провайдеры (`src/spec_chat.py`, селектор в UI): `mock` (rule-based, офлайн),
+`gigachat` (текст+vision, работает из РФ), OpenAI-совместимые `glm` / `kimi` /
+`deepseek` / `openai`, `gemini`. Выбор по умолчанию — `SPEC_CHAT_PROVIDER`,
+активируются наличием ключа (см. таблицу env ниже). Конвейер фото ТЗ:
+vision-провайдер (`VISION_EXTRACT_PROVIDER`, напр. gigachat) выписывает факты →
+сборщик (напр. glm) строит ParamSpec. Фото — 📎 / Ctrl+V / drag&drop.
 
 **Декоры и материалы из производственной базы**: поле «Из базы» в Studio ищет
 по ≈960 листовым позициям (`materials/baza_materiala.json`) со свотчами цвета;
@@ -83,23 +97,43 @@ python main.py materials --search "Дуб Вотан" --category "Листово
 python main.py materials --resolve projects/<project>.json [--write]   # подбор реальных позиций → material_refs
 python main.py materials --check projects/<project>.json          # сверка материалов проекта
 
+# Показ и документы (бесплатно, локально)
+python main.py studio    paramspecs/<spec>.json --out D:/claude/bazis/out   # редактор
+python main.py viewer    projects/<project>.json -o model.html   # автономный 3D-файл
+python main.py techview  projects/<project>.json                 # чертёж SVG фронт+бок
+python main.py hardware  projects/<project>.json [--full]        # присадки/фурнитура
+python main.py deliver   paramspecs/<spec>.json [--status draft] # лист согласования
+
 # Сборка нативной модели .b3d через облако БАЗИС (device-independent, ПЛАТНО ~10₽/операция)
 python main.py build-b3d         projects/<project>.json -o out.b3d
 python main.py cloud info | list | model-convert … | drawing-convert …
+python main.py cutting …                                          # раскрой (облако, платно)
+```
+
+## Тесты
+
+```bash
+python -m tests.regression   # ГЕЙТ перед merge: все спеки valid + goldens EXACT
+python -m pytest tests/ -q   # юнит-тесты (сканируют все paramspecs/)
+python qa/e2e_ai.py          # e2e ИИ-помощника (нужен живой провайдер с ключом)
 ```
 
 ## Структура
 
 ```
-src/         конвертер (Vision), генераторы (src/generators/), валидаторы (schema/geometry/consistency),
-             materials.py, cfrn.py (.cfrn для облака), cloud_api.py / cloud_cutting.py, orchestrator.py
+src/         весь конвейер: генераторы, валидаторы, Studio, чат, cfrn/b3d, смета,
+             раскрой, чертёж, доставка — карта модулей в rules/architecture.md
 schema/      furniture.schema.json, paramspec.schema.json — контракты JSON
-prompts/     системные промпты (convert, извлечение ParamSpec)
-paramspecs/  входные ParamSpec-примеры (в т.ч. tz_*)
-projects/    готовые проекты-примеры (.json)
-materials/   catalog.json (курируемый) + baza_materiala.json (база ≈5000) + source/ (сырой xlsx)
-scripts/     ImportFurnitureFromJSON.js (импорт в БАЗИС) + import_materials_base.py (xlsx→json)
-rules/       core.md + правила по архетипам (источник истины для генераторов)
+prompts/     системные промпты (convert, чат Studio spec_chat_prompt.txt)
+paramspecs/  входные ParamSpec (в т.ч. tz_*); .previews/ — кэш миниатюр каталога
+projects/    сгенерированные проекты-примеры (.json)
+materials/   catalog.json (курируемый) + baza_materiala.json (база ≈5000) + source/
+scripts/     ImportFurnitureFromJSON.js (импорт в БАЗИС) + import_materials_base.py
+rules/       источник истины: architecture, paramspec, core, generators, hardware,
+             materials, studio, delivery, tumby
+tests/       pytest + tests/regression.py (гейт) + goldens/
+qa/          e2e_ai.py — e2e-матрица ИИ-помощника
+landing/     обложка демо (planovo.pro/bazis)
 ```
 
 ## Импорт в БАЗИС
@@ -140,7 +174,15 @@ CfrnToB3d` → нативный `.b3d`. Команда `build-b3d`. Каждая
 
 | Переменная | Описание |
 |---|---|
-| `OPENAI_API_KEY` | ключ OpenAI (для `convert` и чата Studio) |
-| `OPENAI_MODEL` | модель, по умолчанию `gpt-4o` |
-| `BAZIS_API_KEY` | ключ БАЗИС-Облака (для `build-b3d`, `cloud`, раскрой) |
-| `SPEC_CHAT_PROVIDER` | провайдер чата Studio: `mock`\|`openai` (авто: openai при ключе) |
+| `BAZIS_API_KEY` | ключ БАЗИС-Облака (для `build-b3d`, `cloud`, раскрой) — ПЛАТНЫЕ операции |
+| `SPEC_CHAT_PROVIDER` | провайдер чата Studio по умолчанию: `mock`\|`gigachat`\|`glm`\|`kimi`\|`deepseek`\|`openai`\|`gemini` |
+| `VISION_EXTRACT_PROVIDER` | кто читает фото ТЗ в конвейере (напр. `gigachat`), сборку делает SPEC_CHAT_PROVIDER |
+| `GIGACHAT_AUTH_KEY` | GigaChat (Сбер): текст+vision, работает из РФ (+`GIGACHAT_SCOPE/MODEL/VISION_MODEL/VERIFY/CA`) |
+| `GLM_API_KEY` | GLM/Zhipu `glm-4.5-flash` (бесплатный, thinking отключён) |
+| `KIMI_API_KEY` | Kimi/Moonshot (платный) |
+| `DEEPSEEK_API_KEY` | DeepSeek |
+| `OPENAI_API_KEY` | OpenAI `gpt-4o` (чат и `convert`) |
+| `GEMINI_API_KEY` | Gemini (из РФ заблокирован) |
+| `LLM_API_KEY/BASE_URL/MODEL/VISION_MODEL/JSON_MODE` | переопределение любого OpenAI-совместимого провайдера |
+| `PARAMSPEC_PROVIDER` | провайдер извлечения ParamSpec для `convert`/`ingest` |
+| `BAZIS_VIEWER` | путь к БАЗИС-Просмотру (по умолчанию `D:\bazis\viewer.exe`) |

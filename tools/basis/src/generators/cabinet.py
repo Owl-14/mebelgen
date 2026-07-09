@@ -18,7 +18,7 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     c = read_carcass(spec)
     sections = spec.get("sections") or [{"kind": "open"}]
     g = c.gap
-    yb, yt = c.Hleg + c.T, c.H - c.T
+    yb, yt = c.Hleg + c.T, c.H - c.T_top
     # фронт полок/перегородок = фронт корпуса (дно/крышка), а не утоплен на T:
     # иначе полки посередине не доходят до переднего края изделия
     iz1 = spec.get("interior_z_front", spec.get("carcass_z_front", 0))
@@ -34,9 +34,14 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
                      z_front=spec.get("carcass_z_front", 0),
                      top_z=tuple(top_z) if top_z else None,
                      socle_full=spec.get("socle_full", False),
-                     socle_recess=spec.get("socle_recess", 50))
+                     socle_recess=spec.get("socle_recess", 50),
+                     sides_over_top=spec.get("sides_over_top", False),
+                     t_top=c.T_top)
     bounds = column_bounds(c.W, c.T, sections)
-    panels += partitions(bounds, c.H, c.T, c.Hleg, c.mat, iz1, iz2)
+    # перегородки — конструктив: всегда до фронта корпуса (AKD-192);
+    # interior_z_front утапливает только наполнение (полки)
+    panels += partitions(bounds, c.H, c.T, c.Hleg, c.mat,
+                         spec.get("carcass_z_front", 0), iz2)
 
     drawers_meta: list[dict[str, Any]] = []
     sections_meta: list[dict[str, Any]] = []
@@ -66,15 +71,36 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
             sec_dr = {**sec, "back_limit": c.D - c.T_back}
             ps, dm, topy = drawer_stack(cx1, cx2, fb, heights, g, sec_dr, c.T, c.mat, sid,
                                         sec.get("prefix", ""), facade_bounds=fspan)
+            # нижний фасад перекрывает торец дна (как дверь): если фасад
+            # начинается ровно с верха дна, открытый угол дна — брак
+            bot_f = min((q for q in ps if q.get("type") == "drawer_front"),
+                        key=lambda q: q["placement"]["y1"], default=None)
+            if bot_f is not None and abs(bot_f["placement"]["y1"] - yb) <= 2 \
+                    and fb_bottom < bot_f["placement"]["y1"]:
+                dy = round(bot_f["placement"]["y1"] - fb_bottom, 2)
+                bot_f["placement"]["y1"] = fb_bottom
+                bot_f["position"]["y"] = fb_bottom
+                bot_f["dimensions"]["height"] = round(bot_f["dimensions"]["height"] + dy, 2)
             panels += ps
             drawers_meta += dm
             names += [p["name"] for p in ps]
-            if sec.get("open_top"):
+            # перекрытие стека (AKD-187): если ящики не доходят до крышки,
+            # верхний ящик открыт сверху — полка над стеком строится всегда
+            # (cover_top: false — отключить явно)
+            if sec.get("cover_top", True) and topy + c.T <= yt - 40:
                 sh = panel("Полка под нишей", "shelf", "horizont", (cx1, cx2), (topy, topy + c.T),
                            (sec.get("niche_z_front", 0), iz2), thickness=c.T, material=c.mat,
                            section_id=sid, estimated=True)
                 panels.append(sh)
                 names.append(sh["name"])
+                # верхний фасад продлевается на T и перекрывает торец полки
+                # (AKD-191: полка остаётся в корпусе, фасад — поверх, как с дном)
+                top_f = max((q for q in ps if q.get("type") == "drawer_front"),
+                            key=lambda q: q["placement"]["y2"], default=None)
+                if top_f is not None:
+                    top_f["placement"]["y2"] = round(topy + c.T, 2)
+                    top_f["dimensions"]["height"] = round(
+                        top_f["dimensions"]["height"] + c.T, 2)
         else:
             if levels:
                 base_label = sec.get("shelf_label", "Полка")
@@ -83,10 +109,6 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
                 sp = shelves_in_column(cx1, cx2, levels, c.T, iz1, iz2, c.mat, sid, lbl)
                 panels += sp
                 names += [p["name"] for p in sp]
-            rod = rod_in_column(cx1, cx2, sec, yt, iz1, iz2, sid)
-            if rod:
-                rods_meta.append(rod)
-                names.append(f"Штанга ({sid})" if len(sections) > 1 else "Штанга")
             nd = sec.get("door", 0)
             if nd:
                 z_mode = sec.get("door_z", "overlay")
@@ -106,12 +128,51 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
                     panels.append(door_in_column(mid + g / 2, fx2, dy1, dy2, c.T, c.mat, sid, names[1], z_mode=z_mode))
                 else:
                     one = sec.get("door_name") if isinstance(sec.get("door_name"), str) else f"Дверь {sid}"
-                    panels.append(door_in_column(fx1, fx2, dy1, dy2, c.T, c.mat, sid, one, z_mode=z_mode))
+                    dpanel = door_in_column(fx1, fx2, dy1, dy2, c.T, c.mat, sid, one, z_mode=z_mode)
+                    if sec.get("door_swing"):          # направление открывания (AKD-224)
+                        dpanel["swing"] = str(sec["door_swing"]).lower()
+                    panels.append(dpanel)
+
+        # штанга (AKD-177/186) — в любой секции, включая над стеком ящиков
+        rod = rod_in_column(cx1, cx2, sec, yt, iz1, iz2, sid)
+        if rod:
+            rods_meta.append(rod)
+            names.append(f"Штанга ({sid})" if len(sections) > 1 else "Штанга")
+            # зона подвеса (~900 вниз от штанги) должна быть свободной
+            hang_lo = rod["y1"] - 900
+            busy = [p["name"] for p in panels
+                    if p.get("section_id") == sid and p.get("type") == "shelf"
+                    and p["placement"]["y2"] > hang_lo + 1
+                    and p["placement"]["y1"] < rod["y1"] - 1]
+            if busy:
+                spec.setdefault("warnings", []).append(
+                    f"Штанга ({sid}): зона подвеса занята ({', '.join(busy[:3])}) — "
+                    "одежде на плечиках нужно ~900 мм свободной высоты")
 
         sections_meta.append({"id": sid, "type": kind,
                               "dimensions": {"width": round(cx2 - cx1, 2), "height": round(yt - yb, 2),
                                              "depth": round(iz2 - iz1, 2), "estimated": False},
                               "elements": names})
+
+    # выравнивание полок между секциями (AKD-190): полка, отличающаяся от
+    # структурного уровня (перекрытие стека) на ≤25 мм, приводится к нему —
+    # перепад в пару сантиметров между соседними секциями бьёт по глазам
+    anchors = [p["placement"]["y1"] for p in panels
+               if p["type"] == "shelf" and p["name"] == "Полка под нишей"]
+    if anchors:
+        for p in panels:
+            if p["type"] != "shelf" or p["name"] == "Полка под нишей":
+                continue
+            pl = p["placement"]
+            near = next((a for a in anchors if 0 < abs(pl["y1"] - a) <= 25), None)
+            if near is None:
+                continue
+            dy = round(near - pl["y1"], 2)
+            pl["y1"], pl["y2"] = round(pl["y1"] + dy, 2), round(pl["y2"] + dy, 2)
+            p["position"]["y"] = pl["y1"]
+            spec.setdefault("warnings", []).append(
+                f"«{p['name']}» выровнена с перекрытием стека соседней секции "
+                f"({dy:+g} мм) — визуальная стыковка уровней")
 
     cc = carcass_calc(c)
     cc["columns"] = [{"x": b, "kind": s["kind"]} for s, b in zip(sections, bounds)]

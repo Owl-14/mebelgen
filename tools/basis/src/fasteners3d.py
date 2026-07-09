@@ -16,7 +16,6 @@ from typing import Any
 
 # purpose → (kind, цвет Kd для .mtl)
 _PURPOSE_KIND = {
-    "стяжка (конфирмат)": ("confirmat", (0.60, 0.63, 0.65)),
     "короб ящика (саморез)": ("screw", (0.39, 0.42, 0.44)),
     "направляющая (винт)": ("screw", (0.39, 0.42, 0.44)),
     "петля (планка)": ("screw", (0.39, 0.42, 0.44)),
@@ -26,7 +25,7 @@ _PURPOSE_KIND = {
     "полкодержатель": ("shelfpin", (0.82, 0.84, 0.85)),
     "петля (чашка Ø35)": ("cup", (0.55, 0.57, 0.60)),
     "эксцентрик (чашка Ø15)": ("cam", (0.79, 0.70, 0.49)),
-    "эксцентрик (шток)": ("bolt", (0.60, 0.63, 0.65)),
+    # «эксцентрик (шток)» + «эксцентрик (канал Ø8)» собираются парой → bolt
     "фасадная стяжка (эксцентрик Ø15)": ("cam", (0.79, 0.70, 0.49)),
     "фасадная стяжка (шток)": ("bolt", (0.60, 0.63, 0.65)),
     "замок (цилиндр Ø18)": ("lock", (0.82, 0.84, 0.85)),
@@ -86,7 +85,7 @@ def _mesh(kind: str, depth: float, dia: float) -> list[tuple[float, float, float
     if kind == "cam":
         return [(r, 0, -depth)]                               # корпус эксцентрика
     if kind == "bolt":
-        return [(3.5, 0, -depth), (4.5, 0, -3)]               # шток с головкой в чашку
+        return [(4.0, 34, -depth)]                # шток Ø8 через плоскость стыка
     if kind == "dowel":
         return [(4.0, 10, -20)]                               # шкант: 20 в торец, 10 в пласть
     if kind == "lock":
@@ -119,9 +118,11 @@ def _vec(h: dict[str, Any]) -> tuple[float, float, float]:
 
 
 def _box_obj(sx: float, sy: float, sz: float) -> str:
-    """Wavefront OBJ бокса 0..sx × 0..sy × 0..sz (грани наружу)."""
-    v = [(0, 0, 0), (sx, 0, 0), (sx, sy, 0), (0, sy, 0),
-         (0, 0, sz), (sx, 0, sz), (sx, sy, sz), (0, sy, sz)]
+    """Wavefront OBJ бокса 0..sx × −sy/2..sy/2 × 0..sz (центрован по Y —
+    симметрия нужна развороту модели правыми матрицами, AKD-188)."""
+    y0, y1 = -sy / 2, sy / 2
+    v = [(0, y0, 0), (sx, y0, 0), (sx, y1, 0), (0, y1, 0),
+         (0, y0, sz), (sx, y0, sz), (sx, y1, sz), (0, y1, sz)]
     faces = [(1, 4, 3, 2), (5, 6, 7, 8), (1, 2, 6, 5),
              (2, 3, 7, 6), (3, 4, 8, 7), (4, 1, 5, 8)]
     lines = [f"v {p[0]} {p[1]} {p[2]}" for p in v]
@@ -131,6 +132,7 @@ def _box_obj(sx: float, sy: float, sz: float) -> str:
 
 # kind тела фурнитуры → (имя для спецификации, запрос в базу, цвет Kd, форма)
 _BODY_KINDS = {
+    "handle": ("Ручка-скоба", "ручка скоба", (0.55, 0.57, 0.60), "box"),
     "rod": ("Штанга-вешало", "штанга", (0.72, 0.74, 0.77), "cyl"),
     "rod_bracket": ("Штангодержатель", "штангодержатель", (0.48, 0.51, 0.55), "box"),
     "leg": ("Опора регулируемая", "опора регулируемая", (0.22, 0.23, 0.24), "cyl"),
@@ -189,7 +191,8 @@ def build_hardware_bodies(project: dict[str, Any],
                     "obj_body": _box_obj(sx, sy, sz), "holes": [], "instances": [],
                 }
             grp["instances"].append(_matrix16(
-                [[1.0, 0, 0], [0, 1.0, 0], [0, 0, 1.0]], (g["x1"], g["y1"], g["z1"])))
+                [[1.0, 0, 0], [0, 1.0, 0], [0, 0, 1.0]],
+                (g["x1"], (g["y1"] + g["y2"]) / 2, g["z1"])))   # бокс центрован по Y
 
     out: list[dict[str, Any]] = []
     for g in groups.values():
@@ -249,8 +252,29 @@ def build_fastener_objects(holes: list[dict[str, Any]],
               {"pos": {"x": 0, "y": 0, "z": 0}, "dir": {"x": 0, "y": 0, "z": 1},
                "depth": 12, "diameter": h["diameter"]}])
 
+    # минификс (AKD-202): шток в пласти + канал в торце соосны в одной точке
+    # плоскости стыка → один болт Ø8 с двумя отверстиями
     for i, h in enumerate(hole_list):
-        if i in used or h["purpose"].startswith("шкант"):
+        if h["purpose"] != "эксцентрик (шток)" or i in used:
+            continue
+        mate = next((j for j, q in enumerate(hole_list)
+                     if j not in used and q["purpose"] == "эксцентрик (канал Ø8)"
+                     and q["axis"] == h["axis"]
+                     and abs(q["x"] - h["x"]) < 1 and abs(q["y"] - h["y"]) < 1
+                     and abs(q["z"] - h["z"]) < 1), None)
+        used.add(i)
+        if mate is not None:
+            used.add(mate)
+        v = _vec(h)
+        _add("bolt", (0.60, 0.63, 0.65), 45, 8, (h["x"], h["y"], h["z"]), v,
+             [{"pos": {"x": 0, "y": 0, "z": 0}, "dir": {"x": 0, "y": 0, "z": -1},
+               "depth": h["depth"], "diameter": h["diameter"]},
+              {"pos": {"x": 0, "y": 0, "z": 0}, "dir": {"x": 0, "y": 0, "z": 1},
+               "depth": 34, "diameter": 8}])
+
+    for i, h in enumerate(hole_list):
+        if i in used or h["purpose"].startswith("шкант") \
+                or h["purpose"] == "эксцентрик (канал Ø8)":
             continue
         pk = _PURPOSE_KIND.get(h["purpose"])
         if pk is None:

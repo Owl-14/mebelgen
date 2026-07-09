@@ -606,13 +606,13 @@
       "thickness": 16,
       "dimensions": {
         "width": 400,
-        "height": 155
+        "height": 171
       },
       "placement": {
         "x1": 2,
         "x2": 402,
         "y1": 384,
-        "y2": 539,
+        "y2": 555,
         "z1": -16,
         "z2": 0
       },

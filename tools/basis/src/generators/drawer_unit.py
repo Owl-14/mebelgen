@@ -31,6 +31,10 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     guide_gap = section.get("guide_gap", 14.5)
     box_z1 = section.get("box_z1", 0)                             # короб прижат к фасаду (z=0)
     box_depth = section.get("box_depth", round(c.D - c.T_back - box_z1 - 30, 2))
+    # кламп: короб (с задней стенкой) не должен упереться в задник корпуса —
+    # защита от завышенного box_depth из ТЗ/чата (AKD-221)
+    box_back_lim = c.D - c.T_back - box_z1 - section.get("box_back_thickness", c.T)
+    box_depth = max(50, min(box_depth, round(box_back_lim, 2)))
     box_y_off = section.get("box_y_offset", c.T)
     box_h = section.get("box_height", round(min(heights) * 0.52, 2))
     box_back = section.get("box_back_thickness", c.T)
@@ -38,7 +42,9 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
 
     panels = carcass(c.W, c.D, c.H, c.T, c.T_back, c.Hleg, c.mat, c.mat_back,
                      leg_as_panel=c.leg_as_panel, leg_type=c.leg_type,
-                     socle_recess=spec.get("socle_recess", 50))
+                     socle_recess=spec.get("socle_recess", 50),
+                     sides_over_top=spec.get("sides_over_top", False),
+                     t_top=c.T_top)
 
     ox1, ox2 = c.T, c.W - c.T                # внутренний проём (короб между боковинами)
     fx1, fx2 = round(reveal, 2), round(c.W - reveal, 2)   # накладной фасад — во всю ширину
@@ -76,10 +82,29 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
                       "dimensions": {"width": c.W - 2 * c.T, "height": round(y - g - fb, 2), "depth": box_depth, "estimated": True},
                       "elements": front_names}]
 
-    if section.get("open_top"):
-        ny1 = fb + sum(heights) + (n - 1) * g     # верх верхнего фасада
-        panels.append(panel("Полка под нишей", "shelf", "horizont", (c.T, c.W - c.T), (ny1, ny1 + c.T), (0, c.D - c.T_back),
+    # нижний фасад перекрывает торец дна: старт ровно с верха дна — брак
+    bot_f = min((q for q in panels if q.get("type") == "drawer_front"),
+                key=lambda q: q["placement"]["y1"], default=None)
+    if bot_f is not None and abs(bot_f["placement"]["y1"] - (c.Hleg + c.T)) <= 2 \
+            and band_bottom < bot_f["placement"]["y1"]:
+        dy = round(bot_f["placement"]["y1"] - band_bottom, 2)
+        bot_f["placement"]["y1"] = band_bottom
+        bot_f["position"]["y"] = band_bottom
+        bot_f["dimensions"]["height"] = round(bot_f["dimensions"]["height"] + dy, 2)
+
+    # перекрытие стека (AKD-187): полка над ящиками всегда, когда стек не
+    # доходит до крышки (cover_top: false — отключить явно)
+    ny1 = fb + sum(heights) + (n - 1) * g         # верх верхнего фасада
+    if section.get("cover_top", True) and ny1 + c.T <= (c.H - c.T_top) - 40:
+        panels.append(panel("Полка под нишей", "shelf", "horizont", (c.T, c.W - c.T), (ny1, ny1 + c.T),
+                            (section.get("niche_z_front", 0), c.D - c.T_back),
                             thickness=c.T, material=c.mat, section_id="top_open", estimated=True))
+        # верхний фасад продлевается на T и перекрывает торец полки (AKD-191)
+        top_f = max((q for q in panels if q.get("type") == "drawer_front"),
+                    key=lambda q: q["placement"]["y2"], default=None)
+        if top_f is not None:
+            top_f["placement"]["y2"] = round(ny1 + c.T, 2)
+            top_f["dimensions"]["height"] = round(top_f["dimensions"]["height"] + c.T, 2)
         sections_meta.append({"id": "top_open", "type": "open",
                               "dimensions": {"width": c.W - 2 * c.T, "height": round((c.H - c.T) - (ny1 + c.T), 2),
                                              "depth": round(c.D - c.T_back, 2), "estimated": True},

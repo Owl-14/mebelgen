@@ -270,7 +270,7 @@
       "material": "ЛДСП",
       "thickness": 16,
       "dimensions": {
-        "width": 468,
+        "width": 484,
         "height": 868
       },
       "placement": {
@@ -278,13 +278,13 @@
         "x2": 613,
         "y1": 116,
         "y2": 984,
-        "z1": 16,
+        "z1": 0,
         "z2": 484
       },
       "position": {
         "x": 597,
         "y": 116,
-        "z": 16
+        "z": 0
       },
       "rotation": {
         "x": 0,
@@ -306,7 +306,7 @@
       "material": "ЛДСП",
       "thickness": 16,
       "dimensions": {
-        "width": 468,
+        "width": 484,
         "height": 868
       },
       "placement": {
@@ -314,13 +314,13 @@
         "x2": 1210,
         "y1": 116,
         "y2": 984,
-        "z1": 16,
+        "z1": 0,
         "z2": 484
       },
       "position": {
         "x": 1194,
         "y": 116,
-        "z": 16
+        "z": 0
       },
       "rotation": {
         "x": 0,
@@ -342,7 +342,7 @@
       "material": "ЛДСП",
       "thickness": 16,
       "dimensions": {
-        "width": 468,
+        "width": 484,
         "height": 868
       },
       "placement": {
@@ -350,13 +350,13 @@
         "x2": 1807,
         "y1": 116,
         "y2": 984,
-        "z1": 16,
+        "z1": 0,
         "z2": 484
       },
       "position": {
         "x": 1791,
         "y": 116,
-        "z": 16
+        "z": 0
       },
       "rotation": {
         "x": 0,
@@ -378,7 +378,7 @@
       "material": "ЛДСП",
       "thickness": 16,
       "dimensions": {
-        "width": 468,
+        "width": 484,
         "height": 868
       },
       "placement": {
@@ -386,13 +386,13 @@
         "x2": 2404,
         "y1": 116,
         "y2": 984,
-        "z1": 16,
+        "z1": 0,
         "z2": 484
       },
       "position": {
         "x": 2388,
         "y": 116,
-        "z": 16
+        "z": 0
       },
       "rotation": {
         "x": 0,
