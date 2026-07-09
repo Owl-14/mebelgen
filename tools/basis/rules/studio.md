@@ -46,7 +46,7 @@ AKD-214) — запись в каталоге + пустой воркспейс 
 | `/api/generate` | ParamSpec → `{viewer, issues{6 чеков}, stats, bom, refs, estimate}` |
 | `/api/techview` | чертёж SVG (+`panel` — деталировка одной детали) |
 | `/api/nesting` | раскрой-превью SVG |
-| `/api/chat` | ИИ-правка: `{spec,message,history,context,images,provider}` → `{reply,spec,changes,usage}`; для нерешённых слотов базы в context кладутся реальные кандидаты |
+| `/api/chat` | ИИ-правка: `{spec,message,history,context,images,provider}` → `{reply,spec,changes,usage}`; в context — реальные кандидаты базы для нерешённых слотов и `panels` (геометрия всех деталей — для добавления/подгонки встык) |
 | `/api/providers`, `/api/token-balance` | список нейросетей / лимиты выбранной |
 | `/api/import-tz` | фото ТЗ → распознавание → новая спека (в черновик — тот же файл) |
 | `/api/projects`, `/api/open`, `/api/new`, `/api/duplicate` | каталог/открыть/черновик/копия |

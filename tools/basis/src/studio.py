@@ -1727,6 +1727,12 @@ function diagCtx(){
     n_holes:lastPayload.stats&&lastPayload.stats.n_holes,
     dims:lastPayload.stats&&lastPayload.stats.dims,
     estimate_total:lastPayload.estimate&&lastPayload.estimate.total}:{};
+  // реальная геометрия деталей — чтобы ИИ добавлял/двигал панели по фактическим
+  // координатам соседей, а не вслепую (перегородки, полки, примыкание встык)
+  if(lastPayload&&lastPayload.viewer&&lastPayload.viewer.panels)
+    ctx.panels=lastPayload.viewer.panels.slice(0,80).map(p=>({n:p.name,t:p.type,
+      x:[Math.round(p.x1),Math.round(p.x2)],y:[Math.round(p.y1),Math.round(p.y2)],
+      z:[Math.round(p.z1),Math.round(p.z2)]}));
   if(lastPayload&&lastPayload.issues){
     const bad={};
     for(const k of Object.keys(lastPayload.issues)){
@@ -1801,7 +1807,10 @@ async function fixAll(){
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({spec:SPEC,
           message:'Почини все перечисленные проблемы: ошибки проверок и неподобранные '
-                 +'позиции базы. Меняй только то, что нужно для починки.',
+                 +'позиции базы. Меняй только то, что нужно для починки. '
+                 +'Детали, добавленные пользователем (overrides с action:"add"), '
+                 +'УДАЛЯТЬ ЗАПРЕЩЕНО — вместо удаления подгони их placement до '
+                 +'примыкания встык по координатам соседей из context.panels.',
           history:[],context:diagCtx(),provider:CHAT_PROVIDER})});
       const p=await r.json();
       wait.remove();

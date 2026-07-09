@@ -129,6 +129,15 @@ def test_gemini_provider_parses_response(monkeypatch):
     assert any("inline_data" in p for p in parts)
 
 
+def test_prompt_keeps_geometry_rules():
+    """Инварианты промпта: ориентация добавляемых деталей (8а) и запрет
+    удалять пользовательские overrides при автопочинке (регресс на потерю)."""
+    text = (ROOT / "prompts" / "spec_chat_prompt.txt").read_text(encoding="utf-8")
+    for marker in ("vertical_partition", "тонкая по X", "ПРИМЫКАНИЕ ВСТЫК",
+                   "context.panels", "ДЕТАЛИ ПОЛЬЗОВАТЕЛЯ НЕ УДАЛЯТЬ"):
+        assert marker in text, f"в промпте потеряно правило: {marker}"
+
+
 def test_gigachat_provider(monkeypatch):
     """AKD-203: GigaChat — обмен ключа на токен + JSON-ответ (сеть замокана)."""
     import src.spec_chat as sc
