@@ -105,6 +105,18 @@ CASES = [
      _expect_spec(lambda s: None if "сонома" in json.dumps(s, ensure_ascii=False).lower() else "нет дуба сонома")),
     ("правка: ножки 100", None, "добавь регулируемые ножки 100 мм",
      _expect_spec(lambda s: None if (s.get("legs") or {}).get("height") == 100 else f"legs={s.get('legs')}")),
+    # «рядом такой же» = composite из 2 блоков, а не расширение габаритов (репорт AKD)
+    ("правка: поставить рядом такой же",
+     {"schemaVersion": "paramspec-v1", "project_name": "Шкаф", "furniture_type": "шкаф",
+      "archetype": "wardrobe", "dimensions": {"width": 1200, "depth": 600, "height": 2200},
+      "materials": {"board_thickness": 16},
+      "sections": [{"kind": "door", "door": 1}, {"kind": "drawers", "drawers": 3}]},
+     "поставь рядом справа такой же шкаф",
+     _expect_spec(lambda s: None if (
+         s.get("archetype") == "composite" and len(s.get("blocks") or []) == 2
+         and float((s["blocks"][1].get("origin") or {}).get("x", 0)) >= 1100)
+         else f"archetype={s.get('archetype')}, blocks={len(s.get('blocks') or [])}, "
+              f"origin={[b.get('origin') for b in (s.get('blocks') or [])]}")),
     # --- диагностика ---
     ("диагностика: всё зелёное — не выдумывать", None, "проверь модель на ошибки",
      _expect_no_spec(("зелен", "нет ошибок", "ошибок нет", "не обнаруж", "в порядке", "корректн"))),

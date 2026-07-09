@@ -134,7 +134,8 @@ def test_prompt_keeps_geometry_rules():
     удалять пользовательские overrides при автопочинке (регресс на потерю)."""
     text = (ROOT / "prompts" / "spec_chat_prompt.txt").read_text(encoding="utf-8")
     for marker in ("vertical_partition", "тонкая по X", "ПРИМЫКАНИЕ ВСТЫК",
-                   "context.panels", "ДЕТАЛИ ПОЛЬЗОВАТЕЛЯ НЕ УДАЛЯТЬ"):
+                   "context.panels", "ДЕТАЛИ ПОЛЬЗОВАТЕЛЯ НЕ УДАЛЯТЬ",
+                   "ПОСТАВЬ РЯДОМ", '"composite" + blocks'):
         assert marker in text, f"в промпте потеряно правило: {marker}"
 
 
