@@ -118,6 +118,91 @@ def _vec(h: dict[str, Any]) -> tuple[float, float, float]:
     return {"x": (d, 0, 0), "y": (0, d, 0), "z": (0, 0, d)}[h["axis"]]
 
 
+def _box_obj(sx: float, sy: float, sz: float) -> str:
+    """Wavefront OBJ бокса 0..sx × 0..sy × 0..sz (грани наружу)."""
+    v = [(0, 0, 0), (sx, 0, 0), (sx, sy, 0), (0, sy, 0),
+         (0, 0, sz), (sx, 0, sz), (sx, sy, sz), (0, sy, sz)]
+    faces = [(1, 4, 3, 2), (5, 6, 7, 8), (1, 2, 6, 5),
+             (2, 3, 7, 6), (3, 4, 8, 7), (4, 1, 5, 8)]
+    lines = [f"v {p[0]} {p[1]} {p[2]}" for p in v]
+    lines += [f"f {a} {b} {c} {d}" for a, b, c, d in faces]
+    return "\n".join(lines) + "\n"
+
+
+# kind тела фурнитуры → (имя для спецификации, запрос в базу, цвет Kd, форма)
+_BODY_KINDS = {
+    "rod": ("Штанга-вешало", "штанга", (0.72, 0.74, 0.77), "cyl"),
+    "rod_bracket": ("Штангодержатель", "штангодержатель", (0.48, 0.51, 0.55), "box"),
+    "leg": ("Опора регулируемая", "опора регулируемая", (0.22, 0.23, 0.24), "cyl"),
+    "frame_leg": ("Металлокаркас: стойка 40×40", "каркас", (0.22, 0.23, 0.24), "box"),
+    "frame_rail": ("Металлокаркас: царга 40×40", "каркас", (0.22, 0.23, 0.24), "box"),
+}
+
+
+def build_hardware_bodies(project: dict[str, Any],
+                          bom_articles: dict[str, str] | None = None
+                          ) -> list[dict[str, Any]]:
+    """Тела фурнитуры (AKD-183) для .cfrn: штанга, держатели, опоры, каркас.
+
+    Источник — hardware_geometry (те же тела, что рисует Studio). Механика
+    эталона native_cabinet.cfrn: objType 5 + OBJ в models/, инстансы матрицами.
+    Возвращает список групп в формате build_fastener_objects (holes пустые).
+    """
+    from .hardware_geometry import compute_hardware_geometry
+    bom_articles = bom_articles or {}
+    groups: dict[tuple, dict[str, Any]] = {}
+    for g in compute_hardware_geometry(project):
+        meta = _BODY_KINDS.get(g["kind"])
+        if meta is None:
+            continue
+        label, _query, color, shape = meta
+        sx, sy, sz = g["x2"] - g["x1"], g["y2"] - g["y1"], g["z2"] - g["z1"]
+        if shape == "cyl":
+            # цилиндр вдоль длинной оси бокса
+            axis, L = max((("x", sx), ("y", sy), ("z", sz)), key=lambda t: t[1])
+            r = min(v for a, v in (("x", sx), ("y", sy), ("z", sz)) if a != axis) / 2
+            key = (g["kind"], round(L, 1), round(r, 1))
+            grp = groups.get(key)
+            if grp is None:
+                grp = groups[key] = {
+                    "key": f"{g['kind']}_{L:g}_{r:g}", "kind": g["kind"],
+                    "name": f"{label} L={round(L)}", "label": label,
+                    "art": bom_articles.get(label, ""), "color": color,
+                    "obj_body": _cyl_obj([(r, L, 0)]), "holes": [], "instances": [],
+                }
+            # локальная +Z → мировая ось цилиндра (через _basis: локальная −Z = v)
+            v = {"x": (-1.0, 0.0, 0.0), "y": (0.0, -1.0, 0.0), "z": (0.0, 0.0, -1.0)}[axis]
+            cx = (g["x1"] + g["x2"]) / 2
+            cy = (g["y1"] + g["y2"]) / 2
+            cz = (g["z1"] + g["z2"]) / 2
+            start = {"x": (g["x1"], cy, cz), "y": (cx, g["y1"], cz),
+                     "z": (cx, cy, g["z1"])}[axis]
+            grp["instances"].append(_matrix16(_basis(v), start))
+        else:
+            key = (g["kind"], round(sx, 1), round(sy, 1), round(sz, 1))
+            grp = groups.get(key)
+            if grp is None:
+                grp = groups[key] = {
+                    "key": f"{g['kind']}_{sx:g}x{sy:g}x{sz:g}", "kind": g["kind"],
+                    "name": f"{label} {round(sx)}×{round(sy)}×{round(sz)}", "label": label,
+                    "art": bom_articles.get(label, ""), "color": color,
+                    "obj_body": _box_obj(sx, sy, sz), "holes": [], "instances": [],
+                }
+            grp["instances"].append(_matrix16(
+                [[1.0, 0, 0], [0, 1.0, 0], [0, 0, 1.0]], (g["x1"], g["y1"], g["z1"])))
+
+    out: list[dict[str, Any]] = []
+    for g in groups.values():
+        obj_name = f"{g['name']} [{g['key']}]"
+        kd = g["color"]
+        g["obj_name"] = f"{obj_name}.obj"
+        g["obj_text"] = (f"mtllib {obj_name}.mtl\nusemtl m0\n" + g.pop("obj_body"))
+        g["mtl_text"] = (f"newmtl m0\nKd {kd[0]:.3f} {kd[1]:.3f} {kd[2]:.3f}\n"
+                         "Ka 0.2 0.2 0.2\nNs 32\n")
+        out.append(g)
+    return out
+
+
 def build_fastener_objects(holes: list[dict[str, Any]],
                            bom_articles: dict[str, str] | None = None
                            ) -> list[dict[str, Any]]:

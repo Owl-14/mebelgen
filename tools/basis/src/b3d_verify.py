@@ -46,13 +46,15 @@ def verify_b3d_parity(b3d_path: str | Path,
     panel_names = [str(p.get("name", "")) for p in project.get("panels", [])]
     missing_panels = [n for n in panel_names if n and n not in joined]
 
-    # ожидаемые материалы метизов — ровно те имена, что кодируются в .cfrn
+    # ожидаемые материалы метизов и тел фурнитуры (AKD-183: штанга/опоры/каркас)
+    # — ровно те имена, что кодируются в .cfrn
     fast_expected: list[str] = []
     try:
-        from .fasteners3d import build_fastener_objects
+        from .fasteners3d import build_fastener_objects, build_hardware_bodies
         from .hardware import compute_drilling
-        fast_expected = sorted({fo["name"]
-                                for fo in build_fastener_objects(compute_drilling(project))})
+        fast_expected = sorted(
+            {fo["name"] for fo in build_fastener_objects(compute_drilling(project))}
+            | {bo["name"] for bo in build_hardware_bodies(project)})
     except Exception:
         pass
     # в .b3d имя и артикул склеены через \r — ищем подстрокой имени
