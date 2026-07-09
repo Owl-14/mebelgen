@@ -80,6 +80,14 @@ CASES = [
                   else f"нет rod: {s.get('sections')}")),
     ("создание: круглый стол", {}, "сделай круглый стол диаметром 900, высота 750",
      _expect_spec(lambda s: None if s["archetype"] == "round_table" else f"archetype={s['archetype']}")),
+    # порядок секций: привязки сторон главнее порядка перечисления (AKD, тумба модератора)
+    ("создание: порядок секций по привязкам", {},
+     "сделай тумбу 1000х400х750 из 3 секций: 1-я секция с распашной дверью и полкой, "
+     "2-я открытая с одной полкой, 3-я с тремя выдвижными ящиками. "
+     "Замок на правой двери. Ящики слева.",
+     _expect_spec(lambda s: None if [sec.get("kind") for sec in s.get("sections", [])]
+                  == ["drawers", "open", "door"]
+                  else f"порядок={[sec.get('kind') for sec in s.get('sections', [])]}")),
     # --- правки ---
     ("правка: глубина", None, "сделай глубину 500",
      _expect_spec(lambda s: None if s["dimensions"]["depth"] == 500 else f"depth={s['dimensions']['depth']}")),
