@@ -54,6 +54,39 @@ def test_techview_svg_clean():
     assert r["svg"].startswith("<svg") and r["issues"] == []
 
 
+def test_composite_carries_hardware():
+    """«Поставь рядом такой же» (composite) не теряет фурнитуру блоков:
+    штанги/ящики сдвинуты на origin, ручки/направляющие/опоры унаследованы."""
+    base = json.loads((ROOT / "paramspecs" / "wardrobe_demo.json").read_text(encoding="utf-8"))
+    w = base["dimensions"]["width"]
+    comp = {"schemaVersion": "paramspec-v1", "project_name": "Два шкафа",
+            "furniture_type": "шкаф", "archetype": "composite",
+            "dimensions": {"width": w * 2, "depth": base["dimensions"]["depth"],
+                            "height": base["dimensions"]["height"]},
+            "materials": dict(base["materials"]),
+            "blocks": [
+                {"name": "левый", "origin": {"x": 0, "y": 0, "z": 0}, "spec": base},
+                {"name": "правый", "origin": {"x": w, "y": 0, "z": 0},
+                 "spec": json.loads(json.dumps(base))}]}
+    from src.generators import generate_from_paramspec
+    from src.webviewer import viewer_payload
+    single = generate_from_paramspec(json.loads(json.dumps(base)))
+    proj = generate_from_paramspec(comp)
+    p = build_payload(comp)
+    assert p["ok"], p["issues"]
+    rods = proj["hardware"].get("rods") or []
+    assert len(rods) == 2 and rods[1]["x1"] == rods[0]["x1"] + w   # штанга в обоих блоках
+    xs = sorted({round(d["position"]["x"]) for d in proj["drawers"]})
+    assert len(proj["drawers"]) == 2 * len(single["drawers"])
+    assert xs[1] == xs[0] + w                                       # короба сдвинуты на origin
+    assert proj["hardware"]["handles"]["count"] == 2 * single["hardware"]["handles"]["count"]
+    assert proj["hardware"]["legs"]["count"] == 2 * single["hardware"]["legs"]["count"]
+    # видимая фурнитура и анимация — ровно два комплекта
+    sv, cv = viewer_payload(single), p["viewer"]
+    assert len(cv["openables"]) == 2 * len(sv["openables"])
+    assert len(cv["hardware"]) == 2 * len(sv["hardware"])
+
+
 def test_axon_svg_thumbnail():
     from src.studio import _axon_svg
     svg = _axon_svg(SPEC)

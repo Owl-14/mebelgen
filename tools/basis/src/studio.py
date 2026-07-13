@@ -1451,6 +1451,10 @@ async function loadProjects(){
 }
 function adoptSpec(p){
   SPEC=p.spec; UNDO.length=0; $('btnUndo').disabled=true;
+  // другой объект — другой разговор: история чата, лог и вложения не должны
+  // утекать между изделиями (иначе ИИ «помнит» чужие правки)
+  CHAT_HISTORY.length=0; $('chatlog').innerHTML='';
+  PENDING_IMGS.length=0; renderImgs(); SELECTED_PART=null;
   const dr=!!(SPEC&&SPEC.draft);                   // черновик — пустой экран без модели
   showEmpty(dr);
   scene3d.select(null); fillForm();
