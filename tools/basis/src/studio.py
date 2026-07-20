@@ -460,6 +460,65 @@ def _open_file(out_dir: Path, path: str) -> dict[str, Any]:
         return {"ok": False, "error": str(e)[:200]}
 
 
+# ------------------------------------------------------------------ защита публичного демо (AKD-271)
+#
+# Публичный инстанс (STUDIO_PUBLIC=1 в .env): ИИ-чат ходит через наши ключи —
+# без ограничений бот выжигает лимиты за минуты, а общая папка изделий даёт
+# любому посетителю портить демо-образцы. Локальной разработке лимиты не мешают.
+
+import os as _os
+import time as _time
+
+_CHAT_RPM = int(_os.environ.get("STUDIO_CHAT_RPM", "8"))          # запросов чата в минуту с IP
+_CHAT_RPD = int(_os.environ.get("STUDIO_CHAT_RPD", "200"))        # в сутки с IP
+_TOKENS_PER_DAY = int(_os.environ.get("STUDIO_TOKENS_PER_DAY", "400000"))  # на инстанс
+
+
+class _ChatGuard:
+    """Rate-limit по IP + суточный бюджет токенов (журнал в out/chat_tokens.json)."""
+
+    def __init__(self, out_dir: Path):
+        self.hits: dict[str, list[float]] = {}
+        self.f = out_dir / "chat_tokens.json"
+
+    def check(self, ip: str) -> str | None:
+        now = _time.time()
+        q = [t for t in self.hits.get(ip, []) if now - t < 86400]
+        if sum(1 for t in q if now - t < 60) >= _CHAT_RPM:
+            return "слишком часто — подождите минуту"
+        if len(q) >= _CHAT_RPD:
+            return "дневной лимит запросов чата с этого адреса исчерпан"
+        q.append(now)
+        self.hits[ip] = q
+        if len(self.hits) > 5000:                          # защита памяти от скана IP
+            self.hits = {k: v for k, v in list(self.hits.items())[-2500:]}
+        return None
+
+    def _day(self) -> str:
+        return _time.strftime("%Y-%m-%d")
+
+    def tokens_left(self) -> int:
+        try:
+            d = json.loads(self.f.read_text(encoding="utf-8"))
+        except Exception:
+            d = {}
+        return _TOKENS_PER_DAY - int(d.get(self._day(), 0))
+
+    def add_tokens(self, n: int) -> None:
+        if not n:
+            return
+        try:
+            d = json.loads(self.f.read_text(encoding="utf-8"))
+        except Exception:
+            d = {}
+        day = self._day()
+        try:
+            self.f.write_text(json.dumps({day: int(d.get(day, 0)) + int(n)}),
+                              encoding="utf-8")
+        except OSError:
+            pass
+
+
 # ------------------------------------------------------------------ server
 
 class _Studio:
@@ -467,6 +526,14 @@ class _Studio:
         self.spec_path = spec_path
         self.out_dir = out_dir
         self.spec = json.loads(spec_path.read_text(encoding="utf-8"))
+        self.public = _os.environ.get("STUDIO_PUBLIC") == "1"
+        self.guard = _ChatGuard(out_dir)
+        self.started = _time.time()               # /healthz, /version (AKD-264)
+        # демо-режим: изделия, существовавшие на старте, защищены от перезаписи
+        self.protected: set[str] = (
+            {f.name for f in spec_path.parent.glob("*.json")
+             if not f.name.endswith((".project.json", ".versions.json"))}
+            if self.public else set())
 
 
 def make_handler(st: _Studio):
@@ -498,6 +565,25 @@ def make_handler(st: _Studio):
                         .replace("__SPEC__", json.dumps(st.spec, ensure_ascii=False)
                                  .replace("</", "<\\/")))
                 self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
+            elif self.path.startswith("/vendor/"):    # three.js локально, без CDN (AKD-261)
+                vd = (Path(__file__).resolve().parent.parent / "vendor")
+                p = (vd / Path(self.path[len("/vendor/"):]).name).resolve()
+                if p.parent == vd.resolve() and p.suffix == ".js" and p.is_file():
+                    self._send(200, p.read_bytes(),
+                               "application/javascript; charset=utf-8")
+                else:
+                    self._send(404, b"{}")
+            elif self.path == "/healthz":             # мониторинг (AKD-264)
+                self._json({"ok": True, "uptime_s": int(_time.time() - st.started)})
+            elif self.path == "/version":             # какой код развёрнут (AKD-264)
+                sha = ""
+                try:
+                    sha = (Path(__file__).resolve().parent.parent / "DEPLOY_SHA") \
+                        .read_text(encoding="utf-8").strip()
+                except OSError:
+                    pass
+                self._json({"sha": sha or "dev", "public": st.public,
+                            "started": int(st.started)})
             elif self.path.startswith("/thumb/"):     # аксонометрия карточки (AKD-217)
                 from urllib.parse import unquote
                 try:
@@ -521,10 +607,26 @@ def make_handler(st: _Studio):
             else:
                 self._send(404, b"{}")
 
+        def _chat_gate(self) -> str | None:
+            """Лимиты ИИ-эндпоинтов (AKD-271): None — можно, иначе текст отказа."""
+            ip = self.headers.get("X-Real-IP") or self.client_address[0]
+            err = st.guard.check(ip)
+            if err:
+                return err
+            if st.guard.tokens_left() <= 0:
+                return "дневной бюджет токенов демо исчерпан — приходите завтра"
+            return None
+
         def do_POST(self):
             try:
                 body = self._body()
                 spec = body.get("spec") or {}
+                if self.path in ("/api/chat", "/api/import-tz"):
+                    gate = self._chat_gate()
+                    if gate:
+                        self._json({"ok": False, "error": gate,
+                                    "reply": "⛔ " + gate}, 429)
+                        return
                 if self.path == "/api/generate":
                     self._json(build_payload(spec))
                 elif self.path == "/api/techview":
@@ -560,11 +662,13 @@ def make_handler(st: _Studio):
                                 ctx["base_candidates"] = cand
                         except Exception:
                             pass
-                    self._json(chat_edit(spec, str(body.get("message", "")),
-                                         body.get("history") or [],
-                                         ctx,
-                                         body.get("images") or None,
-                                         body.get("provider") or None))
+                    res = chat_edit(spec, str(body.get("message", "")),
+                                    body.get("history") or [],
+                                    ctx,
+                                    body.get("images") or None,
+                                    body.get("provider") or None)
+                    st.guard.add_tokens(int(((res.get("usage") or {}).get("total")) or 0))
+                    self._json(res)
                 elif self.path == "/api/providers":       # список нейросетей для селектора
                     from .spec_chat import available_providers
                     self._json(available_providers())
@@ -586,6 +690,7 @@ def make_handler(st: _Studio):
                                         "изображению. НЕ бери ничего из других изделий. created=true.",
                                         images=[{"mime": mime, "data": str(body.get("data", ""))}],
                                         provider=body.get("provider") or None)
+                        st.guard.add_tokens(int(((res.get("usage") or {}).get("total")) or 0))
                         new_spec = res.get("spec")
                         if not new_spec:
                             self._json({"ok": False, "error":
@@ -666,6 +771,12 @@ def make_handler(st: _Studio):
                         thickness=float(th) if th else None,
                         limit=int(body.get("limit", 30)))})
                 elif self.path == "/api/save":
+                    # демо-режим (AKD-271): исходные образцы каталога защищены
+                    if st.public and st.spec_path.name in st.protected:
+                        self._json({"ok": False, "error":
+                                    "демо-режим: исходное изделие защищено — "
+                                    "нажмите «Дублировать» и правьте копию"}, 403)
+                        return
                     st.spec = spec
                     st.spec_path.write_text(json.dumps(spec, ensure_ascii=False, indent=2),
                                             encoding="utf-8")
@@ -847,10 +958,24 @@ PAGE = r"""<!DOCTYPE html>
   #emptyState .es-hint{font-size:13px;color:var(--mut);margin-bottom:16px;line-height:1.7}
   #emptyState.drop .es-box{border-color:var(--accent);background:#eef4ff}
   #view3d{position:absolute;inset:0}
-  #hud{position:absolute;right:12px;top:10px;z-index:5;background:rgba(255,255,255,.9);
-       border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12px}
+  /* AKD-262: HUD — узкая колонка справа, не пересекается с табами слева */
+  #hud{position:absolute;right:12px;top:10px;z-index:5;background:rgba(255,255,255,.92);
+       border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:12px;
+       width:200px;display:flex;flex-direction:column;gap:4px}
+  #hud label{display:flex;align-items:center;gap:5px;cursor:pointer;user-select:none}
+  #hud .row2{display:flex;gap:5px}
+  #hud .row2 button{flex:1;padding:4px 2px;font-size:11.5px}
+  #views{display:flex;flex-wrap:wrap;gap:3px;align-items:center}
   #views .vw{font-size:11px;padding:2px 7px}
   #views .vw.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  /* узкие ноутбуки: ужимаем боковые колонки, центр остаётся рабочим */
+  @media (max-width:1440px){
+    #app{grid-template-columns:300px 1fr 330px}
+  }
+  @media (max-width:1200px){
+    #app{grid-template-columns:270px 1fr 300px}
+    #hud{width:176px}
+  }
   #toast{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:9;
          background:#1a1d21;color:#fff;padding:7px 14px;border-radius:8px;font-size:12.5px;
          opacity:0;transition:opacity .25s;pointer-events:none;max-width:80%}
@@ -1012,7 +1137,7 @@ PAGE = r"""<!DOCTYPE html>
     <button id="btnPrint" title="печать открытого чертежа/раскроя">⎙</button>
   </div>
   <div id="hud">
-    <div id="views" style="margin-bottom:5px">Вид:
+    <div id="views"><span class="mini">Вид:</span>
       <button class="vw" data-view="axon" title="аксонометрия (без перспективы)">аксон</button>
       <button class="vw on" data-view="persp" title="перспектива ¾">персп</button>
       <button class="vw" data-view="top" title="вид сверху">сверху</button>
@@ -1024,10 +1149,12 @@ PAGE = r"""<!DOCTYPE html>
     <label><input type="checkbox" id="cbTex" checked> текстура</label>
     <label><input type="checkbox" id="cbDims" checked> размеры</label>
     <label><input type="checkbox" id="cbXray"> прозрачный</label>
-    <button id="btnOpenAll">Открыть всё</button>
-    <button id="btnCloseAll">Закрыть</button>
+    <div class="row2">
+      <button id="btnOpenAll">Открыть всё</button>
+      <button id="btnCloseAll">Закрыть</button>
+    </div>
     <label title="разнесённый вид">разбор
-      <input type="range" id="explode" min="0" max="100" value="0" style="width:90px;vertical-align:middle"></label>
+      <input type="range" id="explode" min="0" max="100" value="0" style="flex:1;min-width:0"></label>
   </div>
   <div id="draw"></div>
   <div id="catalog">
@@ -1051,8 +1178,8 @@ PAGE = r"""<!DOCTYPE html>
 </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="/vendor/three.min.js"></script>
+<script src="/vendor/OrbitControls.js"></script>
 <script>
 __SCENE_JS__
 let SPEC = __SPEC__;
@@ -1451,6 +1578,10 @@ async function loadProjects(){
 }
 function adoptSpec(p){
   SPEC=p.spec; UNDO.length=0; $('btnUndo').disabled=true;
+  // другой объект — другой разговор: история чата, лог и вложения не должны
+  // утекать между изделиями (иначе ИИ «помнит» чужие правки)
+  CHAT_HISTORY.length=0; $('chatlog').innerHTML='';
+  PENDING_IMGS.length=0; renderImgs(); SELECTED_PART=null;
   const dr=!!(SPEC&&SPEC.draft);                   // черновик — пустой экран без модели
   showEmpty(dr);
   scene3d.select(null); fillForm();

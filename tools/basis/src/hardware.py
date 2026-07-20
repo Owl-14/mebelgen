@@ -258,9 +258,14 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
         h = pl["y2"] - pl["y1"]
         n = _n_hinges(h)
         cup_x = pl["x1"] + 22 if hinge_left else pl["x2"] - 22
-        # ближайшая вертикаль со стороны петель
+        # ближайшая вертикаль со стороны петель. Кандидат обязан пересекаться
+        # с дверью по Y (AKD-235: в composite с origin.y дверь ВЕРХНЕГО шкафа
+        # прибивалась планками к боковине НИЖНЕЙ тумбы на том же X)
         side_x = pl["x1"] if hinge_left else pl["x2"]
-        side = min(verticals, key=lambda v: abs(((v["placement"]["x1"] + v["placement"]["x2"]) / 2) - side_x), default=None)
+        cands = [v for v in verticals
+                 if min(v["placement"]["y2"], pl["y2"])
+                 - max(v["placement"]["y1"], pl["y1"]) >= 40]
+        side = min(cands, key=lambda v: abs(((v["placement"]["x1"] + v["placement"]["x2"]) / 2) - side_x), default=None)
         for y in hinge_levels_clear(pl["y1"], pl["y2"], n, _shelf_spans(panels, pl["x1"], pl["x2"])):
             # чашка сверлится с ВНУТРЕННЕЙ (задней) грани двери, глухая 12 мм
             holes.append(_hole(p["name"], "петля (чашка Ø35)", cup_x, y, pl["z2"], 35, 12, "z", -1))
@@ -282,7 +287,10 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
         m = 32.0 * max(1, min(3, round((pl["z2"] - pl["z1"]) * 0.25 / 32)))
         zf, zb = pl["z1"] + m, pl["z2"] - m
         for edge_x, want in ((pl["x1"], "x2"), (pl["x2"], "x1")):
-            v = min((v for v in verticals if abs(v["placement"][want] - edge_x) < 1.0),
+            # боковина должна содержать уровень полки по Y (AKD-235: composite
+            # с origin.y — полка верхнего блока сверлилась в нижнюю боковину)
+            v = min((v for v in verticals if abs(v["placement"][want] - edge_x) < 1.0
+                     and v["placement"]["y1"] <= yc <= v["placement"]["y2"]),
                     key=lambda v: abs(v["placement"][want] - edge_x), default=None)
             if v is None:
                 continue

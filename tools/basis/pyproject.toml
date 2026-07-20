@@ -1,0 +1,17 @@
+[project]
+name = "basis"
+version = "1.0.0"
+description = "Akeda Studio: мебельное ТЗ → ParamSpec → детерминированный генератор → производственная модель БАЗИС"
+requires-python = ">=3.10"
+dependencies = [
+  "openai>=1.40.0",
+  "python-dotenv>=1.0.0",
+  "jsonschema>=4.22.0",
+  "requests>=2.31.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

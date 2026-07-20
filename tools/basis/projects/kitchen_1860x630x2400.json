@@ -1,0 +1,1697 @@
+{
+  "project_name": "Кухонный модуль 1860×630×2400 (холодильник + мойка + верхние шкафы)",
+  "furniture_type": "кухонный гарнитур (единый модуль)",
+  "overall_dimensions": {
+    "width": 1860,
+    "depth": 630,
+    "height": 2400,
+    "tolerance": 10
+  },
+  "materials": {
+    "board_material": "ЛДСП 16 мм (фасады/полки); обвязка/боковины 30–32 мм HPL светло-серый; столешница/фартук HPL Слотекс 25 мм",
+    "board_thickness": 16,
+    "back_wall_material": "ХДФ белый 3 мм",
+    "edge_band_thickness": 2.0,
+    "color": "Egger H1367 ST40 Дуб Каселла натуральный светлый",
+    "color_code": "H1367 ST40",
+    "facade_color": "Egger H1367 ST40 Дуб Каселла (альт. H1204 TM22 Ясень Лугано)"
+  },
+  "sections": [
+    {
+      "id": "Колонна холодильника_main",
+      "type": "open",
+      "dimensions": {
+        "width": 600,
+        "height": 2268,
+        "depth": 611,
+        "estimated": false
+      },
+      "elements": [
+        "Дно",
+        "Крышка",
+        "Боковина левая",
+        "Боковина правая",
+        "Задняя стенка",
+        "Цоколь",
+        "Полка 1"
+      ]
+    },
+    {
+      "id": "Низ центр — мойка_main",
+      "type": "door",
+      "dimensions": {
+        "width": 632,
+        "height": 738,
+        "depth": 611,
+        "estimated": false
+      },
+      "elements": [
+        "Дно",
+        "Крышка",
+        "Боковина левая",
+        "Боковина правая",
+        "Задняя стенка",
+        "Цоколь",
+        "Фасад левый",
+        "Фасад правый"
+      ]
+    },
+    {
+      "id": "Верх центр — посудосушитель_main",
+      "type": "door",
+      "dimensions": {
+        "width": 632,
+        "height": 968,
+        "depth": 611,
+        "estimated": false
+      },
+      "elements": [
+        "Дно",
+        "Крышка",
+        "Боковина левая",
+        "Боковина правая",
+        "Задняя стенка",
+        "Фасад левый",
+        "Фасад правый"
+      ]
+    },
+    {
+      "id": "Низ право_main",
+      "type": "door",
+      "dimensions": {
+        "width": 532,
+        "height": 738,
+        "depth": 611,
+        "estimated": false
+      },
+      "elements": [
+        "Дно",
+        "Крышка",
+        "Боковина левая",
+        "Боковина правая",
+        "Задняя стенка",
+        "Цоколь",
+        "Полка 1",
+        "Фасад двери"
+      ]
+    },
+    {
+      "id": "Верх право_main",
+      "type": "door",
+      "dimensions": {
+        "width": 532,
+        "height": 968,
+        "depth": 611,
+        "estimated": false
+      },
+      "elements": [
+        "Дно",
+        "Крышка",
+        "Боковина левая",
+        "Боковина правая",
+        "Задняя стенка",
+        "Полка 1",
+        "Фасад двери"
+      ]
+    }
+  ],
+  "panels": [
+    {
+      "name": "Колонна холодильника: Дно",
+      "type": "bottom",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 632,
+        "height": 630
+      },
+      "placement": {
+        "x1": 0.0,
+        "x2": 632.0,
+        "y1": 100.0,
+        "y2": 116.0,
+        "z1": 0.0,
+        "z2": 630.0
+      },
+      "position": {
+        "x": 0.0,
+        "y": 100.0,
+        "z": 0.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "bottom": 2,
+        "top": 0.4,
+        "left": 2,
+        "right": 2
+      },
+      "estimated": false
+    },
+    {
+      "name": "Колонна холодильника: Крышка",
+      "type": "top",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 632,
+        "height": 630
+      },
+      "placement": {
+        "x1": 0.0,
+        "x2": 632.0,
+        "y1": 2384.0,
+        "y2": 2400.0,
+        "z1": 0.0,
+        "z2": 630.0
+      },
+      "position": {
+        "x": 0.0,
+        "y": 2384.0,
+        "z": 0.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "bottom": 2,
+        "top": 0.4,
+        "left": 2,
+        "right": 2
+      },
+      "estimated": false
+    },
+    {
+      "name": "Колонна холодильника: Боковина левая",
+      "type": "side_left",
+      "basis_orientation": "vertical",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 630,
+        "height": 2268
+      },
+      "placement": {
+        "x1": 0.0,
+        "x2": 16.0,
+        "y1": 116.0,
+        "y2": 2384.0,
+        "z1": 0.0,
+        "z2": 630.0
+      },
+      "position": {
+        "x": 0.0,
+        "y": 116.0,
+        "z": 0.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "left": 2,
+        "right": 0.4,
+        "top": 0.4,
+        "bottom": 0.4
+      },
+      "estimated": false
+    },
+    {
+      "name": "Колонна холодильника: Боковина правая",
+      "type": "side_right",
+      "basis_orientation": "vertical",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 630,
+        "height": 2268
+      },
+      "placement": {
+        "x1": 616.0,
+        "x2": 632.0,
+        "y1": 116.0,
+        "y2": 2384.0,
+        "z1": 0.0,
+        "z2": 630.0
+      },
+      "position": {
+        "x": 616.0,
+        "y": 116.0,
+        "z": 0.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "left": 2,
+        "right": 0.4,
+        "top": 0.4,
+        "bottom": 0.4
+      },
+      "estimated": false
+    },
+    {
+      "name": "Колонна холодильника: Задняя стенка",
+      "type": "back",
+      "basis_orientation": "front",
+      "material": "ХДФ белый",
+      "thickness": 3,
+      "dimensions": {
+        "width": 632,
+        "height": 2400
+      },
+      "placement": {
+        "x1": 0.0,
+        "x2": 632.0,
+        "y1": 0.0,
+        "y2": 2400.0,
+        "z1": 630.0,
+        "z2": 633.0
+      },
+      "position": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 630.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0,
+        "bottom": 0,
+        "left": 0,
+        "right": 0
+      },
+      "estimated": false,
+      "override": true
+    },
+    {
+      "name": "Колонна холодильника: Цоколь",
+      "type": "plinth",
+      "basis_orientation": "front",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 600,
+        "height": 100
+      },
+      "placement": {
+        "x1": 16.0,
+        "x2": 616.0,
+        "y1": 0.0,
+        "y2": 100.0,
+        "z1": 50.0,
+        "z2": 66.0
+      },
+      "position": {
+        "x": 16.0,
+        "y": 0.0,
+        "z": 50.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 2,
+        "bottom": 2,
+        "left": 2,
+        "right": 2
+      },
+      "estimated": true
+    },
+    {
+      "name": "Колонна холодильника: Полка 1",
+      "type": "shelf",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 600,
+        "height": 611
+      },
+      "placement": {
+        "x1": 16.0,
+        "x2": 616.0,
+        "y1": 2050.0,
+        "y2": 2066.0,
+        "z1": 16.0,
+        "z2": 627.0
+      },
+      "position": {
+        "x": 16.0,
+        "y": 2050.0,
+        "z": 16.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "bottom": 2,
+        "top": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
+      "estimated": false,
+      "section_id": "main"
+    },
+    {
+      "name": "Низ центр — мойка: Дно",
+      "type": "bottom",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 664,
+        "height": 630
+      },
+      "placement": {
+        "x1": 632.0,
+        "x2": 1296.0,
+        "y1": 100.0,
+        "y2": 116.0,
+        "z1": 0.0,
+        "z2": 630.0
+      },
+      "position": {
+        "x": 632.0,
+        "y": 100.0,
+        "z": 0.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "bottom": 2,
+        "top": 0.4,
+        "left": 2,
+        "right": 2
+      },
+      "estimated": false
+    },
+    {
+      "name": "Низ центр — мойка: Крышка",
+      "type": "top",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 664,
+        "height": 630
+      },
+      "placement": {
+        "x1": 632.0,
+        "x2": 1296.0,
+        "y1": 854.0,
+        "y2": 870.0,
+        "z1": 0.0,
+        "z2": 630.0
+      },
+      "position": {
+        "x": 632.0,
+        "y": 854.0,
+        "z": 0.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "bottom": 2,
+        "top": 0.4,
+        "left": 2,
+        "right": 2
+      },
+      "estimated": false
+    },
+    {
+      "name": "Низ центр — мойка: Боковина левая",
+      "type": "side_left",
+      "basis_orientation": "vertical",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 630,
+        "height": 738
+      },
+      "placement": {
+        "x1": 632.0,
+        "x2": 648.0,
+        "y1": 116.0,
+        "y2": 854.0,
+        "z1": 0.0,
+        "z2": 630.0
+      },
+      "position": {
+        "x": 632.0,
+        "y": 116.0,
+        "z": 0.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "left": 2,
+        "right": 0.4,
+        "top": 0.4,
+        "bottom": 0.4
+      },
+      "estimated": false
+    },
+    {
+      "name": "Низ центр — мойка: Боковина правая",
+      "type": "side_right",
+      "basis_orientation": "vertical",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 630,
+        "height": 738
+      },
+      "placement": {
+        "x1": 1280.0,
+        "x2": 1296.0,
+        "y1": 116.0,
+        "y2": 854.0,
+        "z1": 0.0,
+        "z2": 630.0
+      },
+      "position": {
+        "x": 1280.0,
+        "y": 116.0,
+        "z": 0.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "left": 2,
+        "right": 0.4,
+        "top": 0.4,
+        "bottom": 0.4
+      },
+      "estimated": false
+    },
+    {
+      "name": "Низ центр — мойка: Задняя стенка",
+      "type": "back",
+      "basis_orientation": "front",
+      "material": "ХДФ белый",
+      "thickness": 3,
+      "dimensions": {
+        "width": 664,
+        "height": 870
+      },
+      "placement": {
+        "x1": 632.0,
+        "x2": 1296.0,
+        "y1": 0.0,
+        "y2": 870.0,
+        "z1": 630.0,
+        "z2": 633.0
+      },
+      "position": {
+        "x": 632.0,
+        "y": 0.0,
+        "z": 630.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0,
+        "bottom": 0,
+        "left": 0,
+        "right": 0
+      },
+      "estimated": false,
+      "override": true
+    },
+    {
+      "name": "Низ центр — мойка: Цоколь",
+      "type": "plinth",
+      "basis_orientation": "front",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 632,
+        "height": 100
+      },
+      "placement": {
+        "x1": 648.0,
+        "x2": 1280.0,
+        "y1": 0.0,
+        "y2": 100.0,
+        "z1": 50.0,
+        "z2": 66.0
+      },
+      "position": {
+        "x": 648.0,
+        "y": 0.0,
+        "z": 50.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 2,
+        "bottom": 2,
+        "left": 2,
+        "right": 2
+      },
+      "estimated": true
+    },
+    {
+      "name": "Низ центр — мойка: Фасад левый",
+      "type": "door_front",
+      "basis_orientation": "front",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 329,
+        "height": 734
+      },
+      "placement": {
+        "x1": 634.0,
+        "x2": 963.0,
+        "y1": 118.0,
+        "y2": 852.0,
+        "z1": -16.0,
+        "z2": 0.0
+      },
+      "position": {
+        "x": 634.0,
+        "y": 118.0,
+        "z": -16.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 2,
+        "bottom": 2,
+        "left": 2,
+        "right": 2
+      },
+      "estimated": false,
+      "section_id": "main"
+    },
+    {
+      "name": "Низ центр — мойка: Фасад правый",
+      "type": "door_front",
+      "basis_orientation": "front",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 329,
+        "height": 734
+      },
+      "placement": {
+        "x1": 965.0,
+        "x2": 1294.0,
+        "y1": 118.0,
+        "y2": 852.0,
+        "z1": -16.0,
+        "z2": 0.0
+      },
+      "position": {
+        "x": 965.0,
+        "y": 118.0,
+        "z": -16.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 2,
+        "bottom": 2,
+        "left": 2,
+        "right": 2
+      },
+      "estimated": false,
+      "section_id": "main"
+    },
+    {
+      "name": "Верх центр — посудосушитель: Дно",
+      "type": "bottom",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 664,
+        "height": 630
+      },
+      "placement": {
+        "x1": 632.0,
+        "x2": 1296.0,
+        "y1": 1400.0,
+        "y2": 1416.0,
+        "z1": 0.0,
+        "z2": 630.0
+      },
+      "position": {
+        "x": 632.0,
+        "y": 1400.0,
+        "z": 0.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "bottom": 2,
+        "top": 0.4,
+        "left": 2,
+        "right": 2
+      },
+      "estimated": false
+    },
+    {
+      "name": "Верх центр — посудосушитель: Крышка",
+      "type": "top",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 664,
+        "height": 630
+      },
+      "placement": {
+        "x1": 632.0,
+        "x2": 1296.0,
+        "y1": 2384.0,
+        "y2": 2400.0,
+        "z1": 0.0,
+        "z2": 630.0
+      },
+      "position": {
+        "x": 632.0,
+        "y": 2384.0,
+        "z": 0.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "bottom": 2,
+        "top": 0.4,
+        "left": 2,
+        "right": 2
+      },
+      "estimated": false
+    },
+    {
+      "name": "Верх центр — посудосушитель: Боковина левая",
+      "type": "side_left",
+      "basis_orientation": "vertical",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 630,
+        "height": 968
+      },
+      "placement": {
+        "x1": 632.0,
+        "x2": 648.0,
+        "y1": 1416.0,
+        "y2": 2384.0,
+        "z1": 0.0,
+        "z2": 630.0
+      },
+      "position": {
+        "x": 632.0,
+        "y": 1416.0,
+        "z": 0.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "left": 2,
+        "right": 0.4,
+        "top": 0.4,
+        "bottom": 0.4
+      },
+      "estimated": false
+    },
+    {
+      "name": "Верх центр — посудосушитель: Боковина правая",
+      "type": "side_right",
+      "basis_orientation": "vertical",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 630,
+        "height": 968
+      },
+      "placement": {
+        "x1": 1280.0,
+        "x2": 1296.0,
+        "y1": 1416.0,
+        "y2": 2384.0,
+        "z1": 0.0,
+        "z2": 630.0
+      },
+      "position": {
+        "x": 1280.0,
+        "y": 1416.0,
+        "z": 0.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "left": 2,
+        "right": 0.4,
+        "top": 0.4,
+        "bottom": 0.4
+      },
+      "estimated": false
+    },
+    {
+      "name": "Верх центр — посудосушитель: Задняя стенка",
+      "type": "back",
+      "basis_orientation": "front",
+      "material": "ХДФ белый",
+      "thickness": 3,
+      "dimensions": {
+        "width": 664,
+        "height": 1000
+      },
+      "placement": {
+        "x1": 632.0,
+        "x2": 1296.0,
+        "y1": 1400.0,
+        "y2": 2400.0,
+        "z1": 630.0,
+        "z2": 633.0
+      },
+      "position": {
+        "x": 632.0,
+        "y": 1400.0,
+        "z": 630.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0,
+        "bottom": 0,
+        "left": 0,
+        "right": 0
+      },
+      "estimated": false,
+      "override": true
+    },
+    {
+      "name": "Верх центр — посудосушитель: Фасад левый",
+      "type": "door_front",
+      "basis_orientation": "front",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 329,
+        "height": 964
+      },
+      "placement": {
+        "x1": 634.0,
+        "x2": 963.0,
+        "y1": 1418.0,
+        "y2": 2382.0,
+        "z1": -16.0,
+        "z2": 0.0
+      },
+      "position": {
+        "x": 634.0,
+        "y": 1418.0,
+        "z": -16.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 2,
+        "bottom": 2,
+        "left": 2,
+        "right": 2
+      },
+      "estimated": false,
+      "section_id": "main"
+    },
+    {
+      "name": "Верх центр — посудосушитель: Фасад правый",
+      "type": "door_front",
+      "basis_orientation": "front",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 329,
+        "height": 964
+      },
+      "placement": {
+        "x1": 965.0,
+        "x2": 1294.0,
+        "y1": 1418.0,
+        "y2": 2382.0,
+        "z1": -16.0,
+        "z2": 0.0
+      },
+      "position": {
+        "x": 965.0,
+        "y": 1418.0,
+        "z": -16.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 2,
+        "bottom": 2,
+        "left": 2,
+        "right": 2
+      },
+      "estimated": false,
+      "section_id": "main"
+    },
+    {
+      "name": "Низ право: Дно",
+      "type": "bottom",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 564,
+        "height": 630
+      },
+      "placement": {
+        "x1": 1296.0,
+        "x2": 1860.0,
+        "y1": 100.0,
+        "y2": 116.0,
+        "z1": 0.0,
+        "z2": 630.0
+      },
+      "position": {
+        "x": 1296.0,
+        "y": 100.0,
+        "z": 0.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "bottom": 2,
+        "top": 0.4,
+        "left": 2,
+        "right": 2
+      },
+      "estimated": false
+    },
+    {
+      "name": "Низ право: Крышка",
+      "type": "top",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 564,
+        "height": 630
+      },
+      "placement": {
+        "x1": 1296.0,
+        "x2": 1860.0,
+        "y1": 854.0,
+        "y2": 870.0,
+        "z1": 0.0,
+        "z2": 630.0
+      },
+      "position": {
+        "x": 1296.0,
+        "y": 854.0,
+        "z": 0.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "bottom": 2,
+        "top": 0.4,
+        "left": 2,
+        "right": 2
+      },
+      "estimated": false
+    },
+    {
+      "name": "Низ право: Боковина левая",
+      "type": "side_left",
+      "basis_orientation": "vertical",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 630,
+        "height": 738
+      },
+      "placement": {
+        "x1": 1296.0,
+        "x2": 1312.0,
+        "y1": 116.0,
+        "y2": 854.0,
+        "z1": 0.0,
+        "z2": 630.0
+      },
+      "position": {
+        "x": 1296.0,
+        "y": 116.0,
+        "z": 0.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "left": 2,
+        "right": 0.4,
+        "top": 0.4,
+        "bottom": 0.4
+      },
+      "estimated": false
+    },
+    {
+      "name": "Низ право: Боковина правая",
+      "type": "side_right",
+      "basis_orientation": "vertical",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 630,
+        "height": 738
+      },
+      "placement": {
+        "x1": 1844.0,
+        "x2": 1860.0,
+        "y1": 116.0,
+        "y2": 854.0,
+        "z1": 0.0,
+        "z2": 630.0
+      },
+      "position": {
+        "x": 1844.0,
+        "y": 116.0,
+        "z": 0.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "left": 2,
+        "right": 0.4,
+        "top": 0.4,
+        "bottom": 0.4
+      },
+      "estimated": false
+    },
+    {
+      "name": "Низ право: Задняя стенка",
+      "type": "back",
+      "basis_orientation": "front",
+      "material": "ХДФ белый",
+      "thickness": 3,
+      "dimensions": {
+        "width": 564,
+        "height": 870
+      },
+      "placement": {
+        "x1": 1296.0,
+        "x2": 1860.0,
+        "y1": 0.0,
+        "y2": 870.0,
+        "z1": 630.0,
+        "z2": 633.0
+      },
+      "position": {
+        "x": 1296.0,
+        "y": 0.0,
+        "z": 630.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0,
+        "bottom": 0,
+        "left": 0,
+        "right": 0
+      },
+      "estimated": false,
+      "override": true
+    },
+    {
+      "name": "Низ право: Цоколь",
+      "type": "plinth",
+      "basis_orientation": "front",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 532,
+        "height": 100
+      },
+      "placement": {
+        "x1": 1312.0,
+        "x2": 1844.0,
+        "y1": 0.0,
+        "y2": 100.0,
+        "z1": 50.0,
+        "z2": 66.0
+      },
+      "position": {
+        "x": 1312.0,
+        "y": 0.0,
+        "z": 50.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 2,
+        "bottom": 2,
+        "left": 2,
+        "right": 2
+      },
+      "estimated": true
+    },
+    {
+      "name": "Низ право: Полка 1",
+      "type": "shelf",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 532,
+        "height": 611
+      },
+      "placement": {
+        "x1": 1312.0,
+        "x2": 1844.0,
+        "y1": 477.0,
+        "y2": 493.0,
+        "z1": 16.0,
+        "z2": 627.0
+      },
+      "position": {
+        "x": 1312.0,
+        "y": 477.0,
+        "z": 16.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "bottom": 2,
+        "top": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
+      "estimated": false,
+      "section_id": "main"
+    },
+    {
+      "name": "Низ право: Фасад двери",
+      "type": "door_front",
+      "basis_orientation": "front",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 560,
+        "height": 734
+      },
+      "placement": {
+        "x1": 1298.0,
+        "x2": 1858.0,
+        "y1": 118.0,
+        "y2": 852.0,
+        "z1": -16.0,
+        "z2": 0.0
+      },
+      "position": {
+        "x": 1298.0,
+        "y": 118.0,
+        "z": -16.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 2,
+        "bottom": 2,
+        "left": 2,
+        "right": 2
+      },
+      "estimated": false,
+      "section_id": "main"
+    },
+    {
+      "name": "Верх право: Дно",
+      "type": "bottom",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 564,
+        "height": 630
+      },
+      "placement": {
+        "x1": 1296.0,
+        "x2": 1860.0,
+        "y1": 1400.0,
+        "y2": 1416.0,
+        "z1": 0.0,
+        "z2": 630.0
+      },
+      "position": {
+        "x": 1296.0,
+        "y": 1400.0,
+        "z": 0.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "bottom": 2,
+        "top": 0.4,
+        "left": 2,
+        "right": 2
+      },
+      "estimated": false
+    },
+    {
+      "name": "Верх право: Крышка",
+      "type": "top",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 564,
+        "height": 630
+      },
+      "placement": {
+        "x1": 1296.0,
+        "x2": 1860.0,
+        "y1": 2384.0,
+        "y2": 2400.0,
+        "z1": 0.0,
+        "z2": 630.0
+      },
+      "position": {
+        "x": 1296.0,
+        "y": 2384.0,
+        "z": 0.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "bottom": 2,
+        "top": 0.4,
+        "left": 2,
+        "right": 2
+      },
+      "estimated": false
+    },
+    {
+      "name": "Верх право: Боковина левая",
+      "type": "side_left",
+      "basis_orientation": "vertical",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 630,
+        "height": 968
+      },
+      "placement": {
+        "x1": 1296.0,
+        "x2": 1312.0,
+        "y1": 1416.0,
+        "y2": 2384.0,
+        "z1": 0.0,
+        "z2": 630.0
+      },
+      "position": {
+        "x": 1296.0,
+        "y": 1416.0,
+        "z": 0.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "left": 2,
+        "right": 0.4,
+        "top": 0.4,
+        "bottom": 0.4
+      },
+      "estimated": false
+    },
+    {
+      "name": "Верх право: Боковина правая",
+      "type": "side_right",
+      "basis_orientation": "vertical",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 630,
+        "height": 968
+      },
+      "placement": {
+        "x1": 1844.0,
+        "x2": 1860.0,
+        "y1": 1416.0,
+        "y2": 2384.0,
+        "z1": 0.0,
+        "z2": 630.0
+      },
+      "position": {
+        "x": 1844.0,
+        "y": 1416.0,
+        "z": 0.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "left": 2,
+        "right": 0.4,
+        "top": 0.4,
+        "bottom": 0.4
+      },
+      "estimated": false
+    },
+    {
+      "name": "Верх право: Задняя стенка",
+      "type": "back",
+      "basis_orientation": "front",
+      "material": "ХДФ белый",
+      "thickness": 3,
+      "dimensions": {
+        "width": 564,
+        "height": 1000
+      },
+      "placement": {
+        "x1": 1296.0,
+        "x2": 1860.0,
+        "y1": 1400.0,
+        "y2": 2400.0,
+        "z1": 630.0,
+        "z2": 633.0
+      },
+      "position": {
+        "x": 1296.0,
+        "y": 1400.0,
+        "z": 630.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0,
+        "bottom": 0,
+        "left": 0,
+        "right": 0
+      },
+      "estimated": false,
+      "override": true
+    },
+    {
+      "name": "Верх право: Полка 1",
+      "type": "shelf",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 532,
+        "height": 611
+      },
+      "placement": {
+        "x1": 1312.0,
+        "x2": 1844.0,
+        "y1": 1892.0,
+        "y2": 1908.0,
+        "z1": 16.0,
+        "z2": 627.0
+      },
+      "position": {
+        "x": 1312.0,
+        "y": 1892.0,
+        "z": 16.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "bottom": 2,
+        "top": 0.4,
+        "left": 0.4,
+        "right": 0.4
+      },
+      "estimated": false,
+      "section_id": "main"
+    },
+    {
+      "name": "Верх право: Фасад двери",
+      "type": "door_front",
+      "basis_orientation": "front",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 560,
+        "height": 964
+      },
+      "placement": {
+        "x1": 1298.0,
+        "x2": 1858.0,
+        "y1": 1418.0,
+        "y2": 2382.0,
+        "z1": -16.0,
+        "z2": 0.0
+      },
+      "position": {
+        "x": 1298.0,
+        "y": 1418.0,
+        "z": -16.0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 2,
+        "bottom": 2,
+        "left": 2,
+        "right": 2
+      },
+      "estimated": false,
+      "section_id": "main"
+    }
+  ],
+  "drawers": [],
+  "doors": [
+    {
+      "id": "Низ центр — мойка_door_1",
+      "type": "распашная",
+      "hinges": "накладные",
+      "lock": false,
+      "dimensions": {
+        "width": 329.0,
+        "height": 734.0
+      },
+      "position": {
+        "x": 634.0,
+        "y": 118.0,
+        "z": 0.0
+      },
+      "estimated": false
+    },
+    {
+      "id": "Низ центр — мойка_door_2",
+      "type": "распашная",
+      "hinges": "накладные",
+      "lock": false,
+      "dimensions": {
+        "width": 329.0,
+        "height": 734.0
+      },
+      "position": {
+        "x": 965.0,
+        "y": 118.0,
+        "z": 0.0
+      },
+      "estimated": false
+    },
+    {
+      "id": "Верх центр — посудосушитель_door_1",
+      "type": "распашная",
+      "hinges": "накладные",
+      "lock": false,
+      "dimensions": {
+        "width": 329.0,
+        "height": 964.0
+      },
+      "position": {
+        "x": 634.0,
+        "y": 1418.0,
+        "z": 0.0
+      },
+      "estimated": false
+    },
+    {
+      "id": "Верх центр — посудосушитель_door_2",
+      "type": "распашная",
+      "hinges": "накладные",
+      "lock": false,
+      "dimensions": {
+        "width": 329.0,
+        "height": 964.0
+      },
+      "position": {
+        "x": 965.0,
+        "y": 1418.0,
+        "z": 0.0
+      },
+      "estimated": false
+    },
+    {
+      "id": "Низ право_door_1",
+      "type": "распашная",
+      "hinges": "накладные",
+      "lock": false,
+      "dimensions": {
+        "width": 560,
+        "height": 734.0
+      },
+      "position": {
+        "x": 1298.0,
+        "y": 118.0,
+        "z": 0.0
+      },
+      "estimated": false
+    },
+    {
+      "id": "Верх право_door_1",
+      "type": "распашная",
+      "hinges": "накладные",
+      "lock": false,
+      "dimensions": {
+        "width": 560,
+        "height": 964.0
+      },
+      "position": {
+        "x": 1298.0,
+        "y": 1418.0,
+        "z": 0.0
+      },
+      "estimated": false
+    }
+  ],
+  "hardware": {
+    "handles": {
+      "type": "профиль-ручка Gola (безручечный)",
+      "material": "алюминий",
+      "color": "матовый хром",
+      "count": 0
+    },
+    "legs": {
+      "type": "цоколь + регулируемые опоры",
+      "adjustable": true,
+      "color": "—",
+      "height": 100,
+      "count": 0
+    },
+    "hinges": {
+      "type": "петля накладная"
+    }
+  },
+  "constraints": {
+    "default_gap": 2,
+    "drawer_gap": 2,
+    "door_gap": 2,
+    "back_wall_offset": 3,
+    "construction": "top_bottom_over_sides"
+  },
+  "basis_mapping": {
+    "coordinate_system": "basis_mebelshik",
+    "units": "mm",
+    "ready_for_import": true,
+    "placement_required": true
+  },
+  "warnings": [
+    "Единый композит из 5 модулей: колонна холодильника (полная высота) + низ мойки/верх посудосушитель (центр) + низ/верх справа. Открытая ниша = зазор 870…1400 мм между базой и навесными (задник ниши — фартук HPL).",
+    "Модель: board_thickness=16 (фасады/полки/перегородки). Обвязка/боковины 30–32 мм, столешница/фартук HPL 25 мм, задник ХДФ 3 мм — заданы в materials, но в 3D корпус рисуется одной толщиной (ограничение генератора: одна толщина на блок).",
+    "Вырез 500×400 под врезную мойку и фрезеровки в столешнице булевым вычитанием в этом конвейере не выполняются — заданы примечанием (фрезеровка под ящик на ЛДСП не требуется).",
+    "Торцы корпуса выступают относительно фасадов на 30 мм — накладные фасады утоплены; в модели фасады накладные (z −T..0), точный вынос 30 мм — оверрайдом/при сборке.",
+    "Кромка: топ и фасады 2.0 мм, внутренние полки 1.0 мм.",
+    "Цоколь 100 мм + регулируемые опоры под нижними модулями — принято по умолчанию (в ТЗ высота 2400 — общая, включая цоколь)."
+  ],
+  "estimated_values": [
+    "legs.height",
+    "materials.color"
+  ],
+  "carcass_calculation": {
+    "blocks": [
+      "Колонна холодильника",
+      "Низ центр — мойка",
+      "Верх центр — посудосушитель",
+      "Низ право",
+      "Верх право"
+    ],
+    "construction": "composite"
+  },
+  "material_refs": {
+    "back": {
+      "resolved": true,
+      "id": "2001",
+      "article": "2001",
+      "name": "ХДФ, 3 мм, Белый лак., Kronostar",
+      "cost": 245,
+      "unit": "кв.м.",
+      "group": "01 Листовой материал/ДВП,ХДФ",
+      "match": "задник ДВП/ХДФ",
+      "confidence": "medium"
+    },
+    "board": {
+      "resolved": false,
+      "query": "плита 16 мм «Egger H1367 ST40 Дуб Каселла натуральный светлый» (код H1367 ST40)",
+      "reason": "не найдено по цвету/коду — подтвердить вручную",
+      "candidates": [
+        "ЛДСП, 16 мм, Кубанит серый, Egger",
+        "ЛДСП, 16 мм, Белый Премиум, Egger",
+        "ЛДСП, 16 мм, Дуб Бардолино натуральный, Egger"
+      ]
+    },
+    "facade": {
+      "resolved": false,
+      "query": "плита 16 мм «Egger H1367 ST40 Дуб Каселла (альт. H1204 TM22 Ясень Лугано)»",
+      "reason": "не найдено по цвету/коду — подтвердить вручную",
+      "candidates": [
+        "ЛДСП, 16 мм, Кубанит серый, Egger",
+        "ЛДСП, 16 мм, Белый Премиум, Egger",
+        "ЛДСП, 16 мм, Дуб Бардолино натуральный, Egger"
+      ]
+    },
+    "edge": {
+      "resolved": true,
+      "id": "1759",
+      "article": "1759",
+      "name": "Кромка ПВХ, 19/2 мм, Белый, 91470-14, Rehau",
+      "cost": 20,
+      "unit": "пог. м",
+      "group": "02 Кромочные материалы/Кромка 19мм/2/19",
+      "match": "по толщине (в цвет плиты)",
+      "confidence": "low"
+    },
+    "hinges": {
+      "resolved": true,
+      "group": "Петли",
+      "matched_tokens": [
+        "петля"
+      ],
+      "note": "шорт-лист реальных позиций базы; конкретный артикул выбирает технолог/каталог БАЗИС",
+      "candidates": [
+        {
+          "article": "8337, HMF.01119.052",
+          "name": "Петля полунакладная MF-201В, Slide-on",
+          "cost": 19
+        },
+        {
+          "article": "8338, HMF.01119.082",
+          "name": "Петля вкладная MF-201С, Slide-on",
+          "cost": 19
+        },
+        {
+          "article": "8336, HMF.01119.022",
+          "name": "Петля накладная MF-201А, Slide-on",
+          "cost": 22
+        },
+        {
+          "article": "3201",
+          "name": "Петля для накладных дверей Firmax Slide-on, угол открывания 110°, 48 мм, шуруп",
+          "cost": 25
+        },
+        {
+          "article": "3203",
+          "name": "Петля для вкладных дверей Firmax Slide-on, угол открывания 110°, 48 мм, под шуруп",
+          "cost": 25
+        }
+      ]
+    }
+  }
+}

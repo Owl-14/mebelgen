@@ -234,15 +234,6 @@
             "minimum": 0,
             "maximum": 2
           },
-          "door_inset": {
-            "type": "boolean",
-            "description": "true — врезная в проём, false — накладная"
-          },
-          "open_top_height": {
-            "type": "number",
-            "minimum": 0,
-            "description": "Высота верхней открытой ниши над содержимым (с полкой-отбивкой)"
-          },
           "rod": {
             "description": "Штанга-вешало (AKD-177): true или объект. axis x — поперечная между боковинами; z — продольная выдвижная (малая глубина). height — ось по Y (иначе верх проёма − 80).",
             "anyOf": [
@@ -282,6 +273,31 @@
               "down"
             ],
             "description": "Направление открывания одиночной двери секции (AKD-224): left/right — сторона петель; up/down — откидная вверх/вниз"
+          },
+          "door_inset": {
+            "type": "boolean",
+            "description": "true — врезная дверь в проём (алиас door_z:'inset'); нет/false — накладная"
+          },
+          "door_z": {
+            "type": "string",
+            "enum": [
+              "overlay",
+              "front",
+              "inset"
+            ],
+            "description": "Z-позиция двери: overlay/front — накладная, inset — врезная в проём"
+          },
+          "front_bottom": {
+            "type": "number",
+            "description": "Y низа фасадной зоны (ниша снизу): фасады начинаются не от пола"
+          },
+          "front_top": {
+            "type": "number",
+            "description": "Y верха фасадной зоны (ниша сверху): фасады не до крышки"
+          },
+          "cover_top": {
+            "type": "boolean",
+            "description": "полка-перекрытие над стеком ящиков (по умолчанию true)"
           }
         }
       }
@@ -381,6 +397,40 @@
     "sides_over_top": {
       "type": "boolean",
       "description": "Схема стыка верха (AKD-226): true — боковины идут до верха и перекрывают крышку (крышка в проём между ними); false/нет — крышка перекрывает боковины (по умолчанию)"
+    },
+    "blocks": {
+      "type": "array",
+      "description": "Только archetype=composite: блоки композиции; origin — смещение блока (мм), origin.y — вертикальная постановка (навесные над нижними)",
+      "items": {
+        "type": "object",
+        "required": [
+          "spec"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "префикс имён деталей блока"
+          },
+          "origin": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "z": {
+                "type": "number"
+              }
+            }
+          },
+          "spec": {
+            "type": "object",
+            "description": "полный вложенный ParamSpec блока (composite внутри composite запрещён)"
+          }
+        }
+      }
     }
   }
 }

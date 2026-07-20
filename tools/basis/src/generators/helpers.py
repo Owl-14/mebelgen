@@ -139,6 +139,46 @@ def overlay_door(W: float, H: float, T: float, Hleg: float, gap: float, mat: str
                  thickness=T, material=mat, section_id=section_id)
 
 
+# ------------------------------------------------------------------ кромка (AKD-260)
+#
+# Кромка по назначению торца (rules/materials.md: видимые — edge_band_thickness,
+# скрытые — 0.4, стыковые с ДВП/дном ящика — без кромки), а не 0.4 на всё.
+# Ключи edge_banding — в осях пласти детали: left/right — торцы по оси ширины
+# контура (min/max), bottom/top — по оси высоты (min/max):
+#   horizont: ширина=X, высота=Z → bottom = ПЕРЕДНИЙ торец (z1);
+#   vertical: ширина=Z, высота=Y → left  = ПЕРЕДНИЙ торец (z1);
+#   front:    ширина=X, высота=Y.
+_FACADE_EDGE_TYPES = {"door_front", "drawer_front", "facade", "screen"}
+_NO_EDGE_TYPES = {"back", "drawer_bottom"}
+
+
+def apply_edge_policy(panels: list[dict[str, Any]], spec: dict[str, Any]) -> None:
+    m = spec.get("materials") or {}
+    v = float(m.get("edge_band_thickness") or 2.0)
+    vis = int(v) if v.is_integer() else v
+    hid = 0.4
+    for p in panels:
+        t = str(p.get("type") or "")
+        orient = str(p.get("basis_orientation") or "front")
+        if t in _FACADE_EDGE_TYPES:
+            eb = {"top": vis, "bottom": vis, "left": vis, "right": vis}
+        elif t in _NO_EDGE_TYPES:
+            eb = {"top": 0, "bottom": 0, "left": 0, "right": 0}
+        elif t in ("drawer_side_left", "drawer_side_right", "drawer_back"):
+            # короб ящика: виден только верхний торец
+            eb = {"top": hid, "bottom": 0, "left": 0, "right": 0}
+        elif orient in ("horizont", "horizontal"):
+            # дно/крышка перекрывают боковины — их X-торцы видны; полки/цоколь
+            # прячут торцы в стыках с боковинами
+            side = vis if t in ("top", "bottom") else hid
+            eb = {"bottom": vis, "top": hid, "left": side, "right": side}
+        elif orient == "vertical":
+            eb = {"left": vis, "right": hid, "top": hid, "bottom": hid}
+        else:
+            eb = {"top": vis, "bottom": vis, "left": vis, "right": vis}
+        p["edge_banding"] = eb
+
+
 def build_project(spec: dict[str, Any], panels: list[dict[str, Any]], *,
                   sections: list[dict[str, Any]] | None = None,
                   drawers: list[dict[str, Any]] | None = None,
@@ -146,6 +186,7 @@ def build_project(spec: dict[str, Any], panels: list[dict[str, Any]], *,
                   carcass_calc: dict[str, Any] | None = None,
                   rods: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """Собрать project.json по furniture.schema.json из панелей и ParamSpec."""
+    apply_edge_policy(panels, spec)               # кромка по назначению (AKD-260)
     dim = spec["dimensions"]
     m = spec["materials"]
     T_back = m.get("back_thickness", m["board_thickness"])

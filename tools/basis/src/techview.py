@@ -234,22 +234,38 @@ def build_techview_svg(project: dict[str, Any]) -> tuple[str, list[str]]:
     lt = str(legs.get("type") or "").strip()
     legs_note = (f"{lt[:1].upper()}{lt[1:]} {_fmt(legs_h)} мм" if lt else f"Опоры {_fmt(legs_h)} мм") if legs_h else ""
 
+    # выноски считаем ДО раскладки: ширины колонок подгоняются под самый
+    # длинный текст (AKD-235: «Колонна холодильника: Задняя стенка» в composite
+    # вылезала за рамку при фиксированной ширине колонки)
+    def _call_w(text: str) -> float:
+        return max(len(ln) for ln in _wrap(text)) * _FS_CALL * _CHAR_W
+
+    calls = _pick_callouts(panels, legs_h if not has_plinth else 0, legs_note)
+    lbl_w1 = max(_LBL_COL_W, max((_call_w(c["text"]) for c in calls), default=0) + 30)
+    backs = [p for p in panels if p.get("type") == "back"]
+    back_txt = ""
+    if backs:
+        pl_b = backs[0]["placement"]
+        nm_b = _clean_name(backs[0].get("name") or "Задняя стенка")
+        back_txt = f"{nm_b} {_fmt(backs[0].get('thickness') or (pl_b['z2'] - pl_b['z1']))} мм"
+    lbl_w2 = max(_LBL_COL_W2, (_call_w(back_txt) + 26) if back_txt else 0)
+
     # --- масштаб и раскладка листа ---
     sheet_h = 560.0
     m_left, m_top, m_bot = 86.0, 46.0, 74.0
     draw_h = sheet_h - m_top - m_bot
     scale = draw_h / max(H, 1)
     max_total = 1160.0
-    need = W * scale + _LBL_COL_W + (D * scale) + _LBL_COL_W2 + m_left + 60
+    need = W * scale + lbl_w1 + (D * scale) + lbl_w2 + m_left + 60
     if need > max_total:
-        scale *= (max_total - _LBL_COL_W - _LBL_COL_W2 - m_left - 60) / (W * scale + D * scale)
+        scale *= (max_total - lbl_w1 - lbl_w2 - m_left - 60) / (W * scale + D * scale)
 
     fx0, fy0 = m_left, m_top                      # фронт: левый-верх области
     fw, fh = W * scale, H * scale
     fy1 = fy0 + fh                                # линия пола
-    sx0 = fx0 + fw + _LBL_COL_W + 26              # бок
+    sx0 = fx0 + fw + lbl_w1 + 26                  # бок
     sw_, sh_ = D * scale, fh
-    total_w = sx0 + sw_ + _LBL_COL_W2 + 30
+    total_w = sx0 + sw_ + lbl_w2 + 30
     total_h = sheet_h
 
     def FX(x):
@@ -345,19 +361,16 @@ def build_techview_svg(project: dict[str, Any]) -> tuple[str, list[str]]:
             prev = lv
 
     # --- выноски: колонка справа от фронта + одиночная у бока ---
-    calls = _pick_callouts(panels, legs_h if not has_plinth else 0, legs_note)
     sc = []
     for c in calls:
         ax = FX(c["x"]) if c["x"] is not None else FX(xs1 + 30) + 4
         sc.append({"x": ax, "y": FY(c["y"]), "text": c["text"]})
     _draw_callout_column(svg, sc, fx0 + fw, fx0 + fw + 26, fy0 + 4, fy1 - 4)
 
-    backs = [p for p in panels if p.get("type") == "back"]
     if backs:
         pl = backs[0]["placement"]
-        nm = _clean_name(backs[0].get("name") or "Задняя стенка")   # у стола это царга
         sc2 = [{"x": SX(pl["z2"]) - 1, "y": FY((pl["y1"] + pl["y2"]) / 2),
-                "text": f"{nm} {_fmt(backs[0].get('thickness') or (pl['z2'] - pl['z1']))} мм"}]
+                "text": back_txt}]
         _draw_callout_column(svg, sc2, sx0 + sw_, sx0 + sw_ + 22, fy0 + 4, fy1 - 4)
 
     # подписи видов
