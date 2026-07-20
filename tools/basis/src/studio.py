@@ -847,10 +847,24 @@ PAGE = r"""<!DOCTYPE html>
   #emptyState .es-hint{font-size:13px;color:var(--mut);margin-bottom:16px;line-height:1.7}
   #emptyState.drop .es-box{border-color:var(--accent);background:#eef4ff}
   #view3d{position:absolute;inset:0}
-  #hud{position:absolute;right:12px;top:10px;z-index:5;background:rgba(255,255,255,.9);
-       border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12px}
+  /* AKD-262: HUD — узкая колонка справа, не пересекается с табами слева */
+  #hud{position:absolute;right:12px;top:10px;z-index:5;background:rgba(255,255,255,.92);
+       border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:12px;
+       width:200px;display:flex;flex-direction:column;gap:4px}
+  #hud label{display:flex;align-items:center;gap:5px;cursor:pointer;user-select:none}
+  #hud .row2{display:flex;gap:5px}
+  #hud .row2 button{flex:1;padding:4px 2px;font-size:11.5px}
+  #views{display:flex;flex-wrap:wrap;gap:3px;align-items:center}
   #views .vw{font-size:11px;padding:2px 7px}
   #views .vw.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  /* узкие ноутбуки: ужимаем боковые колонки, центр остаётся рабочим */
+  @media (max-width:1440px){
+    #app{grid-template-columns:300px 1fr 330px}
+  }
+  @media (max-width:1200px){
+    #app{grid-template-columns:270px 1fr 300px}
+    #hud{width:176px}
+  }
   #toast{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:9;
          background:#1a1d21;color:#fff;padding:7px 14px;border-radius:8px;font-size:12.5px;
          opacity:0;transition:opacity .25s;pointer-events:none;max-width:80%}
@@ -1012,7 +1026,7 @@ PAGE = r"""<!DOCTYPE html>
     <button id="btnPrint" title="печать открытого чертежа/раскроя">⎙</button>
   </div>
   <div id="hud">
-    <div id="views" style="margin-bottom:5px">Вид:
+    <div id="views"><span class="mini">Вид:</span>
       <button class="vw" data-view="axon" title="аксонометрия (без перспективы)">аксон</button>
       <button class="vw on" data-view="persp" title="перспектива ¾">персп</button>
       <button class="vw" data-view="top" title="вид сверху">сверху</button>
@@ -1024,10 +1038,12 @@ PAGE = r"""<!DOCTYPE html>
     <label><input type="checkbox" id="cbTex" checked> текстура</label>
     <label><input type="checkbox" id="cbDims" checked> размеры</label>
     <label><input type="checkbox" id="cbXray"> прозрачный</label>
-    <button id="btnOpenAll">Открыть всё</button>
-    <button id="btnCloseAll">Закрыть</button>
+    <div class="row2">
+      <button id="btnOpenAll">Открыть всё</button>
+      <button id="btnCloseAll">Закрыть</button>
+    </div>
     <label title="разнесённый вид">разбор
-      <input type="range" id="explode" min="0" max="100" value="0" style="width:90px;vertical-align:middle"></label>
+      <input type="range" id="explode" min="0" max="100" value="0" style="flex:1;min-width:0"></label>
   </div>
   <div id="draw"></div>
   <div id="catalog">
