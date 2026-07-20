@@ -73,6 +73,31 @@ def _board_material_name(m: dict[str, Any]) -> str:
     return board
 
 
+def _facade_material_name(m: dict[str, Any]) -> str | None:
+    """Отдельный декор фасадов (AKD-260); None — фасады как корпус."""
+    color = str(m.get("facade_color", "")).strip()
+    code = str(m.get("facade_color_code", "")).strip()
+    generic = (not color) or any(w in color.lower() for w in _GENERIC_COLOR) or color in ("—", "-")
+    if generic:
+        return None
+    return f"{color} ({code})" if code else color
+
+
+def _slot_article(project: dict[str, Any], slot: str, spec_key: str) -> str | None:
+    """Артикул позиции базы для материала: явный из спеки или из резолвера."""
+    art = str((project.get("materials") or {}).get(spec_key, "")).strip()
+    if art:
+        return art
+    r = (project.get("material_refs") or {}).get(slot)
+    if isinstance(r, dict) and r.get("resolved") and r.get("article"):
+        return str(r["article"])
+    return None
+
+
+# фасадные детали — получают материал фасадов в .cfrn/.b3d (AKD-260)
+_CFRN_FACADE_TYPES = {"door_front", "drawer_front", "facade", "screen"}
+
+
 def _hardware_entries(project: dict[str, Any]) -> list[dict[str, Any]]:
     """Фурнитура из material_refs → записи материала с артикулом (как в родном .cfrn)."""
     refs = project.get("material_refs") or {}
@@ -102,14 +127,28 @@ def project_to_cfrn_json(project: dict[str, Any]) -> dict[str, Any]:
     name = project.get("project_name", "model")
     m = project.get("materials", {}) or {}
 
-    # 0 = плита (реальный декор), 1 = задник (если материал отличается)
+    # 0 = плита (реальный декор), далее задник и фасады (если отличаются)
     board_name = _board_material_name(m)
-    materials: list[dict[str, Any]] = [{"name": board_name}]
+    board_entry: dict[str, Any] = {"name": board_name}
+    board_art = _slot_article(project, "board", "board_article")
+    if board_art:
+        board_entry["art"] = board_art
+    materials: list[dict[str, Any]] = [board_entry]
     back_raw = str(m.get("back_wall_material", "")).strip()
     back_idx = 0
     if back_raw and back_raw.lower() not in board_name.lower():
         materials.append({"name": back_raw})
         back_idx = len(materials) - 1
+    # AKD-260: отдельный декор фасадов доезжает до производства
+    facade_idx = 0
+    facade_name = _facade_material_name(m)
+    if facade_name and facade_name != board_name:
+        f_entry: dict[str, Any] = {"name": facade_name}
+        f_art = _slot_article(project, "facade", "facade_article")
+        if f_art:
+            f_entry["art"] = f_art
+        materials.append(f_entry)
+        facade_idx = len(materials) - 1
     materials += _hardware_entries(project)   # фурнитура с артикулами (spec)
 
     # направление текстуры (AKD-218): across → 1, along/нет → 0
@@ -125,7 +164,12 @@ def project_to_cfrn_json(project: dict[str, Any]) -> dict[str, Any]:
         sx, sy, sz = pl["x2"] - pl["x1"], pl["y2"] - pl["y1"], pl["z2"] - pl["z1"]
         cont = _contour(orient, sx, sy, sz)
         pname = str(p.get("name", "")).lower()
-        mi = back_idx if ("задн" in pname or p.get("type") == "back") else 0
+        if "задн" in pname or p.get("type") == "back":
+            mi = back_idx
+        elif facade_idx and p.get("type") in _CFRN_FACADE_TYPES:
+            mi = facade_idx                       # декор фасадов (AKD-260)
+        else:
+            mi = 0
         idx = len(objects)
         objects.append({
             "objType": 2,

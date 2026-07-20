@@ -34,6 +34,8 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     slots_first: dict[str, Any] = {}             # guides/hinges — первый непустой
     legs_cfg: dict[str, Any] | None = None
     legs_count = 0                               # опоры: сумма по блокам (не эвристика)
+    block_warns: list[str] = []                  # допущения блоков (AKD-259)
+    block_est: list[str] = []
     for b in blocks:
         sub_spec = b["spec"]
         if sub_spec.get("archetype") == "composite":
@@ -101,6 +103,11 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
         if legs_cfg is None and sl.get("height"):
             legs_cfg = dict(sl)
         legs_count += int((sub.get("hardware", {}).get("legs") or {}).get("count") or 0)
+        # допущения блоков не теряем (AKD-259): warnings/estimated_values → верх
+        for w in (sub_spec.get("warnings") or []):
+            block_warns.append(f"{prefix}: {w}" if prefix else str(w))
+        for ev in (sub_spec.get("estimated_values") or []):
+            block_est.append(f"{prefix}: {ev}" if prefix else str(ev))
 
     # верхнеуровневые материалы/габарит берём из spec; фурнитуру и опоры,
     # не заданные на верхнем уровне (чат отдаёт композит без hardware/legs),
@@ -120,6 +127,11 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
         if legs_count:
             legs_cfg["count"] = legs_count
         spec["legs"] = legs_cfg
+    for key, extra in (("warnings", block_warns), ("estimated_values", block_est)):
+        if extra:
+            merged = list(spec.get(key) or [])
+            merged += [w for w in extra if w not in merged]
+            spec[key] = merged
 
     from .helpers import build_project
     return build_project(spec, panels, sections=sections, drawers=drawers,

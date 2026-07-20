@@ -29,13 +29,27 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     ndoor = section.get("door", 1)
     g = c.gap
     y1, y2 = c.Hleg + c.T + g, c.H - c.T_top - g
+    # врезная дверь (AKD-259: door_inset → door_z "inset"): в плоскости корпуса,
+    # в проёме между боковинами; накладная (по умолчанию) — перед корпусом
+    inset = str(section.get("door_z", "")).lower() == "inset"
+    iz = (0.0, c.T)
+    ix1, ix2 = c.T + g, c.W - c.T - g
     doors_meta: list[dict[str, Any]] = []
     if ndoor == 2:
-        mid = c.W / 2
-        panels.append(overlay_door(c.W, c.H, c.T, c.Hleg, g, c.mat, "main", "Фасад левый",
-                                   x1=g, x2=mid - g / 2, y1=y1, y2=y2))
-        panels.append(overlay_door(c.W, c.H, c.T, c.Hleg, g, c.mat, "main", "Фасад правый",
-                                   x1=mid + g / 2, x2=c.W - g, y1=y1, y2=y2))
+        if inset:
+            mid = (ix1 + ix2) / 2
+            panels.append(panel("Фасад левый", "door_front", "front",
+                                (ix1, mid - g / 2), (y1, y2), iz, thickness=c.T,
+                                material=c.mat, section_id="main", estimated=True))
+            panels.append(panel("Фасад правый", "door_front", "front",
+                                (mid + g / 2, ix2), (y1, y2), iz, thickness=c.T,
+                                material=c.mat, section_id="main", estimated=True))
+        else:
+            mid = c.W / 2
+            panels.append(overlay_door(c.W, c.H, c.T, c.Hleg, g, c.mat, "main", "Фасад левый",
+                                       x1=g, x2=mid - g / 2, y1=y1, y2=y2))
+            panels.append(overlay_door(c.W, c.H, c.T, c.Hleg, g, c.mat, "main", "Фасад правый",
+                                       x1=mid + g / 2, x2=c.W - g, y1=y1, y2=y2))
         doors_meta = [{"id": "door_1", "type": "распашная", "hinges": "накладные", "lock": False,
                        "dimensions": {"width": round(mid - g / 2 - g, 2), "height": y2 - y1},
                        "position": {"x": g, "y": y1, "z": 0}, "estimated": False},
@@ -43,7 +57,11 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
                        "dimensions": {"width": round(c.W - g - (mid + g / 2), 2), "height": y2 - y1},
                        "position": {"x": mid + g / 2, "y": y1, "z": 0}, "estimated": False}]
     elif ndoor == 1:
-        dpanel = overlay_door(c.W, c.H, c.T, c.Hleg, g, c.mat, "main", y1=y1, y2=y2)
+        if inset:
+            dpanel = panel("Фасад", "door_front", "front", (ix1, ix2), (y1, y2), iz,
+                           thickness=c.T, material=c.mat, section_id="main", estimated=True)
+        else:
+            dpanel = overlay_door(c.W, c.H, c.T, c.Hleg, g, c.mat, "main", y1=y1, y2=y2)
         if section.get("door_swing"):                  # направление открывания (AKD-224)
             dpanel["swing"] = str(section["door_swing"]).lower()
         panels.append(dpanel)

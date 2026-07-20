@@ -63,7 +63,10 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
             fb = _fb if isinstance(_fb, (int, float)) and not isinstance(_fb, bool) else fb_bottom
             heights = sec.get("drawer_heights")
             n = sec["drawers"]
-            if not heights:
+            if heights:
+                # контракт (AKD-259): в спеке СВЕРХУ ВНИЗ, стек строится снизу
+                heights = [float(h) for h in heights][::-1]
+            else:
                 top = sec.get("front_top", fb_top)
                 h = (top - fb - (n - 1) * g) / n
                 heights = [round(h, 2)] * n

@@ -22,7 +22,11 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     _fb = section.get("front_bottom")                             # низ нижнего фасада (Y-координата)
     fb = _fb if isinstance(_fb, (int, float)) and not isinstance(_fb, bool) else band_bottom
     heights = section.get("drawer_heights")
-    if not heights:
+    if heights:
+        # контракт ParamSpec (AKD-259): drawer_heights в ТЗ/UI перечисляются
+        # СВЕРХУ ВНИЗ; стек строится снизу вверх → разворачиваем
+        heights = [float(h) for h in heights][::-1]
+    else:
         top = section.get("front_top", band_top)
         h = (top - fb - (n - 1) * g) / n
         heights = [round(h, 2)] * n
