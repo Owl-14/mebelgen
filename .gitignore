@@ -12,3 +12,4 @@ __pycache__/
 
 # тяжёлые исходники ТЗ (.doc/.docx) — храним извлечённый текст, не бинарь
 input_specs/**/source/*.versions.json
+tools/basis/DEPLOY_SHA

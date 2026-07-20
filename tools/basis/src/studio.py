@@ -528,6 +528,7 @@ class _Studio:
         self.spec = json.loads(spec_path.read_text(encoding="utf-8"))
         self.public = _os.environ.get("STUDIO_PUBLIC") == "1"
         self.guard = _ChatGuard(out_dir)
+        self.started = _time.time()               # /healthz, /version (AKD-264)
         # демо-режим: изделия, существовавшие на старте, защищены от перезаписи
         self.protected: set[str] = (
             {f.name for f in spec_path.parent.glob("*.json")
@@ -564,6 +565,17 @@ def make_handler(st: _Studio):
                         .replace("__SPEC__", json.dumps(st.spec, ensure_ascii=False)
                                  .replace("</", "<\\/")))
                 self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
+            elif self.path == "/healthz":             # мониторинг (AKD-264)
+                self._json({"ok": True, "uptime_s": int(_time.time() - st.started)})
+            elif self.path == "/version":             # какой код развёрнут (AKD-264)
+                sha = ""
+                try:
+                    sha = (Path(__file__).resolve().parent.parent / "DEPLOY_SHA") \
+                        .read_text(encoding="utf-8").strip()
+                except OSError:
+                    pass
+                self._json({"sha": sha or "dev", "public": st.public,
+                            "started": int(st.started)})
             elif self.path.startswith("/thumb/"):     # аксонометрия карточки (AKD-217)
                 from urllib.parse import unquote
                 try:
