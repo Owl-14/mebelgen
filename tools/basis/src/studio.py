@@ -460,6 +460,65 @@ def _open_file(out_dir: Path, path: str) -> dict[str, Any]:
         return {"ok": False, "error": str(e)[:200]}
 
 
+# ------------------------------------------------------------------ защита публичного демо (AKD-271)
+#
+# Публичный инстанс (STUDIO_PUBLIC=1 в .env): ИИ-чат ходит через наши ключи —
+# без ограничений бот выжигает лимиты за минуты, а общая папка изделий даёт
+# любому посетителю портить демо-образцы. Локальной разработке лимиты не мешают.
+
+import os as _os
+import time as _time
+
+_CHAT_RPM = int(_os.environ.get("STUDIO_CHAT_RPM", "8"))          # запросов чата в минуту с IP
+_CHAT_RPD = int(_os.environ.get("STUDIO_CHAT_RPD", "200"))        # в сутки с IP
+_TOKENS_PER_DAY = int(_os.environ.get("STUDIO_TOKENS_PER_DAY", "400000"))  # на инстанс
+
+
+class _ChatGuard:
+    """Rate-limit по IP + суточный бюджет токенов (журнал в out/chat_tokens.json)."""
+
+    def __init__(self, out_dir: Path):
+        self.hits: dict[str, list[float]] = {}
+        self.f = out_dir / "chat_tokens.json"
+
+    def check(self, ip: str) -> str | None:
+        now = _time.time()
+        q = [t for t in self.hits.get(ip, []) if now - t < 86400]
+        if sum(1 for t in q if now - t < 60) >= _CHAT_RPM:
+            return "слишком часто — подождите минуту"
+        if len(q) >= _CHAT_RPD:
+            return "дневной лимит запросов чата с этого адреса исчерпан"
+        q.append(now)
+        self.hits[ip] = q
+        if len(self.hits) > 5000:                          # защита памяти от скана IP
+            self.hits = {k: v for k, v in list(self.hits.items())[-2500:]}
+        return None
+
+    def _day(self) -> str:
+        return _time.strftime("%Y-%m-%d")
+
+    def tokens_left(self) -> int:
+        try:
+            d = json.loads(self.f.read_text(encoding="utf-8"))
+        except Exception:
+            d = {}
+        return _TOKENS_PER_DAY - int(d.get(self._day(), 0))
+
+    def add_tokens(self, n: int) -> None:
+        if not n:
+            return
+        try:
+            d = json.loads(self.f.read_text(encoding="utf-8"))
+        except Exception:
+            d = {}
+        day = self._day()
+        try:
+            self.f.write_text(json.dumps({day: int(d.get(day, 0)) + int(n)}),
+                              encoding="utf-8")
+        except OSError:
+            pass
+
+
 # ------------------------------------------------------------------ server
 
 class _Studio:
@@ -467,6 +526,13 @@ class _Studio:
         self.spec_path = spec_path
         self.out_dir = out_dir
         self.spec = json.loads(spec_path.read_text(encoding="utf-8"))
+        self.public = _os.environ.get("STUDIO_PUBLIC") == "1"
+        self.guard = _ChatGuard(out_dir)
+        # демо-режим: изделия, существовавшие на старте, защищены от перезаписи
+        self.protected: set[str] = (
+            {f.name for f in spec_path.parent.glob("*.json")
+             if not f.name.endswith((".project.json", ".versions.json"))}
+            if self.public else set())
 
 
 def make_handler(st: _Studio):
@@ -521,10 +587,26 @@ def make_handler(st: _Studio):
             else:
                 self._send(404, b"{}")
 
+        def _chat_gate(self) -> str | None:
+            """Лимиты ИИ-эндпоинтов (AKD-271): None — можно, иначе текст отказа."""
+            ip = self.headers.get("X-Real-IP") or self.client_address[0]
+            err = st.guard.check(ip)
+            if err:
+                return err
+            if st.guard.tokens_left() <= 0:
+                return "дневной бюджет токенов демо исчерпан — приходите завтра"
+            return None
+
         def do_POST(self):
             try:
                 body = self._body()
                 spec = body.get("spec") or {}
+                if self.path in ("/api/chat", "/api/import-tz"):
+                    gate = self._chat_gate()
+                    if gate:
+                        self._json({"ok": False, "error": gate,
+                                    "reply": "⛔ " + gate}, 429)
+                        return
                 if self.path == "/api/generate":
                     self._json(build_payload(spec))
                 elif self.path == "/api/techview":
@@ -560,11 +642,13 @@ def make_handler(st: _Studio):
                                 ctx["base_candidates"] = cand
                         except Exception:
                             pass
-                    self._json(chat_edit(spec, str(body.get("message", "")),
-                                         body.get("history") or [],
-                                         ctx,
-                                         body.get("images") or None,
-                                         body.get("provider") or None))
+                    res = chat_edit(spec, str(body.get("message", "")),
+                                    body.get("history") or [],
+                                    ctx,
+                                    body.get("images") or None,
+                                    body.get("provider") or None)
+                    st.guard.add_tokens(int(((res.get("usage") or {}).get("total")) or 0))
+                    self._json(res)
                 elif self.path == "/api/providers":       # список нейросетей для селектора
                     from .spec_chat import available_providers
                     self._json(available_providers())
@@ -586,6 +670,7 @@ def make_handler(st: _Studio):
                                         "изображению. НЕ бери ничего из других изделий. created=true.",
                                         images=[{"mime": mime, "data": str(body.get("data", ""))}],
                                         provider=body.get("provider") or None)
+                        st.guard.add_tokens(int(((res.get("usage") or {}).get("total")) or 0))
                         new_spec = res.get("spec")
                         if not new_spec:
                             self._json({"ok": False, "error":
@@ -666,6 +751,12 @@ def make_handler(st: _Studio):
                         thickness=float(th) if th else None,
                         limit=int(body.get("limit", 30)))})
                 elif self.path == "/api/save":
+                    # демо-режим (AKD-271): исходные образцы каталога защищены
+                    if st.public and st.spec_path.name in st.protected:
+                        self._json({"ok": False, "error":
+                                    "демо-режим: исходное изделие защищено — "
+                                    "нажмите «Дублировать» и правьте копию"}, 403)
+                        return
                     st.spec = spec
                     st.spec_path.write_text(json.dumps(spec, ensure_ascii=False, indent=2),
                                             encoding="utf-8")
