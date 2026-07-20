@@ -565,6 +565,14 @@ def make_handler(st: _Studio):
                         .replace("__SPEC__", json.dumps(st.spec, ensure_ascii=False)
                                  .replace("</", "<\\/")))
                 self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
+            elif self.path.startswith("/vendor/"):    # three.js локально, без CDN (AKD-261)
+                vd = (Path(__file__).resolve().parent.parent / "vendor")
+                p = (vd / Path(self.path[len("/vendor/"):]).name).resolve()
+                if p.parent == vd.resolve() and p.suffix == ".js" and p.is_file():
+                    self._send(200, p.read_bytes(),
+                               "application/javascript; charset=utf-8")
+                else:
+                    self._send(404, b"{}")
             elif self.path == "/healthz":             # мониторинг (AKD-264)
                 self._json({"ok": True, "uptime_s": int(_time.time() - st.started)})
             elif self.path == "/version":             # какой код развёрнут (AKD-264)
@@ -1170,8 +1178,8 @@ PAGE = r"""<!DOCTYPE html>
 </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="/vendor/three.min.js"></script>
+<script src="/vendor/OrbitControls.js"></script>
 <script>
 __SCENE_JS__
 let SPEC = __SPEC__;

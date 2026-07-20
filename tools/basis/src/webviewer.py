@@ -162,12 +162,27 @@ def _openables(project: dict[str, Any], panels: list[dict[str, Any]],
     return groups
 
 
+def _vendor_js() -> str:
+    """three.js + OrbitControls из vendor/ — инлайном (AKD-261: автономный .html
+    работает без интернета и CDN); нет файлов — фолбэк на CDN-теги."""
+    from pathlib import Path
+    vd = Path(__file__).resolve().parent.parent / "vendor"
+    try:
+        return ("<script>" + (vd / "three.min.js").read_text(encoding="utf-8")
+                + "</script>\n<script>" + (vd / "OrbitControls.js").read_text(encoding="utf-8")
+                + "</script>")
+    except OSError:
+        return ('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>\n'
+                '<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>')
+
+
 def project_to_viewer_html(project: dict[str, Any], *, title: str | None = None,
                            include_holes: bool = True) -> str:
     """HTML со встроенным three.js-просмотром модели в правильной (правосторонней) системе."""
     name = title or project.get("project_name") or project.get("furniture_type") or "Модель"
     payload = viewer_payload(project, include_holes=include_holes)
     return (_TEMPLATE
+            .replace("__VENDOR_JS__", _vendor_js())
             .replace("__NAME__", _esc(name))
             .replace("__SCENE_JS__", SCENE_JS)
             .replace("__DATA__", json.dumps(payload, ensure_ascii=False)))
@@ -772,8 +787,7 @@ _TEMPLATE = r"""<!DOCTYPE html>
   <button id="btnClose">Закрыть всё</button>
 </div>
 <div id="hint">клик по фасаду/ящику — открыть · ЛКМ — вращать · колесо — зум · ПКМ — панорама</div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+__VENDOR_JS__
 <script>
 __SCENE_JS__
 const DATA = __DATA__;
