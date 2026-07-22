@@ -100,7 +100,7 @@ def extract(path: str) -> dict:
             instances.append({"name": e.get("name", nm).split("\r")[0],
                               "fastId": _val(o, "FastID"),
                               "pos": list(wpos), "axisX": list(_qrot(wq, (1, 0, 0))),
-                              "assembly": path})
+                              "_q": list(wq), "assembly": path})
         elif t == 4002:
             butts = [{"elem": _val(b, "Elem"), "thick": _val(b, "Thick"),
                       "mat": str(_val(b, "Mat", ""))}
@@ -120,8 +120,23 @@ def extract(path: str) -> dict:
         if o[0] == "Obj":
             walk(o, (0, 0, 0), (0, 0, 0, 1), "")
 
+    # мировые отверстия: шаблон каждого инстанса развёрнут его кватернионом —
+    # эталонный список дырок для сверки с compute_drilling (AKD-287)
+    world_holes = []
+    for inst in instances:
+        e = lib.get(inst["fastId"])
+        if not e:
+            continue
+        q = tuple(inst.pop("_q")) if "_q" in inst else None
+        for h in e["holes"]:
+            wp = [round(inst["pos"][i] + _qrot(q, h["pos"])[i], 2) for i in range(3)] \
+                if q else None
+            wd = list(_qrot(q, h["dir"])) if q else None
+            world_holes.append({"name": inst["name"], "pos": wp, "dir": wd,
+                                "d": round(h["d"], 2), "depth": round(h["depth"], 2),
+                                "drillMode": h["drillMode"]})
     return {"library": {str(k): v for k, v in lib.items()},
-            "instances": instances, "panels": panels}
+            "instances": instances, "panels": panels, "world_holes": world_holes}
 
 
 def main() -> int:

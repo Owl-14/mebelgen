@@ -153,10 +153,13 @@ _NO_EDGE_TYPES = {"back", "drawer_bottom"}
 
 
 def apply_edge_policy(panels: list[dict[str, Any]], spec: dict[str, Any]) -> None:
+    # реверс эталона технолога (AKD-287, rules/b3d_production_reference.md):
+    # фасады — edge_band_thickness (2) по кругу; ВИДИМЫЕ не-фасадные торцы —
+    # 0.5; СКРЫТЫЕ (в стыках, к заднику) — совсем без кромки
     m = spec.get("materials") or {}
     v = float(m.get("edge_band_thickness") or 2.0)
     vis = int(v) if v.is_integer() else v
-    hid = 0.4
+    thin = 0.5
     for p in panels:
         t = str(p.get("type") or "")
         orient = str(p.get("basis_orientation") or "front")
@@ -165,15 +168,16 @@ def apply_edge_policy(panels: list[dict[str, Any]], spec: dict[str, Any]) -> Non
         elif t in _NO_EDGE_TYPES:
             eb = {"top": 0, "bottom": 0, "left": 0, "right": 0}
         elif t in ("drawer_side_left", "drawer_side_right", "drawer_back"):
-            # короб ящика: виден только верхний торец
-            eb = {"top": hid, "bottom": 0, "left": 0, "right": 0}
+            # короб ящика: видны верхний, передний и задний торцы (эталон)
+            eb = {"top": thin, "bottom": 0, "left": thin, "right": thin}
         elif orient in ("horizont", "horizontal"):
-            # дно/крышка перекрывают боковины — их X-торцы видны; полки/цоколь
-            # прячут торцы в стыках с боковинами
-            side = vis if t in ("top", "bottom") else hid
-            eb = {"bottom": vis, "top": hid, "left": side, "right": side}
+            # дно/крышка перекрывают боковины: перед + X-торцы видны, зад скрыт;
+            # полки/цоколь прячут торцы в стыках — только перед
+            side = thin if t in ("top", "bottom") else 0
+            eb = {"bottom": thin, "top": 0, "left": side, "right": side}
         elif orient == "vertical":
-            eb = {"left": vis, "right": hid, "top": hid, "bottom": hid}
+            # боковины/перегородки: виден только передний торец
+            eb = {"left": thin, "right": 0, "top": 0, "bottom": 0}
         else:
             eb = {"top": vis, "bottom": vis, "left": vis, "right": vis}
         p["edge_banding"] = eb

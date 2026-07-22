@@ -18,11 +18,17 @@ from typing import Any
 _PURPOSE_KIND = {
     "короб ящика (саморез)": ("screw", (0.39, 0.42, 0.44)),
     "направляющая (винт)": ("screw", (0.39, 0.42, 0.44)),
+    "направляющая (саморез)": ("screw", (0.39, 0.42, 0.44)),
     "петля (планка)": ("screw", (0.39, 0.42, 0.44)),
+    "петля (накол чашки)": ("screw", (0.39, 0.42, 0.44)),
     "ручка (винт)": ("hscrew", (0.82, 0.84, 0.85)),
     "задник (гвоздь)": ("nail", (0.60, 0.63, 0.65)),
     "задник (саморез)": ("screw", (0.39, 0.42, 0.44)),
     "полкодержатель": ("shelfpin", (0.82, 0.84, 0.85)),
+    "эксцентрик полки (чашка Ø20)": ("cam", (0.90, 0.90, 0.88)),
+    "эксцентрик полки (шток)": ("bolt", (0.60, 0.63, 0.65)),
+    "евровинт (проход Ø8)": ("confirmat", (0.60, 0.63, 0.65)),
+    "конфирмат": ("confirmat", (0.60, 0.63, 0.65)),
     "петля (чашка Ø35)": ("cup", (0.55, 0.57, 0.60)),
     "эксцентрик (чашка Ø15)": ("cam", (0.79, 0.70, 0.49)),
     # «эксцентрик (шток)» + «эксцентрик (канал Ø8)» собираются парой → bolt
@@ -243,14 +249,16 @@ def build_fastener_objects(holes: list[dict[str, Any]],
                      and abs(q["x"] - h["x"]) < 1 and abs(q["y"] - h["y"]) < 1
                      and abs(q["z"] - h["z"]) < 1), None)
         used.add(i)
+        mate_depth = 12.0
         if mate is not None:
             used.add(mate)
+            mate_depth = float(hole_list[mate]["depth"])   # пласть: 11 (реверс) / 12
         v = _vec(h)
         _add("dowel", (0.85, 0.71, 0.51), 30, 8, (h["x"], h["y"], h["z"]), v,
              [{"pos": {"x": 0, "y": 0, "z": 0}, "dir": {"x": 0, "y": 0, "z": -1},
                "depth": h["depth"], "diameter": h["diameter"]},
               {"pos": {"x": 0, "y": 0, "z": 0}, "dir": {"x": 0, "y": 0, "z": 1},
-               "depth": 12, "diameter": h["diameter"]}])
+               "depth": mate_depth, "diameter": h["diameter"]}])
 
     # минификс (AKD-202): шток в пласти + канал в торце соосны в одной точке
     # плоскости стыка → один болт Ø8 с двумя отверстиями
@@ -271,6 +279,52 @@ def build_fastener_objects(holes: list[dict[str, Any]],
                "depth": h["depth"], "diameter": h["diameter"]},
               {"pos": {"x": 0, "y": 0, "z": 0}, "dir": {"x": 0, "y": 0, "z": 1},
                "depth": 34, "diameter": 8}])
+
+    # конфирмат (AKD-287): проход Ø8 сквозь пласть + тело Ø5×35 в торец — один
+    # винт с двумя отверстиями (соосны вдоль оси сверления, разнесены на толщину)
+    for i, h in enumerate(hole_list):
+        if h["purpose"] != "евровинт (проход Ø8)" or i in used:
+            continue
+        t = float(h["depth"])                          # толщина прошиваемой детали
+        mate = next((j for j, q in enumerate(hole_list)
+                     if j not in used and q["purpose"] == "конфирмат"
+                     and q["axis"] == h["axis"]
+                     and abs((q["x"], q["y"], q["z"])[("x", "y", "z").index(h["axis"])]
+                             - (h["x"], h["y"], h["z"])[("x", "y", "z").index(h["axis"])]) < t + 1
+                     and all(abs(q[k] - h[k]) < 1 for k in "xyz" if k != h["axis"])), None)
+        used.add(i)
+        body_depth = 35.0
+        if mate is not None:
+            used.add(mate)
+            body_depth = float(hole_list[mate]["depth"])
+        v = _vec(h)
+        _add("confirmat", (0.60, 0.63, 0.65), 50, 7, (h["x"], h["y"], h["z"]), v,
+             [{"pos": {"x": 0, "y": 0, "z": 0}, "dir": {"x": 0, "y": 0, "z": -1},
+               "depth": t, "diameter": h["diameter"]},
+              {"pos": {"x": 0, "y": 0, "z": -t}, "dir": {"x": 0, "y": 0, "z": -1},
+               "depth": body_depth, "diameter": 5}])
+
+    # гвоздь задника (AKD-287): прокол Ø3 сквозь ДВП/ХДФ + тело Ø1×12 в торец
+    for i, h in enumerate(hole_list):
+        if h["purpose"] != "задник (прокол Ø3)" or i in used:
+            continue
+        t = float(h["depth"])
+        mate = next((j for j, q in enumerate(hole_list)
+                     if j not in used and q["purpose"] == "задник (гвоздь)"
+                     and abs(q["x"] - h["x"]) < 1 and abs(q["y"] - h["y"]) < 1
+                     and abs(q["z"] - h["z"]) < t + 2), None)
+        used.add(i)
+        body_depth, body_d = 12.0, 1.0
+        if mate is not None:
+            used.add(mate)
+            body_depth = float(hole_list[mate]["depth"])
+            body_d = float(hole_list[mate]["diameter"])
+        v = _vec(h)
+        _add("nail", (0.60, 0.63, 0.65), 16, 1.5, (h["x"], h["y"], h["z"]), v,
+             [{"pos": {"x": 0, "y": 0, "z": 0}, "dir": {"x": 0, "y": 0, "z": -1},
+               "depth": t, "diameter": h["diameter"]},
+              {"pos": {"x": 0, "y": 0, "z": -t}, "dir": {"x": 0, "y": 0, "z": -1},
+               "depth": body_depth, "diameter": body_d}])
 
     for i, h in enumerate(hole_list):
         if i in used or h["purpose"].startswith("шкант") \

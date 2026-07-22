@@ -29,7 +29,8 @@ def test_shkaf_has_hinges_shelfpins_handles():
     s = _holes("komi_46_shkaf_dokumenty")
     assert s.get("ручка (винт)") == 4                      # 2 двери × 2
     assert s.get("петля (чашка Ø35)", 0) >= 4              # ≥2 петли на дверь
-    assert s.get("полкодержатель", 0) == 32               # 8 полок × 4
+    # реверс эталона (AKD-287): съёмные полки на эксцентриках Ø20 SE01PB
+    assert s.get("эксцентрик полки (чашка Ø20)", 0) == 32  # 8 полок × 4
     assert s.get("шкант 8×30 (торец)", 0) > 0              # система 32 (AKD-202)
     assert s.get("эксцентрик (канал Ø8)", 0) > 0
 
@@ -37,7 +38,7 @@ def test_shkaf_has_hinges_shelfpins_handles():
 def test_tumba_drawers_has_guides_and_handles():
     s = _holes("komi_72_tumba_podkatnaya")
     assert s.get("ручка (винт)") == 6                      # 3 ящика × 2
-    assert s.get("направляющая (винт)", 0) == 18           # 3 ящика × 2 боковины × 3
+    assert s.get("направляющая (саморез)", 0) == 36        # 3 ящика × (2 корпусных + 2 ящичных полоза) × 3 точки
     assert "петля (чашка Ø35)" not in s                    # дверей нет
 
 
@@ -72,11 +73,11 @@ def test_fasteners_reverse_patterns():
     assert sw["задник (гвоздь)"] >= 8           # стойки/полки до задника
     bom = fastener_bom(holes, resolve=True)
     names = {b["name"]: b for b in bom}
-    # система 32 (AKD-202): межпанельный крепёж — шкант Ø8 + эксцентрик,
-    # конфирматов и заглушек в BOM больше нет
-    assert "Конфирмат 7×50" not in names and "Заглушка самоклеящаяся D13" not in names
+    # реверс эталона (AKD-287): конфирматы ЕСТЬ — снизу дна (голова не видна),
+    # стяжки — комплект MNFX из производственной базы
+    assert names["Евровинт конфирмат 7×50"]["qty"] == 4    # 2 стойки × 2
     assert names["Шкант 8×30"]["qty"] >= 2
-    assert names["Эксцентрик Ø15 + шток"].get("article")   # позиция из базы
+    assert names["Стяжка эксцентриковая MNFX (комплект)"].get("article")  # 11154
 
 
 def test_desk_joints_covered():
@@ -92,7 +93,7 @@ def test_desk_joints_covered():
     assert s.get("эксцентрик (шток)") == 8 and s.get("эксцентрик (канал Ø8)") == 8
     bom = {b["name"]: b["qty"] for b in fastener_bom(holes)}
     assert bom["Шкант 8×30"] == 8                    # 2 отверстия = 1 шкант
-    assert bom["Эксцентрик Ø15 + шток"] == 8
+    assert bom["Стяжка эксцентриковая MNFX (комплект)"] == 8
 
 
 def test_system32_grid():
@@ -108,7 +109,5 @@ def test_system32_grid():
     spec2 = json.loads((ROOT / "paramspecs" / "komi_72_tumba_podkatnaya.json").read_text(encoding="utf-8"))
     r = check_drilling_geometry(generate_from_paramspec(spec2), holes)
     assert not [w for w in r["warnings"] if "не кратен 32" in w], r["warnings"]
-    # конфирматов Ø7 и присадок Ø5 в стяжках больше нет
-    assert not [h for h in holes if h["diameter"] in (5, 7)
-                and "стяжк" in h["purpose"]]
-    assert all(h["diameter"] == 8 for h in holes if h["purpose"] == "полкодержатель")
+    # шток стяжки MNFX — Ø5 (реверс эталона); чашки полок Ø20 SE01PB
+    assert all(h["diameter"] == 5 for h in holes if h["purpose"] == "эксцентрик (шток)")

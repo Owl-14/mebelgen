@@ -114,8 +114,10 @@ def check_drilling_geometry(project: dict[str, Any],
                 errors.append(f"{pa} ({ha['x']:.0f},{ha['y']:.0f},{ha['z']:.0f}): "
                               f"нет соосного «{pb}»")
 
-    # 5) система 32 (AKD-202): шаг между стяжками одного стыка кратен 32
-    #    (шканты и каналы эксцентриков на одной панели+оси+уровне)
+    # 5) присадочная сетка (AKD-202/287, реверс эталона): шкант стоит на 32 от
+    #    своей стяжки (пары «крепёж+шкант» через 32); расстояние МЕЖДУ парами
+    #    производитель кратным 32 не держит (96 от торцов) — проверяем только
+    #    короткие шаги внутри пар
     checked: set[tuple] = set()
     for purpose in ("шкант 8×30 (торец)", "эксцентрик (канал Ø8)"):
         for h in by_purpose.get(purpose, []):
@@ -130,7 +132,7 @@ def check_drilling_geometry(project: dict[str, Any],
                             and abs(x[lvl_t] - h[lvl_t]) < 0.5)
                 for a, b in zip(xs, xs[1:]):
                     df = b - a
-                    if df > 1 and abs(df / 32 - round(df / 32)) * 32 > 1.5:
+                    if 1 < df <= 64 and abs(df / 32 - round(df / 32)) * 32 > 1.5:
                         warnings.append(f"{purpose} @ {h.get('panel')}: шаг {df:.0f} "
                                         f"не кратен 32 (система 32)")
                         break
