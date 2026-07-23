@@ -25,8 +25,8 @@ _PURPOSE_KIND = {
     "задник (гвоздь)": ("nail", (0.60, 0.63, 0.65)),
     "задник (саморез)": ("screw", (0.39, 0.42, 0.44)),
     "полкодержатель": ("shelfpin", (0.82, 0.84, 0.85)),
-    "эксцентрик полки (чашка Ø20)": ("cam", (0.90, 0.90, 0.88)),
-    "эксцентрик полки (шток)": ("bolt", (0.60, 0.63, 0.65)),
+    "эксцентрик полки (чашка Ø20)": ("cam20", (0.90, 0.90, 0.88)),
+    "эксцентрик полки (шток)": ("pin", (0.60, 0.63, 0.65)),
     "евровинт (проход Ø8)": ("confirmat", (0.60, 0.63, 0.65)),
     "конфирмат": ("confirmat", (0.60, 0.63, 0.65)),
     "петля (чашка Ø35)": ("cup", (0.55, 0.57, 0.60)),
@@ -45,7 +45,14 @@ _BOM_NAME = {
     "hscrew": "Винт М4×16", "nail": "Гвоздь 1.6×25",
     "shelfpin": "Полкодержатель", "cup": "Петля (чашка)",
     "cam": "Эксцентрик Ø15", "bolt": "Шток эксцентрика",
+    "cam20": "Эксцентрик Ø20 SE01PB", "pin": "Шток SE01PB",
     "dowel": "Шкант 8×30", "lock": "Замок мебельный",
+}
+# kind → имя позиции BOM (_FASTENER_MAP) для подбора артикула, когда
+# отображаемое имя тела отличается от строки спецификации
+_ART_KEY = {
+    "cam20": "Эксцентрик Ø20 в пласт. корпусе (SE01PB)",
+    "pin": "Эксцентрик Ø20 в пласт. корпусе (SE01PB)",
 }
 
 
@@ -79,7 +86,7 @@ def _mesh(kind: str, depth: float, dia: float) -> list[tuple[float, float, float
     """Части тела метиза (r, z_top, z_bottom); сверление вдоль −Z от z=0."""
     r = dia / 2
     if kind == "confirmat":
-        return [(3.5, 0, -depth), (5.0, 1.4, 0)]              # стержень + головка
+        return [(3.5, 0, -depth), (5.0, 0, -1.4)]             # стержень + шляпка впотай
     if kind in ("screw", "hscrew"):
         return [(min(r, 2.5), 0, -depth), (min(r * 2, 4.5), 0.9, 0)]
     if kind == "nail":
@@ -88,10 +95,14 @@ def _mesh(kind: str, depth: float, dia: float) -> list[tuple[float, float, float
         return [(2.5, 0, -depth), (3.5, 5, 0)]                # штифт + носик под полку
     if kind == "cup":
         return [(r, 0, -depth)]                               # чашка петли
-    if kind == "cam":
+    if kind in ("cam", "cam20"):
         return [(r, 0, -depth)]                               # корпус эксцентрика
     if kind == "bolt":
-        return [(4.0, 34, -depth)]                # шток Ø8 через плоскость стыка
+        # шток стяжки: резьба Ø5×depth в деталь А + тело Ø7 вдоль канала
+        # в деталь Б до эксцентрика (канал Ø8×34) — не дальше плоскости стыка
+        return [(2.5, 0, -depth), (3.5, 34, 0)]
+    if kind == "pin":
+        return [(2.5, 11, -depth)]                # штифт SE01PB: в стойку + выступ в чашку
     if kind == "dowel":
         return [(4.0, 10, -20)]                               # шкант: 20 в торец, 10 в пласть
     if kind == "lock":
@@ -232,7 +243,7 @@ def build_fastener_objects(holes: list[dict[str, Any]],
             nm = _BOM_NAME[kind]
             g = groups[key] = {
                 "key": f"{kind}_{depth:g}_{dia:g}", "kind": kind,
-                "name": nm, "art": bom_articles.get(_BOM_NAME[kind], ""),
+                "name": nm, "art": bom_articles.get(_ART_KEY.get(kind, nm), ""),
                 "color": color, "obj_parts": _mesh(kind, depth, dia),
                 "holes": local_holes, "instances": [],
             }
@@ -261,7 +272,8 @@ def build_fastener_objects(holes: list[dict[str, Any]],
                "depth": mate_depth, "diameter": h["diameter"]}])
 
     # минификс (AKD-202): шток в пласти + канал в торце соосны в одной точке
-    # плоскости стыка → один болт Ø8 с двумя отверстиями
+    # плоскости стыка → один болт с двумя отверстиями; тело — резьба в деталь
+    # штока + стержень вдоль канала (в тело детали с каналом), не наружу
     for i, h in enumerate(hole_list):
         if h["purpose"] != "эксцентрик (шток)" or i in used:
             continue
@@ -274,7 +286,7 @@ def build_fastener_objects(holes: list[dict[str, Any]],
         if mate is not None:
             used.add(mate)
         v = _vec(h)
-        _add("bolt", (0.60, 0.63, 0.65), 45, 8, (h["x"], h["y"], h["z"]), v,
+        _add("bolt", (0.60, 0.63, 0.65), h["depth"], 8, (h["x"], h["y"], h["z"]), v,
              [{"pos": {"x": 0, "y": 0, "z": 0}, "dir": {"x": 0, "y": 0, "z": -1},
                "depth": h["depth"], "diameter": h["diameter"]},
               {"pos": {"x": 0, "y": 0, "z": 0}, "dir": {"x": 0, "y": 0, "z": 1},
