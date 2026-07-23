@@ -106,3 +106,29 @@ def test_edge_policy_by_purpose():
     assert set(by["back"].values()) == {0}
     assert set(by["drawer_bottom"].values()) == {0}
     assert by["drawer_side_left"]["top"] == 0.5              # верхний торец короба
+
+
+def test_edge_banding_reaches_cfrn_butts():
+    """AKD-287 ф.2: кромка кодируется в .cfrn (butts по сторонам контура) —
+    реверс round-trip файла технолога (task 13307)."""
+    proj = generate_from_paramspec(_spec())
+    cf = project_to_cfrn_json(proj)
+    t = cf["table"]
+    edge_mats = {i for i, m in enumerate(t["materials"])
+                 if "ромка" in str(m.get("name", ""))}
+    assert edge_mats, "нет материалов кромки"
+    by = {o["name"]: o.get("butts", []) for o in t["objects"] if o.get("objType") == 2}
+    # фасад: 4 стороны по 2 мм
+    front = next(b for n, b in by.items() if "Фасад" in n)
+    assert sorted(x["elemIndex"] for x in front) == [0, 1, 2, 3]
+    assert all(x["thickness"] == 2.0 and x["materialIndex"] in edge_mats for x in front)
+    # боковина: только передний торец (elem 3 нашего vertical-контура), 0.5
+    side = by["Боковина левая"]
+    assert [(x["elemIndex"], x["thickness"]) for x in side] == [(3, 0.5)]
+    # задник и дно ящика — без кромки
+    assert by.get("Задняя стенка", []) == []
+    assert by.get("Ящик 1 дно", []) == []
+    # формат записи — как в файле технолога
+    assert {"elemIndex", "materialIndex", "thickness", "width", "clip",
+            "overhung", "allowance", "cutIndex"} - set(front[0]) == {"overhung"}
+    assert front[0]["width"] == 19 and front[0]["overhang"] == 30
