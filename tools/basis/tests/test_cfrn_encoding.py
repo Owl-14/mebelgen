@@ -91,6 +91,9 @@ def test_hardware_bodies_in_cfrn():
     assert sum(v for k, v in counts.items() if "Штанга-вешало" in k) == 1
     assert sum(v for k, v in counts.items() if "Штангодержатель" in k) == 2
     assert sum(v for k, v in counts.items() if "Опора" in k) == 4
+    # полозья направляющих (паритет с файлом технолога): 3 ящика × 2 стороны
+    assert sum(v for k, v in counts.items() if "корпусный полоз" in k) == 6
+    assert sum(v for k, v in counts.items() if "ящичный полоз" in k) == 6
     # OBJ тел лежат в zip .cfrn
     z = zipfile.ZipFile(_io.BytesIO(project_to_cfrn_bytes(pr)))
     assert any("Штанга" in n for n in z.namelist())
