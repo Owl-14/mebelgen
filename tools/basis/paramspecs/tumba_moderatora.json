@@ -1,0 +1,76 @@
+{
+  "schemaVersion": "paramspec-v1",
+  "project_name": "Тумба для модератора",
+  "furniture_type": "тумба для модератора",
+  "archetype": "cabinet",
+  "dimensions": {
+    "width": 1000,
+    "depth": 400,
+    "height": 750,
+    "tolerance": 10
+  },
+  "materials": {
+    "board_thickness": 16,
+    "board_material": "ЛДСП",
+    "back_material": "ЛДСП",
+    "back_thickness": 16,
+    "edge_band_thickness": 2,
+    "color": "Серо-коричневый тёмный",
+    "color_code": "U740 ST9"
+  },
+  "legs": {
+    "type": "регулируемые опоры",
+    "height": 60,
+    "adjustable": true,
+    "color": "черный",
+    "count": 4
+  },
+  "gaps": {
+    "default": 2,
+    "facade": 2
+  },
+  "sections": [
+    {
+      "kind": "drawers",
+      "drawers": 3
+    },
+    {
+      "kind": "shelves",
+      "shelves": 1
+    },
+    {
+      "kind": "door",
+      "door": 1,
+      "shelves": 1
+    }
+  ],
+  "hardware": {
+    "handles": {
+      "type": "ручка-профиль",
+      "material": "металл",
+      "color": "черный",
+      "size": 128,
+      "count": 4
+    },
+    "drawer_guides": {
+      "type": "шариковые с доводчиком"
+    },
+    "locks": [
+      {
+        "type": "замок центральный",
+        "color": "черный",
+        "target": "Фасад ящик 3"
+      },
+      {
+        "type": "замок",
+        "color": "черный",
+        "target": "right_door"
+      }
+    ]
+  },
+  "warnings": [
+    "Порядок секций принят по привязке «замок на правой двери»: ящики слева, открытая посередине, дверь справа",
+    "Высота опор в ТЗ не указана — принята 60 мм"
+  ],
+  "estimated_values": ["legs.height"]
+}

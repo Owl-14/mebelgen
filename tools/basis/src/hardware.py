@@ -801,12 +801,25 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
             holes.append(_hole(p["name"], "замок (цилиндр Ø18)", lx, ly, pl["z2"],
                                18, pl["z2"] - pl["z1"], "z", -1))
         fronts = [p for p in panels if p.get("type") == "drawer_front"]
-        if fronts and not doors:
-            top_front = max(fronts, key=lambda q: q["placement"]["y2"])
-            pl = top_front["placement"]
-            holes.append(_hole(top_front["name"], "замок (цилиндр Ø18)",
-                               (pl["x1"] + pl["x2"]) / 2, pl["y2"] - 30, pl["z2"],
-                               18, pl["z2"] - pl["z1"], "z", -1))
+        if fronts:
+            # явный target на фасад ящика («Фасад ящик 3», центральный замок
+            # стека) работает и при наличии дверей; без targets — старое
+            # поведение: верхний ящик, только если дверей нет
+            d_targets = [t for t in targets
+                         if t not in ("right_door", "left_door", "правая", "левая")]
+            tgt = next((p for p in fronts
+                        if any(t in str(p.get("name", "")).lower() for t in d_targets)),
+                       None) if d_targets else None
+            if tgt is None and d_targets:
+                # generic-цель («drawers», «центральный») → верхний фасад стека
+                tgt = max(fronts, key=lambda q: q["placement"]["y2"])
+            if tgt is None and not doors and not targets:
+                tgt = max(fronts, key=lambda q: q["placement"]["y2"])
+            if tgt is not None:
+                pl = tgt["placement"]
+                holes.append(_hole(tgt["name"], "замок (цилиндр Ø18)",
+                                   (pl["x1"] + pl["x2"]) / 2, pl["y2"] - 30, pl["z2"],
+                                   18, pl["z2"] - pl["z1"], "z", -1))
 
     # --- Направляющие ящиков (реверс эталона AKD-287): каждый корпусный полоз
     #     крепится 3 саморезами US3.5×16 в ШТАТНЫЕ монтажные отверстия
