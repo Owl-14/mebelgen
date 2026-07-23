@@ -312,7 +312,7 @@ def build_fastener_objects(holes: list[dict[str, Any]],
         v = _vec(h)
         _add("confirmat", (0.60, 0.63, 0.65), 50, 7, (h["x"], h["y"], h["z"]), v,
              [{"pos": {"x": 0, "y": 0, "z": 0}, "dir": {"x": 0, "y": 0, "z": -1},
-               "depth": t, "diameter": h["diameter"]},
+               "depth": t, "diameter": h["diameter"], "through": True},
               {"pos": {"x": 0, "y": 0, "z": -t}, "dir": {"x": 0, "y": 0, "z": -1},
                "depth": body_depth, "diameter": 5}])
 
@@ -334,7 +334,7 @@ def build_fastener_objects(holes: list[dict[str, Any]],
         v = _vec(h)
         _add("nail", (0.60, 0.63, 0.65), 16, 1.5, (h["x"], h["y"], h["z"]), v,
              [{"pos": {"x": 0, "y": 0, "z": 0}, "dir": {"x": 0, "y": 0, "z": -1},
-               "depth": t, "diameter": h["diameter"]},
+               "depth": t, "diameter": h["diameter"], "through": True},
               {"pos": {"x": 0, "y": 0, "z": -t}, "dir": {"x": 0, "y": 0, "z": -1},
                "depth": body_depth, "diameter": body_d}])
 
@@ -347,9 +347,12 @@ def build_fastener_objects(holes: list[dict[str, Any]],
             continue
         kind, color = pk
         v = _vec(h)
-        _add(kind, color, h["depth"], h["diameter"], (h["x"], h["y"], h["z"]), v,
-             [{"pos": {"x": 0, "y": 0, "z": 0}, "dir": {"x": 0, "y": 0, "z": -1},
-               "depth": h["depth"], "diameter": h["diameter"]}])
+        lh: dict[str, Any] = {"pos": {"x": 0, "y": 0, "z": 0},
+                              "dir": {"x": 0, "y": 0, "z": -1},
+                              "depth": h["depth"], "diameter": h["diameter"]}
+        if kind in ("hscrew", "lock"):        # винт ручки/замок — сквозь фасад
+            lh["through"] = True
+        _add(kind, color, h["depth"], h["diameter"], (h["x"], h["y"], h["z"]), v, [lh])
 
     out: list[dict[str, Any]] = []
     for g in groups.values():

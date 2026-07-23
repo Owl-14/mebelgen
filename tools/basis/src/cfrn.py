@@ -398,8 +398,10 @@ def _encode_drilling(project: dict[str, Any], objects: list[dict[str, Any]],
     materials: list[dict[str, Any]] = table["materials"]
     mat_index = {m.get("name"): i for i, m in enumerate(materials)}
 
-    def _info(depth: float, dia: float) -> int:
-        key = (_r(depth), _r(dia), 1)                 # drillMode 1 — как в эталоне
+    def _info(depth: float, dia: float, through: bool = False) -> int:
+        # drillMode по эталону технолога: сквозные проходы — 1, глухие
+        # крепёжные (каналы, чашки, гнёзда, тела в ответной детали) — 2
+        key = (_r(depth), _r(dia), 1 if through else 2)
         if key not in cat_index:
             cat_index[key] = len(catalog)
             catalog.append({"depth": key[0], "diameter": key[1], "drillMode": key[2]})
@@ -419,7 +421,8 @@ def _encode_drilling(project: dict[str, Any], objects: list[dict[str, Any]],
             models[f"models/{fo['obj_name']}"] = fo["obj_text"]
             models[f"models/{fo['obj_name'][:-4]}.mtl"] = fo["mtl_text"]
         obj_holes = [{"pos": h["pos"], "dir": h["dir"],
-                      "infoIndex": _info(h["depth"], h["diameter"])}
+                      "infoIndex": _info(h["depth"], h["diameter"],
+                                         bool(h.get("through")))}
                      for h in fo["holes"]]
         idx = len(objects)
         objects.append({"objType": 5, "materialIndex": mat_index[mname],
