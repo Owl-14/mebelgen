@@ -152,7 +152,11 @@ def project_to_cfrn_json(project: dict[str, Any]) -> dict[str, Any]:
     materials: list[dict[str, Any]] = [board_entry]
     back_raw = str(m.get("back_wall_material", "")).strip()
     back_idx = 0
-    if back_raw and back_raw.lower() not in board_name.lower():
+    # задник из корпусной плиты («ЛДСП»/«ЛДСП 16») наследует декор корпуса
+    # (AKD-287); отдельная запись — только для другого материала (ХДФ/ДВП)
+    board_type = (str(m.get("board_material", "")).strip() or "ЛДСП")
+    if back_raw and back_raw.lower() not in board_name.lower() \
+            and not back_raw.lower().startswith(board_type.lower()):
         materials.append({"name": back_raw})
         back_idx = len(materials) - 1
     # AKD-260: отдельный декор фасадов доезжает до производства

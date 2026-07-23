@@ -104,3 +104,22 @@ def test_hardware_bodies_in_cfrn():
     dd = project_to_cfrn_json(generate_from_paramspec(dspec))
     names = chr(10).join(dd["table"].get("triangles", []))
     assert "стойка 40×40" in names and "царга 40×40" in names
+
+
+def test_back_wall_material_inherits_board_decor():
+    """AKD-287: задник из корпусной плиты (ЛДСП) наследует декор корпуса;
+    тонкий ДВП/ХДФ-задник остаётся отдельной записью материала."""
+    from src.cfrn import project_to_cfrn_json
+
+    def _back_mats(spec_name: str) -> set[str]:
+        spec = json.loads((ROOT / "paramspecs" / f"{spec_name}.json").read_text(encoding="utf-8"))
+        d = project_to_cfrn_json(generate_from_paramspec(spec))
+        mats = d["table"]["materials"]
+        return {mats[o["materialIndex"]]["name"] for o in d["table"]["objects"]
+                if o.get("objType") == 2 and "задн" in str(o.get("name", "")).lower()
+                and "ящик" not in str(o.get("name", "")).lower()}
+
+    tm = _back_mats("tumba_moderatora")            # задник ЛДСП 16
+    assert tm and all("ЛДСП" not in n for n in tm), tm   # декор, не генерик
+    dv = _back_mats("tumba_404x490x674_drawers")   # задник ДВП
+    assert "ДВП" in dv, dv
