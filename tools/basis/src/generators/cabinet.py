@@ -94,6 +94,7 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
                 sh = panel("Полка под нишей", "shelf", "horizont", (cx1, cx2), (topy, topy + c.T),
                            (sec.get("niche_z_front", 0), iz2), thickness=c.T, material=c.mat,
                            section_id=sid, estimated=True)
+                sh["fixed"] = True      # стационарная: стяжки, не съёмные эксцентрики (AKD-287)
                 panels.append(sh)
                 names.append(sh["name"])
                 # верхний фасад продлевается на T и перекрывает торец полки

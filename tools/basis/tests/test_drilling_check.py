@@ -39,7 +39,7 @@ def test_catches_wrong_direction():
     bad = [dict(h) for h in holes]
     flipped = False
     for h in bad:
-        if h["purpose"] == "полкодержатель":
+        if h["purpose"] == "эксцентрик полки (шток)":
             h["dir"] = -h["dir"]                     # сверлим в полку, а не в боковину
             flipped = True
     assert flipped

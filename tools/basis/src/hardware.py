@@ -51,6 +51,25 @@ def _sys32_pts(a: float, b: float) -> tuple[list[float], list[float]]:
     return dws, cams
 
 
+def _prod_pts(a: float, b: float) -> tuple[list[float], list[float]]:
+    """Производственная раскладка (реверс эталона технолога,
+    rules/b3d_production_reference.md): стяжка/конфирмат на 96 от каждого
+    торца стыка, шкант — на 32 внутрь от неё (пары через 32, всё кратно 32).
+    Узкие стыки — вырожденные варианты по центру."""
+    L = b - a
+    if L >= 232:
+        cams = [round(a + 96, 1), round(b - 96, 1)]
+        dws = [round(a + 128, 1), round(b - 128, 1)]
+    elif L >= 128:
+        cams = [round(a + 48, 1), round(b - 48, 1)]
+        dws = [round((a + b) / 2, 1)]
+    else:
+        c = (a + b) / 2
+        cams = [round(c + 16, 1)]
+        dws = [round(c - 16, 1)]
+    return dws, cams
+
+
 def door_hinge_side(p: dict[str, Any], model_w: float | None = None,
                     siblings: int = 1) -> str:
     """Сторона петель фасада двери: 'left'|'right'|'up'|'down' (AKD-223/224).
@@ -92,17 +111,23 @@ def _model_width(panels: list[dict[str, Any]]) -> float:
 
 
 def _n_hinges(h: float) -> int:
+    # реверс эталона: дверь 2196 у технолога несёт 4 петли (не 5)
     if h <= 900:
         return 2
     if h <= 1600:
         return 3
-    if h <= 2000:
+    if h <= 2400:
         return 4
     return 5
 
 
-def _hinge_levels(y1: float, y2: float, n: int, margin: float = 100.0) -> list[float]:
-    lo, hi = y1 + margin, y2 - margin
+def _hinge_levels(y1: float, y2: float, n: int, margin: float = 100.0,
+                  prod: bool = False) -> list[float]:
+    # prod (вертикальная дверь, реверс эталона): нижняя петля 160 от низа,
+    # верхняя 100 от верха, промежуточные равномерно; откидные — симметрично
+    lo, hi = (y1 + 160.0, y2 - 100.0) if prod else (y1 + margin, y2 - margin)
+    if hi <= lo:                                   # низкая дверь — по центру зоны
+        lo, hi = y1 + margin, y2 - margin
     if n <= 1:
         return [(lo + hi) / 2]
     return [lo + (hi - lo) * k / (n - 1) for k in range(n)]
@@ -129,7 +154,7 @@ def hinge_levels_clear(y1: float, y2: float, n: int,
     к ближайшему свободному краю зоны."""
     lo, hi = y1 + 60, y2 - 60
     out: list[float] = []
-    for y in _hinge_levels(y1, y2, n, margin):
+    for y in _hinge_levels(y1, y2, n, margin, prod=True):
         for _ in range(3):                      # каскад зон — до 3 сдвигов
             hit = next(((a, b) for a, b in spans if a - half < y < b + half), None)
             if hit is None:
@@ -257,7 +282,11 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
         hinge_left = sd == "left"
         h = pl["y2"] - pl["y1"]
         n = _n_hinges(h)
-        cup_x = pl["x1"] + 22 if hinge_left else pl["x2"] - 22
+        # реверс эталона (DTC Pivot-Star): центр чашки 22.5 от кромки двери,
+        # наколы саморезов чашки Ø3×2 на 28.5 от кромки, ±24 по вертикали;
+        # ответная планка — 2 накола Ø3×2 (не Ø5) на 37 вглубь от фронта, ±16
+        cup_x = pl["x1"] + 22.5 if hinge_left else pl["x2"] - 22.5
+        pin_x = pl["x1"] + 28.5 if hinge_left else pl["x2"] - 28.5
         # ближайшая вертикаль со стороны петель. Кандидат обязан пересекаться
         # с дверью по Y (AKD-235: в composite с origin.y дверь ВЕРХНЕГО шкафа
         # прибивалась планками к боковине НИЖНЕЙ тумбы на том же X)
@@ -269,23 +298,29 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
         for y in hinge_levels_clear(pl["y1"], pl["y2"], n, _shelf_spans(panels, pl["x1"], pl["x2"])):
             # чашка сверлится с ВНУТРЕННЕЙ (задней) грани двери, глухая 12 мм
             holes.append(_hole(p["name"], "петля (чашка Ø35)", cup_x, y, pl["z2"], 35, 12, "z", -1))
+            for dy in (-24, 24):                      # наколы саморезов чашки
+                holes.append(_hole(p["name"], "петля (накол чашки)", pin_x, y + dy, pl["z2"], 3, 2, "z", -1))
             if side is not None:
                 sp = side["placement"]
                 sx = sp["x2"] if hinge_left else sp["x1"]
                 sdir = -1 if hinge_left else 1
                 z_pl = sp["z1"] + 37                  # планка на 37 от переднего края боковины
                 for dy in (-16, 16):
-                    holes.append(_hole(side["name"], "петля (планка)", sx, y + dy, z_pl, 5, 12, "x", sdir))
+                    holes.append(_hole(side["name"], "петля (планка)", sx, y + dy, z_pl, 3, 2, "x", sdir))
 
-    # --- Полкодержатели: 4 отв на съёмную полку (2 на каждую боковину/перегородку) ---
+    # --- Полки (реверс эталона, AKD-287).
+    #     Съёмные: эксцентрик Ø20 в пластиковом корпусе (SE01PB) — чашка
+    #     Ø20×13 в НИЖНЕЙ пласти полки на 10 от торца, шток Ø5×12 в пласть
+    #     стойки; по 2 на сторону, 64 от переднего/заднего торца полки.
+    #     Стационарные (fixed=True, перекрытие стека): стяжка MNFX — канал
+    #     Ø8×34 в торец полки, чашка Ø15×12.5 в нижней пласти полки на 35 от
+    #     торца, шток Ø5×12 в стойку; позиции 96 от торцов + шкант на 32. ---
     for p in panels:
         if p.get("type") != "shelf":
             continue
         pl = p["placement"]
         yc = (pl["y1"] + pl["y2"]) / 2
-        # отступ от кромок — кратен 32 (присадочная сетка производства)
-        m = 32.0 * max(1, min(3, round((pl["z2"] - pl["z1"]) * 0.25 / 32)))
-        zf, zb = pl["z1"] + m, pl["z2"] - m
+        fixed = bool(p.get("fixed"))
         for edge_x, want in ((pl["x1"], "x2"), (pl["x2"], "x1")):
             # боковина должна содержать уровень полки по Y (AKD-235: composite
             # с origin.y — полка верхнего блока сверлилась в нижнюю боковину)
@@ -294,53 +329,75 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
                     key=lambda v: abs(v["placement"][want] - edge_x), default=None)
             if v is None:
                 continue
-            # сверлим В ТЕЛО боковины: у левой (её x2 = грань полки) — в −X,
-            # у правой (её x1) — в +X. Раньше был инверт (дырка уходила в полку).
+            # шток сверлится В ТЕЛО стойки: у левой (её x2 = грань полки) — в −X
             into = -1 if want == "x2" else 1
-            for z in (zf, zb):
-                holes.append(_hole(v["name"], "полкодержатель", edge_x, yc, z, 8, 10, "x", into))
+            cup_x = edge_x + (10 if into < 0 else -10)     # чашка в теле полки
+            if not fixed:
+                for z in (pl["z1"] + 64, pl["z2"] - 64):
+                    holes.append(_hole(p["name"], "эксцентрик полки (чашка Ø20)",
+                                       cup_x, pl["y1"], z, 20, 13, "y", 1))
+                    holes.append(_hole(v["name"], "эксцентрик полки (шток)",
+                                       edge_x, yc, z, 5, 12, "x", into))
+            else:
+                mcup_x = edge_x + (35 if into < 0 else -35)
+                dws, cams = _prod_pts(pl["z1"], pl["z2"])
+                for z in cams:
+                    holes.append(_hole(p["name"], "эксцентрик (канал Ø8)",
+                                       edge_x, yc, z, 8, 34, "x", -into))
+                    holes.append(_hole(p["name"], "эксцентрик (чашка Ø15)",
+                                       mcup_x, pl["y1"], z, 15, 12.5, "y", 1))
+                    holes.append(_hole(v["name"], "эксцентрик (шток)",
+                                       edge_x, yc, z, 5, 12, "x", into))
+                for z in dws:
+                    holes.append(_hole(p["name"], "шкант 8×30 (торец)",
+                                       edge_x, yc, z, 8, 21, "x", -into))
+                    holes.append(_hole(v["name"], "шкант 8×30 (пласть)",
+                                       edge_x, yc, z, 8, 11, "x", into))
 
-    # --- Стяжки Y-стыков: дно/крышка/столешница ↔ боковины/перегородки.
-    #     Система 32 (AKD-202, стандарт производства): шкант Ø8×30 + минификс
-    #     (канал Ø8 в торце боковины, шток Ø8 в пласти горизонта, чашка Ø15
-    #     в пласти боковины на 32 от торца) — конфирматы Ø7 не используются,
-    #     присадочный центр сверлит Ø8 по сетке 32. ---
+    # --- Y-стыки: дно/крышка ↔ боковины/перегородки (реверс эталона AKD-287).
+    #     ДНО: евровинт-конфирмат 7×50 СНИЗУ (голова в нижней пласти дна, не
+    #     видна): проход Ø8 сквозь дно + тело Ø5×35 в торец стойки. КРЫШКА:
+    #     стяжка MNFX — канал Ø8×34 вниз в торец стойки, чашка Ø15×12.5 во
+    #     ВНУТРЕННЕЙ пласти стойки на 35 ниже стыка, шток Ø5×12 вверх в крышку.
+    #     Позиции: 96 от торцов + шкант 8×30 на 32 внутрь (гнездо 21 в стойку,
+    #     11 в пласть горизонта). ---
     construction = str((project.get("carcass_calculation") or {}).get("construction", ""))
     for p in panels:
         if p.get("type") not in ("bottom", "top"):
             continue
         pl = p["placement"]
+        t_h = float(p.get("thickness") or (pl["y2"] - pl["y1"]))
         for v in verticals:
             vp = v["placement"]
             if not (vp["x1"] >= pl["x1"] - 1 and vp["x2"] <= pl["x2"] + 1):
                 continue
-            if p["type"] == "bottom" and abs(vp["y1"] - pl["y2"]) < 1:
-                t_face, t_dir = vp["y1"], 1     # торец боковины снизу
-                b_face, b_dir = pl["y2"], -1    # пласть дна сверху
-                cup_y = vp["y1"] + 32
-            elif p["type"] == "top" and abs(vp["y2"] - pl["y1"]) < 1:
-                t_face, t_dir = vp["y2"], -1    # торец боковины сверху
-                b_face, b_dir = pl["y1"], 1     # пласть крышки снизу
-                cup_y = vp["y2"] - 32
-            else:
-                continue
             xc = (vp["x1"] + vp["x2"]) / 2
             cz1, cz2 = max(pl["z1"], vp["z1"]), min(pl["z2"], vp["z2"])
-            dws, cams = _sys32_pts(cz1, cz2)
+            dws, cams = _prod_pts(cz1, cz2)
             cup_x, cup_dir = ((vp["x1"], 1) if v.get("type") == "side_right"
                               else (vp["x2"], -1))    # чашка с внутренней пласти
-            for z in dws:
-                holes.append(_hole(v["name"], "шкант 8×30 (торец)", xc, t_face, z, 8, 20, "y", t_dir))
-                holes.append(_hole(p["name"], "шкант 8×30 (пласть)", xc, b_face, z, 8, 12, "y", b_dir))
-            for z in cams:
-                holes.append(_hole(v["name"], "эксцентрик (канал Ø8)", xc, t_face, z, 8, 34, "y", t_dir))
-                holes.append(_hole(p["name"], "эксцентрик (шток)", xc, b_face, z, 8, 11, "y", b_dir))
-                holes.append(_hole(v["name"], "эксцентрик (чашка Ø15)", cup_x, cup_y, z, 15, 13, "x", cup_dir))
+            if p["type"] == "bottom" and abs(vp["y1"] - pl["y2"]) < 1:
+                joint = pl["y2"]                       # плоскость стыка (верх дна)
+                for z in cams:                         # конфирмат снизу дна
+                    holes.append(_hole(p["name"], "евровинт (проход Ø8)", xc, pl["y1"], z, 8, t_h, "y", 1))
+                    holes.append(_hole(v["name"], "конфирмат", xc, joint, z, 5, 35, "y", 1))
+                for z in dws:                          # шкант: гнездо в стойке
+                    holes.append(_hole(v["name"], "шкант 8×30 (торец)", xc, joint, z, 8, 21, "y", 1))
+                    holes.append(_hole(p["name"], "шкант 8×30 (пласть)", xc, joint, z, 8, 11, "y", -1))
+            elif p["type"] == "top" and abs(vp["y2"] - pl["y1"]) < 1:
+                joint = pl["y1"]                       # плоскость стыка (низ крышки)
+                for z in cams:                         # стяжка MNFX
+                    holes.append(_hole(v["name"], "эксцентрик (канал Ø8)", xc, joint, z, 8, 34, "y", -1))
+                    holes.append(_hole(v["name"], "эксцентрик (чашка Ø15)", cup_x, joint - 35, z, 15, 12.5, "x", cup_dir))
+                    holes.append(_hole(p["name"], "эксцентрик (шток)", xc, joint, z, 5, 12, "y", 1))
+                for z in dws:
+                    holes.append(_hole(v["name"], "шкант 8×30 (торец)", xc, joint, z, 8, 21, "y", -1))
+                    holes.append(_hole(p["name"], "шкант 8×30 (пласть)", xc, joint, z, 8, 11, "y", 1))
 
     # --- Стяжки X-стыков: торец царги/экрана/задника → пласть боковины.
-    #     Система 32 (AKD-202): шкант Ø8 (торец панели ↔ пласть боковины) +
-    #     минификс (канал Ø8 в торце панели, шток Ø8 в пласти боковины,
-    #     чашка Ø15 в пласти панели на 32 от торца). ---
+    #     Реверс эталона (AKD-287): стяжка MNFX — канал Ø8×34 в торец панели,
+    #     чашка Ø15×12.5 в пласти панели на 35 от торца, шток Ø5×12 в стойку;
+    #     позиции 96 от торцов + шкант 8×30 на 32 внутрь (21/11). ---
     x_joint_types = ("bottom", "top", "back", "screen", "plinth")
     for p in panels:
         if p.get("type") not in x_joint_types:
@@ -353,11 +410,11 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
             if abs(pl["x1"] - vp["x2"]) < 1:          # панель справа от вертикали
                 t_face, t_dir = pl["x1"], 1           # торец панели слева
                 b_face, b_dir = vp["x2"], -1          # контактная пласть боковины
-                cup_x = pl["x1"] + 32
+                cup_x = pl["x1"] + 35
             elif abs(pl["x2"] - vp["x1"]) < 1:        # панель слева от вертикали
                 t_face, t_dir = pl["x2"], -1
                 b_face, b_dir = vp["x1"], 1
-                cup_x = pl["x2"] - 32
+                cup_x = pl["x2"] - 35
             else:
                 continue
             cy1, cy2 = max(pl["y1"], vp["y1"]), min(pl["y2"], vp["y2"])
@@ -374,22 +431,22 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
             along_z = (cz2 - cz1) >= (cy2 - cy1)
             if along_z:
                 lvl = (cy1 + cy2) / 2
-                dws, cams = _sys32_pts(cz1, cz2)
+                dws, cams = _prod_pts(cz1, cz2)
             else:
                 lvl = (cz1 + cz2) / 2
-                dws, cams = _sys32_pts(cy1, cy2)
+                dws, cams = _prod_pts(cy1, cy2)
             for t in dws:
                 y, z = (lvl, t) if along_z else (t, lvl)
-                holes.append(_hole(p["name"], "шкант 8×30 (торец)", t_face, y, z, 8, 20, "x", t_dir))
-                holes.append(_hole(v["name"], "шкант 8×30 (пласть)", b_face, y, z, 8, 12, "x", b_dir))
+                holes.append(_hole(p["name"], "шкант 8×30 (торец)", t_face, y, z, 8, 21, "x", t_dir))
+                holes.append(_hole(v["name"], "шкант 8×30 (пласть)", b_face, y, z, 8, 11, "x", b_dir))
             for t in cams:
                 y, z = (lvl, t) if along_z else (t, lvl)
                 holes.append(_hole(p["name"], "эксцентрик (канал Ø8)", t_face, y, z, 8, 34, "x", t_dir))
-                holes.append(_hole(v["name"], "эксцентрик (шток)", b_face, y, z, 8, 11, "x", b_dir))
+                holes.append(_hole(v["name"], "эксцентрик (шток)", b_face, y, z, 5, 12, "x", b_dir))
                 if along_z:                           # горизонталь: чашка с нижней пласти
-                    holes.append(_hole(p["name"], "эксцентрик (чашка Ø15)", cup_x, pl["y1"], z, 15, 13, "y", 1))
+                    holes.append(_hole(p["name"], "эксцентрик (чашка Ø15)", cup_x, pl["y1"], z, 15, 12.5, "y", 1))
                 else:                                 # front-панель: чашка с задней пласти
-                    holes.append(_hole(p["name"], "эксцентрик (чашка Ø15)", cup_x, y, pl["z2"], 15, 13, "z", -1))
+                    holes.append(_hole(p["name"], "эксцентрик (чашка Ø15)", cup_x, y, pl["z2"], 15, 12.5, "z", -1))
 
     # --- Цоколь (AKD-180): боковины начинаются выше дна — единственный стык
     #     цоколя это его верхний торец под дном. Конфирматы сквозь дно вниз ---
@@ -409,14 +466,14 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
                 continue
             # система 32: шкант + минификс (канал в торце цоколя, шток снизу дна,
             # чашка с задней пласти цоколя)
-            dws, cams = _sys32_pts(x1o, x2o)
+            dws, cams = _prod_pts(x1o, x2o)
             for x in dws:
-                holes.append(_hole(p["name"], "шкант 8×30 (торец)", x, pl["y2"], zc, 8, 20, "y", -1))
-                holes.append(_hole(q["name"], "шкант 8×30 (пласть)", x, qp["y1"], zc, 8, 12, "y", 1))
+                holes.append(_hole(p["name"], "шкант 8×30 (торец)", x, pl["y2"], zc, 8, 21, "y", -1))
+                holes.append(_hole(q["name"], "шкант 8×30 (пласть)", x, qp["y1"], zc, 8, 11, "y", 1))
             for x in cams:
                 holes.append(_hole(p["name"], "эксцентрик (канал Ø8)", x, pl["y2"], zc, 8, 34, "y", -1))
-                holes.append(_hole(q["name"], "эксцентрик (шток)", x, qp["y1"], zc, 8, 11, "y", 1))
-                holes.append(_hole(p["name"], "эксцентрик (чашка Ø15)", x, pl["y2"] - 32, pl["z2"], 15, 13, "z", -1))
+                holes.append(_hole(q["name"], "эксцентрик (шток)", x, qp["y1"], zc, 5, 12, "y", 1))
+                holes.append(_hole(p["name"], "эксцентрик (чашка Ø15)", x, pl["y2"] - 35, pl["z2"], 15, 12.5, "z", -1))
 
     # --- Толстый задник в проём (>6, ЛДСП): помимо стяжек через боковины
     #     (X-стыки выше) — шкант+минификс через дно/крышку в его торцы и
@@ -438,21 +495,21 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
             if p["type"] == "bottom" and abs(bp["y1"] - pl["y2"]) < 1:
                 t_face, t_dir = bp["y1"], 1        # торец задника снизу
                 b_face, b_dir = pl["y2"], -1       # пласть дна сверху
-                cup_y = bp["y1"] + 32
+                cup_y = bp["y1"] + 35
             elif p["type"] == "top" and abs(bp["y2"] - pl["y1"]) < 1:
                 t_face, t_dir = bp["y2"], -1
                 b_face, b_dir = pl["y1"], 1
-                cup_y = bp["y2"] - 32
+                cup_y = bp["y2"] - 35
             else:
                 continue
-            dws, cams = _sys32_pts(bp["x1"], bp["x2"])
+            dws, cams = _prod_pts(bp["x1"], bp["x2"])
             for x in dws:
-                holes.append(_hole(b["name"], "шкант 8×30 (торец)", x, t_face, zc, 8, 20, "y", t_dir))
-                holes.append(_hole(p["name"], "шкант 8×30 (пласть)", x, b_face, zc, 8, 12, "y", b_dir))
+                holes.append(_hole(b["name"], "шкант 8×30 (торец)", x, t_face, zc, 8, 21, "y", t_dir))
+                holes.append(_hole(p["name"], "шкант 8×30 (пласть)", x, b_face, zc, 8, 11, "y", b_dir))
             for x in cams:
                 holes.append(_hole(b["name"], "эксцентрик (канал Ø8)", x, t_face, zc, 8, 34, "y", t_dir))
-                holes.append(_hole(p["name"], "эксцентрик (шток)", x, b_face, zc, 8, 11, "y", b_dir))
-                holes.append(_hole(b["name"], "эксцентрик (чашка Ø15)", x, cup_y, bp["z2"], 15, 13, "z", -1))
+                holes.append(_hole(p["name"], "эксцентрик (шток)", x, b_face, zc, 5, 12, "y", b_dir))
+                holes.append(_hole(b["name"], "эксцентрик (чашка Ø15)", x, cup_y, bp["z2"], 15, 12.5, "z", -1))
         # перегородки/полки, упирающиеся торцом в пласть задника
         t_b = float(b.get("thickness", 16))
         for q in panels:
@@ -477,46 +534,61 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
                 holes.append(_hole(b["name"], "задник (саморез)", x, y, bp["z2"],
                                    3.5, round(t_b + 14, 1), "z", -1))
 
-    # --- Гвозди задника: по периметру + вдоль внутренних полок/стоек (реверс
-    #     готовой тумбы БАЗИС: гвоздь 1.6×25, шаг ≤250, см. BASIS_FASTENERS_REVERSE) ---
+    # --- Гвозди задника (реверс эталона AKD-287): гвоздь 1×16 бьётся в ЦЕНТРЫ
+    #     торцов примыкающих панелей с шагом 96; прокол Ø3 сквозь ДВП/ХДФ +
+    #     тело Ø1×12 в торец. Стойки — ряд по Y (центрированная сетка 96),
+    #     дно/крышка/полки — ряд по X от 32 от края (хвост подтянут). ---
+    def _row96_centered(a: float, b: float) -> list[float]:
+        L = b - a
+        if L < 64:
+            return [(a + b) / 2]
+        n = max(2, int(L // 96) + 1)
+        off = (L - (n - 1) * 96) / 2
+        while off < 32 and n > 2:                     # не ближе 32 к краю
+            n -= 1
+            off = (L - (n - 1) * 96) / 2
+        return [round(a + off + 96 * k, 1) for k in range(n)]
+
+    def _row96_edge(a: float, b: float) -> list[float]:
+        pts = []
+        x = a + 32
+        while x <= b - 32 + 0.1:
+            pts.append(round(x, 1))
+            x += 96
+        if pts and (b - 32) - pts[-1] > 64:           # хвост: добить у края
+            pts.append(round(b - 48, 1))
+        return pts or [(a + b) / 2]
+
     for p in panels:
         if p.get("type") != "back" or float(p.get("thickness", 16)) > 6:
-            continue                                  # только тонкий ДВП-задник
+            continue                                  # только тонкий ДВП/ХДФ-задник
         pl = p["placement"]
-        m = 12.0                                      # отступ от кромки ДВП
-        xs = _spread(pl["x1"] + m, pl["x2"] - m, 250)
-        ys = _spread(pl["y1"] + m, pl["y2"] - m, 250)
-        pts = [(x, pl["y1"] + m) for x in xs] + [(x, pl["y2"] - m) for x in xs] \
-            + [(pl["x1"] + m, y) for y in ys[1:-1]] + [(pl["x2"] - m, y) for y in ys[1:-1]]
-        # внутренние стойки/полки, примыкающие к заднику сзади
+        t_b = float(p.get("thickness") or (pl["z2"] - pl["z1"]))
+        # примыкающие сзади панели: их задний торец касается тела задника
         for q in panels:
             qp = q.get("placement")
-            if q.get("type") not in ("vertical_partition", "shelf") or not qp:
+            if not qp or q is p or q.get("type") == "back":
                 continue
-            if qp["z2"] < pl["z1"] - 20:              # не доходит до задника
-                continue
-            if q["type"] == "vertical_partition":
+            if not (pl["z1"] - 1.5 <= qp["z2"] <= pl["z2"] + 1.5):
+                continue                              # торец не под задником
+            vert = q.get("type") in ("side_left", "side_right", "vertical_partition")
+            if vert:
                 cx = (qp["x1"] + qp["x2"]) / 2
-                if pl["x1"] < cx < pl["x2"]:
-                    pts += [(cx, y) for y in _spread(max(qp["y1"], pl["y1"]) + m,
-                                                     min(qp["y2"], pl["y2"]) - m, 250)]
-            else:
+                y1o, y2o = max(qp["y1"], pl["y1"]), min(qp["y2"], pl["y2"])
+                if not (pl["x1"] - 1 <= cx <= pl["x2"] + 1) or y2o - y1o < 60:
+                    continue
+                pts = [(cx, y) for y in _row96_centered(y1o, y2o)]
+            elif q.get("type") in ("bottom", "top", "shelf"):
                 cy = (qp["y1"] + qp["y2"]) / 2
-                if pl["y1"] < cy < pl["y2"]:
-                    pts += [(x, cy) for x in _spread(max(qp["x1"], pl["x1"]) + m,
-                                                     min(qp["x2"], pl["x2"]) - m, 250)]
-        # гвоздь ставится только там, где за ДВП есть тело (торец панели):
-        # задник «в проём» (между боковинами) не перекрывает их торцы — такие
-        # точки периметра пропускаем, держат дно/крышка/стойки
-        bodies = [q["placement"] for q in panels
-                  if q.get("placement") and q is not p
-                  and q["placement"]["z2"] >= pl["z1"] - 1.5]
-        tip_z = pl["z2"] - 25 * 0.6                   # середина заглубления гвоздя
-        for x, y in dict.fromkeys(pts):
-            if not any(b["x1"] - 1 <= x <= b["x2"] + 1 and b["y1"] - 1 <= y <= b["y2"] + 1
-                       and b["z1"] - 1 <= tip_z <= b["z2"] + 1 for b in bodies):
+                x1o, x2o = max(qp["x1"], pl["x1"]), min(qp["x2"], pl["x2"])
+                if not (pl["y1"] - 1 <= cy <= pl["y2"] + 1) or x2o - x1o < 60:
+                    continue
+                pts = [(x, cy) for x in _row96_edge(x1o, x2o)]
+            else:
                 continue
-            holes.append(_hole(p["name"], "задник (гвоздь)", x, y, pl["z2"], 1.6, 25, "z", -1))
+            for x, y in pts:
+                holes.append(_hole(p["name"], "задник (прокол Ø3)", x, y, pl["z2"], 3, t_b, "z", -1))
+                holes.append(_hole(q["name"], "задник (гвоздь)", x, y, qp["z2"], 1, 12, "z", -1))
 
     # --- Короб ящика: саморезы 3.5×16 сквозь бок в торцы дна и задней стенки ---
     for p in panels:
@@ -736,27 +808,54 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
                                (pl["x1"] + pl["x2"]) / 2, pl["y2"] - 30, pl["z2"],
                                18, pl["z2"] - pl["z1"], "z", -1))
 
-    # --- Направляющие ящиков: винты на боковинах/перегородках у КОРОБА ---
-    # (по коробу, а не по фасаду: накладной фасад шире проёма и не задаёт колонку)
+    # --- Направляющие ящиков (реверс эталона AKD-287): каждый корпусный полоз
+    #     крепится 3 саморезами US3.5×16 в ШТАТНЫЕ монтажные отверстия
+    #     направляющей — 37, 101 и 389 мм от её переднего конца (полоз
+    #     заподлицо с фронтом корпуса); высота осей = низ короба + 16.
+    #     Присадка — накол Ø3×2 (саморез вкручивается по месту). ---
     for d in project.get("drawers", []):
         pos, dim = d.get("position") or {}, d.get("dimensions") or {}
         if not pos or not dim:
             continue
         box_l, box_r = float(pos["x"]), float(pos["x"]) + float(dim["width"])
-        guide_y = float(pos["y"]) + 12
+        guide_y = float(pos["y"]) + 16
         left = min((v for v in verticals if v["placement"]["x2"] <= box_l + 1),
                    key=lambda v: box_l - v["placement"]["x2"], default=None)
         right = min((v for v in verticals if v["placement"]["x1"] >= box_r - 1),
                     key=lambda v: v["placement"]["x1"] - box_r, default=None)
-        # винт входит с ВНУТРЕННЕЙ пласти опоры и сверлится В её тело:
+        # накол входит с ВНУТРЕННЕЙ пласти опоры и сверлится В её тело:
         # левая опора — вход с её x2, сверло в −X; правая — с x1, в +X
         for v, inx in ((left, -1), (right, 1)):
             if v is None:
                 continue
             vp = v["placement"]
             sx = vp["x2"] if inx < 0 else vp["x1"]
-            for z in (vp["z1"] + 30, (vp["z1"] + vp["z2"]) / 2, vp["z2"] - 50):
-                holes.append(_hole(v["name"], "направляющая (винт)", sx, guide_y, z, 5, 12, "x", inx))
+            front = vp["z1"]                          # наш фронт — min Z
+            depth_av = vp["z2"] - vp["z1"]
+            for off in (37.0, 101.0, 389.0):
+                if off > depth_av - 10:               # мелкий корпус — точка не влезает
+                    continue
+                holes.append(_hole(v["name"], "направляющая (саморез)", sx, guide_y,
+                                   front + off, 3, 2, "x", inx))
+        # ящичный полоз (реверс эталона): 3 накола на боковину КОРОБА в его
+        # монтажные точки 37/192/224 от переднего торца, вход с наружной пласти
+        box_front = float(pos["z"])
+        box_depth = float(dim["depth"])
+        for q in panels:
+            if q.get("type") not in ("drawer_side_left", "drawer_side_right"):
+                continue
+            qp = q["placement"]
+            if not (qp["y1"] - 1 <= guide_y <= qp["y2"] + 1):
+                continue
+            if not (box_l - 20 <= qp["x1"] <= box_r + 20):    # боковина этого короба
+                continue
+            outer = qp["x1"] if q["type"] == "drawer_side_left" else qp["x2"]
+            b_inx = 1 if q["type"] == "drawer_side_left" else -1
+            for off in (37.0, 192.0, 224.0):
+                if off > box_depth - 10:
+                    continue
+                holes.append(_hole(q["name"], "направляющая (саморез)", outer, guide_y,
+                                   box_front + off, 3, 2, "x", b_inx))
     return holes
 
 
@@ -764,18 +863,25 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
 # У шканта 2 отверстия (торец+пласть) на 1 шкант; у эксцентрика чашка = 1 шт,
 # отверстие штока — в комплекте (0).
 _FASTENER_MAP = {
-    "задник (гвоздь)": ("Гвоздь 1.6×25", "гвоздь 1,6", 1.0),
+    "задник (гвоздь)": ("Гвоздь 1×16", "гвоздь 1х16", 1.0),
+    "задник (прокол Ø3)": ("Гвоздь 1×16", "гвоздь 1х16", 0.0),   # прокол того же гвоздя
     "задник (саморез)": ("Саморез 3,5×30", "саморез потай 3,5 30", 1.0),
     "короб ящика (саморез)": ("Саморез 3,5×16", "саморез потай 3,5 16", 1.0),
-    "направляющая (винт)": ("Саморез 3,5×16 (направляющие)", "саморез потай 3,5 16", 1.0),
+    "направляющая (саморез)": ("Саморез US3,5×16 (направляющие)", "саморез потай 3,5 16", 1.0),
     "ручка (винт)": ("Винт М4×16", "винт м4 16", 1.0),
-    "полкодержатель": ("Полкодержатель", "полкодержатель", 1.0),
+    "эксцентрик полки (чашка Ø20)": ("Эксцентрик Ø20 в пласт. корпусе (SE01PB)",
+                                     "эксцентрик усиленный пластиковом корпусе", 1.0),
+    "эксцентрик полки (шток)": ("Эксцентрик Ø20 в пласт. корпусе (SE01PB)",
+                                "эксцентрик усиленный пластиковом корпусе", 0.0),
     "петля (чашка Ø35)": ("Петля накладная", "петля наклад", 1.0),
+    "петля (накол чашки)": ("Петля накладная", "петля наклад", 0.0),
+    "евровинт (проход Ø8)": ("Евровинт конфирмат 7×50", "конфирмат 7,0х50", 1.0),
+    "конфирмат": ("Евровинт конфирмат 7×50", "конфирмат 7,0х50", 0.0),  # тело того же винта
     "шкант 8×30 (торец)": ("Шкант 8×30", "шкант 8", 0.5),
     "шкант 8×30 (пласть)": ("Шкант 8×30", "шкант 8", 0.5),
-    "эксцентрик (чашка Ø15)": ("Эксцентрик Ø15 + шток", "эксцентрик", 1.0),
-    "эксцентрик (шток)": ("Эксцентрик Ø15 + шток", "эксцентрик", 0.0),
-    "эксцентрик (канал Ø8)": ("Эксцентрик Ø15 + шток", "эксцентрик", 0.0),
+    "эксцентрик (чашка Ø15)": ("Стяжка эксцентриковая MNFX (комплект)", "стяжка эксцентриковая комплект", 1.0),
+    "эксцентрик (шток)": ("Стяжка эксцентриковая MNFX (комплект)", "стяжка эксцентриковая комплект", 0.0),
+    "эксцентрик (канал Ø8)": ("Стяжка эксцентриковая MNFX (комплект)", "стяжка эксцентриковая комплект", 0.0),
     "фасадная стяжка (эксцентрик Ø15)": ("Стяжка фасадная (эксцентрик+шток)", "эксцентрик", 1.0),
     "фасадная стяжка (шток)": ("Стяжка фасадная (эксцентрик+шток)", "эксцентрик", 0.0),
     "замок (цилиндр Ø18)": ("Замок мебельный", "замок", 1.0),

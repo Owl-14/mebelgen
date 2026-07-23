@@ -52,7 +52,10 @@ def _parse_node(d: bytes, p: int, names: list[str]) -> tuple[tuple, int]:
     nm, cnt = struct.unpack_from("<II", d, p)
     t = d[p + 8]
     q = p + 9
-    name = names[nm]
+    # десктопный Мебельщик пишет АНОНИМНЫЕ узлы (элементы массивов, напр.
+    # FurnList→ParData→Elements) с nameIdx=0xFFFFFFFF — файл из облака их
+    # не содержит, файл технолога содержит (реверс правок производства)
+    name = "" if nm == 0xFFFFFFFF else names[nm]
     if t == 0x00:
         kids = []
         for _ in range(cnt):
@@ -90,13 +93,15 @@ def _collect_names(node: tuple, acc: set) -> None:
 
 def _write_node(node: tuple, idx: dict[str, int], out: bytearray) -> None:
     name, kind, val = node
+    # анонимные узлы (десктоп): nameIdx = 0xFFFFFFFF, в таблицу имён не входят
+    nid = 0xFFFFFFFF if name == "" else idx[name]
     if kind == "obj":
-        out += struct.pack("<II", idx[name], len(val)) + b"\x00"
+        out += struct.pack("<II", nid, len(val)) + b"\x00"
         for k in val:
             _write_node(k, idx, out)
         return
     if kind == "bool":
-        out += struct.pack("<II", idx[name], 0) + (b"\x01" if val else b"\x02")
+        out += struct.pack("<II", nid, 0) + (b"\x01" if val else b"\x02")
         return
     tag, payload = {
         "u8": (b"\x03", lambda v: bytes([v])),
@@ -106,7 +111,7 @@ def _write_node(node: tuple, idx: dict[str, int], out: bytearray) -> None:
         "blob": (b"\x07", lambda v: struct.pack("<I", len(v)) + bytes(v)),
         "date": (b"\x09", lambda v: struct.pack("<d", float(v))),
     }[kind]
-    out += struct.pack("<II", idx[name], 0) + tag + payload(val)
+    out += struct.pack("<II", nid, 0) + tag + payload(val)
 
 
 def _serialize_section(nodes: list[tuple]) -> bytes:

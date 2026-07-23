@@ -96,13 +96,13 @@ def test_facade_material_reaches_cfrn():
 
 
 def test_edge_policy_by_purpose():
-    """Кромка по назначению: фасад 2 на все стороны, боковина 2 только на
-    передний торец, задник и дно ящика — без кромки."""
+    """Кромка по эталону технолога (AKD-287): фасад 2 по кругу, видимые
+    не-фасадные торцы 0.5, скрытые — без кромки."""
     p = generate_from_paramspec(_spec())
     by = {q["type"]: q["edge_banding"] for q in p["panels"]}
     assert set(by["drawer_front"].values()) == {2}
     side = by["side_left"]
-    assert side["left"] == 2 and side["right"] == 0.4        # перед 2, зад 0.4
+    assert side["left"] == 0.5 and side["right"] == 0        # перед 0.5, зад скрыт
     assert set(by["back"].values()) == {0}
     assert set(by["drawer_bottom"].values()) == {0}
-    assert by["drawer_side_left"]["top"] == 0.4              # верхний торец короба
+    assert by["drawer_side_left"]["top"] == 0.5              # верхний торец короба

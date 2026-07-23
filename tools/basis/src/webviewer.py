@@ -341,6 +341,8 @@ function MebelScene(container){
       add(cyl(3.5,1,_MTL.steel),dir*0.4);
     }else if(pu.includes('шкант')){
       if(pu.includes('торец')) add(cyl(8,30,_MTL.wood),dir*10);  // одно тело на пару отверстий
+    }else if(pu.includes('чашка Ø20')){          // эксцентрик полки SE01PB (AKD-287)
+      add(cyl(20,13,_MTL.chrome),dir*6.5);
     }else if(pu.includes('чашка Ø15')){
       add(cyl(15,13,_MTL.brass),dir*6.5);
     }else if(pu.includes('шток')){

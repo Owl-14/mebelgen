@@ -11,6 +11,7 @@
 | [rules/generators.md](rules/generators.md) | Какие поля ParamSpec понимает каждый генератор (`src/generators/`) |
 | [rules/materials.md](rules/materials.md) | Политика выбора материалов/фурнитуры (дозаполнение из ТЗ, дефолты, привязка к базе) |
 | [rules/hardware.md](rules/hardware.md) | Присадки под фурнитуру + система 32 — координаты сверловки |
+| [rules/b3d_production_reference.md](rules/b3d_production_reference.md) | **Реверс эталона технолога**: шаблоны крепежа, правила расстановки, оформление в .b3d (FurnList/3001/Butts) |
 | [rules/studio.md](rules/studio.md) | Studio: UI, API, каталог изделий, гарантии |
 | [rules/delivery.md](rules/delivery.md) | Лист согласования (версии, статусы, чертёж на листе) |
 
