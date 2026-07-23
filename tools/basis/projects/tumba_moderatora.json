@@ -1,0 +1,1346 @@
+{
+  "project_name": "Тумба для модератора",
+  "furniture_type": "тумба для модератора",
+  "overall_dimensions": {
+    "width": 1000,
+    "depth": 400,
+    "height": 750,
+    "tolerance": 10
+  },
+  "materials": {
+    "board_material": "ЛДСП",
+    "board_thickness": 16,
+    "back_wall_material": "ЛДСП",
+    "edge_band_thickness": 2,
+    "color": "Серо-коричневый тёмный",
+    "color_code": "U740 ST9"
+  },
+  "sections": [
+    {
+      "id": "col1",
+      "type": "drawers",
+      "dimensions": {
+        "width": 312,
+        "height": 658.0,
+        "depth": 384,
+        "estimated": false
+      },
+      "elements": [
+        "Фасад ящик 1",
+        "Ящик 1 дно",
+        "Ящик 1 боковина левая",
+        "Ящик 1 боковина правая",
+        "Ящик 1 задняя",
+        "Фасад ящик 2",
+        "Ящик 2 дно",
+        "Ящик 2 боковина левая",
+        "Ящик 2 боковина правая",
+        "Ящик 2 задняя",
+        "Фасад ящик 3",
+        "Ящик 3 дно",
+        "Ящик 3 боковина левая",
+        "Ящик 3 боковина правая",
+        "Ящик 3 задняя"
+      ]
+    },
+    {
+      "id": "col2",
+      "type": "shelves",
+      "dimensions": {
+        "width": 312,
+        "height": 658.0,
+        "depth": 384,
+        "estimated": false
+      },
+      "elements": [
+        "Полка (col2)"
+      ]
+    },
+    {
+      "id": "col3",
+      "type": "door",
+      "dimensions": {
+        "width": 312,
+        "height": 658.0,
+        "depth": 384,
+        "estimated": false
+      },
+      "elements": [
+        "Полка (col3)"
+      ]
+    }
+  ],
+  "panels": [
+    {
+      "name": "Дно",
+      "type": "bottom",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 1000,
+        "height": 400
+      },
+      "placement": {
+        "x1": 0,
+        "x2": 1000,
+        "y1": 60,
+        "y2": 76,
+        "z1": 0,
+        "z2": 400
+      },
+      "position": {
+        "x": 0,
+        "y": 60,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0.5,
+        "right": 0.5
+      },
+      "estimated": false
+    },
+    {
+      "name": "Крышка",
+      "type": "top",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 1000,
+        "height": 400
+      },
+      "placement": {
+        "x1": 0,
+        "x2": 1000,
+        "y1": 734,
+        "y2": 750,
+        "z1": 0,
+        "z2": 400
+      },
+      "position": {
+        "x": 0,
+        "y": 734,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0.5,
+        "right": 0.5
+      },
+      "estimated": false
+    },
+    {
+      "name": "Боковина левая",
+      "type": "side_left",
+      "basis_orientation": "vertical",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 400,
+        "height": 658
+      },
+      "placement": {
+        "x1": 0,
+        "x2": 16,
+        "y1": 76,
+        "y2": 734,
+        "z1": 0,
+        "z2": 400
+      },
+      "position": {
+        "x": 0,
+        "y": 76,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
+      },
+      "estimated": false
+    },
+    {
+      "name": "Боковина правая",
+      "type": "side_right",
+      "basis_orientation": "vertical",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 400,
+        "height": 658
+      },
+      "placement": {
+        "x1": 984,
+        "x2": 1000,
+        "y1": 76,
+        "y2": 734,
+        "z1": 0,
+        "z2": 400
+      },
+      "position": {
+        "x": 984,
+        "y": 76,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
+      },
+      "estimated": false
+    },
+    {
+      "name": "Задняя стенка",
+      "type": "back",
+      "basis_orientation": "front",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 968,
+        "height": 658
+      },
+      "placement": {
+        "x1": 16,
+        "x2": 984,
+        "y1": 76,
+        "y2": 734,
+        "z1": 384,
+        "z2": 400
+      },
+      "position": {
+        "x": 16,
+        "y": 76,
+        "z": 384
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0,
+        "bottom": 0,
+        "left": 0,
+        "right": 0
+      },
+      "estimated": false
+    },
+    {
+      "name": "Перегородка 1",
+      "type": "vertical_partition",
+      "basis_orientation": "vertical",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 384,
+        "height": 658
+      },
+      "placement": {
+        "x1": 328,
+        "x2": 344,
+        "y1": 76,
+        "y2": 734,
+        "z1": 0,
+        "z2": 384
+      },
+      "position": {
+        "x": 328,
+        "y": 76,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
+      },
+      "estimated": false
+    },
+    {
+      "name": "Перегородка 2",
+      "type": "vertical_partition",
+      "basis_orientation": "vertical",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 384,
+        "height": 658
+      },
+      "placement": {
+        "x1": 656,
+        "x2": 672,
+        "y1": 76,
+        "y2": 734,
+        "z1": 0,
+        "z2": 384
+      },
+      "position": {
+        "x": 656,
+        "y": 76,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
+      },
+      "estimated": false
+    },
+    {
+      "name": "Фасад ящик 1",
+      "type": "drawer_front",
+      "basis_orientation": "front",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 333,
+        "height": 227.33
+      },
+      "placement": {
+        "x1": 2,
+        "x2": 335,
+        "y1": 62,
+        "y2": 289.33,
+        "z1": -16,
+        "z2": 0
+      },
+      "position": {
+        "x": 2,
+        "y": 62,
+        "z": -16
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 2,
+        "bottom": 2,
+        "left": 2,
+        "right": 2
+      },
+      "estimated": true,
+      "section_id": "col1"
+    },
+    {
+      "name": "Ящик 1 дно",
+      "type": "drawer_bottom",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 251,
+        "height": 350
+      },
+      "placement": {
+        "x1": 46.5,
+        "x2": 297.5,
+        "y1": 78,
+        "y2": 94,
+        "z1": 0,
+        "z2": 350
+      },
+      "position": {
+        "x": 46.5,
+        "y": 78,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0,
+        "bottom": 0,
+        "left": 0,
+        "right": 0
+      },
+      "estimated": true,
+      "section_id": "col1"
+    },
+    {
+      "name": "Ящик 1 боковина левая",
+      "type": "drawer_side_left",
+      "basis_orientation": "vertical",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 350,
+        "height": 118.21
+      },
+      "placement": {
+        "x1": 30.5,
+        "x2": 46.5,
+        "y1": 78,
+        "y2": 196.21,
+        "z1": 0,
+        "z2": 350
+      },
+      "position": {
+        "x": 30.5,
+        "y": 78,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.5,
+        "bottom": 0,
+        "left": 0.5,
+        "right": 0.5
+      },
+      "estimated": true,
+      "section_id": "col1"
+    },
+    {
+      "name": "Ящик 1 боковина правая",
+      "type": "drawer_side_right",
+      "basis_orientation": "vertical",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 350,
+        "height": 118.21
+      },
+      "placement": {
+        "x1": 297.5,
+        "x2": 313.5,
+        "y1": 78,
+        "y2": 196.21,
+        "z1": 0,
+        "z2": 350
+      },
+      "position": {
+        "x": 297.5,
+        "y": 78,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.5,
+        "bottom": 0,
+        "left": 0.5,
+        "right": 0.5
+      },
+      "estimated": true,
+      "section_id": "col1"
+    },
+    {
+      "name": "Ящик 1 задняя",
+      "type": "drawer_back",
+      "basis_orientation": "front",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 283,
+        "height": 118.21
+      },
+      "placement": {
+        "x1": 30.5,
+        "x2": 313.5,
+        "y1": 78,
+        "y2": 196.21,
+        "z1": 350,
+        "z2": 366
+      },
+      "position": {
+        "x": 30.5,
+        "y": 78,
+        "z": 350
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.5,
+        "bottom": 0,
+        "left": 0.5,
+        "right": 0.5
+      },
+      "estimated": true,
+      "section_id": "col1"
+    },
+    {
+      "name": "Фасад ящик 2",
+      "type": "drawer_front",
+      "basis_orientation": "front",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 333,
+        "height": 227.33
+      },
+      "placement": {
+        "x1": 2,
+        "x2": 335,
+        "y1": 291.33,
+        "y2": 518.66,
+        "z1": -16,
+        "z2": 0
+      },
+      "position": {
+        "x": 2,
+        "y": 291.33,
+        "z": -16
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 2,
+        "bottom": 2,
+        "left": 2,
+        "right": 2
+      },
+      "estimated": true,
+      "section_id": "col1"
+    },
+    {
+      "name": "Ящик 2 дно",
+      "type": "drawer_bottom",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 251,
+        "height": 350
+      },
+      "placement": {
+        "x1": 46.5,
+        "x2": 297.5,
+        "y1": 307.33,
+        "y2": 323.33,
+        "z1": 0,
+        "z2": 350
+      },
+      "position": {
+        "x": 46.5,
+        "y": 307.33,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0,
+        "bottom": 0,
+        "left": 0,
+        "right": 0
+      },
+      "estimated": true,
+      "section_id": "col1"
+    },
+    {
+      "name": "Ящик 2 боковина левая",
+      "type": "drawer_side_left",
+      "basis_orientation": "vertical",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 350,
+        "height": 118.21
+      },
+      "placement": {
+        "x1": 30.5,
+        "x2": 46.5,
+        "y1": 307.33,
+        "y2": 425.54,
+        "z1": 0,
+        "z2": 350
+      },
+      "position": {
+        "x": 30.5,
+        "y": 307.33,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.5,
+        "bottom": 0,
+        "left": 0.5,
+        "right": 0.5
+      },
+      "estimated": true,
+      "section_id": "col1"
+    },
+    {
+      "name": "Ящик 2 боковина правая",
+      "type": "drawer_side_right",
+      "basis_orientation": "vertical",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 350,
+        "height": 118.21
+      },
+      "placement": {
+        "x1": 297.5,
+        "x2": 313.5,
+        "y1": 307.33,
+        "y2": 425.54,
+        "z1": 0,
+        "z2": 350
+      },
+      "position": {
+        "x": 297.5,
+        "y": 307.33,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.5,
+        "bottom": 0,
+        "left": 0.5,
+        "right": 0.5
+      },
+      "estimated": true,
+      "section_id": "col1"
+    },
+    {
+      "name": "Ящик 2 задняя",
+      "type": "drawer_back",
+      "basis_orientation": "front",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 283,
+        "height": 118.21
+      },
+      "placement": {
+        "x1": 30.5,
+        "x2": 313.5,
+        "y1": 307.33,
+        "y2": 425.54,
+        "z1": 350,
+        "z2": 366
+      },
+      "position": {
+        "x": 30.5,
+        "y": 307.33,
+        "z": 350
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.5,
+        "bottom": 0,
+        "left": 0.5,
+        "right": 0.5
+      },
+      "estimated": true,
+      "section_id": "col1"
+    },
+    {
+      "name": "Фасад ящик 3",
+      "type": "drawer_front",
+      "basis_orientation": "front",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 333,
+        "height": 227.33
+      },
+      "placement": {
+        "x1": 2,
+        "x2": 335,
+        "y1": 520.66,
+        "y2": 747.99,
+        "z1": -16,
+        "z2": 0
+      },
+      "position": {
+        "x": 2,
+        "y": 520.66,
+        "z": -16
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 2,
+        "bottom": 2,
+        "left": 2,
+        "right": 2
+      },
+      "estimated": true,
+      "section_id": "col1"
+    },
+    {
+      "name": "Ящик 3 дно",
+      "type": "drawer_bottom",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 251,
+        "height": 350
+      },
+      "placement": {
+        "x1": 46.5,
+        "x2": 297.5,
+        "y1": 536.66,
+        "y2": 552.66,
+        "z1": 0,
+        "z2": 350
+      },
+      "position": {
+        "x": 46.5,
+        "y": 536.66,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0,
+        "bottom": 0,
+        "left": 0,
+        "right": 0
+      },
+      "estimated": true,
+      "section_id": "col1"
+    },
+    {
+      "name": "Ящик 3 боковина левая",
+      "type": "drawer_side_left",
+      "basis_orientation": "vertical",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 350,
+        "height": 118.21
+      },
+      "placement": {
+        "x1": 30.5,
+        "x2": 46.5,
+        "y1": 536.66,
+        "y2": 654.87,
+        "z1": 0,
+        "z2": 350
+      },
+      "position": {
+        "x": 30.5,
+        "y": 536.66,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.5,
+        "bottom": 0,
+        "left": 0.5,
+        "right": 0.5
+      },
+      "estimated": true,
+      "section_id": "col1"
+    },
+    {
+      "name": "Ящик 3 боковина правая",
+      "type": "drawer_side_right",
+      "basis_orientation": "vertical",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 350,
+        "height": 118.21
+      },
+      "placement": {
+        "x1": 297.5,
+        "x2": 313.5,
+        "y1": 536.66,
+        "y2": 654.87,
+        "z1": 0,
+        "z2": 350
+      },
+      "position": {
+        "x": 297.5,
+        "y": 536.66,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.5,
+        "bottom": 0,
+        "left": 0.5,
+        "right": 0.5
+      },
+      "estimated": true,
+      "section_id": "col1"
+    },
+    {
+      "name": "Ящик 3 задняя",
+      "type": "drawer_back",
+      "basis_orientation": "front",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 283,
+        "height": 118.21
+      },
+      "placement": {
+        "x1": 30.5,
+        "x2": 313.5,
+        "y1": 536.66,
+        "y2": 654.87,
+        "z1": 350,
+        "z2": 366
+      },
+      "position": {
+        "x": 30.5,
+        "y": 536.66,
+        "z": 350
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0.5,
+        "bottom": 0,
+        "left": 0.5,
+        "right": 0.5
+      },
+      "estimated": true,
+      "section_id": "col1"
+    },
+    {
+      "name": "Полка (col2)",
+      "type": "shelf",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 312,
+        "height": 384
+      },
+      "placement": {
+        "x1": 344,
+        "x2": 656,
+        "y1": 397,
+        "y2": 413,
+        "z1": 0,
+        "z2": 384
+      },
+      "position": {
+        "x": 344,
+        "y": 397,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0,
+        "right": 0
+      },
+      "estimated": false,
+      "section_id": "col2"
+    },
+    {
+      "name": "Полка (col3)",
+      "type": "shelf",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 312,
+        "height": 384
+      },
+      "placement": {
+        "x1": 672,
+        "x2": 984,
+        "y1": 397,
+        "y2": 413,
+        "z1": 0,
+        "z2": 384
+      },
+      "position": {
+        "x": 672,
+        "y": 397,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0,
+        "right": 0
+      },
+      "estimated": false,
+      "section_id": "col3"
+    },
+    {
+      "name": "Дверь col3",
+      "type": "door_front",
+      "basis_orientation": "front",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 333,
+        "height": 686
+      },
+      "placement": {
+        "x1": 665,
+        "x2": 998,
+        "y1": 62,
+        "y2": 748,
+        "z1": -16,
+        "z2": 0
+      },
+      "position": {
+        "x": 665,
+        "y": 62,
+        "z": -16
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 2,
+        "bottom": 2,
+        "left": 2,
+        "right": 2
+      },
+      "estimated": false,
+      "section_id": "col3"
+    }
+  ],
+  "drawers": [
+    {
+      "id": "col1_drawer_1",
+      "count": 1,
+      "guide_type": "шариковые",
+      "soft_close": false,
+      "lock": false,
+      "dimensions": {
+        "width": 251.0,
+        "height": 118.21,
+        "depth": 350
+      },
+      "position": {
+        "x": 46.5,
+        "y": 78.0,
+        "z": 0
+      },
+      "estimated": true
+    },
+    {
+      "id": "col1_drawer_2",
+      "count": 1,
+      "guide_type": "шариковые",
+      "soft_close": false,
+      "lock": false,
+      "dimensions": {
+        "width": 251.0,
+        "height": 118.21,
+        "depth": 350
+      },
+      "position": {
+        "x": 46.5,
+        "y": 307.33,
+        "z": 0
+      },
+      "estimated": true
+    },
+    {
+      "id": "col1_drawer_3",
+      "count": 1,
+      "guide_type": "шариковые",
+      "soft_close": false,
+      "lock": false,
+      "dimensions": {
+        "width": 251.0,
+        "height": 118.21,
+        "depth": 350
+      },
+      "position": {
+        "x": 46.5,
+        "y": 536.66,
+        "z": 0
+      },
+      "estimated": true
+    }
+  ],
+  "doors": [],
+  "hardware": {
+    "handles": {
+      "type": "ручка-профиль",
+      "material": "металл",
+      "color": "черный",
+      "size": 128,
+      "count": 4
+    },
+    "legs": {
+      "type": "регулируемые опоры",
+      "adjustable": true,
+      "color": "черный",
+      "height": 60,
+      "count": 4
+    },
+    "drawer_guides": {
+      "type": "шариковые с доводчиком"
+    },
+    "hinges": {
+      "type": "петля накладная 110°",
+      "furniture_encoded": ""
+    },
+    "locks": [
+      {
+        "type": "замок центральный",
+        "color": "черный",
+        "target": "Фасад ящик 3"
+      },
+      {
+        "type": "замок",
+        "color": "черный",
+        "target": "right_door"
+      }
+    ]
+  },
+  "constraints": {
+    "default_gap": 2,
+    "drawer_gap": 2,
+    "door_gap": 2,
+    "back_wall_offset": 16,
+    "construction": "top_bottom_over_sides"
+  },
+  "basis_mapping": {
+    "coordinate_system": "basis_mebelshik",
+    "units": "mm",
+    "ready_for_import": true,
+    "placement_required": true
+  },
+  "warnings": [
+    "Порядок секций принят по привязке «замок на правой двери»: ящики слева, открытая посередине, дверь справа",
+    "Высота опор в ТЗ не указана — принята 60 мм",
+    "Петли не указаны — приняты накладные петли 110°."
+  ],
+  "estimated_values": [
+    "legs.height"
+  ],
+  "carcass_calculation": {
+    "W": 1000,
+    "D": 400,
+    "H": 750,
+    "T": 16,
+    "T_back": 16,
+    "Hleg": 60,
+    "construction": "top_bottom_over_sides",
+    "inner_width": "W - 2*T = 968",
+    "side_y": "76..734",
+    "columns": [
+      {
+        "x": [
+          16,
+          328
+        ],
+        "kind": "drawers"
+      },
+      {
+        "x": [
+          344,
+          656
+        ],
+        "kind": "shelves"
+      },
+      {
+        "x": [
+          672,
+          984
+        ],
+        "kind": "door"
+      }
+    ]
+  },
+  "material_refs": {
+    "back": {
+      "resolved": true,
+      "id": "U767 ST9",
+      "article": "U767 ST9",
+      "name": "ЛДСП, 16 мм, Кубанит серый, Egger",
+      "cost": 250,
+      "unit": "кв.м.",
+      "group": "01 Листовой материал/ЛДСП/16мм",
+      "match": "по толщине (цвет не задан → дефолт: дешевле)",
+      "confidence": "low"
+    },
+    "board": {
+      "resolved": false,
+      "query": "плита 16 мм «Серо-коричневый тёмный» (код U740 ST9)",
+      "reason": "не найдено по цвету/коду — подтвердить вручную",
+      "candidates": [
+        "ЛДСП, 16 мм, Кубанит серый, Egger",
+        "ЛДСП, 16 мм, Белый Премиум, Egger",
+        "ЛДСП, 16 мм, Дуб Бардолино натуральный, Egger"
+      ]
+    },
+    "edge": {
+      "resolved": true,
+      "id": "1759",
+      "article": "1759",
+      "name": "Кромка ПВХ, 19/2 мм, Белый, 91470-14, Rehau",
+      "cost": 20,
+      "unit": "пог. м",
+      "group": "02 Кромочные материалы/Кромка 19мм/2/19",
+      "match": "по толщине (в цвет плиты)",
+      "confidence": "low"
+    },
+    "handles": {
+      "resolved": true,
+      "group": "Ручк",
+      "matched_tokens": [
+        "профил",
+        "128"
+      ],
+      "note": "шорт-лист реальных позиций базы; конкретный артикул выбирает технолог/каталог БАЗИС",
+      "candidates": [
+        {
+          "article": "2361",
+          "name": "Ручка-профиль UA02, 128 мм, алюминий, Gamet  UA02C00/128",
+          "cost": 150
+        },
+        {
+          "article": "2362",
+          "name": "Ручка-профиль UA01, 128 мм, алюминий, Gamet",
+          "cost": 150
+        },
+        {
+          "article": "2364",
+          "name": "Ручка-профиль 8.1016, 128 мм, никель мат., Citterio Giulio",
+          "cost": 150
+        },
+        {
+          "article": "75503, В63.128.МCR.AL",
+          "name": "Ручка-скоба В63-128, матовый хром (АЛЮМИНИЙ)МФ",
+          "cost": 90
+        },
+        {
+          "article": "2363",
+          "name": "Ручка-профиль UA01, 96 мм, алюминий, Gamet",
+          "cost": 150
+        }
+      ]
+    },
+    "drawer_guides": {
+      "resolved": true,
+      "group": "Шариковые направляющие",
+      "matched_tokens": [],
+      "note": "шорт-лист реальных позиций базы; конкретный артикул выбирает технолог/каталог БАЗИС",
+      "candidates": [
+        {
+          "article": "3183",
+          "name": "Направляющие шар. полн.выдв. L250 1045-10 Z оцинков.",
+          "cost": 300
+        },
+        {
+          "article": "3183-tip-on",
+          "name": "Направляющие шар. полн.выдв. L250-tip-on",
+          "cost": 300
+        },
+        {
+          "article": "3183(доводч)",
+          "name": "Направляющие шар. полн.выдв. L250 1045-10(доводч)",
+          "cost": 300
+        },
+        {
+          "article": "3190",
+          "name": "Направляющие шар. полн.выдв. L500 1045-20 Z оцинков.",
+          "cost": 400
+        },
+        {
+          "article": "325",
+          "name": "Направляющие KA1730-250",
+          "cost": 400
+        }
+      ]
+    },
+    "hinges": {
+      "resolved": true,
+      "group": "Петли",
+      "matched_tokens": [
+        "петля"
+      ],
+      "note": "шорт-лист реальных позиций базы; конкретный артикул выбирает технолог/каталог БАЗИС",
+      "candidates": [
+        {
+          "article": "8337, HMF.01119.052",
+          "name": "Петля полунакладная MF-201В, Slide-on",
+          "cost": 19
+        },
+        {
+          "article": "8338, HMF.01119.082",
+          "name": "Петля вкладная MF-201С, Slide-on",
+          "cost": 19
+        },
+        {
+          "article": "8336, HMF.01119.022",
+          "name": "Петля накладная MF-201А, Slide-on",
+          "cost": 22
+        },
+        {
+          "article": "3201",
+          "name": "Петля для накладных дверей Firmax Slide-on, угол открывания 110°, 48 мм, шуруп",
+          "cost": 25
+        },
+        {
+          "article": "3203",
+          "name": "Петля для вкладных дверей Firmax Slide-on, угол открывания 110°, 48 мм, под шуруп",
+          "cost": 25
+        }
+      ]
+    },
+    "legs": {
+      "resolved": true,
+      "group": "Опоры регулируемые",
+      "matched_tokens": [],
+      "note": "шорт-лист реальных позиций базы; конкретный артикул выбирает технолог/каталог БАЗИС",
+      "candidates": [
+        {
+          "article": "1119",
+          "name": "Ножка регулируемая, Permo, черная PI 05",
+          "cost": 2
+        },
+        {
+          "article": "1116",
+          "name": "Ножка регулируемая, Permo, черная PI 02",
+          "cost": 5
+        },
+        {
+          "article": "1120",
+          "name": "Ножка регулируемая, Permo, черная PI 06",
+          "cost": 6
+        },
+        {
+          "article": "1115",
+          "name": "Ножка регулируемая, Permo, черная PI 01",
+          "cost": 7
+        },
+        {
+          "article": "1123",
+          "name": "Ножка регулируемая, Permo, черная PI 10",
+          "cost": 7
+        }
+      ]
+    },
+    "locks": {
+      "resolved": true,
+      "group": "Замки",
+      "matched_tokens": [
+        "замок"
+      ],
+      "note": "шорт-лист реальных позиций базы; конкретный артикул выбирает технолог/каталог БАЗИС",
+      "candidates": [
+        {
+          "article": "3461, LOCK.105.CR",
+          "name": "Замок LOCK.105.CR, хром, нажимной",
+          "cost": 91
+        },
+        {
+          "article": "0187",
+          "name": "Замок мебельный ЕвроБокс 32 мм 90°",
+          "cost": 205
+        },
+        {
+          "article": "3462, LOCK.288.500.CR",
+          "name": "Замок LOCK.288.500.CR, штырьевой на 3 ящика",
+          "cost": 230
+        },
+        {
+          "article": "4578, LOCK.138.CR",
+          "name": "Замок LOCK.138.CR, прямоугольный хром D19х22",
+          "cost": 250
+        },
+        {
+          "article": "666/S 600 MCR",
+          "name": "Замок для 3-х и более ящиков, поворотный, хром матовый",
+          "cost": 530
+        }
+      ]
+    }
+  }
+}

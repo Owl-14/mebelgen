@@ -97,6 +97,22 @@ def _slot_article(project: dict[str, Any], slot: str, spec_key: str) -> str | No
 # фасадные детали — получают материал фасадов в .cfrn/.b3d (AKD-260)
 _CFRN_FACADE_TYPES = {"door_front", "drawer_front", "facade", "screen"}
 
+# Кромка (реверс round-trip b3d→cfrn файла технолога, task 13307): панель несёт
+# butts[{elemIndex, materialIndex, thickness, width, clip, overhang, allowance,
+# cutIndex}] по сторонам контура. Нумерация сторон прямоугольного контура:
+# 0 = y=0, 1 = x=max, 2 = y=max, 3 = x=0 (против часовой от нижней).
+# Маппинг наших ключей edge_banding (см. helpers.apply_edge_policy) на стороны
+# НАШИХ контуров (_contour/_ROT): vertical — x конт. от ПЕРЕДА (z1);
+# horizont — y конт. от ЗАДА (привязка z2, растёт к переду); front — прямая.
+#   vertical: x конт. вдоль +Z от z1 → x=0 = ПЕРЕДНИЙ торец: left→3, right(зад)→1;
+#   horizont: y конт. вдоль −Z от z2 → y=max = ПЕРЕД: bottom(перед)→2, top(зад)→0;
+#   front: прямое соответствие.
+_BUTT_SIDES = {
+    "vertical": {"left": 3, "right": 1, "top": 2, "bottom": 0},
+    "horizont": {"bottom": 2, "top": 0, "left": 3, "right": 1},
+    "front": {"bottom": 0, "right": 1, "top": 2, "left": 3},
+}
+
 
 def _hardware_entries(project: dict[str, Any]) -> list[dict[str, Any]]:
     """Фурнитура из material_refs → записи материала с артикулом (как в родном .cfrn)."""
@@ -156,6 +172,30 @@ def project_to_cfrn_json(project: dict[str, Any]) -> dict[str, Any]:
     objects: list[dict[str, Any]] = [{"objType": 7, "name": name, "isAssemblyUnit": False}]
     children: list[dict[str, Any]] = []
 
+    # материалы кромки (AKD-287 ф.2, реверс round-trip task 13307): видимая
+    # 2 мм — резолвленная позиция базы, тонкая 0.5 — «в цвет» (как у технолога)
+    edge_mat_cache: dict[float, int] = {}
+
+    def _edge_mat(th: float) -> int:
+        key = 2.0 if th >= 1 else 0.5
+        if key not in edge_mat_cache:
+            if key == 2.0:
+                r = (project.get("material_refs") or {}).get("edge")
+                if isinstance(r, dict) and r.get("resolved") and r.get("name"):
+                    entry: dict[str, Any] = {"name": str(r["name"]),
+                                             "sign": "2х19(в цвет)"}
+                    if r.get("article"):
+                        entry["art"] = str(r["article"])
+                else:
+                    entry = {"name": "Кромка ПВХ, 19/2 мм (в цвет)",
+                             "art": "1(2х19)", "sign": "2х19(в цвет)"}
+            else:
+                entry = {"name": "Кромка ПВХ, 19/0,4 мм (в цвет)",
+                         "art": "1(0,4х19)", "sign": "0,5х19(в цвет)"}
+            materials.append(entry)
+            edge_mat_cache[key] = len(materials) - 1
+        return edge_mat_cache[key]
+
     for p in project.get("panels", []):
         pl = p.get("placement")
         if not pl:
@@ -171,7 +211,7 @@ def project_to_cfrn_json(project: dict[str, Any]) -> dict[str, Any]:
         else:
             mi = 0
         idx = len(objects)
-        objects.append({
+        pobj: dict[str, Any] = {
             "objType": 2,
             "name": p.get("name", f"panel_{idx}"),
             "materialIndex": mi,
@@ -183,7 +223,24 @@ def project_to_cfrn_json(project: dict[str, Any]) -> dict[str, Any]:
             "sourceContour": {"size": cont, "pos": {"x": 0, "y": 0}},
             "clippedSourceContour": {"size": cont, "pos": {"x": 0, "y": 0}},
             "fullProductContour": {"size": cont, "pos": {"x": 0, "y": 0}},
-        })
+        }
+        # кромка по сторонам контура (AKD-287 ф.2) — из edge_banding панели
+        eb = p.get("edge_banding") or {}
+        smap = _BUTT_SIDES["vertical" if orient == "vertical" else
+                           ("horizont" if orient in ("horizont", "horizontal")
+                            else "front")]
+        butts = []
+        for k in ("bottom", "right", "top", "left"):
+            th = float(eb.get(k) or 0)
+            if th <= 0:
+                continue
+            butts.append({"elemIndex": smap[k], "materialIndex": _edge_mat(th),
+                          "thickness": 2.0 if th >= 1 else 0.5, "width": 19,
+                          "clip": True, "overhang": 30, "allowance": 0.5,
+                          "cutIndex": -1})
+        if butts:
+            pobj["butts"] = butts
+        objects.append(pobj)
         # компенсация направления выдавливания толщины от точки привязки:
         #   горизонталь — контур растёт в −Z → привязка по задней грани z2;
         #   вертикаль   — толщина растёт в −X → привязка по правой грани x2
