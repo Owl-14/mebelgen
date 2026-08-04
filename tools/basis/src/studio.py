@@ -573,6 +573,16 @@ def make_handler(st: _Studio):
                                "application/javascript; charset=utf-8")
                 else:
                     self._send(404, b"{}")
+            elif self.path in {                       # exact user-supplied brand crops
+                "/assets/studio/akeda-studio-wordmark.png",
+                "/assets/studio/akeda-studio-mark.png",
+            }:
+                assets = Path(__file__).resolve().parent.parent / "assets" / "studio"
+                p = assets / self.path.rsplit("/", 1)[-1]
+                if p.is_file():
+                    self._send(200, p.read_bytes(), "image/png")
+                else:
+                    self._send(404, b"{}")
             elif self.path == "/healthz":             # мониторинг (AKD-264)
                 self._json({"ok": True, "uptime_s": int(_time.time() - st.started)})
             elif self.path == "/version":             # какой код развёрнут (AKD-264)
@@ -884,19 +894,228 @@ PAGE = r"""<!DOCTYPE html>
         --ok:#2fa84f;--bad:#e5484d;--accent:#3b82f6}
   *{box-sizing:border-box} html,body{margin:0;height:100%;font-family:Segoe UI,Arial,sans-serif;
     background:var(--bg);color:var(--ink);font-size:13px;overflow:hidden}
-  /* AKD-207: 3 колонки — слева проект/чат/деталь, центр 3D, справа параметры/смета.
-     grid-column задаём явно, чтобы порядок в DOM не влиял на раскладку. */
-  #app{display:grid;grid-template-columns:340px 1fr 360px;grid-template-rows:100%;height:100%}
+  /* AKD-207 / MEB-093: рабочая область 3D приоритетна. На обычных ноутбуках
+     инспектор справа свёрнут в рейл, на широких экранах обе панели открыты. */
+  #app{--side-width:340px;--inspector-width:360px;--rail-width:48px;
+    display:grid;grid-template-columns:var(--side-width) minmax(0,1fr) var(--inspector-width);
+    grid-template-rows:100%;height:100%}
+  #app.right-collapsed{
+    grid-template-columns:var(--side-width) minmax(0,1fr) var(--rail-width)}
   /* grid-row:1 всем — иначе #main (col2) после #rightside (col3) в DOM уходит в row2 */
-  #side{grid-column:1;grid-row:1;background:var(--card);border-right:1px solid var(--line);overflow-y:auto;padding:12px}
-  #main{grid-column:2;grid-row:1;position:relative;min-height:0}
-  #rightside{grid-column:3;grid-row:1;background:var(--card);border-left:1px solid var(--line);overflow-y:auto;padding:12px}
-  #side h1{font-size:15px;margin:2px 0 10px}
+  #side{grid-column:1;grid-row:1;display:flex;flex-direction:column;min-width:0;
+    background:var(--card);border-right:1px solid var(--line);overflow:hidden}
+  #sideScroll{flex:1;min-height:0;overflow-y:auto;padding:12px 12px 14px}
+  #side .row>*{min-width:0}
+  #side .project-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:5px!important;margin-top:7px}
+  #side .project-actions button{display:flex;align-items:center;justify-content:center;
+    gap:5px;min-width:0;padding:6px 5px}
+  #side svg.ui-icon,#fs_chat svg.ui-icon{width:16px;height:16px;flex:0 0 16px;fill:none;stroke:currentColor;
+    stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  #side .icon-button{display:grid;place-items:center;flex:0 0 32px;width:32px;height:32px;padding:0}
+  #side h1.studio-brand{display:grid;gap:1px;margin:0 0 13px;font-size:13px;
+    line-height:1;letter-spacing:0}
+  #side .studio-brand-lockup{display:flex;align-items:center;gap:8px;min-width:0;height:30px}
+  #side .studio-brand-wordmark{display:block;width:158px;max-width:calc(100% - 72px);
+    height:auto;object-fit:contain}
+  #side .studio-brand-mark{display:block;width:64px;height:auto;object-fit:contain}
+  #side .studio-brand-tagline{display:block;margin-left:1px;color:#687180;
+    font-size:9.5px;line-height:13px;font-weight:400;letter-spacing:.015em}
+  #side fieldset{border:0;border-radius:0;margin:0;padding:0}
+  #side legend{font-size:12px;line-height:18px;font-weight:600;text-transform:none;
+    color:var(--ink);padding:0;margin-bottom:6px}
+  #side #fs_project{padding-bottom:12px;border-bottom:1px solid var(--line)}
+  #fs_project .project-select{gap:5px;margin:0}
+  #fs_project .project-select label{position:absolute;width:1px;height:1px;overflow:hidden;
+    clip:rect(0,0,0,0)}
+  #fs_project .project-select select{height:32px;font-weight:600}
+  #modelState{padding:11px 0 12px;border-bottom:1px solid var(--line)}
+  .side-section-head{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+  .side-section-head>span{font-size:12px;font-weight:600;flex:1}
+  #btnUndo{display:flex;align-items:center;gap:4px;padding:4px 6px;border-color:transparent;
+    background:transparent;color:#4f5968;font-size:11.5px}
+  #btnUndo:not(:disabled):hover{color:var(--accent);background:#eef4ff}
+  #btnFixAll{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;
+    margin-top:8px;color:#8a4b08;background:#fff8eb;border-color:#efd6a7}
+  #btnFixAll[hidden]{display:none}
+  #modelState #errors:empty{display:none}
+  #modelState #errors:not(:empty){margin:8px 0 0;padding:7px 8px;background:#fff4f2;
+    border-left:2px solid var(--bad);color:#9f2d2f;max-height:120px}
+  #side #stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px;
+    padding-top:9px;margin:8px 0 0;border-top:1px solid #edf0f3}
+  #side #stats>div{min-width:0}
+  #side #stats b{display:block;font-size:13px;line-height:17px;font-variant-numeric:tabular-nums;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #side #stats span{display:block;font-size:10.5px;line-height:14px;color:var(--mut);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #side .badges{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 12px}
+  #side .badge{display:flex;align-items:center;gap:6px;min-width:0;padding:2px 0;
+    border-radius:0;color:#46505e;background:transparent!important;font-size:11px}
+  #side .badge::before{content:"";width:7px;height:7px;flex:0 0 7px;border-radius:50%;
+    background:var(--ok);box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}
+  #side .badge.bad::before{background:var(--bad)}
+  #side .badge.warn::before{background:#c78a2b}
+  #side #fs_part{padding:11px 0 4px;border-bottom:1px solid var(--line)}
+  #fs_part legend.part-section-head{display:flex;align-items:center;width:100%;gap:8px;
+    margin:0 0 7px;padding:0}
+  .part-section-head>span{flex:1;font-size:12px;line-height:18px;font-weight:600}
+  #partClearSelection{display:grid;place-items:center;width:26px;height:26px;padding:0;
+    border-color:transparent;background:transparent;color:#6c7582}
+  #partClearSelection:hover{background:#eef1f4;color:#303947}
+  #partClearSelection svg{width:14px!important;height:14px!important}
+  #partCard{color:#303641;font-size:12px;line-height:1.45}
+  .part-identity{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 8px;min-width:0}
+  #partName{min-width:0;font-size:13.5px;line-height:18px;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis}
+  #partKind{grid-column:1;color:var(--mut);font-size:10.5px;line-height:14px}
+  #partOrigin{grid-column:2;grid-row:1/3;align-self:center;color:#687180;
+    font-size:10.5px;line-height:14px;text-align:right}
+  #fs_part.has-override #partOrigin{color:#8a5a13}
+  .part-facts{margin:8px 0 0;padding:7px 0;border-top:1px solid #edf0f3;
+    border-bottom:1px solid #edf0f3}
+  .part-facts>div{display:grid;grid-template-columns:minmax(72px,30%) minmax(0,1fr);
+    gap:7px;padding:2px 0}
+  .part-facts dt{color:var(--mut);font-size:10.5px;line-height:15px}
+  .part-facts dd{margin:0;min-width:0;font-size:11px;line-height:15px;
+    overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+  .part-primary-actions{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px;margin-top:7px}
+  .part-primary-actions button{display:flex;align-items:center;justify-content:center;gap:5px}
+  .part-context-note{margin:6px 0 0;color:#687180;font-size:10.5px;line-height:14px}
+  .part-exact{margin-top:7px;border-top:1px solid #edf0f3}
+  .part-exact>summary{padding:7px 0 5px;color:#46505e;font-size:11.5px;cursor:pointer}
+  .part-exact[open]>summary{font-weight:600}
+  .part-exact-hint{margin:0 0 6px;color:#727b88;font-size:10.5px;line-height:14px}
+  #partEditStatus{min-height:15px;margin-bottom:5px;color:#6d7682;font-size:10.5px;
+    line-height:15px}
+  #partEditStatus.is-dirty{color:#8a5a13}
+  #partEditStatus.is-error{color:#a02f34}
+  #partEditStatus.is-success{color:#287d40}
+  .part-axis-grid{display:grid;gap:5px}
+  .part-axis{display:grid;grid-template-columns:12px minmax(48px,1fr) 10px minmax(48px,1fr) 42px;
+    gap:4px;align-items:center}
+  .part-axis>span:first-child{font-weight:600;color:#3f4855}
+  .part-axis input{width:100%;min-width:0;max-width:none;height:28px;padding:3px 5px;
+    font:11px/1 Consolas,monospace;font-variant-numeric:tabular-nums}
+  .part-axis .axis-separator{text-align:center;color:#98a0aa}
+  .part-axis .axis-delta{color:#6f7885;font:10.5px/1 Consolas,monospace;text-align:right}
+  .part-edit-actions{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px;margin-top:8px}
+  .part-edit-help{margin:7px 0 0;color:#727b88;font-size:10.5px;line-height:14px}
+  .part-production-data{margin-top:8px;padding-top:7px;border-top:1px solid #edf0f3}
+  .part-production-data b{display:block;margin-bottom:3px;font-size:10.5px}
+  .part-production-data p{margin:2px 0;color:#626c79;font-size:10.5px;line-height:14px}
+  .part-local-actions{display:flex;flex-direction:column;align-items:flex-start;gap:1px;
+    margin-top:8px;padding-top:7px;border-top:1px solid #edf0f3}
+  .part-local-actions button{padding:4px 0;border:0;background:transparent;text-align:left;
+    color:#4f5968;font-size:11px}
+  .part-local-actions button:hover{color:var(--accent);background:transparent}
+  .part-local-actions #ovDelete{color:var(--bad)}
+  #partChatRow[hidden]{display:none}
+  #fs_part[aria-busy="true"] input,#fs_part[aria-busy="true"] button{cursor:wait}
+  #main{--chat-stack-height:133px;--viewport-status-height:24px;
+    grid-column:2;grid-row:1;position:relative;min-width:0;min-height:0;
+    container-type:inline-size}
+  #rightside{grid-column:3;grid-row:1;min-width:0;width:100%;background:var(--card);
+    border-left:1px solid var(--line);overflow-y:auto;padding:0 12px 12px;
+    opacity:1;visibility:visible;transition:opacity .12s ease}
+  #rightPanelHead{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:8px;
+    min-height:48px;margin:0 -12px;padding:0 8px 0 14px;background:var(--card)}
+  #rightPanelHead b{flex:1;font-size:12.5px}
+  #rightPanelClose{display:grid;place-items:center;width:32px;height:32px;padding:0;border-color:transparent}
+  #rightPanelTabs{position:sticky;top:48px;z-index:3;display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));margin:0 -12px 6px;padding:0 8px;
+    background:var(--card);border-bottom:1px solid var(--line)}
+  #rightPanelTabs button{min-width:0;height:36px;padding:0 5px;border:0;border-bottom:2px solid transparent;
+    border-radius:0;background:transparent;color:#66707e;font-size:11px;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis}
+  #rightPanelTabs button:hover{background:#f5f7f9;color:#303947}
+  #rightPanelTabs button[aria-selected="true"]{border-bottom-color:var(--accent);color:#245eae;
+    background:transparent;font-weight:600}
+  #rightPanelTabs button:focus-visible{position:relative;z-index:1;outline:2px solid var(--accent);
+    outline-offset:-2px}
+  .right-panel-view[hidden]{display:none}
+  .right-panel-view{min-width:0;padding-bottom:8px}
+  #rightside .right-panel-view>fieldset{border:0;border-bottom:1px solid #edf0f3;
+    border-radius:0;margin:0;padding:11px 2px 13px}
+  #rightside .right-panel-view>fieldset>legend{margin:0 0 7px;padding:0;color:#303947;
+    font-size:12px;line-height:18px;font-weight:600;text-transform:none}
+  #rightside .right-panel-view>details{margin:0;padding:10px 2px 13px;border-bottom:1px solid #edf0f3}
+  #rightside .right-panel-view>details>summary{padding:2px 0;color:#4f5968;font-size:11.5px;
+    font-weight:600;cursor:pointer}
+  /* UX-026: the product parameters read as a compact engineering sheet, not a
+     stack of generic form rows. These selectors stay scoped to the Parameters
+     mode so BOM, export, sections and the left panel keep their contracts. */
+  #rightViewProperties .parameter-section{min-width:0}
+  #rightViewProperties .dimension-grid{display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+  #rightViewProperties .dimension-field,#rightViewProperties .parameter-field{min-width:0}
+  #rightViewProperties .dimension-field>label,#rightViewProperties .parameter-field>label,
+    #rightViewProperties .material-row>label,#rightViewProperties .parameter-search>label{
+    display:flex;align-items:baseline;gap:4px;min-width:0;margin:0 0 4px;color:#687180;
+    font-size:10.5px;line-height:14px}
+  #rightViewProperties .dimension-axis{color:#35404e;font-size:11px;font-weight:700}
+  #rightViewProperties .dimension-name{min-width:0;overflow:hidden;text-overflow:ellipsis;
+    white-space:nowrap}
+  #rightViewProperties .unit-field{display:grid;grid-template-columns:minmax(0,1fr) auto;
+    align-items:center;gap:4px;min-width:0}
+  #rightViewProperties .unit-field>span{color:#7a8390;font-size:9.5px;line-height:1;
+    white-space:nowrap}
+  #rightViewProperties input[type=number],#rightViewProperties input[type=text],
+    #rightViewProperties select{min-width:0;max-width:none;height:30px;border-radius:4px;
+    font-size:12px;font-variant-numeric:tabular-nums}
+  #rightViewProperties input[type=number]{font-family:Consolas,monospace}
+  #rightViewProperties .material-stack{display:grid;gap:7px}
+  #rightViewProperties .material-row{display:grid;grid-template-columns:72px minmax(0,1fr);
+    align-items:center;gap:8px;min-width:0}
+  #rightViewProperties .material-row>label{margin:0}
+  #rightViewProperties .material-value{display:grid;grid-template-columns:minmax(0,1fr) 24px;
+    align-items:center;gap:5px;min-width:0}
+  #rightViewProperties .material-value .swatch{width:24px;height:24px;border-radius:3px}
+  #rightViewProperties .parameter-grid{display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px}
+  #rightViewProperties .parameter-search{min-width:0;margin-top:9px;padding-top:8px;
+    border-top:1px solid #edf0f3}
+  #rightViewProperties #decorList{max-width:100%;border-radius:4px}
+  #rightViewProperties #decorHint{margin-top:5px;color:#757e8a;font-size:10px;line-height:14px}
+  #rightViewProperties .construction-type{display:grid;grid-template-columns:72px minmax(0,1fr);
+    align-items:center;gap:8px;margin:0}
+  #rightViewProperties .construction-type>label{color:#687180;font-size:10.5px}
+  #rightViewProperties #fs_arch{padding-top:9px}
+  #rightViewProperties #archFields{display:grid;gap:6px}
+  #rightViewProperties #archFields .parameter-row{display:grid;
+    grid-template-columns:minmax(0,1fr) minmax(96px,46%);align-items:center;gap:8px;margin:0}
+  #rightViewProperties #archFields .parameter-row>label{min-width:0;color:#687180;
+    font-size:10.5px;line-height:14px}
+  #rightViewProperties #archFields input[type=checkbox]{justify-self:start;width:18px;height:18px;
+    margin:0;accent-color:var(--accent)}
+  #rightViewProperties #fs_support{padding-top:9px}
+  #rightViewProperties .parameter-section input:focus-visible,
+    #rightViewProperties .parameter-section select:focus-visible{
+    outline:2px solid var(--accent);outline-offset:1px}
+  #rightPanelClose svg,#rightRail svg{width:18px;height:18px;fill:none;stroke:currentColor;
+    stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  #rightRail{grid-column:3;grid-row:1;z-index:4;display:flex;flex-direction:column;
+    align-items:center;gap:6px;padding:8px 5px;background:var(--card);border-left:1px solid var(--line);
+    opacity:0;visibility:hidden;pointer-events:none;transition:opacity .12s ease}
+  #rightRail button{display:grid;place-items:center;width:36px;height:36px;padding:0;
+    color:#596273;border-color:transparent;background:transparent}
+  #rightRail button:hover{color:var(--accent);background:#eef4ff}
+  #rightRail button.is-active{color:#245eae;background:#eef4ff;
+    box-shadow:inset 2px 0 0 var(--accent)}
+  #rightRail button:focus-visible,#rightPanelClose:focus-visible{
+    outline:2px solid var(--accent);outline-offset:1px}
+  #app.right-collapsed #rightside{opacity:0;visibility:hidden;pointer-events:none;overflow:hidden}
+  #app.right-collapsed #rightRail{opacity:1;visibility:visible;pointer-events:auto}
+  #rightside fieldset{scroll-margin-top:94px}
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+    clip:rect(0,0,0,0);white-space:nowrap;border:0}
   #chatImgs{display:flex;gap:5px;flex-wrap:wrap;margin:4px 0}
   #chatImgs .chip{position:relative}
-  #chatImgs .chip img{height:38px;border-radius:5px;border:1px solid var(--line);display:block}
-  #chatImgs .chip b{position:absolute;top:-6px;right:-6px;background:var(--bad);color:#fff;
-    width:16px;height:16px;border-radius:50%;font-size:11px;line-height:16px;text-align:center;cursor:pointer}
+  #chatImgs .chip img{width:44px;height:44px;object-fit:cover;border-radius:4px;
+    border:1px solid var(--line);display:block}
+  #chatImgs .chip-remove{position:absolute;top:-5px;right:-5px;display:grid;place-items:center;
+    width:18px;height:18px;padding:0;border-radius:50%;border:1px solid #fff;
+    background:#343a44;color:#fff}
+  #chatImgs .chip-remove svg{width:10px;height:10px}
   #chatMsg.drop{outline:2px dashed var(--accent);outline-offset:2px}
   #partChatRow{display:flex;gap:5px;margin-top:8px;border-top:1px solid var(--line);padding-top:8px}
   #partChat{flex:1;padding:4px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px}
@@ -922,10 +1141,36 @@ PAGE = r"""<!DOCTYPE html>
   #stats b{font-size:16px} #stats span{display:block;font-size:11px;color:var(--mut)}
   #main{position:relative}
   #stage{position:absolute;inset:0}
-  #tabs{position:absolute;top:10px;left:12px;z-index:5;display:flex;gap:6px}
-  #tabs button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  /* MEB-098: controls are grouped by the decision they change. The wrapper never
+     blocks orbit/raycast outside the controls themselves. */
+  #viewportTopbar{position:absolute;top:10px;left:12px;right:12px;z-index:7;
+    display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
+    pointer-events:none}
+  #tabs,#views{display:flex;align-items:center;min-height:36px;padding:3px;
+    border:1px solid #d9dee5;border-radius:4px;background:#fff;pointer-events:auto}
+  #tabs{gap:1px}
+  #tabs button,#views .vw{display:flex;align-items:center;justify-content:center;gap:5px;
+    height:28px;margin:0;padding:0 9px;border:0;border-radius:2px;background:transparent;
+    color:#4e5867;font-size:11.5px;line-height:1;white-space:nowrap}
+  #tabs button:hover,#views .vw:hover{background:#f0f3f6;color:#252b34}
+  #tabs button.on,#views .vw.on{background:#edf4ff;color:#245fbf;
+    box-shadow:inset 0 -2px 0 var(--accent)}
+  #tabs button:focus-visible,#views .vw:focus-visible,#hud button:focus-visible,
+    #hud input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  #tabs button:disabled{color:#a1a8b2;background:transparent}
+  #tabs .viewport-icon,#hud .viewport-icon{width:15px;height:15px;flex:0 0 15px;
+    fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;
+    stroke-linejoin:round}
+  #tabs .toolbar-separator{width:1px;height:20px;margin:0 2px;background:#dfe3e8}
+  #btnPrint{padding:0 7px!important}
+  #views{justify-content:flex-end;gap:1px}
+  #views .viewport-group-label{padding:0 6px 0 4px;color:#7a8390;font-size:10px;
+    font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+  #views .vw{padding:0 7px;font-size:11px}
+  #views[hidden],#hud[hidden]{display:none!important}
   #draw{position:absolute;inset:48px 12px 12px;z-index:4;background:#fff;border:1px solid var(--line);
-        border-radius:8px;overflow:auto;display:none;padding:8px}
+    border-radius:8px;overflow:auto;display:none;
+    padding:8px 8px calc(var(--chat-stack-height) + var(--viewport-status-height) + 14px)}
   /* AKD-217: каталог изделий */
   #catalog{position:absolute;inset:0;z-index:8;display:none;flex-direction:column;
     background:var(--bg);padding:14px 18px;overflow:hidden}
@@ -958,30 +1203,123 @@ PAGE = r"""<!DOCTYPE html>
   #emptyState .es-hint{font-size:13px;color:var(--mut);margin-bottom:16px;line-height:1.7}
   #emptyState.drop .es-box{border-color:var(--accent);background:#eef4ff}
   #view3d{position:absolute;inset:0}
-  /* AKD-262: HUD — узкая колонка справа, не пересекается с табами слева */
-  #hud{position:absolute;right:12px;top:10px;z-index:5;background:rgba(255,255,255,.92);
-       border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:12px;
-       width:200px;display:flex;flex-direction:column;gap:4px}
-  #hud label{display:flex;align-items:center;gap:5px;cursor:pointer;user-select:none}
-  #hud .row2{display:flex;gap:5px}
-  #hud .row2 button{flex:1;padding:4px 2px;font-size:11.5px}
-  #views{display:flex;flex-wrap:wrap;gap:3px;align-items:center}
-  #views .vw{font-size:11px;padding:2px 7px}
-  #views .vw.on{background:var(--accent);border-color:var(--accent);color:#fff}
-  /* узкие ноутбуки: ужимаем боковые колонки, центр остаётся рабочим */
+  /* AKD-262 / MEB-098: compact opaque CAD HUD. Layers and model state are
+     intentionally separate because they have different semantics. */
+  #hud{position:absolute;right:12px;top:52px;z-index:6;width:212px;
+    border:1px solid #d9dee5;border-radius:4px;background:#fff;color:#303743;
+    font-size:11px;pointer-events:auto}
+  .hud-section{padding:7px 8px 8px}
+  .hud-section+.hud-section{border-top:1px solid #e4e7eb}
+  .hud-section-head{display:flex;align-items:center;gap:6px;min-height:18px;margin-bottom:4px}
+  .hud-section-head>span{flex:1;color:#5e6876;font-size:10px;font-weight:700;
+    letter-spacing:.045em;text-transform:uppercase}
+  .hud-section-head output{color:#7a8390;font-size:10px;font-variant-numeric:tabular-nums}
+  .hud-layer-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 8px}
+  #hud .hud-layer{display:flex;align-items:center;gap:5px;min-width:0;height:23px;
+    cursor:pointer;user-select:none;white-space:nowrap}
+  #hud .hud-layer input{width:14px;height:14px;margin:0;accent-color:var(--accent)}
+  #hud .hud-layer span{min-width:0;overflow:hidden;text-overflow:ellipsis}
+  #hud .hud-layer.is-wide{grid-column:1/-1}
+  .hud-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}
+  #hud .hud-actions button{display:flex;align-items:center;justify-content:center;gap:4px;
+    min-width:0;height:28px;padding:0 5px;border-radius:3px;font-size:10.5px;white-space:nowrap}
+  .explode-control{display:grid;grid-template-columns:auto minmax(0,1fr) auto;
+    align-items:center;gap:6px;height:29px;margin-top:4px;color:#4f5967}
+  .explode-control>span{font-size:10.5px}
+  .explode-control input{width:100%;min-width:0;margin:0;accent-color:var(--accent)}
+  .explode-control output{min-width:27px;color:#66707d;font:10px/1 Consolas,monospace;
+    text-align:right;font-variant-numeric:tabular-nums}
+  @container (max-width:1099px){
+    #tabs button{padding:0 7px}
+    #tabs .print-label{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;
+      clip:rect(0,0,0,0);white-space:nowrap}
+    #viewportTopbar.is-2d #tabs .print-label{position:static;width:auto;height:auto;margin:0;
+      overflow:visible;clip:auto;white-space:nowrap}
+    #views .viewport-group-label{position:absolute;width:1px;height:1px;margin:-1px;
+      overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
+    #views .vw{padding:0 6px}
+    #hud{width:200px}
+  }
+  @container (max-width:700px){
+    #viewportTopbar{gap:6px}
+    #tabs button{padding:0 6px}
+    #tabs .viewport-icon{display:none}
+    #views .vw{padding:0 5px;font-size:10.5px}
+    #hud{width:188px}
+    #hud .hud-actions button span{position:absolute;width:1px;height:1px;margin:-1px;
+      overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
+  }
+  @container (max-width:440px){
+    #viewportTopbar{flex-wrap:wrap}
+    #views{margin-left:auto}
+    #hud{top:92px;width:176px}
+  }
+  /* узкие ноутбуки: левую панель уплотняем, инспектор по умолчанию задаёт JS */
   @media (max-width:1440px){
-    #app{grid-template-columns:300px 1fr 330px}
+    #app{--side-width:288px;--inspector-width:330px;
+      grid-template-columns:var(--side-width) minmax(0,1fr) var(--inspector-width)}
+    #app.right-collapsed{
+      grid-template-columns:var(--side-width) minmax(0,1fr) var(--rail-width)}
   }
   @media (max-width:1200px){
-    #app{grid-template-columns:270px 1fr 300px}
-    #hud{width:176px}
+    #app{--side-width:270px;--inspector-width:300px;
+      grid-template-columns:var(--side-width) minmax(0,1fr) var(--inspector-width)}
+    #app.right-collapsed{
+      grid-template-columns:var(--side-width) minmax(0,1fr) var(--rail-width)}
+    #stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px}
   }
-  #toast{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:9;
+  @media (min-width:1600px){
+    #app{--side-width:340px;--inspector-width:360px;
+      grid-template-columns:var(--side-width) minmax(0,1fr) var(--inspector-width)}
+    #app.right-collapsed{
+      grid-template-columns:var(--side-width) minmax(0,1fr) var(--rail-width)}
+  }
+  @media (prefers-reduced-motion:reduce){
+    #rightside,#rightRail,#chatStatusTray,#chatShortcut,#tabs button,#views .vw{transition:none}
+    #fs_chat.is-busy #chatProgress::after{animation:none;transform:none;width:100%}
+  }
+  #viewportStatus{position:absolute;left:0;right:0;bottom:0;z-index:6;
+    display:flex;align-items:center;height:var(--viewport-status-height);min-width:0;
+    border-top:1px solid #d9dee5;background:#fff;color:#55606e;font-size:10.5px;
+    line-height:1;pointer-events:none}
+  .viewport-status-segment{display:flex;align-items:center;min-width:0;height:100%;
+    padding:0 9px;white-space:nowrap}
+  .viewport-status-segment+.viewport-status-segment{border-left:1px solid #e2e6ea}
+  #viewportModelStatus{flex:0 0 auto;gap:6px;color:#3f4956;font-weight:600}
+  #viewportModelMark{width:6px;height:6px;flex:0 0 6px;border-radius:50%;background:#7f8996}
+  #viewportStatus[data-tone="ready"] #viewportModelMark{background:var(--ok)}
+  #viewportStatus[data-tone="pending"] #viewportModelMark,
+    #viewportStatus[data-tone="busy"] #viewportModelMark{background:var(--accent)}
+  #viewportStatus[data-tone="warning"] #viewportModelMark{background:#c78a2b}
+  #viewportStatus[data-tone="error"] #viewportModelMark{background:var(--bad)}
+  #viewportModelStateShort{display:none}
+  #viewportSelection{flex:0 1 auto;gap:5px;max-width:38%;color:#596373}
+  #viewportSelection[hidden]{display:none}
+  #viewportSelection>span{color:#7a8390}
+  #viewportSelectionName{min-width:0;overflow:hidden;text-overflow:ellipsis;color:#3f4855;
+    font-weight:600}
+  #viewportHint{flex:1 1 auto;min-width:0;color:#6e7784;overflow:hidden;text-overflow:ellipsis}
+  #viewportUnits{flex:0 0 auto;margin-left:auto;color:#4f5967;font-weight:600;
+    font-variant-numeric:tabular-nums}
+  @container (max-width:999px){
+    #viewportModelStateLong{display:none}
+    #viewportModelStateShort{display:inline}
+    #viewportSelection{max-width:42%}
+    .viewport-status-segment{padding-inline:7px}
+  }
+  @container (max-width:700px){
+    #viewportHint{display:none}
+    #viewportSelection{flex:1 1 auto;max-width:none}
+    #viewportStatus[data-tone="error"] #viewportSelection,
+      #viewportStatus[data-tone="busy"] #viewportSelection{display:none}
+  }
+  #toast{position:absolute;left:50%;bottom:calc(44px + var(--chat-stack-height));
+         transform:translateX(-50%);z-index:9;
          background:#1a1d21;color:#fff;padding:7px 14px;border-radius:8px;font-size:12.5px;
          opacity:0;transition:opacity .25s;pointer-events:none;max-width:80%}
   details{margin-top:8px} textarea{width:100%;height:170px;font:11px/1.4 Consolas,monospace}
-  #bom table{width:100%;border-collapse:collapse;font-size:11.5px}
-  #bom td{border-bottom:1px solid var(--line);padding:3px 4px}
+  #bom table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:11.5px}
+  #bom td{border-bottom:1px solid var(--line);padding:3px 4px;overflow-wrap:anywhere}
   #estTable{width:100%;border-collapse:collapse;font-size:11px}
   #estTable td{border-bottom:1px solid var(--line);padding:2px 3px;vertical-align:top}
   #estTable td:last-child{text-align:right;white-space:nowrap}
@@ -989,172 +1327,554 @@ PAGE = r"""<!DOCTYPE html>
                       text-transform:uppercase;font-size:10px}
   .swatch{flex:0 0 18px;height:18px;border-radius:4px;border:1px solid var(--line);
           background:#c9a06a}
-  #partCard{font-size:12px;line-height:1.6}
-  #partCard b{font-size:13px}
-  #partCard .kv{display:grid;grid-template-columns:96px 1fr;gap:0 8px}
-  #partCard .kv span:nth-child(odd){color:var(--mut)}
   #draw rect.sel{stroke:#2b62c4 !important;stroke-width:2.4 !important;
                  fill:#2b62c433 !important}
   #decorList{max-height:170px;overflow-y:auto;display:none;flex-direction:column;gap:2px;
              border:1px solid var(--line);border-radius:6px;padding:3px;margin-top:4px}
-  .ditem{display:flex;align-items:center;gap:6px;padding:3px 5px;border-radius:5px;
-         cursor:pointer;font-size:11.5px}
+  .ditem{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:3px;
+         padding:2px;border-radius:3px;font-size:11.5px}
   .ditem:hover{background:var(--bg)}
+  .ditem .decor-body{display:grid;grid-template-columns:16px minmax(0,1fr) auto;
+         align-items:center;gap:6px;min-width:0;padding:3px;border:0;background:transparent;
+         text-align:left}
+  .ditem .decor-body:hover{background:#eef1f4}
+  .ditem .decor-body:focus-visible,.ditem .fb:focus-visible{outline:2px solid var(--accent);
+         outline-offset:-1px}
   .ditem .sw{flex:0 0 16px;height:16px;border-radius:3px;border:1px solid var(--line)}
   .ditem .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .ditem .fb{flex:0 0 auto;font-size:10px;padding:1px 6px}
-  #chatlog{max-height:190px;overflow-y:auto;display:flex;flex-direction:column;gap:5px;
-           margin-bottom:6px}
-  .cmsg{border-radius:8px;padding:5px 8px;font-size:12px;white-space:pre-wrap;max-width:95%}
-  .cmsg.user{background:var(--accent);color:#fff;align-self:flex-end}
-  .cmsg.ai{background:var(--bg);border:1px solid var(--line);align-self:flex-start}
-  .cmsg .diff{display:block;margin-top:4px;font:10.5px/1.5 Consolas,monospace;color:var(--mut)}
+  .ditem .fb{width:26px;height:24px;padding:0;font-size:10px}
+  #operationLog{padding:11px 0 2px;border-top:1px solid var(--line);scroll-margin-top:10px}
+  #operationLog[hidden]{display:none}
+  #operationLog .side-section-head{margin-bottom:3px}
+  #operationLogHint{margin-bottom:7px;color:var(--mut);font-size:10.5px;line-height:14px}
+  #chatlog{display:block;margin:0}
+  #chatlog:empty{display:none}
+  .operation-record{position:relative;padding:9px 0 10px 10px;border-top:1px solid #e3e7ec;
+    color:var(--ink)}
+  .operation-record:last-child{border-bottom:1px solid #e3e7ec}
+  .operation-record::before{content:"";position:absolute;left:0;top:10px;bottom:10px;width:2px;
+    background:#9aa5b3}
+  .operation-record.is-pending::before,.operation-record.is-answer::before{background:var(--accent)}
+  .operation-record.is-applied::before{background:var(--ok)}
+  .operation-record.is-warning::before{background:#c78a2b}
+  .operation-record.is-error::before{background:var(--bad)}
+  .operation-record.is-undone::before{background:#a9b1bc}
+  .operation-head{display:flex;align-items:center;gap:6px;min-width:0;margin-bottom:4px}
+  .operation-state{display:flex;align-items:center;gap:5px;min-width:0;font-size:10.5px;
+    line-height:14px;font-weight:600;color:#4b5563}
+  .operation-state::before{content:"";width:6px;height:6px;flex:0 0 6px;border-radius:50%;
+    background:#9aa5b3}
+  .is-pending .operation-state::before,.is-answer .operation-state::before{background:var(--accent)}
+  .is-applied .operation-state::before{background:var(--ok)}
+  .is-warning .operation-state::before{background:#c78a2b}
+  .is-error .operation-state::before{background:var(--bad)}
+  .operation-time{margin-left:auto;color:#8a929e;font-size:10px;line-height:14px;
+    font-variant-numeric:tabular-nums}
+  .operation-command{display:-webkit-box;margin:0 0 3px;font-size:12px;line-height:16px;
+    font-weight:600;overflow:hidden;overflow-wrap:anywhere;-webkit-box-orient:vertical;
+    -webkit-line-clamp:3}
+  .operation-context{margin-bottom:7px;color:#697382;font-size:10.5px;line-height:14px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .operation-summary{margin:0 0 6px;color:#414a57;font-size:11.5px;line-height:16px;
+    white-space:pre-wrap;overflow-wrap:anywhere}
+  .operation-summary[hidden],.operation-changes[hidden],.operation-check[hidden],
+    .operation-actions[hidden],.operation-technical[hidden],.operation-more[hidden]{display:none}
+  .operation-changes{margin:2px 0 6px;border-top:1px solid #edf0f3}
+  .operation-change{padding:5px 0;border-bottom:1px solid #edf0f3}
+  .operation-change-label{display:block;margin-bottom:1px;color:#727b88;font-size:10px;line-height:13px}
+  .operation-change-values{display:flex;align-items:baseline;gap:5px;min-width:0;
+    font-size:11.5px;line-height:15px;font-variant-numeric:tabular-nums}
+  .operation-before{min-width:0;color:#747d89;overflow-wrap:anywhere}
+  .operation-arrow{flex:0 0 auto;color:#9aa3af}
+  .operation-after{min-width:0;font-weight:600;color:#27313d;overflow-wrap:anywhere}
+  .operation-change-plain{color:#3f4855;font-size:11.5px;line-height:16px;overflow-wrap:anywhere}
+  .operation-more{margin:-1px 0 6px;color:#6f7885;font-size:10.5px;line-height:14px}
+  .operation-check{display:flex;align-items:flex-start;gap:6px;margin:5px 0 7px;color:#4f5967;
+    font-size:10.5px;line-height:14px}
+  .operation-check::before{content:"";width:6px;height:6px;flex:0 0 6px;margin-top:4px;
+    border-radius:50%;background:var(--ok)}
+  .operation-check.warning::before{background:#c78a2b}
+  .operation-check.error::before{background:var(--bad)}
+  .operation-actions{display:flex;align-items:center;gap:2px;margin:4px -3px -3px}
+  .operation-actions button{padding:4px 5px;border-color:transparent;background:transparent;
+    color:#4f5968;font-size:10.5px;line-height:14px}
+  .operation-actions button:hover{background:#eef4ff;color:var(--accent)}
+  .operation-actions button:focus-visible{outline:2px solid var(--accent);outline-offset:0}
+  .operation-actions .operation-undo{margin-left:auto}
+  .operation-actions button[hidden]{display:none}
+  .operation-technical{margin:7px 0 1px;padding:7px 8px;background:#f5f7f9;
+    border-left:2px solid #cbd2db;color:#4b5563;font-size:10.5px;line-height:15px}
+  .operation-tech-label{display:block;margin:5px 0 2px;color:#737c89;font-size:9.5px;
+    line-height:12px;font-weight:600;text-transform:uppercase}
+  .operation-tech-label:first-child{margin-top:0}
+  .operation-raw{margin:0;max-height:120px;overflow:auto;white-space:pre-wrap;
+    overflow-wrap:anywhere;font:10px/1.45 Consolas,monospace;color:#5e6875}
+  .operation-record.is-undone .operation-command,.operation-record.is-undone .operation-changes{
+    opacity:.62}
+  #fs_chat{position:absolute;left:50%;bottom:calc(10px + var(--viewport-status-height));z-index:7;
+    width:min(760px,calc(100% - 32px));
+    min-inline-size:0;margin:0;padding:0;border:0;transform:translateX(-50%);pointer-events:none}
+  #chatStatusTray{display:flex;align-items:center;gap:9px;width:max-content;max-width:100%;
+    min-height:34px;margin:0 auto 7px;padding:6px 7px 6px 10px;border:1px solid var(--line);
+    border-radius:9px;background:rgba(255,255,255,.97);box-shadow:0 5px 16px rgba(29,39,52,.12);
+    opacity:0;transform:translateY(6px);visibility:hidden;transition:opacity .14s ease,transform .14s ease;
+    pointer-events:none}
+  #fs_chat.has-state #chatStatusTray{opacity:1;transform:translateY(0);visibility:visible;pointer-events:auto}
+  #chatStateMark{width:7px;height:7px;flex:0 0 7px;border-radius:50%;background:#788493}
+  #fs_chat.is-busy #chatStateMark{background:var(--accent)}
+  #fs_chat.state-success #chatStateMark{background:var(--ok)}
+  #fs_chat.state-error #chatStateMark{background:var(--bad)}
+  #chatState{min-width:0;font-size:11.5px;line-height:16px;color:#3d4653;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis}
+  #chatResultActions{display:flex;align-items:center;gap:3px;margin-left:2px;padding-left:5px;
+    border-left:1px solid var(--line)}
+  #chatResultActions[hidden],#chatUndoQuick[hidden]{display:none}
+  #chatResultActions button{padding:4px 6px;border-color:transparent;background:transparent;
+    color:#4f5968;font-size:11px}
+  #chatResultActions button:hover{background:#eef4ff;color:var(--accent)}
+  #chatSurface{position:relative;pointer-events:auto;border:1px solid #cbd2dc;border-radius:13px;
+    background:rgba(255,255,255,.97);box-shadow:0 8px 24px rgba(29,39,52,.14);overflow:visible;
+    transition:border-color .12s ease,box-shadow .12s ease}
+  #fs_chat:focus-within #chatSurface{border-color:#93b5ec;box-shadow:0 8px 24px rgba(29,39,52,.14),
+    0 0 0 2px rgba(59,130,246,.10)}
+  #chatProgress{position:absolute;left:12px;right:12px;top:-1px;height:2px;overflow:hidden;
+    border-radius:2px;opacity:0;background:#dfe7f2}
+  #chatProgress::after{content:"";display:block;width:34%;height:100%;background:var(--accent);
+    transform:translateX(-130%)}
+  #fs_chat.is-busy #chatProgress{opacity:1}
+  #fs_chat.is-busy #chatProgress::after{animation:chat-progress 1.05s linear infinite}
+  @keyframes chat-progress{to{transform:translateX(390%)}}
+  #chatMeta{display:flex;align-items:center;gap:7px;padding:7px 7px 0 9px}
+  #chatContext{display:flex;align-items:center;gap:5px;min-width:0;max-width:58%;height:25px;
+    padding:0 7px;border:1px solid #d9dee5;border-radius:6px;background:#f4f6f8;color:#4c5665}
+  #chatContext.selected{border-color:#b8cdf3;background:#eef4ff;color:#245eae}
+  #chatContext .context-copy{min-width:0}
+  #chatContext .context-copy span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+  #chatContextLabel{display:block;max-width:100%;font-size:10.5px;line-height:14px;font-weight:600;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #chatMetaTitle{margin-left:auto;color:var(--mut);font-size:10.5px;line-height:14px;white-space:nowrap}
+  #aiSettings{position:relative;margin:0 0 0 1px}
+  #aiSettings>summary{display:grid;place-items:center;width:26px;height:26px;border-radius:6px;
+    color:#596273;cursor:pointer;list-style:none}
+  #aiSettings>summary::-webkit-details-marker{display:none}
+  #aiSettings>summary:hover{background:#eef1f4;color:var(--accent)}
+  #aiSettings[open]>summary{background:#eef4ff;color:var(--accent)}
+  #aiSettings .ai-settings-body{position:absolute;right:0;bottom:34px;width:250px;padding:9px;
+    border:1px solid var(--line);border-radius:8px;background:var(--card);
+    box-shadow:0 8px 22px rgba(29,39,52,.14)}
+  #aiSettings label{display:block;margin-bottom:4px;font-size:10.5px;color:var(--mut)}
+  #aiProvider{height:30px}
+  #chatImgs{display:flex;gap:5px;flex-wrap:nowrap;margin:6px 9px 0;overflow-x:auto}
+  #chatComposer{display:flex;align-items:flex-end;gap:5px;padding:4px 6px 7px 9px}
+  #chatMsg{display:block;flex:1;min-width:0;width:auto;height:40px;min-height:40px;max-height:96px;
+    resize:none;overflow-y:auto;padding:10px 5px 8px 0;border:0;border-radius:0;background:transparent;
+    font:12.5px/1.45 Segoe UI,Arial,sans-serif}
+  #chatMsg:focus{outline:0}
+  .chat-actions{display:flex;align-items:center;gap:4px;flex:0 0 auto;padding-bottom:1px}
+  #chatAttach{display:flex;align-items:center;gap:5px;height:34px;padding:0 7px;border-color:transparent;
+    background:transparent;color:#596273}
+  #chatAttach:hover{color:var(--accent);background:#eef4ff}
+  #chatSend{display:flex;align-items:center;justify-content:center;gap:5px;min-width:104px;height:34px}
+  #chatShortcut{position:absolute;right:12px;bottom:-24px;font-size:9.5px;line-height:12px;
+    color:#757f8d;opacity:0;transition:opacity .12s ease;pointer-events:none}
+  #fs_chat:focus-within #chatShortcut{opacity:1}
+  #fs_chat:focus-within + #viewportStatus #viewportHint{visibility:hidden}
+  #tokenCount{margin-top:6px;font-size:10.5px;line-height:15px}
+  @container (max-width:620px){
+    #chatMetaTitle{display:none}
+    #chatContext{max-width:72%}
+    #chatAttach span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+    #chatAttach{width:34px;padding:0;justify-content:center}
+    #chatSend{min-width:42px;width:42px;padding:0}
+    #chatSendLabel{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+  }
 </style></head><body>
-<div id="app">
+<div id="app" class="right-collapsed">
 <div id="side">
-  <h1>Akeda Studio <span class="mini">— от ТЗ до производства</span></h1>
+<div id="sideScroll">
+  <h1 id="studioBrand" class="studio-brand">
+    <span class="studio-brand-lockup">
+      <img id="studioBrandWordmark" class="studio-brand-wordmark"
+        src="/assets/studio/akeda-studio-wordmark.png" width="520" height="84"
+        decoding="async" alt="Akeda Studio">
+      <img id="studioBrandMark" class="studio-brand-mark"
+        src="/assets/studio/akeda-studio-mark.png" width="216" height="98"
+        decoding="async" alt="" aria-hidden="true">
+    </span>
+    <span class="studio-brand-tagline">от ТЗ до производства</span>
+  </h1>
 
-  <fieldset><legend>Проект</legend>
-    <div class="row"><label>Изделие</label><select id="projSel"></select></div>
-    <div class="row" style="gap:6px">
-      <button id="projNew">+ Новое</button>
-      <button id="projRen" title="переименовать текущее изделие">✎</button>
-      <button id="projDup">Дублировать</button>
-      <button id="projCat" title="каталог всех изделий">🗂 Каталог</button>
+  <fieldset id="fs_project"><legend>Проект</legend>
+    <div class="row project-select"><label for="projSel">Изделие</label><select id="projSel"></select>
+      <button id="projRen" class="icon-button" type="button" aria-label="Переименовать изделие"
+        title="Переименовать изделие">
+        <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-4-4L4 16v4Z"/><path d="m13 7 4 4"/>
+        </svg>
+      </button>
+    </div>
+    <div class="row project-actions" style="gap:6px">
+      <button id="projNew" type="button">
+        <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        Новое
+      </button>
+      <button id="projDup" type="button" title="Создать копию текущего изделия">
+        <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="8" y="8" width="11" height="11" rx="1"/><path d="M16 8V5H5v11h3"/>
+        </svg>
+        Копия
+      </button>
+      <button id="projCat" type="button" title="Открыть каталог изделий">
+        <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 6.5h6l2 2h8v10H4v-12Z"/>
+        </svg>
+        Каталог
+      </button>
     </div>
   </fieldset>
 
-  <div class="badges" id="badges"></div>
-  <div id="errors"></div>
-  <div id="stats"></div>
+  <section id="modelState" aria-labelledby="modelStateTitle">
+    <div class="side-section-head">
+      <span id="modelStateTitle">Состояние модели</span>
+      <button id="btnUndo" type="button" disabled title="Отменить последнюю обратимую правку">
+        <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M9 7 5 11l4 4"/><path d="M5 11h8a6 6 0 0 1 6 6"/>
+        </svg>
+        Отменить
+      </button>
+    </div>
+    <div class="badges" id="badges"></div>
+    <div id="errors" role="alert"></div>
+    <div id="stats"></div>
+    <button id="btnFixAll" type="button" hidden
+      title="Исправить ошибки проверок и подобрать нерешённые позиции базы">
+      <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="8"/><path d="m8.5 12 2.2 2.2 4.8-5"/>
+      </svg>
+      Исправить проблемы
+    </button>
+  </section>
 
-  <fieldset id="fs_part" style="display:none"><legend>Деталь <span class="mini">(клик в 3D)</span></legend>
-    <div id="partCard"></div>
+  <fieldset id="fs_part" style="display:none" aria-busy="false">
+    <legend class="part-section-head">
+      <span>Выбранная деталь</span>
+      <button id="partClearSelection" type="button" aria-label="Снять выбор"
+        title="Снять выбор (Esc)">
+        <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg>
+      </button>
+    </legend>
+    <div id="partCard">
+      <header class="part-identity">
+        <b id="partName"></b>
+        <span id="partKind"></span>
+        <span id="partOrigin">От генератора</span>
+      </header>
+      <dl class="part-facts">
+        <div><dt>Габарит XYZ</dt><dd id="partDimensions"></dd></div>
+        <div><dt>Материал</dt><dd id="partMaterial"></dd></div>
+        <div><dt>Кромка</dt><dd id="partEdges"></dd></div>
+        <div><dt>Присадки</dt><dd id="partHoles"></dd></div>
+      </dl>
+      <div class="part-primary-actions">
+        <button id="partCommandFocus" type="button" class="primary">
+          <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M5 6h14v9H9l-4 4V6Z"/><path d="M9 10h6"/>
+          </svg>
+          Изменить словами
+        </button>
+        <button id="ovDetail" type="button" title="Чертёж детали с размерами и присадками">Чертёж</button>
+      </div>
+      <p class="part-context-note">Нижняя команда уже адресована выбранной детали.</p>
+      <details id="partExact" class="part-exact">
+        <summary>Точные параметры</summary>
+        <p class="part-exact-hint">Грани в координатах модели, мм</p>
+        <div id="partEditStatus" role="status" aria-live="polite"></div>
+        <div class="part-axis-grid">
+          <label class="part-axis"><span>X</span>
+            <input type="number" data-ov="x1" aria-label="X от" step="1"><span class="axis-separator">—</span>
+            <input type="number" data-ov="x2" aria-label="X до" step="1"><span class="axis-delta" data-delta="x"></span>
+          </label>
+          <label class="part-axis"><span>Y</span>
+            <input type="number" data-ov="y1" aria-label="Y от" step="1"><span class="axis-separator">—</span>
+            <input type="number" data-ov="y2" aria-label="Y до" step="1"><span class="axis-delta" data-delta="y"></span>
+          </label>
+          <label class="part-axis"><span>Z</span>
+            <input type="number" data-ov="z1" aria-label="Z от" step="1"><span class="axis-separator">—</span>
+            <input type="number" data-ov="z2" aria-label="Z до" step="1"><span class="axis-delta" data-delta="z"></span>
+          </label>
+        </div>
+        <div class="part-edit-actions">
+          <button id="ovApply" type="button" class="primary" disabled>Применить</button>
+          <button id="partEditCancel" type="button" disabled>Отменить ввод</button>
+        </div>
+        <p class="part-edit-help">Shift + перетаскивание перемещает деталь в 3D. После применения пересчитаются присадки и проверки.</p>
+        <div class="part-production-data">
+          <b>Производственные данные</b>
+          <p id="partEdgesRaw"></p>
+          <p id="partHolesRaw"></p>
+        </div>
+        <div class="part-local-actions">
+          <button id="ovReset" type="button" hidden>Сбросить к результату генератора</button>
+          <button id="ovDelete" type="button">Удалить деталь…</button>
+        </div>
+        <div id="partChatRow" hidden aria-hidden="true">
+          <input id="partChat" type="hidden" tabindex="-1">
+          <button id="partChatSend" type="button" hidden tabindex="-1">К команде</button>
+        </div>
+      </details>
+    </div>
   </fieldset>
-
-  <fieldset id="fs_chat"><legend>Чат с ИИ</legend>
-    <div class="row" style="gap:6px;margin-bottom:5px">
-      <label style="flex:0 0 auto;color:var(--mut)">Нейросеть</label>
-      <select id="aiProvider" style="flex:1"></select>
+  <section id="operationLog" aria-labelledby="operationLogTitle" hidden>
+    <div class="side-section-head">
+      <span id="operationLogTitle">Изменения</span>
     </div>
-    <div id="chatlog"></div>
-    <div id="chatImgs"></div>
-    <div class="row" style="gap:6px">
-      <input type="text" id="chatMsg" placeholder="напр.: сделай глубину 600, цвет дуб вотан">
-      <button id="chatAttach" title="прикрепить фото/скан ТЗ">📎</button>
-      <button id="chatSend" title="отправить">➤</button>
-      <input type="file" id="chatFile" accept="image/*" multiple style="display:none">
-    </div>
-    <div class="row" style="gap:6px;margin-top:2px">
-      <button id="btnUndo" disabled>⟲ Откатить</button>
-      <button id="btnFixAll" title="ИИ чинит ошибки проверок и подбирает базу до зелёных бейджей">⚕ Починить всё</button>
-      <span class="mini">фото ТЗ: 📎, Ctrl+V</span>
-    </div>
-    <div id="tokenCount" class="mini" style="margin-top:5px"></div>
-  </fieldset>
+    <div id="operationLogHint">Команды, результат и технические изменения этой сессии</div>
+    <div id="chatlog" role="log" aria-live="polite" aria-label="Изменения этой сессии"></div>
+  </section>
+</div>
 </div>
 
-<div id="rightside">
-  <fieldset><legend>Габариты, мм</legend>
-    <div class="row"><label>Ширина</label><input type="number" id="f_w" step="10"></div>
-    <div class="row"><label>Глубина</label><input type="number" id="f_d" step="10"></div>
-    <div class="row"><label>Высота</label><input type="number" id="f_h" step="10"></div>
-  </fieldset>
+<div id="rightside" data-mode="properties">
+  <div id="rightPanelHead">
+    <b id="rightPanelTitle">Параметры изделия</b>
+    <button id="rightPanelClose" type="button" aria-label="Свернуть правую панель"
+      aria-controls="rightside" aria-expanded="true" title="Свернуть панель">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg>
+    </button>
+  </div>
 
-  <fieldset><legend>Материал</legend>
-    <div class="row"><label>Цвет</label><input type="text" id="f_color">
-      <span class="swatch" id="swCarcass" title="цвет показа корпуса"></span></div>
-    <div class="row"><label>Цвет фасадов</label><input type="text" id="f_facade_color"
-      placeholder="как корпус"><span class="swatch" id="swFacade" title="цвет показа фасадов"></span></div>
-    <div class="row"><label>Код</label><input type="text" id="f_code"></div>
-    <div class="row"><label>Плита, мм</label><input type="number" id="f_t" step="1"></div>
-    <div class="row"><label>Из базы</label><input type="text" id="decorQ"
-      placeholder="поиск декора: дуб, белый, 16…"></div>
-    <div id="decorList"></div>
-    <div class="mini" id="decorHint">клик — корпус, кнопка «Ф» — фасады (база: ≈960 листовых)</div>
-  </fieldset>
+  <nav id="rightPanelTabs" role="tablist" aria-label="Разделы правой панели">
+    <button id="rightTabProperties" type="button" role="tab" aria-selected="true"
+      aria-controls="rightViewProperties" data-mode="properties">Параметры</button>
+    <button id="rightTabComponents" type="button" role="tab" aria-selected="false"
+      aria-controls="rightViewComponents" data-mode="components" tabindex="-1">Комплектация</button>
+    <button id="rightTabProduction" type="button" role="tab" aria-selected="false"
+      aria-controls="rightViewProduction" data-mode="production" tabindex="-1">Производство</button>
+  </nav>
 
-  <fieldset><legend>Опоры / зазор</legend>
-    <div class="row"><label>Опоры, мм</label><input type="number" id="f_legs" step="1"></div>
-    <div class="row"><label>Зазор, мм</label><input type="number" id="f_gap" step="0.5"></div>
-  </fieldset>
+  <div id="rightViewProperties" class="right-panel-view" role="tabpanel"
+    aria-labelledby="rightTabProperties">
+    <fieldset id="fs_dims" class="parameter-section"><legend>Габариты</legend>
+      <div class="dimension-grid" aria-label="Габариты изделия в миллиметрах">
+        <div class="dimension-field">
+          <label for="f_w"><span class="dimension-axis">W</span><span class="dimension-name">Ширина</span></label>
+          <div class="unit-field"><input type="number" id="f_w" step="10"
+            aria-describedby="f_w_unit"><span id="f_w_unit">мм</span></div>
+        </div>
+        <div class="dimension-field">
+          <label for="f_d"><span class="dimension-axis">D</span><span class="dimension-name">Глубина</span></label>
+          <div class="unit-field"><input type="number" id="f_d" step="10"
+            aria-describedby="f_d_unit"><span id="f_d_unit">мм</span></div>
+        </div>
+        <div class="dimension-field">
+          <label for="f_h"><span class="dimension-axis">H</span><span class="dimension-name">Высота</span></label>
+          <div class="unit-field"><input type="number" id="f_h" step="10"
+            aria-describedby="f_h_unit"><span id="f_h_unit">мм</span></div>
+        </div>
+      </div>
+    </fieldset>
 
-  <fieldset><legend>Архетип</legend>
-    <div class="row"><label>Тип</label><select id="archSel"></select></div>
-  </fieldset>
+    <fieldset id="fs_material" class="parameter-section"><legend>Материал</legend>
+      <div class="material-stack">
+        <div class="material-row"><label for="f_color">Корпус</label>
+          <div class="material-value"><input type="text" id="f_color">
+            <span class="swatch" id="swCarcass" title="Цвет показа корпуса" aria-hidden="true"></span></div>
+        </div>
+        <div class="material-row"><label for="f_facade_color">Фасады</label>
+          <div class="material-value"><input type="text" id="f_facade_color" placeholder="Как корпус">
+            <span class="swatch" id="swFacade" title="Цвет показа фасадов" aria-hidden="true"></span></div>
+        </div>
+      </div>
+      <div class="parameter-grid">
+        <div class="parameter-field"><label for="f_code">Код декора</label>
+          <input type="text" id="f_code"></div>
+        <div class="parameter-field"><label for="f_t">Толщина плиты</label>
+          <div class="unit-field"><input type="number" id="f_t" step="1"
+            aria-describedby="f_t_unit"><span id="f_t_unit">мм</span></div></div>
+      </div>
+      <div class="parameter-search"><label for="decorQ">Найти в базе материалов</label>
+        <input type="text" id="decorQ" placeholder="Дуб, белый, артикул…" autocomplete="off"
+          aria-controls="decorList" aria-describedby="decorHint"></div>
+      <div id="decorList" role="list" aria-live="polite"></div>
+      <div class="mini" id="decorHint">Строка — корпус · «Ф» — фасады · ≈960 листовых материалов</div>
+    </fieldset>
 
-  <fieldset id="fs_arch" style="display:none"><legend>Параметры архетипа</legend>
-    <div id="archFields"></div>
-  </fieldset>
+    <fieldset id="fs_archetype" class="parameter-section"><legend>Конструкция</legend>
+      <div class="construction-type"><label for="archSel">Тип изделия</label><select id="archSel"></select></div>
+    </fieldset>
 
-  <fieldset id="fs_sections"><legend>Секции</legend>
-    <div id="sections"></div>
-    <button id="addSec">+ секция</button>
-  </fieldset>
+    <fieldset id="fs_arch" class="parameter-section" style="display:none"><legend>Параметры конструкции</legend>
+      <div id="archFields"></div>
+    </fieldset>
 
-  <fieldset><legend>Экспорт</legend>
-    <div class="row" style="gap:6px">
-      <button id="btnSave">Сохранить</button>
-      <button id="btnCfrn">.cfrn</button>
-      <button id="btnB3d" class="primary">Собрать .b3d (~10₽)</button>
-    </div>
-    <div class="row" style="gap:6px;margin-top:4px">
-      <button id="btnDeliver">Лист согласования</button>
-    </div>
-    <div class="mini">Платная сборка доступна только при зелёных проверках.</div>
-    <div class="row" style="gap:6px;margin-top:6px">
-      <select id="verSel" style="flex:1"><option value="">— версии (при сохранении) —</option></select>
-      <button id="verRestore" title="восстановить выбранную версию">⤺</button>
-    </div>
-    <div id="builds" style="margin-top:6px"></div>
-  </fieldset>
+    <fieldset id="fs_support" class="parameter-section"><legend>Установка</legend>
+      <div class="parameter-grid">
+        <div class="parameter-field"><label for="f_legs">Высота опор</label>
+          <div class="unit-field"><input type="number" id="f_legs" step="1"
+            aria-describedby="f_legs_unit"><span id="f_legs_unit">мм</span></div></div>
+        <div class="parameter-field"><label for="f_gap">Фасадный зазор</label>
+          <div class="unit-field"><input type="number" id="f_gap" step="0.5"
+            aria-describedby="f_gap_unit"><span id="f_gap_unit">мм</span></div></div>
+      </div>
+    </fieldset>
 
-  <fieldset id="fs_hw"><legend>Фурнитура <span class="mini" id="hwBadge"></span></legend>
-    <div id="hwSlots"></div>
-    <div class="row"><label>Ручка: межцентр.</label><input type="number" id="f_hsize" step="32" min="0"></div>
-    <div class="row"><label>Отступ сверху</label><input type="number" id="f_hoff" step="5" min="0"></div>
-  </fieldset>
+    <fieldset id="fs_sections"><legend>Секции</legend>
+      <div id="sections"></div>
+      <button id="addSec">+ секция</button>
+    </fieldset>
 
-  <fieldset id="fs_est"><legend>Смета материалов <span class="mini">(закупка, не продажа)</span></legend>
-    <div id="estTotal" style="font-size:16px;font-weight:600;margin:2px 0 6px"></div>
-    <table id="estTable"></table>
-  </fieldset>
+    <details id="fs_raw"><summary class="mini">ParamSpec (raw JSON)</summary>
+      <textarea id="rawspec" spellcheck="false"></textarea>
+      <button id="applyRaw">Применить JSON</button>
+    </details>
+  </div>
 
-  <fieldset id="bom"><legend>BOM (фурнитура)</legend><table></table></fieldset>
+  <div id="rightViewComponents" class="right-panel-view" role="tabpanel"
+    aria-labelledby="rightTabComponents" hidden inert>
+    <fieldset id="fs_hw"><legend>Фурнитура <span class="mini" id="hwBadge"></span></legend>
+      <div id="hwSlots"></div>
+      <div class="row"><label>Ручка: межцентр.</label><input type="number" id="f_hsize" step="32" min="0"></div>
+      <div class="row"><label>Отступ сверху</label><input type="number" id="f_hoff" step="5" min="0"></div>
+    </fieldset>
 
-  <details><summary class="mini">ParamSpec (raw JSON)</summary>
-    <textarea id="rawspec" spellcheck="false"></textarea>
-    <button id="applyRaw">Применить JSON</button>
-  </details>
+    <fieldset id="fs_est"><legend>Смета материалов <span class="mini">(закупка, не продажа)</span></legend>
+      <div id="estTotal" style="font-size:16px;font-weight:600;margin:2px 0 6px"></div>
+      <table id="estTable"></table>
+    </fieldset>
+
+    <fieldset id="bom"><legend>BOM (фурнитура)</legend><table></table></fieldset>
+  </div>
+
+  <div id="rightViewProduction" class="right-panel-view" role="tabpanel"
+    aria-labelledby="rightTabProduction" hidden inert>
+    <fieldset id="fs_export"><legend>Экспорт</legend>
+      <div class="row" style="gap:6px">
+        <button id="btnSave">Сохранить</button>
+        <button id="btnCfrn">.cfrn</button>
+        <button id="btnB3d" class="primary">Собрать .b3d (~10₽)</button>
+      </div>
+      <div class="row" style="gap:6px;margin-top:4px">
+        <button id="btnDeliver">Лист согласования</button>
+      </div>
+      <div class="mini">Платная сборка доступна только при зелёных проверках.</div>
+      <div class="row" style="gap:6px;margin-top:6px">
+        <select id="verSel" style="flex:1"><option value="">— версии (при сохранении) —</option></select>
+        <button id="verRestore" title="восстановить выбранную версию">⤺</button>
+      </div>
+      <div id="builds" style="margin-top:6px"></div>
+    </fieldset>
+  </div>
 </div>
+
+<nav id="rightRail" aria-label="Разделы параметров изделия">
+  <button id="rightRailProperties" type="button" aria-label="Открыть параметры изделия"
+    aria-controls="rightside" aria-expanded="false" title="Параметры изделия">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M6 14v6"/>
+    </svg>
+    <span class="sr-only">Параметры изделия</span>
+  </button>
+  <button id="rightRailComponents" type="button" aria-label="Открыть комплектацию"
+    aria-controls="rightside" aria-expanded="false" title="Комплектация">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="m12 3 8 4-8 4-8-4 8-4Z"/><path d="m4 12 8 4 8-4M4 17l8 4 8-4"/>
+    </svg>
+    <span class="sr-only">Комплектация</span>
+  </button>
+  <button id="rightRailProduction" type="button" aria-label="Открыть производство"
+    aria-controls="rightside" aria-expanded="false" title="Производство">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3 21V10l6 3V9l6 4V5h6v16H3Z"/><path d="M17 9h2M7 17h2M12 17h2M17 17h2"/>
+    </svg>
+    <span class="sr-only">Производство</span>
+  </button>
+</nav>
 
 <div id="main">
   <div id="view3d"></div>
-  <div id="tabs">
-    <button id="tab3d" class="on">3D</button>
-    <button id="tabDraw">Чертёж</button>
-    <button id="tabNest">Раскрой</button>
-    <button id="btnPrint" title="печать открытого чертежа/раскроя">⎙</button>
+  <div id="viewportTopbar">
+    <div id="tabs" role="tablist" aria-label="Режим рабочего поля">
+      <button id="tab3d" class="on" type="button" role="tab" aria-selected="true"
+        aria-controls="view3d" title="Интерактивная 3D-модель">
+        <svg class="viewport-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/>
+        </svg>
+        3D
+      </button>
+      <button id="tabDraw" type="button" role="tab" aria-selected="false"
+        aria-controls="draw" title="Технический чертёж изделия">
+        <svg class="viewport-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M5 3h10l4 4v14H5V3Z"/><path d="M15 3v5h5M8 13h8M8 17h5"/>
+        </svg>
+        Чертёж
+      </button>
+      <button id="tabNest" type="button" role="tab" aria-selected="false"
+        aria-controls="draw" title="Раскрой листовых материалов">
+        <svg class="viewport-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="3" y="5" width="18" height="14" rx="1"/><path d="M9 5v7h12M3 14h10v5"/>
+        </svg>
+        Раскрой
+      </button>
+      <span class="toolbar-separator" aria-hidden="true"></span>
+      <button id="btnPrint" type="button" disabled aria-label="Печать чертежа или раскроя"
+        title="Доступно в чертеже и раскрое">
+        <svg class="viewport-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M7 8V3h10v5M7 17H4v-7h16v7h-3"/><path d="M7 14h10v7H7v-7Z"/>
+        </svg>
+        <span class="print-label">Печать</span>
+      </button>
+    </div>
+    <div id="views" role="toolbar" aria-label="Ракурс 3D-модели">
+      <span class="viewport-group-label">Вид</span>
+      <button class="vw" type="button" data-view="axon" aria-pressed="false"
+        title="Аксонометрия без перспективы">Аксон</button>
+      <button class="vw on" type="button" data-view="persp" aria-pressed="true"
+        title="Перспектива три четверти">Персп.</button>
+      <button class="vw" type="button" data-view="top" aria-pressed="false"
+        title="Вид сверху">Сверху</button>
+      <button class="vw" type="button" data-view="front" aria-pressed="false"
+        title="Вид спереди">Спереди</button>
+      <button class="vw" type="button" data-view="left" aria-pressed="false"
+        title="Вид слева">Слева</button>
+    </div>
   </div>
-  <div id="hud">
-    <div id="views"><span class="mini">Вид:</span>
-      <button class="vw" data-view="axon" title="аксонометрия (без перспективы)">аксон</button>
-      <button class="vw on" data-view="persp" title="перспектива ¾">персп</button>
-      <button class="vw" data-view="top" title="вид сверху">сверху</button>
-      <button class="vw" data-view="front" title="вид спереди">спереди</button>
-      <button class="vw" data-view="left" title="вид слева">слева</button>
-    </div>
-    <label><input type="checkbox" id="cbHoles" checked> присадки</label>
-    <label><input type="checkbox" id="cbHw" checked> фурнитура</label>
-    <label><input type="checkbox" id="cbTex" checked> текстура</label>
-    <label><input type="checkbox" id="cbDims" checked> размеры</label>
-    <label><input type="checkbox" id="cbXray"> прозрачный</label>
-    <div class="row2">
-      <button id="btnOpenAll">Открыть всё</button>
-      <button id="btnCloseAll">Закрыть</button>
-    </div>
-    <label title="разнесённый вид">разбор
-      <input type="range" id="explode" min="0" max="100" value="0" style="flex:1;min-width:0"></label>
+  <div id="hud" aria-label="Инструменты отображения 3D-модели">
+    <section class="hud-section" aria-labelledby="hudLayersTitle">
+      <div class="hud-section-head">
+        <span id="hudLayersTitle">Отображение</span>
+        <output id="layerCount" aria-live="polite">4 / 5</output>
+      </div>
+      <div class="hud-layer-grid">
+        <label class="hud-layer"><input type="checkbox" id="cbHoles" checked><span>Присадки</span></label>
+        <label class="hud-layer"><input type="checkbox" id="cbHw" checked><span>Фурнитура</span></label>
+        <label class="hud-layer"><input type="checkbox" id="cbTex" checked><span>Текстура</span></label>
+        <label class="hud-layer"><input type="checkbox" id="cbDims" checked><span>Размеры</span></label>
+        <label class="hud-layer is-wide"><input type="checkbox" id="cbXray"><span>Прозрачность</span></label>
+      </div>
+    </section>
+    <section class="hud-section" aria-labelledby="hudModelTitle">
+      <div class="hud-section-head"><span id="hudModelTitle">Модель</span></div>
+      <div class="hud-actions" role="group" aria-label="Открытие фасадов и ящиков">
+        <button id="btnOpenAll" type="button" title="Открыть все фасады и ящики">
+          <svg class="viewport-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 4h11v16H4V4Z"/><path d="m15 4 5 3v13l-5-2V4ZM17 11h.01"/>
+          </svg>
+          <span>Открыть всё</span>
+        </button>
+        <button id="btnCloseAll" type="button" title="Закрыть все фасады и ящики">
+          <svg class="viewport-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M5 4h14v16H5V4ZM15 11h.01"/>
+          </svg>
+          <span>Закрыть всё</span>
+        </button>
+      </div>
+      <label class="explode-control" title="Разнесённый вид модели">
+        <span>Разбор</span>
+        <input type="range" id="explode" min="0" max="100" value="0"
+          aria-label="Степень разборки модели">
+        <output id="explodeValue" for="explode">0%</output>
+      </label>
+    </section>
   </div>
   <div id="draw"></div>
   <div id="catalog">
@@ -1169,10 +1889,85 @@ PAGE = r"""<!DOCTYPE html>
   <div id="emptyState">
     <div class="es-box">
       <div class="es-title">Новое изделие</div>
-      <div class="es-hint">Перетащите сюда фото ТЗ &mdash;<br>или опишите изделие в чате слева</div>
+      <div class="es-hint">Перетащите сюда фото ТЗ &mdash;<br>или опишите изделие в командной строке ниже</div>
       <button id="esUpload" class="primary">Загрузить фото ТЗ</button>
       <input type="file" id="esFile" accept="image/*" style="display:none">
     </div>
+  </div>
+
+  <fieldset id="fs_chat" aria-busy="false">
+    <legend class="sr-only">Изменить модель словами</legend>
+    <div id="chatStatusTray">
+      <span id="chatStateMark" aria-hidden="true"></span>
+      <div id="chatState" role="status" aria-live="polite"></div>
+      <div id="chatResultActions" hidden>
+        <button id="chatShowLog" type="button">Изменения</button>
+        <button id="chatUndoQuick" type="button" hidden>Отменить</button>
+      </div>
+    </div>
+    <div id="chatSurface">
+      <div id="chatProgress" aria-hidden="true"></div>
+      <div id="chatMeta">
+        <div id="chatContext" title="Контекст следующей команды">
+          <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/>
+          </svg>
+          <div class="context-copy">
+            <span>Контекст команды</span>
+            <b id="chatContextLabel">Всё изделие</b>
+          </div>
+        </div>
+        <span id="chatMetaTitle">Изменить модель словами</span>
+        <details id="aiSettings">
+          <summary aria-label="Настройки AI" title="Настройки AI">
+            <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1A7 7 0 0 0 14.8 6L14.5 3h-5L9.2 6a7 7 0 0 0-1.7 1.1l-2.4-1-2 3.4L5.1 11a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.4-1A7 7 0 0 0 9.2 18l.3 3h5l.3-3a7 7 0 0 0 1.7-1.1l2.4 1 2-3.4-2-1.5a7 7 0 0 0 .1-1Z"/>
+            </svg>
+          </summary>
+          <div class="ai-settings-body">
+            <label for="aiProvider">Модель AI</label>
+            <select id="aiProvider"></select>
+            <div id="tokenCount" class="mini"></div>
+          </div>
+        </details>
+      </div>
+      <div id="chatImgs"></div>
+      <div id="chatComposer">
+        <textarea id="chatMsg" rows="1" aria-describedby="chatContextLabel chatShortcut"
+          placeholder="Опишите, что нужно изменить в изделии"></textarea>
+        <div class="chat-actions">
+          <button id="chatAttach" type="button" title="Добавить фото или скан технического задания">
+            <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m8 12.5 6.3-6.3a3 3 0 0 1 4.2 4.2l-8.2 8.2a5 5 0 0 1-7.1-7.1l8-8"/>
+            </svg>
+            <span>Добавить ТЗ</span>
+          </button>
+          <button id="chatSend" class="primary" type="button" title="Выполнить команду">
+            <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m5 12 14-7-4 14-3-5-7-2Z"/><path d="m12 14 7-9"/>
+            </svg>
+            <span id="chatSendLabel">Выполнить</span>
+          </button>
+        </div>
+        <input type="file" id="chatFile" accept="image/*" multiple style="display:none">
+      </div>
+    </div>
+    <div id="chatShortcut">Ctrl/Command + Enter — выполнить</div>
+  </fieldset>
+  <div id="viewportStatus" data-tone="pending" aria-label="Состояние рабочего поля">
+    <div id="viewportModelStatus" class="viewport-status-segment" role="status"
+      aria-live="polite" aria-atomic="true">
+      <span id="viewportModelMark" aria-hidden="true"></span>
+      <span id="viewportModelStateLong">Загружаю модель…</span>
+      <span id="viewportModelStateShort">Загрузка…</span>
+    </div>
+    <div id="viewportSelection" class="viewport-status-segment" hidden>
+      <span>Выбрано</span><b id="viewportSelectionName"></b>
+    </div>
+    <div id="viewportHint" class="viewport-status-segment">
+      Клик — выбрать · перетаскивание — вращать · колесо — масштаб
+    </div>
+    <div id="viewportUnits" class="viewport-status-segment">мм</div>
   </div>
   <div id="toast"></div>
 </div>
@@ -1193,6 +1988,89 @@ const toast = (m,bad,sticky)=>{const t=$('toast');t.textContent=m;t.style.backgr
 /* ---------- 3D: общий движок MebelScene (как webviewer, + анимация открытия) ---------- */
 const view=$('view3d');
 const scene3d=MebelScene(view);
+
+/* ---------- компоновка панелей (MEB-093) ---------- */
+let rightPanelUserChoice=null;
+let rightPanelMode='properties';
+const rightPanelModes={
+  properties:{title:'Параметры изделия',tab:$('rightTabProperties'),
+    rail:$('rightRailProperties'),panel:$('rightViewProperties'),scrollTop:0},
+  components:{title:'Комплектация',tab:$('rightTabComponents'),
+    rail:$('rightRailComponents'),panel:$('rightViewComponents'),scrollTop:0},
+  production:{title:'Производство',tab:$('rightTabProduction'),
+    rail:$('rightRailProduction'),panel:$('rightViewProduction'),scrollTop:0}
+};
+let lastRightRailControl=rightPanelModes.properties.rail;
+function setRightPanelMode(mode){
+  if(!rightPanelModes[mode])return;
+  const side=$('rightside'),changed=mode!==rightPanelMode;
+  if(changed&&rightPanelModes[rightPanelMode])
+    rightPanelModes[rightPanelMode].scrollTop=side.scrollTop;
+  rightPanelMode=mode;side.dataset.mode=mode;
+  Object.entries(rightPanelModes).forEach(([key,item])=>{
+    const active=key===mode;
+    item.panel.hidden=!active;item.panel.inert=!active||$('sideScroll').inert;
+    item.tab.setAttribute('aria-selected',String(active));item.tab.tabIndex=active?0:-1;
+    item.rail.classList.toggle('is-active',active);
+  });
+  const current=rightPanelModes[mode];
+  $('rightPanelTitle').textContent=current.title;
+  $('rightPanelClose').setAttribute('aria-label',`Свернуть панель «${current.title}»`);
+  lastRightRailControl=current.rail;
+  if(changed)requestAnimationFrame(()=>{side.scrollTop=current.scrollTop||0;});
+}
+function setRightPanel(open,mode=rightPanelMode,fromUser=false){
+  const focusWasRail=!!(fromUser&&open&&document.activeElement&&
+    document.activeElement.closest('#rightRail')),wasOpen=!$('app').classList.contains('right-collapsed');
+  if(fromUser) rightPanelUserChoice=!!open;
+  setRightPanelMode(mode);
+  $('app').classList.toggle('right-collapsed',!open);
+  $('rightPanelClose').setAttribute('aria-expanded',String(!!open));
+  Object.entries(rightPanelModes).forEach(([key,item])=>
+    item.rail.setAttribute('aria-expanded',String(!!open&&key===rightPanelMode)));
+  if(wasOpen!==!!open)requestAnimationFrame(()=>scene3d.resize());
+  if(fromUser) requestAnimationFrame(()=>{
+    if(!open)lastRightRailControl.focus({preventScroll:true});
+    else if(focusWasRail)rightPanelModes[rightPanelMode].tab.focus({preventScroll:true});
+  });
+}
+const wideStudioLayout=window.matchMedia('(min-width: 1600px)');
+function syncRightPanelToViewport(){
+  const open=rightPanelUserChoice===null
+    ? wideStudioLayout.matches
+    : rightPanelUserChoice;
+  setRightPanel(open);
+}
+$('rightPanelClose').onclick=()=>setRightPanel(false,null,true);
+Object.entries(rightPanelModes).forEach(([mode,item],index,entries)=>{
+  item.rail.onclick=()=>setRightPanel(true,mode,true);
+  item.rail.onkeydown=event=>{
+    if(!['ArrowUp','ArrowDown','Home','End'].includes(event.key))return;
+    event.preventDefault();
+    let next=index;
+    if(event.key==='ArrowUp')next=(index+entries.length-1)%entries.length;
+    if(event.key==='ArrowDown')next=(index+1)%entries.length;
+    if(event.key==='Home')next=0;
+    if(event.key==='End')next=entries.length-1;
+    entries[next][1].rail.focus({preventScroll:true});
+  };
+  item.tab.onclick=()=>setRightPanel(true,mode,true);
+  item.tab.onkeydown=event=>{
+    if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
+    event.preventDefault();
+    let next=index;
+    if(event.key==='ArrowLeft')next=(index+entries.length-1)%entries.length;
+    if(event.key==='ArrowRight')next=(index+1)%entries.length;
+    if(event.key==='Home')next=0;
+    if(event.key==='End')next=entries.length-1;
+    const [nextMode,nextItem]=entries[next];
+    setRightPanel(true,nextMode,true);nextItem.tab.focus({preventScroll:true});
+  };
+});
+wideStudioLayout.addEventListener('change',syncRightPanelToViewport);
+if(window.ResizeObserver) new ResizeObserver(()=>scene3d.resize()).observe(view);
+syncRightPanelToViewport();
+
 function rebuild(v){scene3d.setPayload(v);
   scene3d.setHoles($('cbHoles').checked);
   scene3d.setHw($('cbHw').checked);
@@ -1205,17 +2083,44 @@ $('cbHw').onchange=e=>scene3d.setHw(e.target.checked);
 $('cbTex').onchange=e=>scene3d.setTextures(e.target.checked);
 $('cbDims').onchange=e=>scene3d.setDims(e.target.checked);
 $('cbXray').onchange=e=>scene3d.setXray(e.target.checked);
-$('explode').oninput=e=>scene3d.setExplode(e.target.value/100);
+const viewportLayerInputs=[$('cbHoles'),$('cbHw'),$('cbTex'),$('cbDims'),$('cbXray')];
+function syncViewportLayerCount(){
+  const enabled=viewportLayerInputs.filter(input=>input.checked).length;
+  $('layerCount').textContent=`${enabled} / ${viewportLayerInputs.length}`;
+}
+viewportLayerInputs.forEach(input=>input.addEventListener('change',syncViewportLayerCount));
+syncViewportLayerCount();
+$('explode').oninput=e=>{
+  scene3d.setExplode(e.target.value/100);
+  $('explodeValue').textContent=`${e.target.value}%`;
+};
 $('btnOpenAll').onclick=()=>scene3d.openAll();
 $('btnCloseAll').onclick=()=>scene3d.closeAll();
 // ракурсы: аксонометрия/перспектива/сверху/спереди/слева
 document.querySelectorAll('#views .vw').forEach(b=>b.onclick=()=>{
   scene3d.setView(b.dataset.view);
-  document.querySelectorAll('#views .vw').forEach(x=>x.classList.toggle('on',x===b));
+  document.querySelectorAll('#views .vw').forEach(x=>{
+    const active=x===b;
+    x.classList.toggle('on',active);
+    x.setAttribute('aria-pressed',String(active));
+  });
 });
-// ручное вращение — ракурс больше не соответствует пресету, снимаем подсветку
-view.addEventListener('pointerdown',()=>
-  document.querySelectorAll('#views .vw').forEach(x=>x.classList.remove('on')));
+// Простой клик выбирает деталь/открывает фасад и не меняет камеру. Снимаем preset
+// только после реального orbit/pan-жеста либо zoom, не вмешиваясь в MebelScene.
+let cameraGestureStart=null;
+function clearCameraPreset(){document.querySelectorAll('#views .vw').forEach(x=>{
+  x.classList.remove('on');x.setAttribute('aria-pressed','false');
+});}
+view.addEventListener('pointerdown',event=>{
+  cameraGestureStart=event.shiftKey?null:{id:event.pointerId,x:event.clientX,y:event.clientY};
+});
+view.addEventListener('pointermove',event=>{
+  if(!cameraGestureStart||cameraGestureStart.id!==event.pointerId)return;
+  if(Math.hypot(event.clientX-cameraGestureStart.x,event.clientY-cameraGestureStart.y)<4)return;
+  clearCameraPreset();cameraGestureStart=null;
+});
+['pointerup','pointercancel'].forEach(type=>view.addEventListener(type,()=>cameraGestureStart=null));
+view.addEventListener('wheel',clearCameraPreset,{passive:true});
 
 /* ---------- формы ← spec ---------- */
 function fillForm(){
@@ -1236,20 +2141,31 @@ function renderArchetype(){
   const defs=FIELDS[SPEC.archetype]||[];
   const box=$('archFields'); box.innerHTML='';
   $('fs_arch').style.display=defs.length?'':'none';
-  defs.forEach(f=>{
-    const v=SPEC[f.key], row=document.createElement('div'); row.className='row';
-    let inp;
+  defs.forEach((f,index)=>{
+    const v=SPEC[f.key], row=document.createElement('div'); row.className='parameter-row';
+    const fieldId=`archField_${index}`;
+    const label=document.createElement('label');label.htmlFor=fieldId;
+    label.textContent=f.label;if(f.hint)label.title=f.hint;
+    let input;
     if(f.type==='bool'){
       const on=(v===undefined)?(f.default===true):!!v;
-      inp=`<input type="checkbox" data-ak="${f.key}" ${on?'checked':''}>`;
+      input=document.createElement('input');input.type='checkbox';input.checked=on;
     }else if(f.type==='select'){
-      inp=`<select data-ak="${f.key}">${(f.options||[]).map(o=>
-        `<option value="${o}" ${String(v??'')===o?'selected':''}>${o||'—'}</option>`).join('')}</select>`;
+      input=document.createElement('select');
+      (f.options||[]).forEach(o=>{
+        const option=document.createElement('option');option.value=o;option.textContent=o||'—';
+        option.selected=String(v??'')===String(o);input.appendChild(option);
+      });
     }else{
-      const ph=f.default!==undefined?` placeholder="${f.default}"`:'';
-      inp=`<input type="${f.type==='num'?'number':'text'}" data-ak="${f.key}" value="${v??''}"${ph}>`;
+      input=document.createElement('input');input.type=f.type==='num'?'number':'text';
+      input.value=v??'';if(f.default!==undefined)input.placeholder=f.default;
     }
-    row.innerHTML=`<label title="${f.hint||''}">${f.label}</label>${inp}`;
+    input.id=fieldId;input.dataset.ak=f.key;
+    if(f.hint){
+      const hint=document.createElement('span');hint.id=`archHint_${index}`;hint.className='sr-only';
+      hint.textContent=f.hint;input.setAttribute('aria-describedby',hint.id);
+      row.append(label,input,hint);
+    }else row.append(label,input);
     box.appendChild(row);
   });
 }
@@ -1366,35 +2282,112 @@ $('applyRaw').onclick=()=>{try{SPEC=JSON.parse($('rawspec').value);fillForm();ap
   catch(err){toast('JSON: '+err.message,true);}};
 
 /* ---------- генерация ---------- */
-let timer=null, lastOk=false;
-function schedule(){clearTimeout(timer);timer=setTimeout(apply,400);}
+let timer=null,lastOk=false,generateRequestSeq=0,viewportModelPhase='loading',
+    viewportModelProblems=0;
+function issueWord(count){
+  const n=Math.abs(Number(count)||0)%100,d=n%10;
+  return n>=11&&n<=14?'ошибок':d===1?'ошибка':d>=2&&d<=4?'ошибки':'ошибок';
+}
+function setViewportModelPhase(phase,problems=0){
+  viewportModelPhase=phase;viewportModelProblems=Number(problems)||0;syncViewportStatus();
+}
+function syncViewportStatus(){
+  const status=$('viewportStatus');if(!status)return;
+  let tone='pending',longText='Загружаю модель…',shortText='Загрузка…';
+  if(viewportModelPhase==='pending'){
+    longText='Изменения ожидают пересчёта…';shortText='Ожидает пересчёта';
+  }else if(viewportModelPhase==='busy'){
+    tone='busy';longText='Пересчитываю модель и проверки…';shortText='Пересчёт…';
+  }else if(viewportModelPhase==='ready'){
+    tone='ready';longText='Модель актуальна';shortText='Актуальна';
+  }else if(viewportModelPhase==='warning'){
+    tone='warning';
+    const suffix=viewportModelProblems?` · ${viewportModelProblems} ${issueWord(viewportModelProblems)}`:
+      ' · проверки не пройдены';
+    longText='Модель пересчитана'+suffix;shortText=viewportModelProblems?
+      `${viewportModelProblems} ${issueWord(viewportModelProblems)}`:'Есть ошибки';
+  }else if(viewportModelPhase==='no-viewer'){
+    tone='error';
+    const suffix=viewportModelProblems?` · ${viewportModelProblems} ${issueWord(viewportModelProblems)}`:'';
+    longText='Модель не обновлена'+suffix;shortText='Не обновлена';
+  }else if(viewportModelPhase==='network'){
+    tone='error';longText='Не удалось пересчитать · показана предыдущая модель';
+    shortText='Ошибка пересчёта';
+  }else if(viewportModelPhase==='draft'){
+    tone='neutral';longText='Черновик · модель ещё не построена';shortText='Черновик';
+  }
+  status.dataset.tone=tone;
+  $('viewportModelStateLong').textContent=longText;
+  $('viewportModelStateShort').textContent=shortText;
+  const panel=currentSelectedPart(),selection=$('viewportSelection');
+  selection.hidden=!panel;
+  $('viewportSelectionName').textContent=panel&&panel.name||'';
+  $('viewportSelectionName').title=panel&&panel.name||'';
+  const mode=currentWorkspaceMode();
+  $('viewportHint').textContent=mode==='draw'?'Клик по детали — выбрать':
+    mode==='nest'?'Раскрой текущей модели':panel?
+      'Shift + перетаскивание — переместить · Esc — снять выбор':
+      'Клик — выбрать · перетаскивание — вращать · колесо — масштаб';
+}
+function schedule(){
+  clearTimeout(timer);refreshUndoState();
+  if(typeof renderedWorkspaceMode!=='undefined'){
+    renderedWorkspaceMode=null;renderedWorkspaceSpecJson=null;syncWorkspacePrintState();
+  }
+  setViewportModelPhase('pending');timer=setTimeout(()=>apply().catch(()=>{}),400);
+}
 async function apply(){
-  if(SPEC&&SPEC.draft){showEmpty(true);return;}    // черновик не генерируем
-  const r=await fetch('/api/generate',{method:'POST',
-    headers:{'Content-Type':'application/json'},body:JSON.stringify({spec:SPEC})});
-  const p=await r.json(); paint(p);
-  if(drawOn) refreshDraw();
-  if(nestOn) refreshNest();
+  const requestId=++generateRequestSeq;
+  if(SPEC&&SPEC.draft){showEmpty(true);setViewportModelPhase('draft');return;} // черновик не генерируем
+  refreshUndoState();
+  const requestSpecJson=JSON.stringify(SPEC);
+  setViewportModelPhase('busy');
+  try{
+    const r=await fetch('/api/generate',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({spec:SPEC})});
+    const p=await r.json();
+    if(requestId!==generateRequestSeq||JSON.stringify(SPEC)!==requestSpecJson)
+      return Object.assign({},p,{ok:false,viewer:null,stale:true});
+    const restorePartName=(typeof SELECTED_PART!=='undefined'&&SELECTED_PART)
+      ?SELECTED_PART.name:null;
+    paint(p);
+    const problems=issueCount();
+    setViewportModelPhase(p.viewer?(p.ok?'ready':'warning'):'no-viewer',problems);
+    if(restorePartName&&p.viewer&&Array.isArray(p.viewer.panels)){
+      const restoreIndex=p.viewer.panels.findIndex(panel=>panel.name===restorePartName);
+      if(restoreIndex>=0)scene3d.select(restoreIndex);
+    }
+    refreshOperationTargets();
+    if(drawOn) refreshDraw();
+    if(nestOn) refreshNest();
+    return p;
+  }catch(error){
+    if(requestId===generateRequestSeq)setViewportModelPhase('network');
+    throw error;
+  }
 }
 function paint(p){
   lastPayload=p;
   const B=$('badges'); B.innerHTML='';
   const names={schema:'схема',consistency:'встык',geometry:'геометрия',cfrn:'.cfrn',
                holes:'присадки',drilling:'сверловка'};
-  let errs=[];
+  let errs=[], hasFixableProblems=false;
   for(const k of Object.keys(names)){
     const bad=(p.issues[k]||[]).length>0;
+    if(bad) hasFixableProblems=true;
     B.insertAdjacentHTML('beforeend',`<span class="badge ${bad?'bad':''}">${names[k]}</span>`);
     if(bad) errs.push(...p.issues[k].slice(0,4).map(x=>`[${names[k]}] ${x}`));
   }
   if(p.refs){                                    // подбор позиций базы (C4, информативно)
     const rs=Object.values(p.refs).filter(r=>r&&typeof r==='object');
     const ok=rs.filter(r=>r.resolved).length;
+    if(ok<rs.length) hasFixableProblems=true;
     if(rs.length) B.insertAdjacentHTML('beforeend',
-      `<span class="badge" style="background:${ok===rs.length?'var(--ok)':'#c78a2b'}"
+      `<span class="badge ${ok===rs.length?'':'warn'}"
         title="позиции производственной базы">база ${ok}/${rs.length}</span>`);
   }
   $('errors').textContent=errs.join('\n');
+  $('btnFixAll').hidden=!hasFixableProblems;
   lastOk=p.ok; $('btnB3d').disabled=!p.ok;
   if(p.viewer){rebuild(p.viewer);
     const C=p.viewer.colors||{};
@@ -1415,20 +2408,44 @@ function paint(p){
 }
 
 /* ---------- чертёж / раскрой ---------- */
-let drawOn=false, nestOn=false;
-function switchTab(mode){
+let drawOn=false,nestOn=false,workspaceViewRequestSeq=0,detailDrawingRequestSeq=0,
+    renderedWorkspaceMode=null,renderedWorkspaceSpecJson=null;
+function currentWorkspaceMode(){return drawOn?'draw':nestOn?'nest':'3d';}
+function syncWorkspacePrintState(){
+  const mode=currentWorkspaceMode();
+  const ready=(mode==='draw'||mode==='nest')&&renderedWorkspaceMode===mode&&
+    renderedWorkspaceSpecJson===JSON.stringify(SPEC)&&!!$('draw').querySelector('svg');
+  $('btnPrint').disabled=!ready;
+  $('btnPrint').title=mode==='3d'?'Доступно в чертеже и раскрое':
+    ready?'Распечатать текущий вид':'Печать станет доступна после построения';
+  syncViewportStatus();
+}
+function switchTab(mode,load=true){
+  workspaceViewRequestSeq++;                    // поздний ответ прошлого режима больше не рисует
   drawOn=(mode==='draw'); nestOn=(mode==='nest');
+  const is3d=mode==='3d';
+  renderedWorkspaceMode=null;renderedWorkspaceSpecJson=null;
   $('draw').style.display=(drawOn||nestOn)?'block':'none';
-  $('tab3d').classList.toggle('on',mode==='3d');
+  if(!is3d)$('draw').textContent=drawOn?'Строю чертёж изделия…':'Строю раскрой…';
+  $('tab3d').classList.toggle('on',is3d);
   $('tabDraw').classList.toggle('on',drawOn);
   $('tabNest').classList.toggle('on',nestOn);
-  if(drawOn) refreshDraw();
-  if(nestOn) refreshNest();
+  [['tab3d',is3d],['tabDraw',drawOn],['tabNest',nestOn]].forEach(([id,active])=>
+    $(id).setAttribute('aria-selected',String(active)));
+  $('views').hidden=!is3d;
+  $('hud').hidden=!is3d;
+  syncWorkspacePrintState();
+  $('viewportTopbar').classList.toggle('is-2d',!is3d);
+  if(load&&drawOn) refreshDraw();
+  if(load&&nestOn) refreshNest();
 }
 $('tab3d').onclick=()=>switchTab('3d');
 $('tabDraw').onclick=()=>switchTab('draw');
 $('tabNest').onclick=()=>switchTab('nest');
 $('btnPrint').onclick=()=>{
+  if($('btnPrint').disabled||renderedWorkspaceMode!==currentWorkspaceMode()){
+    toast('Сначала дождитесь текущего чертежа или раскроя',true);return;
+  }
   const svg=$('draw').querySelector('svg');
   if(!svg){toast('Откройте чертёж или раскрой',true);return;}
   const w=window.open('','print');
@@ -1437,15 +2454,30 @@ $('btnPrint').onclick=()=>{
   w.document.close();
 };
 async function refreshNest(){
+  const requestId=++workspaceViewRequestSeq;
+  const requestSpecJson=JSON.stringify(SPEC);
+  renderedWorkspaceMode=null;renderedWorkspaceSpecJson=null;syncWorkspacePrintState();
+  $('draw').textContent='Строю раскрой…';
   const r=await fetch('/api/nesting',{method:'POST',
     headers:{'Content-Type':'application/json'},body:JSON.stringify({spec:SPEC})});
   const p=await r.json();
+  if(requestId!==workspaceViewRequestSeq||!nestOn||JSON.stringify(SPEC)!==requestSpecJson)return;
   $('draw').innerHTML=p.svg||('<i>'+(p.error||'раскрой недоступен')+'</i>');
+  renderedWorkspaceMode=p.svg?'nest':null;renderedWorkspaceSpecJson=p.svg?requestSpecJson:null;
+  syncWorkspacePrintState();
 }
 async function refreshDraw(){
+  const requestId=++workspaceViewRequestSeq;
+  const requestSpecJson=JSON.stringify(SPEC);
+  renderedWorkspaceMode=null;renderedWorkspaceSpecJson=null;syncWorkspacePrintState();
+  $('draw').textContent='Строю чертёж изделия…';
   const r=await fetch('/api/techview',{method:'POST',
     headers:{'Content-Type':'application/json'},body:JSON.stringify({spec:SPEC})});
-  const p=await r.json(); $('draw').innerHTML=p.svg||('<i>'+(p.issues||[]).join('; ')+'</i>');
+  const p=await r.json();
+  if(requestId!==workspaceViewRequestSeq||!drawOn||JSON.stringify(SPEC)!==requestSpecJson)return;
+  $('draw').innerHTML=p.svg||('<i>'+(p.issues||[]).join('; ')+'</i>');
+  renderedWorkspaceMode=p.svg?'draw':null;renderedWorkspaceSpecJson=p.svg?requestSpecJson:null;
+  syncWorkspacePrintState();
   const pi=scene3d.getSelected&&scene3d.getSelected();     // восстановить подсветку
   if(pi!==null&&pi!==undefined&&lastPayload){
     const nm=(lastPayload.viewer.panels[pi]||{}).name;
@@ -1455,108 +2487,266 @@ async function refreshDraw(){
 }
 
 /* ---------- выбор детали кликом (AKD-120) ---------- */
-let lastPayload=null;
-scene3d.onSelect=sel=>{
-  const fs=$('fs_part'), card=$('partCard');
-  document.querySelectorAll('#draw rect.sel').forEach(r=>r.classList.remove('sel'));
-  if(typeof SELECTED_PART!=='undefined'){        // контекст чата (AKD-208)
-    SELECTED_PART = sel ? sel.panel : null;
-    const cm=$('chatMsg'); if(cm) cm.placeholder = sel
-      ? `правка изделия — или напишите про «${sel.panel.name}» в карточке детали`
-      : 'напр.: сделай глубину 600, цвет дуб вотан';
+let lastPayload=null, SELECTED_PART=null, partEditBusy=false, partEditMessage='',
+    partEditMessageTone='',partEditMessageFor=null;
+const PART_TYPE_LABELS={back:'Задняя стенка',bottom:'Дно',door_front:'Дверной фасад',
+  drawer_back:'Задняя стенка ящика',drawer_bottom:'Дно ящика',drawer_front:'Фасад ящика',
+  drawer_side_left:'Левая боковина ящика',drawer_side_right:'Правая боковина ящика',
+  plinth:'Цоколь',screen:'Экран',shelf:'Полка',side_left:'Левая боковина',
+  side_right:'Правая боковина',top:'Крышка',vertical_partition:'Перегородка'};
+const PART_EDGE_LABELS={top:'верх',bottom:'низ',left:'слева',right:'справа'};
+const PART_COORD_KEYS=['x1','x2','y1','y2','z1','z2'];
+function formatPartNumber(value){
+  const n=Number(value); if(!Number.isFinite(n))return '—';
+  return Number.isInteger(n)?String(n):String(Math.round(n*10)/10).replace('.',',');
+}
+function currentSelectedPart(){
+  if(!SELECTED_PART||!lastPayload||!lastPayload.viewer)return null;
+  return (lastPayload.viewer.panels||[]).find(panel=>panel.name===SELECTED_PART.name)||null;
+}
+function selectedPartOverrides(name){
+  const list=(SPEC.overrides||[]).filter(item=>item.panel===name);
+  return {list,added:list.some(item=>item.action==='add'),
+    transform:list.find(item=>(item.action||'transform')==='transform')||null};
+}
+function selectedPartHoles(name){
+  return ((lastPayload&&lastPayload.viewer&&lastPayload.viewer.holes)||[])
+    .filter(hole=>hole.panel===name);
+}
+function parsePanelEdges(value){
+  const raw=String(value||'').trim(); if(!raw||raw==='—')return [];
+  return raw.split(',').map(item=>{
+    const [side,thickness]=item.trim().split(':');
+    return {side:side||'',thickness:Number(thickness)};
+  }).filter(item=>item.side&&Number.isFinite(item.thickness));
+}
+function edgeWord(count){
+  const n=count%100,d=count%10;
+  return n>=11&&n<=14?'торцов':d===1?'торец':d>=2&&d<=4?'торца':'торцов';
+}
+function panelEdgeSummary(edges){
+  if(!edges.length)return 'Нет';
+  const values=[...new Set(edges.map(item=>formatPartNumber(item.thickness)))];
+  return `${values.join(' / ')} мм · ${edges.length} ${edgeWord(edges.length)}`;
+}
+function holeTypeWord(count){
+  const n=count%100,d=count%10;
+  return n>=11&&n<=14?'типов':d===1?'тип':d>=2&&d<=4?'типа':'типов';
+}
+function partHoleData(name){
+  const holes=selectedPartHoles(name),counts=new Map();
+  holes.forEach(hole=>counts.set(hole.purpose||'без назначения',
+    (counts.get(hole.purpose||'без назначения')||0)+1));
+  const groups=[...counts.entries()].sort((a,b)=>b[1]-a[1]);
+  return {holes,groups,summary:holes.length?`${holes.length} · ${groups.length} ${holeTypeWord(groups.length)}`:'Нет'};
+}
+function readPartDraft(){
+  const values={};
+  PART_COORD_KEYS.forEach(key=>{
+    const input=$('partCard').querySelector(`input[data-ov="${key}"]`);
+    values[key]=input&&input.value.trim()!==''?Number(input.value):NaN;
+  });
+  const panel=currentSelectedPart();
+  const valid=PART_COORD_KEYS.every(key=>Number.isFinite(values[key]))&&
+    values.x1<values.x2&&values.y1<values.y2&&values.z1<values.z2;
+  const dirty=!!panel&&PART_COORD_KEYS.some(key=>values[key]!==Number(panel[key]));
+  return {values,valid,dirty,panel};
+}
+function syncPartEditState(){
+  const draft=readPartDraft(),locked=partEditBusy||chatBusy;
+  for(const axis of ['x','y','z']){
+    const from=draft.values[axis+'1'],to=draft.values[axis+'2'];
+    const delta=$('partCard').querySelector(`[data-delta="${axis}"]`);
+    delta.textContent=Number.isFinite(from)&&Number.isFinite(to)?`Δ${formatPartNumber(to-from)}`:'Δ—';
   }
-  if(!sel){fs.style.display='none';card.innerHTML='';return;}
-  const p=sel.panel;
-  const dx=p.x2-p.x1, dy=p.y2-p.y1, dz=p.z2-p.z1;
-  const nHoles=((lastPayload&&lastPayload.viewer&&lastPayload.viewer.holes)||[])
-    .filter(h=>h.panel===p.name).length;
-  const hasOv=(SPEC.overrides||[]).some(o=>o.panel===p.name);
-  const num=(id,v)=>`<input type="number" data-ov="${id}" value="${v}" step="1"
-    style="width:74px;padding:2px 4px;border:1px solid var(--line);border-radius:4px">`;
-  card.innerHTML=`<b>${p.name}</b>${hasOv?' <span class="mini" style="color:#c78a2b">✎ правлено</span>':''}
-    <div class="kv">
-      <span>Тип</span><span>${p.type||'—'}</span>
-      <span>Габарит</span><span>${dx}×${dy}×${dz} мм</span>
-      <span>Толщина</span><span>${p.thickness??'—'} мм</span>
-      <span>Материал</span><span>${p.material||'—'}</span>
-      <span>Присадки</span><span>${nHoles}</span>
-    </div>
-    <div class="kv" style="margin-top:6px">
-      <span>X</span><span>${num('x1',p.x1)} … ${num('x2',p.x2)}</span>
-      <span>Y</span><span>${num('y1',p.y1)} … ${num('y2',p.y2)}</span>
-      <span>Z</span><span>${num('z1',p.z1)} … ${num('z2',p.z2)}</span>
-    </div>
-    <div class="row" style="gap:4px;margin-top:6px">
-      <button id="ovApply" class="primary">Применить</button>
-      ${hasOv?'<button id="ovReset" title="убрать правки этой детали">Сбросить</button>':''}
-      <button id="ovDelete" title="удалить деталь из изделия">Удалить</button>
-      <button id="ovDetail" title="чертёж этой детали с размерами и присадками">Чертёж</button>
-    </div>
-    <div class="mini" style="margin-top:4px">Shift+перетаскивание в 3D — двигать деталь.
-    Правки хранятся в спеке и переживают смену габаритов; чертёж, присадки,
-    смета и .b3d пересчитываются.</div>
-    <div id="partChatRow">
-      <input type="text" id="partChat" placeholder="изменить эту деталь словами: «сделай глубже на 50», «удали»">
-      <button id="partChatSend" title="применить к этой детали">➤</button>
-    </div>`;
-  fs.style.display='';
-  const pc=$('partChat'), pcSend=()=>{const v=pc.value.trim(); if(!v)return; pc.value=''; runChat(v);};
-  $('partChatSend').onclick=pcSend;
-  pc.addEventListener('keydown',e=>{if(e.key==='Enter')pcSend();});
-  $('ovApply').onclick=()=>{
-    const pl={};
-    card.querySelectorAll('input[data-ov]').forEach(i=>{
-      const v=Number(i.value);
-      if(isFinite(v)&&v!==p[i.dataset.ov]) pl[i.dataset.ov]=v;
-    });
-    if(Object.keys(pl).length) setOverride(p.name, pl);
-  };
-  const rb=$('ovReset'); if(rb) rb.onclick=()=>clearOverride(p.name);
-  $('ovDetail').onclick=async()=>{
-    switchTab('draw');
-    const r=await fetch('/api/techview',{method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({spec:SPEC,panel:p.name})});
-    const d=await r.json();
-    $('draw').innerHTML=(d.svg||'')+'<div style="margin:8px"><button onclick="refreshDraw()">← общий чертёж</button></div>';
-  };
-  $('ovDelete').onclick=()=>{
-    if(!confirm(`Удалить деталь «${p.name}»?`)) return;
-    pushUndo();
-    SPEC.overrides=(SPEC.overrides||[]).filter(o=>o.panel!==p.name);
-    SPEC.overrides.push({panel:p.name, action:'delete'});
-    $('rawspec').value=JSON.stringify(SPEC,null,2);
-    scene3d.select(null); apply();
-  };
-  document.querySelectorAll(`#draw rect[data-panel="${CSS.escape(p.name)}"]`)
-    .forEach(r=>r.classList.add('sel'));
-};
-function setOverride(name, placement, move){
+  $('partCard').querySelectorAll('input[data-ov]').forEach(input=>input.disabled=locked);
+  $('ovApply').disabled=locked||!draft.dirty||!draft.valid;
+  $('partEditCancel').disabled=locked||!draft.dirty;
+  [$('ovReset'),$('ovDelete'),$('ovDetail'),$('partCommandFocus')]
+    .forEach(button=>{if(button)button.disabled=locked;});
+  $('fs_part').setAttribute('aria-busy',String(partEditBusy));
+  const status=$('partEditStatus'); status.className='';
+  if(partEditBusy){status.textContent='Пересчитываю деталь и проверки…';}
+  else if(partEditMessage&&draft.panel&&partEditMessageFor===draft.panel.name){status.textContent=partEditMessage;
+    if(partEditMessageTone)status.classList.add('is-'+partEditMessageTone);}
+  else if(draft.dirty&&!draft.valid){status.textContent='Проверьте границы: начало оси должно быть меньше конца.';
+    status.classList.add('is-error');}
+  else if(draft.dirty){status.textContent='Есть неприменённые значения.';status.classList.add('is-dirty');}
+  else status.textContent='';
+  return draft;
+}
+function fillPartCoordinateInputs(panel){
+  PART_COORD_KEYS.forEach(key=>{
+    const input=$('partCard').querySelector(`input[data-ov="${key}"]`);
+    input.value=panel[key]??'';
+  });
+}
+function renderSelectedPart(panel){
+  const fs=$('fs_part'),override=selectedPartOverrides(panel.name),
+    edges=parsePanelEdges(panel.edges),holes=partHoleData(panel.name);
+  const dx=Number(panel.x2)-Number(panel.x1),dy=Number(panel.y2)-Number(panel.y1),
+    dz=Number(panel.z2)-Number(panel.z1);
+  $('partName').textContent=panel.name||'Без названия';$('partName').title=panel.name||'';
+  $('partKind').textContent=PART_TYPE_LABELS[panel.type]||panel.type||'Деталь';
+  $('partKind').title=panel.type||'';
+  $('partOrigin').textContent=override.added?'Добавлена вручную':
+    override.transform?'Локальная правка':'От генератора';
+  fs.classList.toggle('has-override',!!(override.added||override.transform));
+  $('partDimensions').textContent=`${formatPartNumber(dx)} × ${formatPartNumber(dy)} × ${formatPartNumber(dz)} мм`;
+  $('partMaterial').textContent=`${panel.material||'Не указан'}${panel.thickness!=null?` · ${formatPartNumber(panel.thickness)} мм`:''}`;
+  $('partEdges').textContent=panelEdgeSummary(edges);
+  $('partHoles').textContent=holes.summary;
+  $('partEdgesRaw').textContent=edges.length?'Кромка: '+edges.map(item=>
+    `${PART_EDGE_LABELS[item.side]||item.side} ${formatPartNumber(item.thickness)} мм`).join(' · '):'Кромка: нет';
+  $('partHolesRaw').textContent=holes.groups.length?'Присадки: '+holes.groups.map(([purpose,count])=>
+    `${purpose} ×${count}`).join(' · '):'Присадки: нет';
+  $('ovReset').hidden=!override.transform;
+  $('ovDetail').textContent='Чертёж';
+  fillPartCoordinateInputs(panel); partEditMessage='';partEditMessageTone='';partEditMessageFor=null;
+  fs.style.display=''; syncPartEditState();
+}
+function focusPartCommand(){
+  $('chatMsg').focus();$('chatMsg').scrollIntoView({block:'nearest'});
+}
+async function openSelectedPartDrawing(){
+  const panel=currentSelectedPart(); if(!panel||partEditBusy||chatBusy)return;
+  const name=panel.name,button=$('ovDetail');
+  switchTab('draw',false);
+  const requestId=++workspaceViewRequestSeq,detailRequestId=++detailDrawingRequestSeq,
+    requestSpecJson=JSON.stringify(SPEC);
+  button.disabled=true;button.textContent='Открываю…';
+  $('draw').textContent=`Строю чертёж детали «${name}»…`;
+  try{
+    const r=await fetch('/api/techview',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({spec:SPEC,panel:name})});
+    const data=await r.json();
+    const current=currentSelectedPart();
+    if(requestId!==workspaceViewRequestSeq||detailRequestId!==detailDrawingRequestSeq||
+       !drawOn||!current||current.name!==name||JSON.stringify(SPEC)!==requestSpecJson)return;
+    if(!r.ok||!data.svg)throw new Error((data.issues||[]).join('; ')||data.error||'чертёж недоступен');
+    $('draw').innerHTML=data.svg;
+    renderedWorkspaceMode='draw';renderedWorkspaceSpecJson=requestSpecJson;syncWorkspacePrintState();
+    const back=document.createElement('div');back.style.margin='8px';
+    const backButton=document.createElement('button');backButton.type='button';
+    backButton.textContent='← Общий чертёж';backButton.onclick=refreshDraw;back.appendChild(backButton);
+    $('draw').appendChild(back);
+  }catch(error){
+    if(requestId===workspaceViewRequestSeq&&detailRequestId===detailDrawingRequestSeq){
+      toast('Чертёж детали: '+error.message,true);refreshDraw();}
+  }finally{
+    button.textContent='Чертёж';
+    if(currentSelectedPart())syncPartEditState();
+  }
+}
+async function commitPartMutation(name,mutate,successText){
+  if(modelMutationLocked())return false;
+  clearTimeout(timer);timer=null;
+  const beforeSpec=JSON.stringify(SPEC),undoBefore=UNDO.slice();
+  partEditBusy=true;partEditMessage='';partEditMessageTone='';partEditMessageFor=name;
+  syncModelEditLock();syncPartEditState();
   pushUndo();
-  SPEC.overrides=SPEC.overrides||[];
-  let ov=SPEC.overrides.find(o=>o.panel===name&&(o.action||'transform')==='transform');
-  if(!ov){ov={panel:name}; SPEC.overrides.push(ov);}
-  if(placement) ov.placement=Object.assign(ov.placement||{}, placement);
-  if(move){
-    // сдвиг фиксируем абсолютными гранями (складывается с прошлыми правками)
-    const p=(lastPayload.viewer.panels||[]).find(q=>q.name===name);
-    if(p){ov.placement=Object.assign(ov.placement||{},{
-      x1:p.x1+move[0],x2:p.x2+move[0],y1:p.y1+move[1],y2:p.y2+move[1],
-      z1:p.z1+move[2],z2:p.z2+move[2]});}
+  try{
+    mutate();$('rawspec').value=JSON.stringify(SPEC,null,2);
+    const generated=await apply();
+    if(!generated||generated.stale||!generated.viewer)throw new Error('модель не пересчитана');
+    partEditMessage=successText||'Изменение применено.';partEditMessageTone='success';
+    partEditMessageFor=name;
+    if(successText)toast(successText);
+    return true;
+  }catch(error){
+    SPEC=JSON.parse(beforeSpec);UNDO.splice(0,UNDO.length,...undoBefore);refreshUndoState();fillForm();
+    try{await apply();}catch(_restoreError){}
+    partEditMessage='Не удалось применить. Исходная модель сохранена.';
+    partEditMessageTone='error';partEditMessageFor=name;
+    toast('Правка детали: '+error.message,true);return false;
+  }finally{
+    partEditBusy=false;syncModelEditLock();if(currentSelectedPart())syncPartEditState();
   }
-  $('rawspec').value=JSON.stringify(SPEC,null,2);
-  apply();
+}
+function setOverride(name,placement,move){
+  return commitPartMutation(name,()=>{
+    SPEC.overrides=SPEC.overrides||[];
+    let override=SPEC.overrides.find(item=>item.panel===name&&
+      (item.action||'transform')==='transform');
+    if(!override){override={panel:name};SPEC.overrides.push(override);}
+    if(placement)override.placement=Object.assign(override.placement||{},placement);
+    if(move){
+      const panel=((lastPayload&&lastPayload.viewer&&lastPayload.viewer.panels)||[])
+        .find(item=>item.name===name);
+      if(panel)override.placement=Object.assign(override.placement||{},
+        {x1:panel.x1+move[0],x2:panel.x2+move[0],y1:panel.y1+move[1],
+         y2:panel.y2+move[1],z1:panel.z1+move[2],z2:panel.z2+move[2]});
+    }
+  },move?'Положение детали изменено.':'Точные параметры применены.');
 }
 function clearOverride(name){
-  pushUndo();
-  SPEC.overrides=(SPEC.overrides||[]).filter(o=>o.panel!==name);
-  if(!SPEC.overrides.length) delete SPEC.overrides;
-  $('rawspec').value=JSON.stringify(SPEC,null,2);
-  scene3d.select(null); apply();
+  return commitPartMutation(name,()=>{
+    SPEC.overrides=(SPEC.overrides||[]).filter(item=>!(item.panel===name&&
+      (item.action||'transform')==='transform'));
+    if(!SPEC.overrides.length)delete SPEC.overrides;
+  },'Локальная правка сброшена.');
 }
-scene3d.onTransform=(name,delta)=>setOverride(name,null,delta);
+function deleteSelectedPart(name){
+  const wasAdded=selectedPartOverrides(name).added;
+  return commitPartMutation(name,()=>{
+    SPEC.overrides=(SPEC.overrides||[]).filter(item=>item.panel!==name);
+    if(!wasAdded)SPEC.overrides.push({panel:name,action:'delete'});
+    if(!SPEC.overrides.length)delete SPEC.overrides;
+  },'Деталь удалена.');
+}
+$('partClearSelection').onclick=()=>scene3d.select(null);
+$('partCommandFocus').onclick=focusPartCommand;
+$('partChatSend').onclick=focusPartCommand;
+$('partEditCancel').onclick=()=>{
+  const panel=currentSelectedPart();if(!panel)return;
+  fillPartCoordinateInputs(panel);partEditMessage='';partEditMessageTone='';partEditMessageFor=null;
+  syncPartEditState();
+};
+$('partCard').querySelectorAll('input[data-ov]').forEach(input=>input.addEventListener('input',()=>{
+  partEditMessage='';partEditMessageTone='';partEditMessageFor=null;syncPartEditState();
+}));
+$('ovApply').onclick=()=>{
+  const draft=syncPartEditState();if(!draft.panel||!draft.valid||!draft.dirty)return;
+  setOverride(draft.panel.name,draft.values);
+};
+$('ovReset').onclick=()=>{const panel=currentSelectedPart();if(panel)clearOverride(panel.name);};
+$('ovDetail').onclick=openSelectedPartDrawing;
+$('ovDelete').onclick=()=>{
+  const panel=currentSelectedPart();if(!panel)return;
+  if(!confirm(`Деталь «${panel.name}» будет исключена из модели. Присадки, смета и чертежи пересчитаются. Удалить?`))return;
+  deleteSelectedPart(panel.name);
+};
+scene3d.onSelect=sel=>{
+  const fs=$('fs_part');
+  document.querySelectorAll('#draw rect.sel').forEach(rect=>rect.classList.remove('sel'));
+  const previousName=SELECTED_PART&&SELECTED_PART.name,nextName=sel&&sel.panel&&sel.panel.name;
+  const discarded=!!(previousName&&previousName!==nextName&&!modelMutationLocked()&&readPartDraft().dirty);
+  if(previousName!==nextName)detailDrawingRequestSeq++;
+  SELECTED_PART=sel?sel.panel:null;
+  const cm=$('chatMsg'),cc=$('chatContext'),cl=$('chatContextLabel');
+  if(cm)cm.placeholder=sel?`Опишите, что изменить в детали «${sel.panel.name}»`:
+    'Опишите, что нужно изменить в изделии';
+  if(cc)cc.classList.toggle('selected',!!sel);
+  if(cl)cl.textContent=sel?`Выбранная деталь · ${sel.panel.name}`:'Всё изделие';
+  if(discarded)toast('Неприменённые точные значения отменены');
+  syncViewportStatus();
+  if(!sel){fs.style.display='none';partEditMessage='';partEditMessageTone='';partEditMessageFor=null;return;}
+  renderSelectedPart(sel.panel);
+  document.querySelectorAll(`#draw rect[data-panel="${CSS.escape(sel.panel.name)}"]`)
+    .forEach(rect=>rect.classList.add('sel'));
+};
+scene3d.onTransform=(name,delta)=>{
+  if(modelMutationLocked()){toast('Дождитесь завершения текущего пересчёта',true);return;}
+  setOverride(name,null,delta);
+};
 document.addEventListener('keydown',e=>{
-  if(e.key==='Escape') scene3d.select(null);
+  if(e.key!=='Escape')return;
+  const exact=$('partExact'),draft=currentSelectedPart()?readPartDraft():null;
+  if(exact&&exact.open&&draft&&draft.dirty){
+    fillPartCoordinateInputs(draft.panel);partEditMessage='';partEditMessageTone='';partEditMessageFor=null;
+    exact.open=false;syncPartEditState();return;
+  }
+  scene3d.select(null);
 });
 document.addEventListener('click',e=>{           // клик по детали на чертеже
   const r=e.target.closest&&e.target.closest('#draw rect[data-panel]');
@@ -1580,8 +2770,12 @@ function adoptSpec(p){
   SPEC=p.spec; UNDO.length=0; $('btnUndo').disabled=true;
   // другой объект — другой разговор: история чата, лог и вложения не должны
   // утекать между изделиями (иначе ИИ «помнит» чужие правки)
-  CHAT_HISTORY.length=0; $('chatlog').innerHTML='';
+  CHAT_HISTORY.length=0; chatWorkspaceGeneration++; resetOperationLog();
   PENDING_IMGS.length=0; renderImgs(); SELECTED_PART=null;
+  $('chatContext').classList.remove('selected');
+  $('chatContextLabel').textContent='Всё изделие';
+  $('chatMsg').placeholder='Опишите, что нужно изменить в изделии';
+  setChatState('',false,'');
   const dr=!!(SPEC&&SPEC.draft);                   // черновик — пустой экран без модели
   showEmpty(dr);
   scene3d.select(null); fillForm();
@@ -1593,6 +2787,7 @@ function adoptSpec(p){
 let EMPTY=false;
 function showEmpty(on){
   EMPTY=on; $('emptyState').classList.toggle('on',on);
+  setViewportModelPhase(on?'draft':'loading');
   if(on){                                          // чистый экран: 3D, бейджи, статистика
     if(scene3d.setPayload) scene3d.setPayload({panels:[]});
     ['badges','stats','errors'].forEach(id=>{const e=$(id); if(e) e.innerHTML='';});
@@ -1602,7 +2797,7 @@ function showEmpty(on){
 // распознавание фото ТЗ через FileReader — надёжно на больших файлах (AKD-214)
 let TZ_BUSY=false;
 function importTzFile(f){
-  if(!f||TZ_BUSY) return;
+  if(!f||TZ_BUSY||modelMutationLocked()) return;
   if(!/\.(png|jpe?g|webp|gif)$/i.test(f.name)){toast('Нужно изображение ТЗ (png/jpg/webp)',true);return;}
   TZ_BUSY=true;
   const btn=$('esUpload'), btnTxt=btn.textContent;
@@ -1641,18 +2836,18 @@ $('projNew').onclick=async()=>{   // черновик: запись в ката�
   const r=await fetch('/api/new',{method:'POST',
     headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
   const p=await r.json();
-  if(p.ok){adoptSpec(p); toast('Создано «'+(name||'Новое изделие')+'» — загрузите ТЗ или опишите в чате');}
+  if(p.ok){adoptSpec(p); toast('Создано «'+(name||'Новое изделие')+'» — загрузите ТЗ или опишите в командной строке');}
   else toast('Ошибка: '+(p.error||''),true);
 };
 $('projRen').onclick=async()=>{   // переименовать текущее изделие
   const name=prompt('Название изделия:',SPEC&&SPEC.project_name||'');
   if(!name) return;
-  SPEC.project_name=name;
+  const previousName=SPEC.project_name;SPEC.project_name=name;
   const r=await fetch('/api/save',{method:'POST',
     headers:{'Content-Type':'application/json'},body:JSON.stringify({spec:SPEC})});
   const p=await r.json();
-  if(p.ok){loadProjects(); toast('Переименовано: '+name);}
-  else toast('Ошибка: '+(p.error||''),true);
+  if(p.ok){fillForm();loadProjects();schedule();toast('Переименовано: '+name);}
+  else{SPEC.project_name=previousName;toast('Ошибка: '+(p.error||''),true);}
 };
 /* ---------- каталог изделий (AKD-217) ---------- */
 // аксонометрия не собралась (битая спека) → PNG-снапшот, если был, иначе заглушка
@@ -1794,11 +2989,14 @@ async function loadDecors(){
   const p=await r.json();
   box.innerHTML='';
   (p.items||[]).forEach(it=>{
-    const d=document.createElement('div'); d.className='ditem';
-    d.innerHTML=`<span class="sw" style="background:${it.hex}"></span>
+    const d=document.createElement('div'); d.className='ditem';d.setAttribute('role','listitem');
+    d.innerHTML=`<button type="button" class="decor-body"
+        aria-label="Применить ${it.label} к корпусу">
+      <span class="sw" style="background:${it.hex}" aria-hidden="true"></span>
       <span class="nm" title="${it.name} (арт. ${it.article})">${it.label}</span>
-      <span class="mini">${it.thickness??''}</span>
-      <button class="fb" title="применить к фасадам">Ф</button>`;
+      <span class="mini">${it.thickness??''}</span></button>
+      <button type="button" class="fb" title="Применить к фасадам"
+        aria-label="Применить ${it.label} к фасадам">Ф</button>`;
     d.onclick=e=>{
       pushUndo();
       if(e.target.classList.contains('fb')){          // фасады
@@ -1822,34 +3020,396 @@ async function loadDecors(){
 }
 
 /* ---------- чат с ИИ + undo (AKD-107/108/110) ---------- */
-const UNDO=[], CHAT_HISTORY=[];
-function pushUndo(){UNDO.push(JSON.stringify(SPEC));
-  if(UNDO.length>30)UNDO.shift(); $('btnUndo').disabled=false;}
-$('btnUndo').onclick=()=>{
-  if(!UNDO.length)return;
-  SPEC=JSON.parse(UNDO.pop()); $('btnUndo').disabled=!UNDO.length;
-  fillForm(); apply(); addMsg('ai','Откатил последнюю правку.');};
-function addMsg(who,text,changes){
-  const d=document.createElement('div'); d.className='cmsg '+who;
-  d.textContent=text;
-  if(changes&&changes.length){
-    const df=document.createElement('span'); df.className='diff';
-    df.textContent=changes.join('\n'); d.appendChild(df);
+const UNDO=[], CHAT_HISTORY=[], OPERATIONS=new Map();
+const OPERATION_LIMIT=30;
+let chatBusy=false, operationSeq=0, chatWorkspaceGeneration=0;
+let chatQuickUndoDepth=null, chatQuickUndoOperationId=null;
+let chatQuickUndoBeforeSpecJson=null, chatQuickUndoAfterSpecJson=null;
+function presentChatReply(text){
+  const raw=String(text||'');
+  const m=raw.match(/^Применил:\s*([a-z_]+)\s*=\s*(.+)$/i);
+  if(!m)return raw;
+  const labels={width:'Ширина изделия',depth:'Глубина изделия',height:'Высота изделия',
+    color:'Материал корпуса',facade_color:'Материал фасадов',
+    board_thickness:'Толщина плиты',legs:'Высота опор',gap:'Зазор'};
+  const label=labels[m[1]];
+  if(!label)return raw;
+  const mm=['width','depth','height','board_thickness','legs','gap'].includes(m[1])?' мм':'';
+  return `${label}: ${m[2]}${mm}`;
+}
+function operationReplyPreview(text){
+  const value=presentChatReply(text).replace(/\s+/g,' ').trim();
+  return value.length>220?value.slice(0,217).trimEnd()+'…':value;
+}
+function presentChatChange(change){
+  let value=String(change||'');
+  const paths={
+    'dimensions.width':'Ширина','dimensions.depth':'Глубина','dimensions.height':'Высота',
+    'materials.color':'Материал корпуса','materials.facade_color':'Материал фасадов',
+    'materials.color_code':'Код материала','materials.board_thickness':'Толщина плиты',
+    'legs.height':'Высота опор','gaps.default':'Зазор','apron_height':'Высота царги',
+    'frame':'Каркас','archetype':'Тип изделия'
+  };
+  for(const [path,label] of Object.entries(paths))
+    if(value.startsWith(path+':')) value=label+value.slice(path.length);
+  const sectionFields={kind:'Тип',width:'Ширина',ratio:'Доля',drawers:'Ящики',
+    shelves:'Полки',door:'Дверь'};
+  value=value.replace(/^sections\.(\d+)\.([^:]+):/,(_,i,key)=>
+    `Секция ${Number(i)+1} · ${sectionFields[key]||key}:`);
+  if(/^(Ширина|Глубина|Высота|Толщина плиты|Высота опор|Зазор):/.test(value)
+     && !value.endsWith(' мм')) value+=' мм';
+  return value;
+}
+function operationChangeUnit(rawPath){
+  return /^(dimensions\.(width|depth|height)|materials\.board_thickness|legs\.height|gaps\.default|apron_height|sections\.\d+\.(width|drawer_heights|shelf_levels)|overrides\.\d+\.placement\.(x1|x2|y1|y2|z1|z2))$/.test(rawPath)
+    ?' мм':'';
+}
+function changeCountCaption(count){
+  const mod100=count%100, mod10=count%10;
+  const word=(mod100>=11&&mod100<=14)?'изменений'
+    :mod10===1?'изменение':(mod10>=2&&mod10<=4)?'изменения':'изменений';
+  return `${count} ${word}`;
+}
+function issueWord(count){
+  const mod100=count%100,mod10=count%10;
+  return (mod100>=11&&mod100<=14)?'вопросов'
+    :mod10===1?'вопрос':(mod10>=2&&mod10<=4)?'вопроса':'вопросов';
+}
+function passWord(count){
+  const mod100=count%100,mod10=count%10;
+  return (mod100>=11&&mod100<=14)?'проходов'
+    :mod10===1?'проход':(mod10>=2&&mod10<=4)?'прохода':'проходов';
+}
+function operationNode(tag,className,text){
+  const node=document.createElement(tag);
+  if(className) node.className=className;
+  if(text!==undefined&&text!==null) node.textContent=String(text);
+  return node;
+}
+function operationContextSnapshot(forceModel=false){
+  if(!forceModel&&SELECTED_PART) return {scope:'part',label:`Деталь · ${SELECTED_PART.name}`,
+    partName:SELECTED_PART.name,partType:SELECTED_PART.type||'',
+    placement:{x1:SELECTED_PART.x1,x2:SELECTED_PART.x2,y1:SELECTED_PART.y1,
+      y2:SELECTED_PART.y2,z1:SELECTED_PART.z1,z2:SELECTED_PART.z2}};
+  return {scope:'model',label:'Всё изделие',partName:null};
+}
+function trimOperationCommand(text,attachmentCount){
+  const value=String(text||'').trim();
+  if(value)return value;
+  return attachmentCount===1?'Техническое задание из вложения':
+    `Техническое задание · ${attachmentCount} вложения`;
+}
+function setOperationStatus(operation,state,label){
+  operation.state=state;
+  operation.el.classList.remove('is-pending','is-applied','is-warning','is-answer','is-error','is-undone');
+  operation.el.classList.add('is-'+state);
+  operation.status.textContent=label;
+}
+function createOperation(command,{images=[],forceModel=false,kind='command'}={}){
+  const id=`operation-${++operationSeq}`, context=operationContextSnapshot(forceModel);
+  const attachmentMeta=(images||[]).map(im=>({name:im.name||'',mime:im.mime||''}));
+  const el=operationNode('article','operation-record is-pending'); el.id=id;
+  el.setAttribute('aria-labelledby',id+'-title');
+  const head=operationNode('div','operation-head');
+  const status=operationNode('span','operation-state','В работе');
+  const time=operationNode('time','operation-time',new Date().toLocaleTimeString('ru-RU',
+    {hour:'2-digit',minute:'2-digit'})); time.dateTime=new Date().toISOString();
+  head.append(status,time);
+  const title=operationNode('p','operation-command',trimOperationCommand(command,attachmentMeta.length));
+  title.id=id+'-title';
+  const contextLine=operationNode('div','operation-context',`Контекст: ${context.label}`+
+    (attachmentMeta.length?` · ТЗ: ${attachmentMeta.length}`:''));
+  const summary=operationNode('div','operation-summary','Разбираю команду и контекст…');
+  const changes=operationNode('div','operation-changes'); changes.hidden=true;
+  const more=operationNode('div','operation-more'); more.hidden=true;
+  const check=operationNode('div','operation-check'); check.hidden=true;
+  const actions=operationNode('div','operation-actions'); actions.hidden=true;
+  const show=operationNode('button','operation-show','Показать'); show.type='button';
+  show.hidden=true; show.title='Показать контекст команды в модели';
+  const details=operationNode('button','operation-details','Подробнее'); details.type='button';
+  details.hidden=true; details.setAttribute('aria-expanded','false');
+  const undo=operationNode('button','operation-undo','Отменить'); undo.type='button'; undo.hidden=true;
+  undo.title='Отменить эту операцию';
+  actions.append(show,details,undo);
+  const technical=operationNode('div','operation-technical'); technical.hidden=true;
+  el.append(head,title,contextLine,summary,changes,more,check,actions,technical);
+  const operation={id,kind,el,status,summary,changes,more,check,actions,show,details,undo,technical,
+    context,attachments:attachmentMeta,provider:$('aiProvider').selectedOptions[0]?.textContent||CHAT_PROVIDER||'—',
+    startedAt:time.dateTime,command:title.textContent,beforeSpecJson:JSON.stringify(SPEC),
+    beforeIssueCount:issueCount(),undoDepthBefore:UNDO.length,state:'pending',rawChanges:[]};
+  show.onclick=()=>showOperationTarget(operation.id);
+  details.onclick=()=>{
+    technical.hidden=!technical.hidden;
+    details.setAttribute('aria-expanded',String(!technical.hidden));
+    details.textContent=technical.hidden?'Подробнее':'Скрыть';
+  };
+  undo.onclick=()=>undoOperation(operation.id);
+  OPERATIONS.set(id,operation); $('operationLog').hidden=false; $('chatlog').appendChild(el);
+  while($('chatlog').children.length>OPERATION_LIMIT){
+    const old=$('chatlog').firstElementChild; OPERATIONS.delete(old.id); old.remove();
   }
-  $('chatlog').appendChild(d); $('chatlog').scrollTop=1e9; return d;}
-let chatBusy=false, SELECTED_PART=null;
+  requestAnimationFrame(()=>el.scrollIntoView({block:'nearest'}));
+  return operation;
+}
+function updateOperationProgress(operation,text){
+  if(!operation)return;
+  setOperationStatus(operation,'pending','В работе');
+  operation.summary.hidden=false; operation.summary.textContent=text;
+}
+function cleanOperationValue(value){
+  let text=String(value||'').trim();
+  if((text.startsWith("'")&&text.endsWith("'"))||(text.startsWith('"')&&text.endsWith('"')))
+    text=text.slice(1,-1);
+  return text.replace(/^\(нет\)$/,'—').replace(/^\(удалено\)$/,'Удалено')
+    .replace(/^True$/,'Да').replace(/^False$/,'Нет').replace(/^None$/,'—');
+}
+function parseOperationChange(change){
+  const raw=String(change||''),rawPath=(raw.match(/^([^:]+):/)||[])[1]||'';
+  const human=presentChatChange(raw), match=human.match(/^(.+?):\s*(.*?)\s*→\s*(.*)$/);
+  if(!match)return {plain:human};
+  let before=cleanOperationValue(match[2]),after=cleanOperationValue(match[3]);
+  const unit=operationChangeUnit(rawPath);
+  if(unit){
+    if(/^-?\d+(?:[.,]\d+)?$/.test(before))before+=unit;
+    if(/^-?\d+(?:[.,]\d+)?$/.test(after))after+=unit;
+  }else if(/^-?\d+(?:[.,]\d+)?$/.test(before)&&/\sмм$/.test(after))before+=' мм';
+  return {label:match[1],before,after};
+}
+function renderOperationChanges(operation,rawChanges){
+  operation.rawChanges=Array.isArray(rawChanges)?rawChanges.map(String):[];
+  operation.changes.innerHTML='';
+  const visible=operation.rawChanges.slice(0,3);
+  visible.forEach(raw=>{
+    const parsed=parseOperationChange(raw), row=operationNode('div','operation-change');
+    if(parsed.plain){row.appendChild(operationNode('div','operation-change-plain',parsed.plain));}
+    else{
+      row.appendChild(operationNode('span','operation-change-label',parsed.label));
+      const values=operationNode('div','operation-change-values');
+      values.append(operationNode('span','operation-before',parsed.before),
+        operationNode('span','operation-arrow','→'),operationNode('span','operation-after',parsed.after));
+      row.appendChild(values);
+    }
+    operation.changes.appendChild(row);
+  });
+  operation.changes.hidden=!visible.length;
+  const hiddenCount=operation.rawChanges.length-visible.length;
+  operation.more.hidden=!hiddenCount;
+  operation.more.textContent=hiddenCount?`Ещё ${hiddenCount} — в подробностях`:'';
+}
+function currentCheckSnapshot(){
+  if(!lastPayload)return null;
+  const details=[];let checkIssues=0;
+  for(const [group,values] of Object.entries(lastPayload.issues||{})){
+    checkIssues+=(values||[]).length;
+    (values||[]).slice(0,4).forEach(value=>details.push(`[${group}] ${value}`));
+  }
+  const refEntries=Object.entries(lastPayload.refs||{})
+    .filter(([,r])=>r&&typeof r==='object');
+  const unresolvedEntries=refEntries.filter(([,r])=>!r.resolved),unresolved=unresolvedEntries.length;
+  unresolvedEntries.forEach(([slot])=>details.push(`[база] не подобрано: ${slot}`));
+  const baseText=refEntries.length?` · база ${refEntries.length-unresolved}/${refEntries.length}`:'';
+  if(checkIssues)return {tone:'error',
+    text:`Проверки: ${checkIssues} ${issueWord(checkIssues)} требуют внимания${baseText}`,
+    checkIssues,unresolved,ok:false,details};
+  if(unresolved)return {tone:'warning',text:`Проверки пройдены${baseText}`,
+    checkIssues,unresolved,ok:true,details};
+  return {tone:'ok',text:`Проверки пройдены${baseText}`,
+    checkIssues:0,unresolved:0,ok:true,details};
+}
+function renderOperationTechnical(operation,reply,usage){
+  operation.technical.innerHTML='';
+  const humanReply=presentChatReply(reply||'');
+  if(humanReply){
+    operation.technical.append(operationNode('span','operation-tech-label','Ответ системы'),
+      operationNode('div','operation-tech-reply',humanReply));
+  }
+  if(operation.rawChanges.length){
+    operation.technical.append(operationNode('span','operation-tech-label','Технический diff'),
+      operationNode('pre','operation-raw',operation.rawChanges.join('\n')));
+  }
+  if(operation.checkSnapshot){
+    operation.technical.append(operationNode('span','operation-tech-label','Снимок проверок'),
+      operationNode('div','operation-tech-meta',operation.checkSnapshot.text));
+    if(operation.checkSnapshot.details&&operation.checkSnapshot.details.length)
+      operation.technical.append(operationNode('pre','operation-raw',
+        operation.checkSnapshot.details.join('\n')));
+  }
+  const meta=[`Модель: ${operation.provider}`];
+  if(usage&&usage.total)meta.push(`Токены: ${Number(usage.total).toLocaleString('ru-RU')}`);
+  if(operation.attachments.length)meta.push(`Вложения: ${operation.attachments.length}`);
+  operation.technical.append(operationNode('span','operation-tech-label','Выполнение'),
+    operationNode('div','operation-tech-meta',meta.join(' · ')));
+  operation.details.hidden=false; operation.actions.hidden=false;
+}
+function finishOperation(operation,{state='applied',reply='',changes=[],usage=null,canUndo=false,
+  summary='',checkSnapshot=null,statusLabel=''}={}){
+  if(!operation)return;
+  operation.reply=String(reply||''); operation.afterSpecJson=JSON.stringify(SPEC);
+  operation.undoDepthAfter=UNDO.length; operation.undoBeforeSpecJson=canUndo?UNDO[UNDO.length-1]:null;
+  operation.checkSnapshot=checkSnapshot;
+  const count=Array.isArray(changes)?changes.length:0;
+  const labels={applied:count?`Применено · ${changeCountCaption(count)}`:'Применено',
+    warning:count?`Применено · ${changeCountCaption(count)}`:'Применено с вопросами',
+    answer:'Ответ',error:'Не выполнено',undone:'Отменено'};
+  setOperationStatus(operation,state,statusLabel||labels[state]||labels.applied);
+  const humanReply=operationReplyPreview(reply||'');
+  const generic=/^(Готово\.?|Применено\.?|\(пусто\))$/i.test(humanReply)||
+    (state!=='answer'&&/^Применил:\s*/i.test(operation.reply));
+  const visibleSummary=summary||(state==='answer'?humanReply:(generic?'':humanReply));
+  operation.summary.hidden=!visibleSummary;
+  operation.summary.textContent=visibleSummary;
+  renderOperationChanges(operation,changes);
+  operation.check.classList.remove('warning','error');
+  if(checkSnapshot){operation.check.hidden=false;operation.check.textContent=checkSnapshot.text;
+    if(checkSnapshot.tone!=='ok')operation.check.classList.add(checkSnapshot.tone);}
+  else operation.check.hidden=true;
+  operation.show.hidden=!operation.context.partName;
+  renderOperationTechnical(operation,reply,usage);
+  operation.canUndo=!!canUndo;
+  refreshOperationTargets(); refreshUndoState();
+}
+function failOperation(operation,message){
+  finishOperation(operation,{state:'error',reply:String(message||''),summary:String(message||''),canUndo:false});
+}
+function markOperationUndone(operationId){
+  const operation=OPERATIONS.get(operationId); if(!operation)return;
+  operation.canUndo=false; setOperationStatus(operation,'undone','Отменено');
+  operation.summary.hidden=false; operation.summary.textContent='Правка отменена, модель пересчитана.';
+  if(operation.checkSnapshot){operation.check.hidden=false;
+    operation.check.textContent='Снимок после применения · '+operation.checkSnapshot.text.replace(/^Проверки:\s*/, '');}
+  operation.undo.hidden=true; refreshOperationTargets();
+}
+function operationRevisionMatches(operation){
+  return !!(operation&&operation.canUndo&&operation.undoDepthAfter===UNDO.length&&
+    UNDO[UNDO.length-1]===operation.undoBeforeSpecJson&&JSON.stringify(SPEC)===operation.afterSpecJson);
+}
+function quickUndoRevisionMatches(){
+  return chatQuickUndoDepth!==null&&chatQuickUndoDepth===UNDO.length&&
+    UNDO[UNDO.length-1]===chatQuickUndoBeforeSpecJson&&JSON.stringify(SPEC)===chatQuickUndoAfterSpecJson;
+}
+function refreshOperationUndoActions(){
+  OPERATIONS.forEach(operation=>{
+    const valid=operationRevisionMatches(operation);
+    operation.undo.hidden=!valid; operation.undo.disabled=modelMutationLocked()||!valid;
+    operation.undo.title=valid?'Отменить эту операцию':'Отмена доступна только для последней неизменённой ревизии';
+    if(!operation.details.hidden||!operation.show.hidden||valid)operation.actions.hidden=false;
+  });
+}
+function refreshUndoState(){
+  $('btnUndo').disabled=modelMutationLocked()||!UNDO.length;
+  const quick=$('chatUndoQuick'),valid=quickUndoRevisionMatches();
+  if(quick){quick.hidden=!valid;quick.disabled=modelMutationLocked()||!valid;}
+  refreshOperationUndoActions();
+}
+function clearQuickUndo(){
+  chatQuickUndoDepth=null;chatQuickUndoOperationId=null;
+  chatQuickUndoBeforeSpecJson=null;chatQuickUndoAfterSpecJson=null;
+}
+function pushUndo(){UNDO.push(JSON.stringify(SPEC));
+  if(UNDO.length>30)UNDO.shift(); refreshUndoState();}
+async function undoLastChange(){
+  if(modelMutationLocked()||!UNDO.length)return;
+  const matchingOperation=[...OPERATIONS.values()].reverse().find(operationRevisionMatches);
+  const operationId=matchingOperation?matchingOperation.id:
+    (quickUndoRevisionMatches()?chatQuickUndoOperationId:null);
+  const current=JSON.stringify(SPEC),previous=UNDO.pop();
+  setChatBusy(true,'Отменяю последнюю правку…');
+  try{
+    SPEC=JSON.parse(previous); showEmpty(!!SPEC.draft); fillForm();
+    const generated=await apply();
+    if(!SPEC.draft&&(!generated||!generated.viewer))throw new Error('модель не пересчитана');
+    if(operationId)markOperationUndone(operationId);
+    clearQuickUndo(); setChatState('Последняя правка отменена',false,'success',false);
+  }catch(e){
+    SPEC=JSON.parse(current); UNDO.push(previous); showEmpty(!!SPEC.draft); fillForm();
+    try{await apply();}catch(_restoreError){}
+    const operation=OPERATIONS.get(operationId);
+    if(operation){operation.summary.hidden=false;
+      operation.summary.textContent='Не удалось отменить правку: '+e.message;}
+    setChatState('Не удалось отменить последнюю правку',true,'error');
+  }finally{setChatBusy(false);refreshUndoState();}
+}
+$('btnUndo').onclick=undoLastChange;
+function undoOperation(operationId){
+  const operation=OPERATIONS.get(operationId);
+  if(!operationRevisionMatches(operation)){refreshUndoState();toast('Эту операцию уже нельзя отменить отдельно',true);return;}
+  chatQuickUndoDepth=operation.undoDepthAfter;chatQuickUndoOperationId=operation.id;
+  chatQuickUndoBeforeSpecJson=operation.undoBeforeSpecJson;
+  chatQuickUndoAfterSpecJson=operation.afterSpecJson;undoLastChange();
+}
+function showOperationTarget(operationId){
+  const operation=OPERATIONS.get(operationId),name=operation&&operation.context.partName;
+  if(!name)return;
+  const panels=((lastPayload&&lastPayload.viewer&&lastPayload.viewer.panels)||[]);
+  const index=panels.findIndex(panel=>panel.name===name);
+  if(index<0){operation.show.hidden=true;toast('Деталь из контекста больше не найдена',true);return;}
+  switchTab('3d');
+  scene3d.select(index);
+}
+function refreshOperationTargets(){
+  const panels=((lastPayload&&lastPayload.viewer&&lastPayload.viewer.panels)||[]);
+  OPERATIONS.forEach(operation=>{
+    operation.show.hidden=!operation.context.partName||!panels.some(panel=>panel.name===operation.context.partName);
+    if(!operation.details.hidden||!operation.show.hidden||!operation.undo.hidden)operation.actions.hidden=false;
+  });
+}
+function resetOperationLog(){
+  OPERATIONS.clear();operationSeq=0;clearQuickUndo();$('chatlog').innerHTML='';
+  $('operationLog').hidden=true;refreshUndoState();
+}
+function setChatState(text,error=false,mode='',canUndo=false,operationId=null){
+  const state=$('chatState'); state.textContent=text||'';
+  state.classList.toggle('error',!!error);
+  const dock=$('fs_chat');
+  dock.classList.toggle('has-state',!!text);
+  dock.classList.toggle('state-error',!!error);
+  dock.classList.toggle('state-success',mode==='success'&&!error);
+  const actions=$('chatResultActions');
+  actions.hidden=mode!=='success'||!text;
+  if(canUndo){chatQuickUndoDepth=UNDO.length;chatQuickUndoOperationId=operationId;
+    chatQuickUndoBeforeSpecJson=UNDO[UNDO.length-1]||null;
+    chatQuickUndoAfterSpecJson=JSON.stringify(SPEC);}
+  else clearQuickUndo();
+  refreshUndoState();
+}
+function modelMutationLocked(){return chatBusy||partEditBusy;}
+function syncModelEditLock(){
+  const locked=modelMutationLocked();
+  $('sideScroll').inert=locked;
+  Object.entries(rightPanelModes).forEach(([key,item])=>
+    item.panel.inert=locked||key!==rightPanelMode);
+  [$('chatMsg'),$('chatAttach'),$('chatSend'),$('aiProvider'),$('partChat'),$('partChatSend')]
+    .filter(Boolean).forEach(el=>el.disabled=locked);
+  $('btnFixAll').disabled=locked;
+  view.style.pointerEvents=locked?'none':'';
+}
+function setChatBusy(busy,stateText){
+  chatBusy=!!busy;
+  $('fs_chat').setAttribute('aria-busy',String(chatBusy));
+  $('fs_chat').classList.toggle('is-busy',chatBusy);
+  [$('chatMsg'),$('chatAttach'),$('chatSend'),$('aiProvider'),$('partChat'),$('partChatSend')]
+    .filter(Boolean).forEach(el=>el.disabled=chatBusy);
+  syncModelEditLock();
+  if(currentSelectedPart())syncPartEditState();
+  refreshUndoState();
+  $('chatSendLabel').textContent=chatBusy?'Выполняю…':'Выполнить';
+  if(stateText!==undefined) setChatState(stateText,false,chatBusy?'busy':'');
+}
 const PENDING_IMGS=[];                       // фото ТЗ: [{mime,data(base64)}]
 function renderImgs(){
   $('chatImgs').innerHTML=PENDING_IMGS.map((im,i)=>
-    `<span class="chip"><img src="data:${im.mime};base64,${im.data}">`+
-    `<b data-rm="${i}" title="убрать">×</b></span>`).join('');
-  $('chatImgs').querySelectorAll('b[data-rm]').forEach(b=>
+    `<span class="chip"><img alt="Прикреплённое изображение ТЗ" src="data:${im.mime};base64,${im.data}">`+
+    `<button class="chip-remove" type="button" data-rm="${i}" aria-label="Убрать изображение" title="Убрать изображение">`+
+    `<svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg>`+
+    `</button></span>`).join('');
+  $('chatImgs').querySelectorAll('[data-rm]').forEach(b=>
     b.onclick=()=>{PENDING_IMGS.splice(+b.dataset.rm,1);renderImgs();});
+  syncCommandStackHeight();
 }
 function addImgFile(file){
   const r=new FileReader();
   r.onload=()=>{const s=String(r.result),c=s.indexOf(',');
-    PENDING_IMGS.push({mime:(file.type||'image/png'),data:s.slice(c+1)});renderImgs();};
+    PENDING_IMGS.push({mime:(file.type||'image/png'),data:s.slice(c+1),name:file.name||''});renderImgs();};
   r.readAsDataURL(file);
 }
 // реальная диагностика для ИИ (AKD-219): тексты ошибок чеков + слоты базы
@@ -1890,53 +3450,104 @@ function issueCount(){
 }
 async function runChat(text){
   const m=(text||'').trim();
-  if((!m&&!PENDING_IMGS.length)||chatBusy)return;
-  chatBusy=true;
+  if((!m&&!PENDING_IMGS.length)||modelMutationLocked())return false;
   const imgs=PENDING_IMGS.splice(0); renderImgs();
-  addMsg('user',m+(imgs.length?`  📎×${imgs.length}`:''));
-  const wait=addMsg('ai','думаю…');
+  const operation=createOperation(m,{images:imgs});
+  const requestSpecJson=JSON.stringify(SPEC),requestGeneration=chatWorkspaceGeneration;
+  let rollbackSpec=null, rollbackUndoDepth=null;
+  setChatBusy(true,'Разбираю команду и контекст…');
   try{
     const ctx=diagCtx();
-    if(SELECTED_PART) ctx.selected_part={name:SELECTED_PART.name,type:SELECTED_PART.type,
-      placement:{x1:SELECTED_PART.x1,x2:SELECTED_PART.x2,y1:SELECTED_PART.y1,
-                 y2:SELECTED_PART.y2,z1:SELECTED_PART.z1,z2:SELECTED_PART.z2}};
+    if(operation.context.partName)ctx.selected_part={name:operation.context.partName,
+      type:operation.context.partType,placement:operation.context.placement};
     const r=await fetch('/api/chat',{method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({spec:SPEC,message:m,history:CHAT_HISTORY,context:ctx,
+      body:JSON.stringify({spec:JSON.parse(requestSpecJson),message:m,history:CHAT_HISTORY,context:ctx,
                            images:imgs.length?imgs:null,provider:CHAT_PROVIDER})});
-    const p=await r.json();
-    wait.remove();
-    addMsg('ai',p.reply||'(пусто)',p.changes);
+    let p={};
+    try{p=await r.json();}catch(e){throw new Error(`Сервер вернул ответ ${r.status} без данных`);}
+    if(!r.ok) throw new Error(p.reply||p.error||`Ошибка запроса (${r.status})`);
+    if(p.error&&!p.spec) throw new Error(String(p.error));
     if(p.usage&&p.usage.total){SESSION_TOKENS+=p.usage.total; renderTokens();}
     refreshBalance();                              // остаток бесплатных токенов
-    CHAT_HISTORY.push({role:'user',text:m},{role:'assistant',text:p.reply||''});
-    if(CHAT_HISTORY.length>16)CHAT_HISTORY.splice(0,CHAT_HISTORY.length-16);
+    if(chatWorkspaceGeneration!==requestGeneration)
+      throw new Error('За время выполнения открыто другое изделие. Команда отменена.');
+    if(JSON.stringify(SPEC)!==requestSpecJson)
+      throw new Error('Модель изменилась во время выполнения. Повторите команду для актуальной версии.');
     if(p.spec){
+      updateOperationProgress(operation,'Пересчитываю модель и инженерные проверки…');
+      setChatState('Пересчитываю модель и инженерные проверки…',false,'busy');
       const wasDraft=!!(SPEC&&SPEC.draft);
-      pushUndo(); SPEC=p.spec; showEmpty(false); fillForm(); await apply();
+      rollbackSpec=JSON.stringify(SPEC); rollbackUndoDepth=UNDO.length;
+      pushUndo(); SPEC=p.spec; showEmpty(false); fillForm();
+      const generated=await apply();
+      if(!generated||!generated.viewer)throw new Error('Движок не вернул пересчитанную 3D-модель.');
       if(wasDraft||p.created){                     // создано из черновика — в базу сразу
         await saveSpec();                          // с превью для каталога
         loadProjects();
       }
     }
-  }catch(e){wait.remove(); addMsg('ai','Ошибка: '+e.message);}
-  finally{chatBusy=false;}
+    CHAT_HISTORY.push({role:'user',text:m},{role:'assistant',text:p.reply||''});
+    if(CHAT_HISTORY.length>16)CHAT_HISTORY.splice(0,CHAT_HISTORY.length-16);
+    const changeCount=Array.isArray(p.changes)?p.changes.length:0;
+    const checkSnapshot=p.spec?currentCheckSnapshot():null;
+    const operationState=p.spec&&checkSnapshot&&checkSnapshot.tone!=='ok'?'warning':
+      (p.spec?'applied':'answer');
+    const answerSummary=p.spec?'':
+      ((operationReplyPreview(p.reply||'')?operationReplyPreview(p.reply||'')+'\n':'')+
+       'Модель не изменялась.');
+    finishOperation(operation,{state:operationState,reply:p.reply||'',changes:p.changes||[],
+      usage:p.usage,canUndo:!!p.spec,summary:answerSummary,checkSnapshot});
+    const resultText=p.spec
+      ?(changeCount?`Готово · ${changeCountCaption(changeCount)}`
+        :'Готово · модель пересчитана')
+      :'Ответ готов · подробности слева';
+    setChatState(resultText,false,'success',!!p.spec,operation.id);
+    return true;
+  }catch(e){
+    const workspaceChanged=chatWorkspaceGeneration!==requestGeneration;
+    if(rollbackSpec!==null){
+      SPEC=JSON.parse(rollbackSpec); UNDO.splice(rollbackUndoDepth); refreshUndoState();
+      showEmpty(!!SPEC.draft); scene3d.select(null); fillForm();
+      try{await apply();}catch(_restoreError){}
+    }
+    if(!workspaceChanged){
+      if(imgs.length) PENDING_IMGS.unshift(...imgs);
+      if(m&&!$('chatMsg').value.trim()) $('chatMsg').value=m;
+      resizeChatInput(); renderImgs();
+      failOperation(operation,'Команда не применена: '+e.message);
+      setChatState('Команда не выполнена · текст и вложения сохранены',true,'error');
+    }else toast('Команда отменена: открыто другое изделие',true);
+    return false;
+  }finally{setChatBusy(false);}
 }
-function sendChat(){const v=$('chatMsg').value; $('chatMsg').value=''; runChat(v);}
+function sendChat(){
+  if(modelMutationLocked())return;
+  const v=$('chatMsg').value;
+  if(!v.trim()&&!PENDING_IMGS.length)return;
+  $('chatMsg').value='';
+  resizeChatInput();
+  runChat(v);
+}
 // автоцикл «Починить всё» (AKD-222): ИИ правит → регенерация → перепроверка,
 // до зелёных бейджей / отсутствия прогресса / 3 итераций
 async function fixAll(){
-  if(chatBusy) return;
-  let before=issueCount();
-  if(!before){toast('Все проверки зелёные, база подобрана — чинить нечего');return;}
-  const btn=$('btnFixAll'); btn.disabled=true;
-  addMsg('user','⚕ Починить всё (автоцикл)');
+  if(modelMutationLocked()) return;
+  const startIssues=issueCount();
+  if(!startIssues){toast('Все проверки зелёные, база подобрана — чинить нечего');return;}
+  const operation=createOperation('Исправить проблемы модели',{forceModel:true,kind:'fix-all'});
+  const requestGeneration=chatWorkspaceGeneration;
+  let before=startIssues,appliedPasses=0,stopReason='',operationTokens=0;
+  const allChanges=[],replies=[];
+  setChatBusy(true,'Исправляю проблемы модели…');
   try{
     for(let it=1; it<=3; it++){
-      const wait=addMsg('ai',`итерация ${it}: чиню (осталось проблем: ${before})…`);
+      updateOperationProgress(operation,`Проход ${it} из 3 · ${before} ${issueWord(before)} осталось`);
+      setChatState(`Исправляю проблемы · проход ${it} из 3`,false,'busy');
+      const passSpecJson=JSON.stringify(SPEC),passUndoDepth=UNDO.length;
       const r=await fetch('/api/chat',{method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({spec:SPEC,
+        body:JSON.stringify({spec:JSON.parse(passSpecJson),
           message:'Почини все перечисленные проблемы: ошибки проверок и неподобранные '
                  +'позиции базы. Меняй только то, что нужно для починки. '
                  +'Детали, добавленные пользователем (overrides с action:"add"), '
@@ -1944,25 +3555,85 @@ async function fixAll(){
                  +'примыкания встык по координатам соседей из context.panels.',
           history:[],context:diagCtx(),provider:CHAT_PROVIDER})});
       const p=await r.json();
-      wait.remove();
-      if(p.usage&&p.usage.total){SESSION_TOKENS+=p.usage.total; renderTokens();}
-      if(!p.spec){addMsg('ai',p.reply||'ИИ не предложил правку — нужна ручная починка');break;}
+      if(!r.ok) throw new Error(p.reply||p.error||`Ошибка запроса (${r.status})`);
+      if(p.usage&&p.usage.total){operationTokens+=p.usage.total;
+        SESSION_TOKENS+=p.usage.total; renderTokens();}
+      if(chatWorkspaceGeneration!==requestGeneration)
+        throw new Error('За время выполнения открыто другое изделие.');
+      if(JSON.stringify(SPEC)!==passSpecJson)
+        throw new Error('Модель изменилась во время выполнения. Автоисправление остановлено.');
+      if(!p.spec){stopReason=p.reply||'Автоматическая правка не предложена — нужна ручная проверка.';
+        replies.push(stopReason);break;}
       pushUndo(); SPEC=p.spec; fillForm();
-      await apply();                               // регенерация + свежие бейджи
+      let generated;
+      try{
+        generated=await apply();                   // регенерация + свежие бейджи
+        if(!generated||!generated.viewer)throw new Error('Движок не вернул пересчитанную 3D-модель.');
+      }catch(error){
+        SPEC=JSON.parse(passSpecJson);UNDO.splice(passUndoDepth);refreshUndoState();fillForm();
+        try{await apply();}catch(_restoreError){}
+        throw error;
+      }
       const after=issueCount();
-      addMsg('ai',`итерация ${it}: ${p.reply||'правка применена'}`,
-             p.changes&&p.changes.concat([`проблем: ${before} → ${after}`]));
-      if(!after){toast('✅ Всё починено — проверки зелёные'); break;}
-      if(after>=before){addMsg('ai','прогресса нет — дальше чинить вручную '
-        +'(правка деталей/выбор позиций в «Фурнитуре»)'); break;}
+      appliedPasses++;
+      if(p.reply)replies.push(`Проход ${it}: ${p.reply}`);
+      if(Array.isArray(p.changes))allChanges.push(...p.changes);
+      allChanges.push(`Проблемы: ${before} → ${after}`);
+      if(!after){toast('Всё исправлено — проверки зелёные'); break;}
+      if(after>=before){stopReason='Количество вопросов не уменьшилось — нужна ручная проверка.';break;}
       before=after;
     }
-  }catch(e){addMsg('ai','Ошибка автопочинки: '+e.message);}
-  finally{btn.disabled=false; refreshBalance();}
+    const remaining=issueCount(),stillHasIssues=!!remaining;
+    const state=stillHasIssues?'warning':'applied';
+    const summary=stillHasIssues
+      ?`${startIssues} → ${remaining} ${issueWord(remaining)} · ${appliedPasses} ${passWord(appliedPasses)}. ${stopReason}`.trim()
+      :`Все ${startIssues} ${issueWord(startIssues)} исправлены за ${appliedPasses} ${passWord(appliedPasses)}.`;
+    finishOperation(operation,{state,reply:replies.join('\n'),changes:allChanges,
+      usage:operationTokens?{total:operationTokens}:null,canUndo:false,summary,
+      checkSnapshot:currentCheckSnapshot(),
+      statusLabel:stillHasIssues?(appliedPasses?'Исправлено частично':'Требуется вручную'):'Исправлено'});
+    setChatState(stillHasIssues?'Автоисправление завершено · остались вопросы':'Все проблемы исправлены',
+      false,'success',false,operation.id);
+  }catch(e){
+    const workspaceChanged=chatWorkspaceGeneration!==requestGeneration;
+    if(!workspaceChanged&&appliedPasses){
+      const remaining=issueCount();
+      finishOperation(operation,{state:'warning',reply:replies.join('\n'),changes:allChanges,
+        usage:operationTokens?{total:operationTokens}:null,canUndo:false,
+        summary:`Остановлено после ${appliedPasses} ${passWord(appliedPasses)}: ${e.message}`,
+        checkSnapshot:currentCheckSnapshot(),statusLabel:'Исправлено частично'});
+      setChatState('Автоисправление остановлено · часть правок применена',true,'error');
+    }else if(!workspaceChanged){
+      failOperation(operation,'Автоисправление не выполнено: '+e.message);
+      setChatState('Автоисправление не выполнено',true,'error');
+    }else toast('Автоисправление отменено: открыто другое изделие',true);
+  }finally{setChatBusy(false); refreshBalance();}
 }
 $('btnFixAll').onclick=fixAll;
+$('chatShowLog').onclick=()=>{
+  const log=$('operationLog');
+  if(log.hidden)return;
+  log.scrollIntoView({block:'nearest',
+    behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
+};
+$('chatUndoQuick').onclick=()=>$('btnUndo').click();
 $('chatSend').onclick=sendChat;
-$('chatMsg').addEventListener('keydown',e=>{if(e.key==='Enter')sendChat();});
+function resizeChatInput(){
+  const input=$('chatMsg');
+  input.style.height='40px';
+  input.style.height=Math.max(40,Math.min(input.scrollHeight,96))+'px';
+  syncCommandStackHeight();
+}
+function syncCommandStackHeight(){
+  $('main').style.setProperty('--chat-stack-height',Math.ceil($('fs_chat').getBoundingClientRect().height)+'px');
+}
+$('chatMsg').addEventListener('input',resizeChatInput);
+$('chatMsg').addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();sendChat();}
+});
+resizeChatInput();
+if(window.ResizeObserver) new ResizeObserver(syncCommandStackHeight).observe($('fs_chat'));
+syncCommandStackHeight();
 // фото ТЗ: кнопка-скрепка, выбор файла, вставка из буфера, drag&drop
 $('chatAttach').onclick=()=>$('chatFile').click();
 $('chatFile').onchange=e=>{[...e.target.files].forEach(addImgFile); e.target.value='';};
@@ -1984,7 +3655,7 @@ function renderTokens(){
     if((it.unit==='ток.'&&v<10000)||(it.unit&&it.unit!=='ток.'&&v<=0)) low=true;  // мало/нет
   });
   if(BAL_ERR){parts.push('лимит: '+BAL_ERR); low=true;}
-  el.textContent=parts.join('  ·  ')+(low?'   ⚠ пополнить/лимит':'');
+  el.textContent=parts.join('  ·  ')+(low?' · требуется пополнение или доступ':'');
   el.style.color=low?'var(--bad)':'var(--mut)';
 }
 async function refreshBalance(){
@@ -2099,5 +3770,5 @@ document.addEventListener('click',async e=>{
 loadBuilds();
 
 /* старт */
-fillForm(); resize(); apply();
+fillForm(); resize(); apply().catch(()=>{});
 </script></body></html>"""

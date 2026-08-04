@@ -8,7 +8,7 @@ SHA=$(git rev-parse --short HEAD)
 echo "$SHA" > DEPLOY_SHA
 tar czf /tmp/basis_update.tgz --exclude='__pycache__' --exclude='.previews' \
     DEPLOY_SHA main.py requirements.txt README.md AGENTS.md RULES.md STUDIO.md \
-    src schema prompts rules materials scripts tests qa landing vendor ops
+    src schema prompts rules materials scripts tests qa landing vendor assets ops
 scp -i "$KEY" /tmp/basis_update.tgz "$HOST":/tmp/
 ssh -i "$KEY" "$HOST" 'cd /opt/bazis/basis && tar xzf /tmp/basis_update.tgz \
   && chown -R bazis:bazis . && systemctl restart bazis && sleep 3 \
