@@ -114,7 +114,7 @@ def test_model_phase_api_has_honest_pending_current_and_failure_states() -> None
         "Изменения ожидают пересчёта",
         "Пересчитываю модель и проверки",
         "Модель актуальна",
-        "Модель пересчитана",
+        "3D обновлена",
         "Модель не обновлена",
         "показана предыдущая модель",
     ):
@@ -131,6 +131,7 @@ def test_generation_token_prevents_stale_response_from_overwriting_status() -> N
     terminal = apply.index("setViewportModelPhase(p.viewer?")
     assert stale < painted < terminal
     assert "setViewportModelPhase('busy')" in apply
+    assert "p.ok&&!diagnostics.unresolved?'ready':'warning'" in apply
     assert "if(requestId===generateRequestSeq)setViewportModelPhase('network')" in apply
 
     schedule = _compact(_function("schedule", length=900))

@@ -542,11 +542,15 @@ def make_handler(st: _Studio):
             pass
 
         def _send(self, code: int, body: bytes, ctype: str = "application/json; charset=utf-8"):
-            self.send_response(code)
-            self.send_header("Content-Type", ctype)
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
+            try:
+                self.send_response(code)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError):
+                # Штатная отмена fetch в Studio: клиент больше не ждёт ответ.
+                return
 
         def _json(self, obj: Any, code: int = 200):
             self._send(code, json.dumps(obj, ensure_ascii=False).encode("utf-8"))
@@ -904,7 +908,15 @@ PAGE = r"""<!DOCTYPE html>
   /* grid-row:1 всем — иначе #main (col2) после #rightside (col3) в DOM уходит в row2 */
   #side{grid-column:1;grid-row:1;display:flex;flex-direction:column;min-width:0;
     background:var(--card);border-right:1px solid var(--line);overflow:hidden}
-  #sideScroll{flex:1;min-height:0;overflow-y:auto;padding:12px 12px 14px}
+  #sideScroll{display:flex;flex:0 1 auto;flex-direction:column;min-height:0;overflow:hidden;
+    padding:12px 12px 14px}
+  #sidePinned{flex:0 0 auto;min-width:0}
+  #side #fs_part{flex:0 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+    scrollbar-gutter:stable;padding:11px 2px 4px 0;border-bottom:1px solid var(--line)}
+  #side #fs_part,#chatlog{scrollbar-width:thin;scrollbar-color:#c8ced7 transparent}
+  #side #fs_part::-webkit-scrollbar,#chatlog::-webkit-scrollbar{width:7px}
+  #side #fs_part::-webkit-scrollbar-thumb,#chatlog::-webkit-scrollbar-thumb{
+    border:2px solid transparent;border-radius:7px;background:#c8ced7;background-clip:padding-box}
   #side .row>*{min-width:0}
   #side .project-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
     gap:5px!important;margin-top:7px}
@@ -940,7 +952,10 @@ PAGE = r"""<!DOCTYPE html>
   #btnFixAll[hidden]{display:none}
   #modelState #errors:empty{display:none}
   #modelState #errors:not(:empty){margin:8px 0 0;padding:7px 8px;background:#fff4f2;
-    border-left:2px solid var(--bad);color:#9f2d2f;max-height:120px}
+    border-left:2px solid var(--bad);color:#9f2d2f;max-height:120px;overflow-y:auto;
+    overscroll-behavior:contain}
+  #modelState #errors:not(:empty)::before{content:"Ошибки проверок";display:block;margin-bottom:4px;
+    color:#7f2528;font-size:10.5px;font-weight:600}
   #side #stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px;
     padding-top:9px;margin:8px 0 0;border-top:1px solid #edf0f3}
   #side #stats>div{min-width:0}
@@ -955,7 +970,6 @@ PAGE = r"""<!DOCTYPE html>
     background:var(--ok);box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}
   #side .badge.bad::before{background:var(--bad)}
   #side .badge.warn::before{background:#c78a2b}
-  #side #fs_part{padding:11px 0 4px;border-bottom:1px solid var(--line)}
   #fs_part legend.part-section-head{display:flex;align-items:center;width:100%;gap:8px;
     margin:0 0 7px;padding:0}
   .part-section-head>span{flex:1;font-size:12px;line-height:18px;font-weight:600}
@@ -1343,11 +1357,14 @@ PAGE = r"""<!DOCTYPE html>
   .ditem .sw{flex:0 0 16px;height:16px;border-radius:3px;border:1px solid var(--line)}
   .ditem .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .ditem .fb{width:26px;height:24px;padding:0;font-size:10px}
-  #operationLog{padding:11px 0 2px;border-top:1px solid var(--line);scroll-margin-top:10px}
+  #operationLog{display:flex;flex:1 1 220px;flex-direction:column;min-height:150px;
+    padding:11px 12px 14px;border-top:1px solid var(--line);overflow:hidden}
   #operationLog[hidden]{display:none}
   #operationLog .side-section-head{margin-bottom:3px}
   #operationLogHint{margin-bottom:7px;color:var(--mut);font-size:10.5px;line-height:14px}
-  #chatlog{display:block;margin:0}
+  #chatlog{display:block;flex:1;min-height:0;margin:0;padding-right:3px;overflow-y:auto;
+    overscroll-behavior:contain;scrollbar-gutter:stable}
+  #chatlog:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   #chatlog:empty{display:none}
   .operation-record{position:relative;padding:9px 0 10px 10px;border-top:1px solid #e3e7ec;
     color:var(--ink)}
@@ -1411,6 +1428,14 @@ PAGE = r"""<!DOCTYPE html>
     overflow-wrap:anywhere;font:10px/1.45 Consolas,monospace;color:#5e6875}
   .operation-record.is-undone .operation-command,.operation-record.is-undone .operation-changes{
     opacity:.62}
+  @media (max-height:720px){
+    #operationLog{flex-basis:180px;min-height:140px;max-height:50%}
+    #operationLogHint{display:none}
+  }
+  @media (max-height:560px){
+    #sidePinned{flex:0 1 auto;min-height:180px;overflow-y:auto;scrollbar-gutter:stable}
+    #operationLog{min-height:120px}
+  }
   #fs_chat{position:absolute;left:50%;bottom:calc(10px + var(--viewport-status-height));z-index:7;
     width:min(760px,calc(100% - 32px));
     min-inline-size:0;margin:0;padding:0;border:0;transform:translateX(-50%);pointer-events:none}
@@ -1475,6 +1500,11 @@ PAGE = r"""<!DOCTYPE html>
     background:transparent;color:#596273}
   #chatAttach:hover{color:var(--accent);background:#eef4ff}
   #chatSend{display:flex;align-items:center;justify-content:center;gap:5px;min-width:104px;height:34px}
+  #chatSend .chat-stop-icon{display:none}
+  #chatSend.is-cancel{border-color:#d8a2a4;background:#fff5f4;color:#9f2d2f}
+  #chatSend.is-cancel:hover{border-color:#c88386;background:#ffedeb;color:#8d2428}
+  #chatSend.is-cancel .chat-send-icon{display:none}
+  #chatSend.is-cancel .chat-stop-icon{display:block}
   #chatShortcut{position:absolute;right:12px;bottom:-24px;font-size:9.5px;line-height:12px;
     color:#757f8d;opacity:0;transition:opacity .12s ease;pointer-events:none}
   #fs_chat:focus-within #chatShortcut{opacity:1}
@@ -1492,6 +1522,7 @@ PAGE = r"""<!DOCTYPE html>
 <div id="app" class="right-collapsed">
 <div id="side">
 <div id="sideScroll">
+<div id="sidePinned">
   <h1 id="studioBrand" class="studio-brand">
     <span class="studio-brand-lockup">
       <img id="studioBrandWordmark" class="studio-brand-wordmark"
@@ -1547,13 +1578,14 @@ PAGE = r"""<!DOCTYPE html>
     <div id="errors" role="alert"></div>
     <div id="stats"></div>
     <button id="btnFixAll" type="button" hidden
-      title="Исправить ошибки проверок и подобрать нерешённые позиции базы">
+      title="До трёх проходов AI. Изменения применяются сразу; может потребоваться ручная проверка">
       <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
         <circle cx="12" cy="12" r="8"/><path d="m8.5 12 2.2 2.2 4.8-5"/>
       </svg>
-      Исправить проблемы
+      Запустить автоисправление
     </button>
   </section>
+</div>
 
   <fieldset id="fs_part" style="display:none" aria-busy="false">
     <legend class="part-section-head">
@@ -1624,14 +1656,15 @@ PAGE = r"""<!DOCTYPE html>
       </details>
     </div>
   </fieldset>
+</div>
   <section id="operationLog" aria-labelledby="operationLogTitle" hidden>
     <div class="side-section-head">
       <span id="operationLogTitle">Изменения</span>
     </div>
     <div id="operationLogHint">Команды, результат и технические изменения этой сессии</div>
-    <div id="chatlog" role="log" aria-live="polite" aria-label="Изменения этой сессии"></div>
+    <div id="chatlog" role="log" aria-live="polite" aria-relevant="additions text"
+      aria-label="Изменения этой сессии" tabindex="0"></div>
   </section>
-</div>
 </div>
 
 <div id="rightside" data-mode="properties">
@@ -1943,8 +1976,11 @@ PAGE = r"""<!DOCTYPE html>
             <span>Добавить ТЗ</span>
           </button>
           <button id="chatSend" class="primary" type="button" title="Выполнить команду">
-            <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <svg class="ui-icon chat-send-icon" viewBox="0 0 24 24" aria-hidden="true">
               <path d="m5 12 14-7-4 14-3-5-7-2Z"/><path d="m12 14 7-9"/>
+            </svg>
+            <svg class="ui-icon chat-stop-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="7" y="7" width="10" height="10" rx="1"/>
             </svg>
             <span id="chatSendLabel">Выполнить</span>
           </button>
@@ -2283,13 +2319,42 @@ $('applyRaw').onclick=()=>{try{SPEC=JSON.parse($('rawspec').value);fillForm();ap
 
 /* ---------- генерация ---------- */
 let timer=null,lastOk=false,generateRequestSeq=0,viewportModelPhase='loading',
-    viewportModelProblems=0;
-function issueWord(count){
+    viewportModelDiagnostics={checkErrors:0,unresolved:0,total:0};
+function checkErrorWord(count){
   const n=Math.abs(Number(count)||0)%100,d=n%10;
   return n>=11&&n<=14?'ошибок':d===1?'ошибка':d>=2&&d<=4?'ошибки':'ошибок';
 }
-function setViewportModelPhase(phase,problems=0){
-  viewportModelPhase=phase;viewportModelProblems=Number(problems)||0;syncViewportStatus();
+function findingWord(count){
+  const n=Math.abs(Number(count)||0)%100,d=n%10;
+  return n>=11&&n<=14?'замечаний':d===1?'замечание':d>=2&&d<=4?'замечания':'замечаний';
+}
+function unresolvedPositionCaption(count){
+  const value=Math.abs(Number(count)||0),n=value%100,d=value%10;
+  if(n>=11&&n<=14)return `${value} позиций базы не сопоставлено`;
+  if(d===1)return `${value} позиция базы не сопоставлена`;
+  if(d>=2&&d<=4)return `${value} позиции базы не сопоставлены`;
+  return `${value} позиций базы не сопоставлено`;
+}
+function modelDiagnosticCounts(payload=lastPayload){
+  let checkErrors=0;
+  if(payload&&payload.issues)
+    Object.values(payload.issues).forEach(values=>{checkErrors+=(values||[]).length;});
+  const unresolved=payload&&payload.refs
+    ?Object.values(payload.refs).filter(item=>item&&typeof item==='object'&&!item.resolved).length:0;
+  return {checkErrors,unresolved,total:checkErrors+unresolved};
+}
+function diagnosticLongCaption(diagnostics){
+  const parts=[];
+  if(diagnostics.checkErrors)parts.push(`${diagnostics.checkErrors} ${checkErrorWord(diagnostics.checkErrors)} проверки`);
+  if(diagnostics.unresolved)parts.push(unresolvedPositionCaption(diagnostics.unresolved));
+  return parts.join(' · ');
+}
+function setViewportModelPhase(phase,diagnostics=null){
+  viewportModelPhase=phase;
+  viewportModelDiagnostics=diagnostics&&typeof diagnostics==='object'
+    ?Object.assign({checkErrors:0,unresolved:0,total:0},diagnostics)
+    :{checkErrors:Number(diagnostics)||0,unresolved:0,total:Number(diagnostics)||0};
+  syncViewportStatus();
 }
 function syncViewportStatus(){
   const status=$('viewportStatus');if(!status)return;
@@ -2302,14 +2367,15 @@ function syncViewportStatus(){
     tone='ready';longText='Модель актуальна';shortText='Актуальна';
   }else if(viewportModelPhase==='warning'){
     tone='warning';
-    const suffix=viewportModelProblems?` · ${viewportModelProblems} ${issueWord(viewportModelProblems)}`:
-      ' · проверки не пройдены';
-    longText='Модель пересчитана'+suffix;shortText=viewportModelProblems?
-      `${viewportModelProblems} ${issueWord(viewportModelProblems)}`:'Есть ошибки';
+    const diagnosticText=diagnosticLongCaption(viewportModelDiagnostics);
+    longText='3D обновлена'+(diagnosticText?` · ${diagnosticText}`:' · есть замечания');
+    shortText=viewportModelDiagnostics.checkErrors
+      ?`${viewportModelDiagnostics.checkErrors} ${checkErrorWord(viewportModelDiagnostics.checkErrors)}`:
+      viewportModelDiagnostics.unresolved?`База: ${viewportModelDiagnostics.unresolved}`:'Есть замечания';
   }else if(viewportModelPhase==='no-viewer'){
     tone='error';
-    const suffix=viewportModelProblems?` · ${viewportModelProblems} ${issueWord(viewportModelProblems)}`:'';
-    longText='Модель не обновлена'+suffix;shortText='Не обновлена';
+    const diagnosticText=diagnosticLongCaption(viewportModelDiagnostics);
+    longText='Модель не обновлена'+(diagnosticText?` · ${diagnosticText}`:'');shortText='Не обновлена';
   }else if(viewportModelPhase==='network'){
     tone='error';longText='Не удалось пересчитать · показана предыдущая модель';
     shortText='Ошибка пересчёта';
@@ -2324,7 +2390,9 @@ function syncViewportStatus(){
   $('viewportSelectionName').textContent=panel&&panel.name||'';
   $('viewportSelectionName').title=panel&&panel.name||'';
   const mode=currentWorkspaceMode();
-  $('viewportHint').textContent=mode==='draw'?'Клик по детали — выбрать':
+  $('viewportHint').textContent=chatBusy?'Команда выполняется · модель доступна для осмотра':
+    partEditBusy?'Пересчёт детали · модель доступна для осмотра':
+    mode==='draw'?'Клик по детали — выбрать':
     mode==='nest'?'Раскрой текущей модели':panel?
       'Shift + перетаскивание — переместить · Esc — снять выбор':
       'Клик — выбрать · перетаскивание — вращать · колесо — масштаб';
@@ -2351,8 +2419,8 @@ async function apply(){
     const restorePartName=(typeof SELECTED_PART!=='undefined'&&SELECTED_PART)
       ?SELECTED_PART.name:null;
     paint(p);
-    const problems=issueCount();
-    setViewportModelPhase(p.viewer?(p.ok?'ready':'warning'):'no-viewer',problems);
+    const diagnostics=modelDiagnosticCounts(p);
+    setViewportModelPhase(p.viewer?(p.ok&&!diagnostics.unresolved?'ready':'warning'):'no-viewer',diagnostics);
     if(restorePartName&&p.viewer&&Array.isArray(p.viewer.panels)){
       const restoreIndex=p.viewer.panels.findIndex(panel=>panel.name===restorePartName);
       if(restoreIndex>=0)scene3d.select(restoreIndex);
@@ -2736,7 +2804,13 @@ scene3d.onSelect=sel=>{
     .forEach(rect=>rect.classList.add('sel'));
 };
 scene3d.onTransform=(name,delta)=>{
-  if(modelMutationLocked()){toast('Дождитесь завершения текущего пересчёта',true);return;}
+  if(modelMutationLocked()){
+    // Жест мог начаться до блокировки. Движок уже сдвинул mesh, поэтому
+    // возвращаем последнюю подтверждённую геометрию, не меняя ParamSpec.
+    if(lastPayload&&lastPayload.viewer)rebuild(lastPayload.viewer);
+    toast('Пока выполняется команда, деталь нельзя перемещать. Осмотр модели доступен.',true);
+    return;
+  }
   setOverride(name,null,delta);
 };
 document.addEventListener('keydown',e=>{
@@ -3022,7 +3096,9 @@ async function loadDecors(){
 /* ---------- чат с ИИ + undo (AKD-107/108/110) ---------- */
 const UNDO=[], CHAT_HISTORY=[], OPERATIONS=new Map();
 const OPERATION_LIMIT=30;
+const CHAT_REQUEST_TIMEOUT_MS=130000;
 let chatBusy=false, operationSeq=0, chatWorkspaceGeneration=0;
+let activeChatController=null,chatAbortReason='',chatRequestInFlight=false;
 let chatQuickUndoDepth=null, chatQuickUndoOperationId=null;
 let chatQuickUndoBeforeSpecJson=null, chatQuickUndoAfterSpecJson=null;
 function presentChatReply(text){
@@ -3069,11 +3145,6 @@ function changeCountCaption(count){
   const word=(mod100>=11&&mod100<=14)?'изменений'
     :mod10===1?'изменение':(mod10>=2&&mod10<=4)?'изменения':'изменений';
   return `${count} ${word}`;
-}
-function issueWord(count){
-  const mod100=count%100,mod10=count%10;
-  return (mod100>=11&&mod100<=14)?'вопросов'
-    :mod10===1?'вопрос':(mod10>=2&&mod10<=4)?'вопроса':'вопросов';
 }
 function passWord(count){
   const mod100=count%100,mod10=count%10;
@@ -3148,7 +3219,7 @@ function createOperation(command,{images=[],forceModel=false,kind='command'}={})
   while($('chatlog').children.length>OPERATION_LIMIT){
     const old=$('chatlog').firstElementChild; OPERATIONS.delete(old.id); old.remove();
   }
-  requestAnimationFrame(()=>el.scrollIntoView({block:'nearest'}));
+  requestAnimationFrame(()=>{const log=$('chatlog');log.scrollTop=log.scrollHeight;});
   return operation;
 }
 function updateOperationProgress(operation,text){
@@ -3209,11 +3280,12 @@ function currentCheckSnapshot(){
   unresolvedEntries.forEach(([slot])=>details.push(`[база] не подобрано: ${slot}`));
   const baseText=refEntries.length?` · база ${refEntries.length-unresolved}/${refEntries.length}`:'';
   if(checkIssues)return {tone:'error',
-    text:`Проверки: ${checkIssues} ${issueWord(checkIssues)} требуют внимания${baseText}`,
+    text:`Проверки модели: ${checkIssues} ${checkErrorWord(checkIssues)}${baseText}`,
     checkIssues,unresolved,ok:false,details};
-  if(unresolved)return {tone:'warning',text:`Проверки пройдены${baseText}`,
+  if(unresolved)return {tone:'warning',
+    text:`Проверки модели пройдены${baseText} · ${unresolvedPositionCaption(unresolved)}`,
     checkIssues,unresolved,ok:true,details};
-  return {tone:'ok',text:`Проверки пройдены${baseText}`,
+  return {tone:'ok',text:`Проверки модели пройдены${baseText}`,
     checkIssues:0,unresolved:0,ok:true,details};
 }
 function renderOperationTechnical(operation,reply,usage){
@@ -3249,7 +3321,7 @@ function finishOperation(operation,{state='applied',reply='',changes=[],usage=nu
   operation.checkSnapshot=checkSnapshot;
   const count=Array.isArray(changes)?changes.length:0;
   const labels={applied:count?`Применено · ${changeCountCaption(count)}`:'Применено',
-    warning:count?`Применено · ${changeCountCaption(count)}`:'Применено с вопросами',
+    warning:count?`Применено · ${changeCountCaption(count)}`:'Применено · есть замечания',
     answer:'Ответ',error:'Не выполнено',undone:'Отменено'};
   setOperationStatus(operation,state,statusLabel||labels[state]||labels.applied);
   const humanReply=operationReplyPreview(reply||'');
@@ -3373,27 +3445,69 @@ function setChatState(text,error=false,mode='',canUndo=false,operationId=null){
   refreshUndoState();
 }
 function modelMutationLocked(){return chatBusy||partEditBusy;}
+function syncChatPrimaryAction(){
+  const button=$('chatSend'),canCancel=!!(chatBusy&&activeChatController&&
+    chatRequestInFlight&&!activeChatController.signal.aborted),
+    stopping=!!(chatBusy&&chatAbortReason==='user'&&activeChatController&&
+      activeChatController.signal.aborted);
+  button.classList.toggle('is-cancel',canCancel);
+  button.disabled=chatBusy?!canCancel:partEditBusy;
+  $('chatSendLabel').textContent=canCancel?'Остановить':stopping?'Останавливаю…':
+    chatBusy?'Выполняю…':'Выполнить';
+  button.title=canCancel?'Остановить выполнение команды':'Выполнить команду';
+  button.setAttribute('aria-label',button.title);
+}
 function syncModelEditLock(){
   const locked=modelMutationLocked();
   $('sideScroll').inert=locked;
   Object.entries(rightPanelModes).forEach(([key,item])=>
     item.panel.inert=locked||key!==rightPanelMode);
-  [$('chatMsg'),$('chatAttach'),$('chatSend'),$('aiProvider'),$('partChat'),$('partChatSend')]
+  [$('chatMsg'),$('chatAttach'),$('aiProvider'),$('partChat'),$('partChatSend')]
     .filter(Boolean).forEach(el=>el.disabled=locked);
   $('btnFixAll').disabled=locked;
-  view.style.pointerEvents=locked?'none':'';
+  syncChatPrimaryAction();
+  syncViewportStatus();
 }
 function setChatBusy(busy,stateText){
   chatBusy=!!busy;
   $('fs_chat').setAttribute('aria-busy',String(chatBusy));
   $('fs_chat').classList.toggle('is-busy',chatBusy);
-  [$('chatMsg'),$('chatAttach'),$('chatSend'),$('aiProvider'),$('partChat'),$('partChatSend')]
+  [$('chatMsg'),$('chatAttach'),$('aiProvider'),$('partChat'),$('partChatSend')]
     .filter(Boolean).forEach(el=>el.disabled=chatBusy);
   syncModelEditLock();
   if(currentSelectedPart())syncPartEditState();
   refreshUndoState();
-  $('chatSendLabel').textContent=chatBusy?'Выполняю…':'Выполнить';
   if(stateText!==undefined) setChatState(stateText,false,chatBusy?'busy':'');
+}
+// Пока AI считает, 3D остаётся доступной для вращения, выбора и открытия.
+// Единственная запрещённая операция — Shift+drag, потому что она меняет ParamSpec.
+view.addEventListener('pointerdown',event=>{
+  if(!modelMutationLocked()||!event.shiftKey)return;
+  event.preventDefault();event.stopPropagation();
+  toast('Пока выполняется команда, деталь нельзя перемещать. Осмотр модели доступен.',true);
+},true);
+function beginChatRequest(){
+  activeChatController=new AbortController();chatAbortReason='';
+  return activeChatController;
+}
+async function requestChat(payload,controller){
+  chatRequestInFlight=true;syncChatPrimaryAction();
+  const timeout=setTimeout(()=>{
+    if(!controller.signal.aborted){chatAbortReason='timeout';controller.abort();}
+  },CHAT_REQUEST_TIMEOUT_MS);
+  try{return await fetch('/api/chat',{method:'POST',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:controller.signal});}
+  finally{clearTimeout(timeout);chatRequestInFlight=false;syncChatPrimaryAction();}
+}
+function cancelActiveChatRequest(){
+  if(!chatBusy||!chatRequestInFlight||!activeChatController||
+     activeChatController.signal.aborted)return;
+  chatAbortReason='user';activeChatController.abort();syncChatPrimaryAction();
+  setChatState('Останавливаю команду…',false,'busy');
+}
+function finishChatRequest(controller){
+  if(activeChatController===controller){activeChatController=null;chatAbortReason='';
+    chatRequestInFlight=false;}
 }
 const PENDING_IMGS=[];                       // фото ТЗ: [{mime,data(base64)}]
 function renderImgs(){
@@ -3441,33 +3555,36 @@ function diagCtx(){
 }
 // сколько проблем осталось (для автоцикла починки)
 function issueCount(){
-  let n=0;
-  if(lastPayload&&lastPayload.issues)
-    for(const k of Object.keys(lastPayload.issues)) n+=(lastPayload.issues[k]||[]).length;
-  if(lastPayload&&lastPayload.refs)
-    n+=Object.values(lastPayload.refs).filter(r=>r&&typeof r==='object'&&!r.resolved).length;
-  return n;
+  return modelDiagnosticCounts().total;
+}
+function requireCleanPartDraft(){
+  const draft=currentSelectedPart()?readPartDraft():null;
+  if(!draft||!draft.dirty)return true;
+  $('partExact').open=true;syncPartEditState();
+  toast('Сначала примените или отмените точные значения выбранной детали.',true);
+  return false;
 }
 async function runChat(text){
   const m=(text||'').trim();
   if((!m&&!PENDING_IMGS.length)||modelMutationLocked())return false;
+  if(!requireCleanPartDraft())return false;
   const imgs=PENDING_IMGS.splice(0); renderImgs();
   const operation=createOperation(m,{images:imgs});
   const requestSpecJson=JSON.stringify(SPEC),requestGeneration=chatWorkspaceGeneration;
   let rollbackSpec=null, rollbackUndoDepth=null;
+  const controller=beginChatRequest();
   setChatBusy(true,'Разбираю команду и контекст…');
   try{
     const ctx=diagCtx();
     if(operation.context.partName)ctx.selected_part={name:operation.context.partName,
       type:operation.context.partType,placement:operation.context.placement};
-    const r=await fetch('/api/chat',{method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({spec:JSON.parse(requestSpecJson),message:m,history:CHAT_HISTORY,context:ctx,
-                           images:imgs.length?imgs:null,provider:CHAT_PROVIDER})});
+    const r=await requestChat({spec:JSON.parse(requestSpecJson),message:m,history:CHAT_HISTORY,
+      context:ctx,images:imgs.length?imgs:null,provider:CHAT_PROVIDER},controller);
     let p={};
     try{p=await r.json();}catch(e){throw new Error(`Сервер вернул ответ ${r.status} без данных`);}
     if(!r.ok) throw new Error(p.reply||p.error||`Ошибка запроса (${r.status})`);
     if(p.error&&!p.spec) throw new Error(String(p.error));
+    if(controller.signal.aborted)throw new DOMException('Команда остановлена','AbortError');
     if(p.usage&&p.usage.total){SESSION_TOKENS+=p.usage.total; renderTokens();}
     refreshBalance();                              // остаток бесплатных токенов
     if(chatWorkspaceGeneration!==requestGeneration)
@@ -3482,6 +3599,7 @@ async function runChat(text){
       pushUndo(); SPEC=p.spec; showEmpty(false); fillForm();
       const generated=await apply();
       if(!generated||!generated.viewer)throw new Error('Движок не вернул пересчитанную 3D-модель.');
+      if(controller.signal.aborted)throw new DOMException('Команда остановлена','AbortError');
       if(wasDraft||p.created){                     // создано из черновика — в базу сразу
         await saveSpec();                          // с превью для каталога
         loadProjects();
@@ -3505,6 +3623,7 @@ async function runChat(text){
     setChatState(resultText,false,'success',!!p.spec,operation.id);
     return true;
   }catch(e){
+    const abortReason=e&&e.name==='AbortError'?chatAbortReason:'';
     const workspaceChanged=chatWorkspaceGeneration!==requestGeneration;
     if(rollbackSpec!==null){
       SPEC=JSON.parse(rollbackSpec); UNDO.splice(rollbackUndoDepth); refreshUndoState();
@@ -3515,14 +3634,25 @@ async function runChat(text){
       if(imgs.length) PENDING_IMGS.unshift(...imgs);
       if(m&&!$('chatMsg').value.trim()) $('chatMsg').value=m;
       resizeChatInput(); renderImgs();
-      failOperation(operation,'Команда не применена: '+e.message);
-      setChatState('Команда не выполнена · текст и вложения сохранены',true,'error');
+      if(abortReason==='user'){
+        finishOperation(operation,{state:'undone',summary:'Остановлено пользователем. Модель не изменена.',
+          statusLabel:'Остановлено'});
+        setChatState('Команда остановлена · текст и вложения сохранены',false,'');
+      }else if(abortReason==='timeout'){
+        failOperation(operation,'AI не ответил за отведённое время. Модель не изменена.');
+        setChatState('AI не ответил · команду можно повторить',true,'error');
+      }else{
+        failOperation(operation,'Команда не применена: '+e.message);
+        setChatState('Команда не выполнена · текст и вложения сохранены',true,'error');
+      }
     }else toast('Команда отменена: открыто другое изделие',true);
     return false;
-  }finally{setChatBusy(false);}
+  }finally{finishChatRequest(controller);setChatBusy(false);}
 }
 function sendChat(){
+  if(chatBusy){cancelActiveChatRequest();return;}
   if(modelMutationLocked())return;
+  if(!requireCleanPartDraft())return;
   const v=$('chatMsg').value;
   if(!v.trim()&&!PENDING_IMGS.length)return;
   $('chatMsg').value='';
@@ -3533,29 +3663,31 @@ function sendChat(){
 // до зелёных бейджей / отсутствия прогресса / 3 итераций
 async function fixAll(){
   if(modelMutationLocked()) return;
+  if(!requireCleanPartDraft())return;
   const startIssues=issueCount();
   if(!startIssues){toast('Все проверки зелёные, база подобрана — чинить нечего');return;}
-  const operation=createOperation('Исправить проблемы модели',{forceModel:true,kind:'fix-all'});
+  const operation=createOperation('Автоматическое исправление проверок',{forceModel:true,kind:'fix-all'});
   const requestGeneration=chatWorkspaceGeneration;
   let before=startIssues,appliedPasses=0,stopReason='',operationTokens=0;
   const allChanges=[],replies=[];
-  setChatBusy(true,'Исправляю проблемы модели…');
+  const controller=beginChatRequest();
+  setChatBusy(true,'Проверяю, что можно исправить автоматически…');
   try{
     for(let it=1; it<=3; it++){
-      updateOperationProgress(operation,`Проход ${it} из 3 · ${before} ${issueWord(before)} осталось`);
-      setChatState(`Исправляю проблемы · проход ${it} из 3`,false,'busy');
+      updateOperationProgress(operation,`Проход ${it} из 3 · осталось ${before} ${findingWord(before)}`);
+      setChatState(`Автоисправление · проход ${it} из 3`,false,'busy');
       const passSpecJson=JSON.stringify(SPEC),passUndoDepth=UNDO.length;
-      const r=await fetch('/api/chat',{method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({spec:JSON.parse(passSpecJson),
+      const r=await requestChat({spec:JSON.parse(passSpecJson),
           message:'Почини все перечисленные проблемы: ошибки проверок и неподобранные '
                  +'позиции базы. Меняй только то, что нужно для починки. '
                  +'Детали, добавленные пользователем (overrides с action:"add"), '
                  +'УДАЛЯТЬ ЗАПРЕЩЕНО — вместо удаления подгони их placement до '
                  +'примыкания встык по координатам соседей из context.panels.',
-          history:[],context:diagCtx(),provider:CHAT_PROVIDER})});
+          history:[],context:diagCtx(),provider:CHAT_PROVIDER},controller);
       const p=await r.json();
       if(!r.ok) throw new Error(p.reply||p.error||`Ошибка запроса (${r.status})`);
+      if(p.error&&!p.spec)throw new Error(String(p.error));
+      if(controller.signal.aborted)throw new DOMException('Автоисправление остановлено','AbortError');
       if(p.usage&&p.usage.total){operationTokens+=p.usage.total;
         SESSION_TOKENS+=p.usage.total; renderTokens();}
       if(chatWorkspaceGeneration!==requestGeneration)
@@ -3574,47 +3706,60 @@ async function fixAll(){
         try{await apply();}catch(_restoreError){}
         throw error;
       }
+      if(controller.signal.aborted)throw new DOMException('Автоисправление остановлено','AbortError');
       const after=issueCount();
       appliedPasses++;
       if(p.reply)replies.push(`Проход ${it}: ${p.reply}`);
       if(Array.isArray(p.changes))allChanges.push(...p.changes);
       allChanges.push(`Проблемы: ${before} → ${after}`);
       if(!after){toast('Всё исправлено — проверки зелёные'); break;}
-      if(after>=before){stopReason='Количество вопросов не уменьшилось — нужна ручная проверка.';break;}
+      if(after>=before){stopReason='Количество замечаний не уменьшилось — проверьте их вручную.';break;}
       before=after;
     }
     const remaining=issueCount(),stillHasIssues=!!remaining;
     const state=stillHasIssues?'warning':'applied';
     const summary=stillHasIssues
-      ?`${startIssues} → ${remaining} ${issueWord(remaining)} · ${appliedPasses} ${passWord(appliedPasses)}. ${stopReason}`.trim()
-      :`Все ${startIssues} ${issueWord(startIssues)} исправлены за ${appliedPasses} ${passWord(appliedPasses)}.`;
+      ?`${startIssues} → ${remaining} ${findingWord(remaining)} · ${appliedPasses} ${passWord(appliedPasses)}. ${stopReason}`.trim()
+      :`Все ${startIssues} ${findingWord(startIssues)} исправлены за ${appliedPasses} ${passWord(appliedPasses)}.`;
     finishOperation(operation,{state,reply:replies.join('\n'),changes:allChanges,
       usage:operationTokens?{total:operationTokens}:null,canUndo:false,summary,
       checkSnapshot:currentCheckSnapshot(),
       statusLabel:stillHasIssues?(appliedPasses?'Исправлено частично':'Требуется вручную'):'Исправлено'});
-    setChatState(stillHasIssues?'Автоисправление завершено · остались вопросы':'Все проблемы исправлены',
+    setChatState(stillHasIssues?`Автоисправление завершено · осталось ${remaining} ${findingWord(remaining)}`:
+      'Все замечания исправлены',
       false,'success',false,operation.id);
   }catch(e){
+    const abortReason=e&&e.name==='AbortError'?chatAbortReason:'';
     const workspaceChanged=chatWorkspaceGeneration!==requestGeneration;
     if(!workspaceChanged&&appliedPasses){
       const remaining=issueCount();
       finishOperation(operation,{state:'warning',reply:replies.join('\n'),changes:allChanges,
         usage:operationTokens?{total:operationTokens}:null,canUndo:false,
-        summary:`Остановлено после ${appliedPasses} ${passWord(appliedPasses)}: ${e.message}`,
+        summary:abortReason==='user'
+          ?`Остановлено пользователем после ${appliedPasses} ${passWord(appliedPasses)}. Осталось ${remaining} ${findingWord(remaining)}.`
+          :`Остановлено после ${appliedPasses} ${passWord(appliedPasses)}: ${e.message}`,
         checkSnapshot:currentCheckSnapshot(),statusLabel:'Исправлено частично'});
-      setChatState('Автоисправление остановлено · часть правок применена',true,'error');
+      setChatState('Автоисправление остановлено · часть правок применена',abortReason!=='user',
+        abortReason==='user'?'':'error');
+    }else if(!workspaceChanged&&abortReason==='user'){
+      finishOperation(operation,{state:'undone',summary:'Остановлено пользователем. Модель не изменена.',
+        statusLabel:'Остановлено'});
+      setChatState('Автоисправление остановлено · модель не изменена',false,'');
+    }else if(!workspaceChanged&&abortReason==='timeout'){
+      failOperation(operation,'AI не ответил за отведённое время. Модель не изменена.');
+      setChatState('AI не ответил · автоисправление остановлено',true,'error');
     }else if(!workspaceChanged){
       failOperation(operation,'Автоисправление не выполнено: '+e.message);
       setChatState('Автоисправление не выполнено',true,'error');
     }else toast('Автоисправление отменено: открыто другое изделие',true);
-  }finally{setChatBusy(false); refreshBalance();}
+  }finally{finishChatRequest(controller);setChatBusy(false); refreshBalance();}
 }
 $('btnFixAll').onclick=fixAll;
 $('chatShowLog').onclick=()=>{
   const log=$('operationLog');
   if(log.hidden)return;
-  log.scrollIntoView({block:'nearest',
-    behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
+  const history=$('chatlog');history.scrollTop=history.scrollHeight;
+  history.focus({preventScroll:true});
 };
 $('chatUndoQuick').onclick=()=>$('btnUndo').click();
 $('chatSend').onclick=sendChat;

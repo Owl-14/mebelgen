@@ -61,6 +61,39 @@ def test_unknown_command_no_spec():
     assert r["spec"] is None and r["changes"] == []
 
 
+def test_provider_failure_is_machine_readable(monkeypatch):
+    import src.spec_chat as sc
+
+    class BrokenProvider:
+        def chat(self, *args, **kwargs):
+            raise RuntimeError("offline")
+
+    monkeypatch.setattr(sc, "get_chat_provider", lambda name=None: BrokenProvider())
+    r = sc.chat_edit(SPEC, "сделай глубину 600")
+    assert r["spec"] is None
+    assert r["error"] == r["reply"]
+    assert "offline" in r["error"]
+
+
+def test_openai_compat_provider_has_bounded_timeout_without_hidden_retries(monkeypatch):
+    import types
+    import src.spec_chat as sc
+
+    captured = {}
+
+    class FakeOpenAI:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("SPEC_CHAT_TIMEOUT_S", "45")
+    monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(OpenAI=FakeOpenAI))
+    sc.OpenAICompatProvider("openai")
+
+    assert captured["timeout"] == 45.0
+    assert captured["max_retries"] == 0
+
+
 def test_result_regenerates():
     """Правка чатом даёт спеку, из которой конвейер собирает валидную модель."""
     from src.studio import build_payload
