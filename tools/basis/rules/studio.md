@@ -66,3 +66,19 @@ AKD-214) — запись в каталоге + пустой воркспейс 
 - сохранённый ParamSpec совместим со всем конвейером (deliver/viewer/build-b3d);
 - тесты: `tests/test_studio.py` (payload, аксонометрия), `tests/test_webviewer.py`;
   e2e ИИ — `qa/e2e_ai.py`.
+
+## Identity/admin — отдельный контур
+
+Локальный первый срез управления компаниями запускается отдельно:
+
+```bash
+AKEDA_BOOTSTRAP_PASSWORD='<секрет минимум 15 символов>' \
+python main.py admin --bootstrap-email admin@example.com
+```
+
+Он реализует вход, компании, memberships, приглашения, роли, аудит и простой
+переход `Открыть компанию` без тикетов/TTL. Переход к клиентским проектам пока
+заблокирован до tenant-миграции Studio: нынешние `paramspecs/`, версии, previews,
+build history и `_Studio.spec_path` общие для процесса. Контракт и этапы — в
+`rules/identity-access.md`, `ux/IDENTITY_ACCESS_ADMIN_SPEC.md` и
+`ux/DEMO_COMPANY_AND_ADMIN_VIEW_SPEC.md`.

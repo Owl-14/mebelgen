@@ -16,6 +16,7 @@ Python-код; координаты деталей ВСЕГДА считает �
 | Материалы: дефолты, база, резолвер | [rules/materials.md](rules/materials.md) |
 | Studio: UI, API, каталог, чат | [rules/studio.md](rules/studio.md) |
 | Визуальные правки Studio без потери функций | [rules/studio-ui.md](rules/studio-ui.md) |
+| Логин, компании, роли, сотрудники, просмотр компании, demo-сессии | [rules/identity-access.md](rules/identity-access.md) |
 | Продуктовая логика, UX-этапы и принятые решения | [ux/README.md](ux/README.md) |
 | Лист согласования, чертёж | [rules/delivery.md](rules/delivery.md) |
 | Команды CLI, установка, env | [README.md](README.md) |

@@ -295,6 +295,17 @@ def cmd_studio(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_admin(args: argparse.Namespace) -> int:
+    """Локальный identity/admin-контур; Studio подключается после tenant-миграции."""
+    from src.admin import run_admin
+
+    run_admin(db_path=args.db, port=args.port,
+              open_browser=not args.no_open,
+              bootstrap_email=args.bootstrap_email,
+              bootstrap_name=args.bootstrap_name)
+    return 0
+
+
 def cmd_techview(args: argparse.Namespace) -> int:
     from src.techview import build_techview_svg
 
@@ -569,6 +580,25 @@ def main() -> int:
     p_st.add_argument("--out", help="Каталог для сохранений (по умолчанию рядом со спекой)")
     p_st.add_argument("--no-open", action="store_true", help="Не открывать браузер")
     p_st.set_defaults(func=cmd_studio)
+
+    p_ad = sub.add_parser(
+        "admin",
+        help="Локальная админ-панель: вход, компании, сотрудники, роли и аудит",
+    )
+    p_ad.add_argument("--port", type=int, default=8766)
+    p_ad.add_argument(
+        "--db",
+        default=".akeda-data/identity.sqlite3",
+        help="SQLite identity DB (по умолчанию .akeda-data/identity.sqlite3)",
+    )
+    p_ad.add_argument(
+        "--bootstrap-email",
+        default=None,
+        help="Email первого platform admin; пароль только через AKEDA_BOOTSTRAP_PASSWORD",
+    )
+    p_ad.add_argument("--bootstrap-name", default="Администратор Akeda")
+    p_ad.add_argument("--no-open", action="store_true", help="Не открывать браузер")
+    p_ad.set_defaults(func=cmd_admin)
 
     p_tv = sub.add_parser("techview", help="ParamSpec/project → чертёж SVG (фронт+бок, размерки/выноски без пересечений)")
     p_tv.add_argument("input", help="ParamSpec или project.json")

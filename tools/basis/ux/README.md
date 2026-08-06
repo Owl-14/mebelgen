@@ -76,3 +76,9 @@
   правила использования утверждённой марки Studio.
 - [../rules/studio-ui.md](../rules/studio-ui.md) — техническая граница редизайна
   и функциональный parity-контракт.
+- [IDENTITY_ACCESS_ADMIN_SPEC.md](IDENTITY_ACCESS_ADMIN_SPEC.md) — отдельный
+  контур логина, компаний, сотрудников, ролей и аудита.
+- [DEMO_COMPANY_AND_ADMIN_VIEW_SPEC.md](DEMO_COMPANY_AND_ADMIN_VIEW_SPEC.md) —
+  простой переход Akeda в компанию и изолированная demo-песочница на сессию.
+- [../rules/identity-access.md](../rules/identity-access.md) — обязательные
+  security-инварианты для реализации этого контура.
