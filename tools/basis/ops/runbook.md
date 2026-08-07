@@ -33,7 +33,8 @@
 
 ## Бэкапы изделий
 [backup-paramspecs.sh](backup-paramspecs.sh) → `/opt/bazis/backups`, cron 04:00,
-глубина 14 суток. Восстановление: `tar xzf paramspecs-<дата>.tgz -C /opt/bazis/basis`.
+глубина 14 суток. Скрипт создаёт отдельную consistent SQLite backup и архивирует
+`tenants/`; legacy-каталог остаётся в `paramspecs-<дата>.tgz`.
 
 ## Ключи и лимиты
 `.env` на сервере (руками, в git не попадает): ключи ИИ-провайдеров + лимиты
