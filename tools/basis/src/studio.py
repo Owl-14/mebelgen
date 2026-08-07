@@ -868,9 +868,6 @@ def make_handler(st: _Studio):
         def do_GET(self):
             path = urlsplit(self.path).path
             if path == "/login":
-                if not st.require_auth:
-                    self._redirect("/index.html")
-                    return
                 auth = self._load_auth()
                 if auth and (auth["context"].get("organization") or {}).get("id"):
                     self._redirect("/index.html")
