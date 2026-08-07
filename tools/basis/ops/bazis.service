@@ -1,14 +1,16 @@
-# systemd-юнит демо Akeda Studio (сервер 80.66.89.3, /etc/systemd/system/bazis.service)
+# systemd-юнит Akeda Studio (сервер 80.66.89.3, /etc/systemd/system/bazis.service)
 [Unit]
-Description=Akeda Studio demo (studio.akeda.ru)
+Description=Akeda Studio (studio.akeda.ru)
 After=network.target
 
 [Service]
 User=bazis
 WorkingDirectory=/opt/bazis/basis
-# STUDIO_PUBLIC=1: rate-limit чата, суточный бюджет токенов, демо-образцы read-only (AKD-271)
-Environment=STUDIO_PUBLIC=1
-ExecStart=/opt/bazis/venv/bin/python main.py studio paramspecs/wardrobe_demo.json --no-open --port 8765 --out /opt/bazis/out
+Environment=STUDIO_REQUIRE_AUTH=1
+Environment=AKEDA_COOKIE_SECURE=1
+Environment=AKEDA_STUDIO_ORIGIN=https://studio.akeda.ru
+Environment=AKEDA_ADMIN_URL=/admin
+ExecStart=/opt/bazis/venv/bin/python main.py studio paramspecs/wardrobe_demo.json --no-open --port 8765 --out /opt/bazis/out --identity-db /opt/bazis/data/identity.sqlite3 --tenant-root /opt/bazis/tenants --require-auth
 Restart=always
 RestartSec=3
 

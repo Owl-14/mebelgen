@@ -708,7 +708,16 @@ class _AdminHandler(BaseHTTPRequestHandler):
         payload = _as_mapping(result)
         payload.pop("session_token", None)
         payload["csrf_token"] = csrf_token
-        payload.update({"ok": True, "redirect": "/admin"})
+        payload.update(
+            {
+                "ok": True,
+                "redirect": (
+                    "/index.html"
+                    if _as_mapping(result.get("organization")).get("id")
+                    else "/admin"
+                ),
+            }
+        )
         self._json(200, payload, headers=headers)
 
     def _post_activate(self, body: dict[str, Any]) -> None:

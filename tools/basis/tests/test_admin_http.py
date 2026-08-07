@@ -162,6 +162,31 @@ def create_organization(browser: Browser, suffix: str = "A") -> dict[str, Any]:
     return response.json()
 
 
+def test_company_user_login_redirects_to_studio(live_admin: LiveAdmin) -> None:
+    admin = live_admin.browser
+    login(admin)
+    response = admin.request(
+        "POST",
+        "/api/admin/organizations/provision",
+        {
+            "name": "Company Redirect",
+            "owner_name": "Owner Redirect",
+            "owner_email": "owner-redirect@example.test",
+        },
+        headers=admin.csrf_headers(),
+    )
+    assert response.status == 201, response.body
+    credentials = response.json()["credentials"]
+    owner = Browser(admin.host, admin.port)
+    result = owner.request(
+        "POST",
+        "/api/auth/login",
+        {"email": credentials["login"], "password": credentials["password"]},
+    )
+    assert result.status == 200
+    assert result.json()["redirect"] == "/index.html"
+
+
 def test_unauthenticated_redirects_and_pages_have_security_headers(live_admin: LiveAdmin) -> None:
     browser = live_admin.browser
     root = browser.request("GET", "/", content_type=None)

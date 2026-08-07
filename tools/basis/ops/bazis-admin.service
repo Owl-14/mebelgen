@@ -1,0 +1,15 @@
+[Unit]
+Description=Akeda Studio identity administration
+After=network.target
+
+[Service]
+User=bazis
+WorkingDirectory=/opt/bazis/basis
+Environment=AKEDA_COOKIE_SECURE=1
+Environment=AKEDA_ADMIN_ORIGIN=https://studio.akeda.ru
+ExecStart=/opt/bazis/venv/bin/python main.py admin --db /opt/bazis/data/identity.sqlite3 --no-open --port 8766
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

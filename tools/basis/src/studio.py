@@ -15,11 +15,16 @@ Python возвращает панели/присадки/фурнитуру/п�
 from __future__ import annotations
 
 import json
+import hmac
+import secrets
 import threading
 import webbrowser
+from email.utils import formatdate
+from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 # ------------------------------------------------------------------ формы архетипов
 #
@@ -522,12 +527,45 @@ class _ChatGuard:
 # ------------------------------------------------------------------ server
 
 class _Studio:
-    def __init__(self, spec_path: Path, out_dir: Path):
-        self.spec_path = spec_path
-        self.out_dir = out_dir
-        self.spec = json.loads(spec_path.read_text(encoding="utf-8"))
+    def __init__(
+        self,
+        spec_path: Path,
+        out_dir: Path,
+        *,
+        identity_db: Path | None = None,
+        tenant_root: Path | None = None,
+        require_auth: bool = False,
+    ):
+        from .studio_tenants import TenantWorkspaceManager
+
+        self.spec_path = spec_path.resolve()
+        self.out_dir = out_dir.resolve()
+        self.spec = json.loads(self.spec_path.read_text(encoding="utf-8"))
         self.public = _os.environ.get("STUDIO_PUBLIC") == "1"
-        self.guard = _ChatGuard(out_dir)
+        self.require_auth = bool(require_auth)
+        self.cookie_secure = (
+            _os.environ.get("AKEDA_COOKIE_SECURE", "").strip().lower()
+            in {"1", "true", "yes", "on"}
+        )
+        self.configured_origin = _os.environ.get("AKEDA_STUDIO_ORIGIN", "").rstrip("/")
+        self.admin_url = _os.environ.get("AKEDA_ADMIN_URL", "/admin").strip() or "/admin"
+        self.identity_store = None
+        self.login_throttle = None
+        if self.require_auth:
+            if identity_db is None:
+                raise RuntimeError("Studio auth требует путь к identity DB")
+            from .admin import _LoginThrottle
+            from .identity import IdentityStore
+
+            self.identity_store = IdentityStore(identity_db)
+            self.identity_store.migrate()
+            self.login_throttle = _LoginThrottle()
+        self.workspaces = TenantWorkspaceManager(
+            self.spec_path,
+            self.out_dir,
+            tenant_root=tenant_root if self.require_auth else None,
+        )
+        self.guard = _ChatGuard(self.out_dir)
         self.started = _time.time()               # /healthz, /version (AKD-264)
         # демо-режим: изделия, существовавшие на старте, защищены от перезаписи
         self.protected: set[str] = (
@@ -536,60 +574,359 @@ class _Studio:
             if self.public else set())
 
 
+def _studio_login_page() -> str:
+    """Small same-origin login page for the authenticated Studio process."""
+
+    return r"""<!doctype html><html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Вход · Akeda Studio</title><style>
+:root{font-family:Inter,Segoe UI,Arial,sans-serif;color:#171a20;background:#eef1f5}
+*{box-sizing:border-box}body{min-height:100vh;margin:0;display:grid;place-items:center;
+  background:radial-gradient(circle at 20% 0,#fff 0,#f4f6f9 38%,#e9edf3 100%)}
+.card{width:min(430px,calc(100vw - 32px));padding:34px;border:1px solid #dfe4ea;
+  border-radius:22px;background:rgba(255,255,255,.94);box-shadow:0 24px 70px rgba(30,39,54,.12)}
+.brand{display:flex;align-items:center;gap:12px;margin-bottom:26px}.brand img{width:178px;height:auto}
+.brand span{color:#707987;font-size:12px}.eyebrow{margin:0 0 8px;color:#2563d9;font-size:11px;
+  font-weight:750;letter-spacing:.12em;text-transform:uppercase}h1{margin:0 0 8px;font-size:25px}
+.lead{margin:0 0 24px;color:#687180;line-height:1.5}label{display:grid;gap:7px;margin:14px 0;
+  color:#454e5c;font-size:12px;font-weight:650}input{width:100%;height:46px;border:1px solid #ccd3dd;
+  border-radius:12px;padding:0 13px;font:inherit;background:#fff;outline:none}input:focus{border-color:#3478ea;
+  box-shadow:0 0 0 3px rgba(52,120,234,.12)}button{width:100%;height:46px;border:0;border-radius:12px;
+  background:#2466d8;color:white;font:inherit;font-weight:750;cursor:pointer}button:disabled{opacity:.55;cursor:wait}
+#error{min-height:20px;margin:12px 0 0;color:#c73d43;font-size:12px;line-height:1.4}
+#companies{display:none;margin:14px 0;padding:12px;border-radius:12px;background:#f4f7fb}
+#companies.on{display:grid;gap:8px}#companies button{height:auto;min-height:40px;padding:9px 12px;
+  background:white;color:#283140;border:1px solid #d8dee7;text-align:left}
+.foot{margin-top:22px;color:#8a929e;font-size:11px;text-align:center}
+</style></head><body><main class="card">
+<div class="brand"><img src="/assets/studio/akeda-studio-wordmark.png" alt="Akeda Studio"><span>от ТЗ до производства</span></div>
+<p class="eyebrow">Рабочее пространство</p><h1>Вход в Studio</h1>
+<p class="lead">Используйте логин сотрудника, выданный командой Akeda.</p>
+<form id="form"><label>Почта<input id="email" name="email" type="email" autocomplete="username" required></label>
+<label>Пароль<input id="password" name="password" type="password" autocomplete="current-password" required></label>
+<div id="companies" aria-label="Выбор компании"></div><button id="submit" type="submit">Войти</button>
+<p id="error" role="alert"></p></form><div class="foot">Доступ выдаётся администратором Akeda</div>
+</main><script>
+let organizationId=null;const form=document.getElementById('form'),error=document.getElementById('error');
+async function login(){const button=document.getElementById('submit');button.disabled=true;error.textContent='';
+  try{const response=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({email:document.getElementById('email').value,password:document.getElementById('password').value,
+      organization_id:organizationId})});const data=await response.json();
+    if(data.code==='organization_selection_required'){
+      const organizations=((data.details||{}).organizations||[]),box=document.getElementById('companies');
+      box.innerHTML='<b>Выберите компанию</b>'+organizations.map(item=>
+        `<button type="button" data-id="${item.id}">${item.name}<small> · ${item.role}</small></button>`).join('');
+      box.classList.add('on');box.querySelectorAll('button').forEach(item=>item.onclick=()=>{organizationId=item.dataset.id;login();});
+      return;
+    }
+    if(!response.ok||!data.ok)throw new Error(data.error||'Не удалось войти');
+    location.href=data.redirect||'/index.html';
+  }catch(reason){error.textContent=reason.message||'Не удалось войти';}
+  finally{button.disabled=false;}}
+form.addEventListener('submit',event=>{event.preventDefault();organizationId=null;login();});
+</script></body></html>"""
+
+
 def make_handler(st: _Studio):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *a):                       # тихий сервер
             pass
 
-        def _send(self, code: int, body: bytes, ctype: str = "application/json; charset=utf-8"):
+        def _send(
+            self,
+            code: int,
+            body: bytes,
+            ctype: str = "application/json; charset=utf-8",
+            *,
+            headers: list[tuple[str, str]] | None = None,
+        ):
             try:
                 self.send_response(code)
                 self.send_header("Content-Type", ctype)
                 self.send_header("Content-Length", str(len(body)))
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.send_header("X-Frame-Options", "DENY")
+                self.send_header("Referrer-Policy", "same-origin")
+                if st.require_auth:
+                    self.send_header("Cache-Control", "no-store, max-age=0")
+                if st.cookie_secure:
+                    self.send_header("Strict-Transport-Security", "max-age=31536000")
+                for name, value in headers or []:
+                    self.send_header(name, value)
                 self.end_headers()
                 self.wfile.write(body)
             except (BrokenPipeError, ConnectionResetError):
                 # Штатная отмена fetch в Studio: клиент больше не ждёт ответ.
                 return
 
-        def _json(self, obj: Any, code: int = 200):
-            self._send(code, json.dumps(obj, ensure_ascii=False).encode("utf-8"))
+        def _json(
+            self,
+            obj: Any,
+            code: int = 200,
+            *,
+            headers: list[tuple[str, str]] | None = None,
+        ):
+            self._send(
+                code,
+                json.dumps(obj, ensure_ascii=False).encode("utf-8"),
+                headers=headers,
+            )
+
+        def _redirect(self, location: str, *, headers: list[tuple[str, str]] | None = None):
+            self._send(303, b"", headers=[("Location", location), *(headers or [])])
+
+        def _cookies(self) -> dict[str, str]:
+            parsed = SimpleCookie()
+            try:
+                parsed.load(self.headers.get("Cookie", ""))
+            except Exception:
+                return {}
+            return {name: morsel.value for name, morsel in parsed.items()}
+
+        def _cookie(
+            self,
+            name: str,
+            value: str,
+            *,
+            http_only: bool,
+            clear: bool = False,
+            max_age: int | None = None,
+        ) -> str:
+            cookie = SimpleCookie()
+            cookie[name] = value
+            morsel = cookie[name]
+            morsel["path"] = "/"
+            morsel["samesite"] = "Lax"
+            if http_only:
+                morsel["httponly"] = True
+            if st.cookie_secure:
+                morsel["secure"] = True
+            if clear:
+                morsel["max-age"] = 0
+                morsel["expires"] = formatdate(0, usegmt=True)
+            elif max_age is not None:
+                morsel["max-age"] = max(1, int(max_age))
+            return morsel.OutputString()
+
+        def _clear_auth_headers(self) -> list[tuple[str, str]]:
+            from .admin import CSRF_COOKIE, SESSION_COOKIE, SUPPORT_COOKIE
+
+            return [
+                ("Set-Cookie", self._cookie(SESSION_COOKIE, "", http_only=True, clear=True)),
+                ("Set-Cookie", self._cookie(CSRF_COOKIE, "", http_only=False, clear=True)),
+                ("Set-Cookie", self._cookie(SUPPORT_COOKIE, "", http_only=True, clear=True)),
+            ]
+
+        def _login_headers(self, result: dict[str, Any]) -> list[tuple[str, str]]:
+            from .admin import CSRF_COOKIE, SESSION_COOKIE, SUPPORT_COOKIE
+
+            session_token = str(result.get("session_token") or "")
+            csrf_token = str(result.get("csrf_token") or "")
+            if not session_token or not csrf_token:
+                raise RuntimeError("IdentityStore не вернул секреты сессии")
+            expires_at = result.get("expires_at")
+            max_age = max(1, int(expires_at) - int(_time.time())) if expires_at else None
+            return [
+                ("Set-Cookie", self._cookie(SESSION_COOKIE, session_token, http_only=True, max_age=max_age)),
+                ("Set-Cookie", self._cookie(CSRF_COOKIE, csrf_token, http_only=False, max_age=max_age)),
+                ("Set-Cookie", self._cookie(SUPPORT_COOKIE, "", http_only=True, clear=True)),
+            ]
+
+        def _request_origin(self) -> str:
+            if st.configured_origin:
+                return st.configured_origin
+            host = self.headers.get("Host", "")
+            allowed = {
+                f"127.0.0.1:{self.server.server_address[1]}",
+                f"localhost:{self.server.server_address[1]}",
+            }
+            if host not in allowed:
+                raise PermissionError("Недопустимый адрес запроса")
+            return f"{'https' if st.cookie_secure else 'http'}://{host}"
+
+        def _require_same_origin(self) -> bool:
+            if not st.require_auth:
+                return True
+            origin = self.headers.get("Origin", "")
+            try:
+                expected = self._request_origin()
+            except PermissionError:
+                self._json({"ok": False, "error": "Недопустимый адрес запроса"}, 400)
+                return False
+            if not origin or origin == "null" or not hmac.compare_digest(origin, expected):
+                self._json({"ok": False, "error": "Запрос отклонён: неверный источник"}, 403)
+                return False
+            return True
+
+        def _load_auth(self) -> dict[str, Any] | None:
+            if not st.require_auth or st.identity_store is None:
+                return None
+            from .admin import SESSION_COOKIE, SUPPORT_COOKIE
+
+            cookies = self._cookies()
+            token = cookies.get(SESSION_COOKIE, "")
+            support_id = cookies.get(SUPPORT_COOKIE) or None
+            if not token:
+                return None
+            context = st.identity_store.session(token, support_session_id=support_id)
+            if context is None and support_id:
+                context = st.identity_store.session(token, support_session_id=None)
+                support_id = None
+            if context is None:
+                return None
+            organization = context.get("organization") or {}
+            support = context.get("support_session") or {}
+            if not organization.get("id") and support.get("organization_id"):
+                snapshot = st.identity_store.snapshot(
+                    actor_user_id=(context.get("user") or {}).get("id"),
+                    organization_id=support.get("organization_id"),
+                    support_session_id=support.get("id"),
+                    primary_session_id=(context.get("session") or {}).get("id"),
+                )
+                context = dict(context)
+                context.update(
+                    {
+                        "organization": snapshot.get("organization"),
+                        "membership": snapshot.get("membership"),
+                        "permissions": snapshot.get("permissions") or [],
+                        "support_session": snapshot.get("support_session") or support,
+                    }
+                )
+            return {"token": token, "support_session_id": support_id, "context": context}
+
+        def _require_access(
+            self,
+            permission: str | None = None,
+            *,
+            csrf: bool = False,
+            page: bool = False,
+        ) -> dict[str, Any] | None:
+            if not st.require_auth:
+                return None
+            from .admin import CSRF_COOKIE
+
+            auth = self._load_auth()
+            if auth is None:
+                if page:
+                    self._redirect("/login", headers=self._clear_auth_headers())
+                else:
+                    self._json(
+                        {"ok": False, "error": "Требуется вход", "code": "unauthenticated"},
+                        401,
+                        headers=self._clear_auth_headers(),
+                    )
+                return None
+            context = auth["context"]
+            organization = context.get("organization") or {}
+            if not organization.get("id"):
+                if page:
+                    self._redirect(st.admin_url)
+                else:
+                    self._json(
+                        {"ok": False, "error": "Выберите компанию", "code": "organization_required"},
+                        403,
+                    )
+                return None
+            if permission and permission not in set(context.get("permissions") or []):
+                self._json(
+                    {"ok": False, "error": "Недостаточно прав", "code": "permission_denied"},
+                    403,
+                )
+                return None
+            if csrf:
+                header = self.headers.get("X-CSRF-Token", "")
+                cookie = self._cookies().get(CSRF_COOKIE, "")
+                valid = bool(header and cookie and hmac.compare_digest(header, cookie))
+                if valid and st.identity_store is not None:
+                    valid = st.identity_store.verify_csrf(auth["token"], header)
+                if not valid:
+                    self._json(
+                        {"ok": False, "error": "Проверка CSRF не пройдена", "code": "csrf_failed"},
+                        403,
+                    )
+                    return None
+            return auth
+
+        @staticmethod
+        def _public_auth(auth: dict[str, Any] | None) -> dict[str, Any] | None:
+            if not auth:
+                return None
+            context = auth.get("context") or {}
+            return {
+                "user": context.get("user"),
+                "organization": context.get("organization"),
+                "membership": context.get("membership"),
+                "permissions": context.get("permissions") or [],
+                "support_session": context.get("support_session"),
+                "viewing_as_akeda": bool(context.get("support_session")),
+            }
 
         def _body(self) -> dict[str, Any]:
             n = int(self.headers.get("Content-Length") or 0)
             return json.loads(self.rfile.read(n).decode("utf-8")) if n else {}
 
         def do_GET(self):
-            if self.path in ("/", "/index.html"):
+            path = urlsplit(self.path).path
+            if path == "/login":
+                if not st.require_auth:
+                    self._redirect("/index.html")
+                    return
+                auth = self._load_auth()
+                if auth and (auth["context"].get("organization") or {}).get("id"):
+                    self._redirect("/index.html")
+                    return
+                self._send(
+                    200,
+                    _studio_login_page().encode("utf-8"),
+                    "text/html; charset=utf-8",
+                )
+            elif path == "/api/auth/me":
+                if not st.require_auth:
+                    self._json({"authenticated": False})
+                    return
+                auth = self._require_access("organization.read")
+                if auth is None:
+                    return
+                payload = self._public_auth(auth) or {}
+                payload["authenticated"] = True
+                self._json(payload)
+            elif path in ("/", "/index.html"):
+                auth = self._require_access("project.read", page=True)
+                if st.require_auth and auth is None:
+                    return
+                spec_path = st.workspaces.current_spec_path(auth)
+                spec = json.loads(spec_path.read_text(encoding="utf-8"))
                 from .webviewer import SCENE_JS
                 page = (PAGE
                         .replace("__SCENE_JS__", SCENE_JS)
                         .replace("__FIELDS__", json.dumps(ARCHETYPE_FIELDS, ensure_ascii=False))
                         .replace("__SECTION_ARCHS__", json.dumps(SECTION_ARCHETYPES))
-                        .replace("__SPEC__", json.dumps(st.spec, ensure_ascii=False)
+                        .replace("__AUTH__", json.dumps(self._public_auth(auth), ensure_ascii=False)
+                                 .replace("</", "<\\/"))
+                        .replace("__SPEC__", json.dumps(spec, ensure_ascii=False)
                                  .replace("</", "<\\/")))
                 self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
-            elif self.path.startswith("/vendor/"):    # three.js локально, без CDN (AKD-261)
+            elif path.startswith("/vendor/"):    # three.js локально, без CDN (AKD-261)
                 vd = (Path(__file__).resolve().parent.parent / "vendor")
-                p = (vd / Path(self.path[len("/vendor/"):]).name).resolve()
+                p = (vd / Path(path[len("/vendor/"):]).name).resolve()
                 if p.parent == vd.resolve() and p.suffix == ".js" and p.is_file():
                     self._send(200, p.read_bytes(),
                                "application/javascript; charset=utf-8")
                 else:
                     self._send(404, b"{}")
-            elif self.path in {                       # exact user-supplied brand crops
+            elif path in {                       # exact user-supplied brand crops
                 "/assets/studio/akeda-studio-wordmark.png",
                 "/assets/studio/akeda-studio-mark.png",
             }:
                 assets = Path(__file__).resolve().parent.parent / "assets" / "studio"
-                p = assets / self.path.rsplit("/", 1)[-1]
+                p = assets / path.rsplit("/", 1)[-1]
                 if p.is_file():
                     self._send(200, p.read_bytes(), "image/png")
                 else:
                     self._send(404, b"{}")
-            elif self.path == "/healthz":             # мониторинг (AKD-264)
+            elif path == "/healthz":             # мониторинг (AKD-264)
                 self._json({"ok": True, "uptime_s": int(_time.time() - st.started)})
-            elif self.path == "/version":             # какой код развёрнут (AKD-264)
+            elif path == "/version":             # какой код развёрнут (AKD-264)
                 sha = ""
                 try:
                     sha = (Path(__file__).resolve().parent.parent / "DEPLOY_SHA") \
@@ -598,22 +935,30 @@ def make_handler(st: _Studio):
                     pass
                 self._json({"sha": sha or "dev", "public": st.public,
                             "started": int(st.started)})
-            elif self.path.startswith("/thumb/"):     # аксонометрия карточки (AKD-217)
+            elif path.startswith("/thumb/"):     # аксонометрия карточки (AKD-217)
+                auth = self._require_access("project.read")
+                if st.require_auth and auth is None:
+                    return
                 from urllib.parse import unquote
                 try:
-                    data = _thumb_svg_cached(st.spec_path.parent,
-                                             unquote(self.path[len("/thumb/"):]))
+                    workspace = st.workspaces.workspace(auth)
+                    data = _thumb_svg_cached(workspace.spec_dir,
+                                             unquote(path[len("/thumb/"):]))
                 except Exception:
                     data = None
                 if data:
                     self._send(200, data, "image/svg+xml; charset=utf-8")
                 else:
                     self._send(404, b"{}")
-            elif self.path.startswith("/preview/"):   # миниатюры каталога (AKD-217)
+            elif path.startswith("/preview/"):   # миниатюры каталога (AKD-217)
+                auth = self._require_access("project.read")
+                if st.require_auth and auth is None:
+                    return
                 from urllib.parse import unquote
-                name = unquote(self.path[len("/preview/"):])
-                p = (st.spec_path.parent / ".previews" / name).resolve()
-                if (p.parent == (st.spec_path.parent / ".previews").resolve()
+                workspace = st.workspaces.workspace(auth)
+                name = unquote(path[len("/preview/"):])
+                p = (workspace.spec_dir / ".previews" / name).resolve()
+                if (p.parent == (workspace.spec_dir / ".previews").resolve()
                         and p.suffix == ".png" and p.is_file()):
                     self._send(200, p.read_bytes(), "image/png")
                 else:
@@ -633,19 +978,121 @@ def make_handler(st: _Studio):
 
         def do_POST(self):
             try:
+                path = urlsplit(self.path).path
+                if not self._require_same_origin():
+                    return
                 body = self._body()
+                if path == "/api/auth/login":
+                    if not st.require_auth or st.identity_store is None or st.login_throttle is None:
+                        self._send(404, b"{}")
+                        return
+                    from .identity import IdentityError
+
+                    email = str(body.get("email") or "").strip().casefold()[:320]
+                    password = str(body.get("password") or "")[:4096]
+                    ip = self.client_address[0]
+                    retry = st.login_throttle.retry_after(ip, email)
+                    if retry:
+                        self._json(
+                            {
+                                "ok": False,
+                                "error": "Вход временно недоступен. Повторите позже.",
+                                "code": "rate_limited",
+                            },
+                            429,
+                            headers=[("Retry-After", str(retry))],
+                        )
+                        return
+                    try:
+                        result = st.identity_store.login(
+                            email,
+                            password,
+                            ip=ip,
+                            user_agent=self.headers.get("User-Agent"),
+                            organization_id=body.get("organization_id"),
+                        )
+                    except IdentityError as error:
+                        if getattr(error, "code", "") == "organization_selection_required":
+                            self._json(
+                                {
+                                    "ok": False,
+                                    "error": "Выберите компанию для входа.",
+                                    "code": "organization_selection_required",
+                                    "details": getattr(error, "details", {}),
+                                },
+                                409,
+                            )
+                            return
+                        st.login_throttle.failure(ip, email)
+                        self._json(
+                            {
+                                "ok": False,
+                                "error": "Неверная почта или пароль.",
+                                "code": "invalid_credentials",
+                            },
+                            401,
+                        )
+                        return
+                    st.login_throttle.success(ip, email)
+                    redirect = (
+                        "/index.html"
+                        if (result.get("organization") or {}).get("id")
+                        else st.admin_url
+                    )
+                    payload = dict(result)
+                    payload.pop("session_token", None)
+                    payload.pop("csrf_token", None)
+                    payload.update({"ok": True, "redirect": redirect})
+                    self._json(payload, headers=self._login_headers(result))
+                    return
+
+                if path == "/api/auth/logout":
+                    auth = self._require_access("organization.read", csrf=True)
+                    if auth is None:
+                        return
+                    if st.identity_store is not None:
+                        st.identity_store.logout(auth["token"])
+                    st.workspaces.clear_session(auth)
+                    self._json({"ok": True}, headers=self._clear_auth_headers())
+                    return
+
+                permissions = {
+                    "/api/chat": "ai.run",
+                    "/api/import-tz": "ai.run",
+                    "/api/new": "project.create",
+                    "/api/duplicate": "project.create",
+                    "/api/save": "project.write",
+                    "/api/restore": "project.write",
+                    "/api/export-cfrn": "production.export",
+                    "/api/deliver": "production.export",
+                    "/api/open-file": "production.export",
+                    "/api/build-b3d": "production.build",
+                }
+                auth = self._require_access(permissions.get(path, "project.read"), csrf=True)
+                if st.require_auth and auth is None:
+                    return
+                if path == "/api/import-tz" and auth is not None:
+                    if "project.create" not in set(auth["context"].get("permissions") or []):
+                        self._json(
+                            {"ok": False, "error": "Недостаточно прав", "code": "permission_denied"},
+                            403,
+                        )
+                        return
+                workspace = st.workspaces.workspace(auth)
+                spec_path = st.workspaces.current_spec_path(auth)
+                current_spec = json.loads(spec_path.read_text(encoding="utf-8"))
                 spec = body.get("spec") or {}
-                if self.path in ("/api/chat", "/api/import-tz"):
+                if path in ("/api/chat", "/api/import-tz"):
                     gate = self._chat_gate()
                     if gate:
                         self._json({"ok": False, "error": gate,
                                     "reply": "⛔ " + gate}, 429)
                         return
-                if self.path == "/api/generate":
+                if path == "/api/generate":
                     self._json(build_payload(spec))
-                elif self.path == "/api/techview":
+                elif path == "/api/techview":
                     self._json(techview_svg(spec, body.get("panel")))
-                elif self.path == "/api/chat":
+                elif path == "/api/chat":
                     from .spec_chat import chat_edit
                     ctx = body.get("context") or None
                     # ИИ не знает содержимого производственной базы: для
@@ -683,13 +1130,13 @@ def make_handler(st: _Studio):
                                     body.get("provider") or None)
                     st.guard.add_tokens(int(((res.get("usage") or {}).get("total")) or 0))
                     self._json(res)
-                elif self.path == "/api/providers":       # список нейросетей для селектора
+                elif path == "/api/providers":       # список нейросетей для селектора
                     from .spec_chat import available_providers
                     self._json(available_providers())
-                elif self.path == "/api/token-balance":   # лимиты/баланс выбранной сети
+                elif path == "/api/token-balance":   # лимиты/баланс выбранной сети
                     from .spec_chat import token_balance
                     self._json(token_balance(body.get("provider") or None))
-                elif self.path == "/api/import-tz":   # drag&drop ТЗ (D4) → провайдер чата
+                elif path == "/api/import-tz":   # drag&drop ТЗ (D4) → провайдер чата
                     try:
                         from .spec_chat import chat_edit
                         name = str(body.get("name", "tz.png"))
@@ -710,111 +1157,113 @@ def make_handler(st: _Studio):
                             self._json({"ok": False, "error":
                                         res.get("reply") or "не удалось распознать ТЗ"})
                             return
-                        if isinstance(st.spec, dict) and st.spec.get("draft"):
-                            out = st.spec_path        # ТЗ в черновик — тот же файл
+                        if isinstance(current_spec, dict) and current_spec.get("draft"):
+                            out = spec_path        # ТЗ в черновик — тот же файл
                         else:
                             title = new_spec.get("project_name", "Из ТЗ")
-                            out = st.spec_path.parent / f"{_slugify(title)}.json"
+                            out = workspace.spec_dir / f"{_slugify(title)}.json"
                             i = 2
                             while out.exists():
-                                out = st.spec_path.parent / f"{_slugify(title)}_{i}.json"
+                                out = workspace.spec_dir / f"{_slugify(title)}_{i}.json"
                                 i += 1
                         out.write_text(json.dumps(new_spec, ensure_ascii=False, indent=2),
                                        encoding="utf-8")
-                        st.spec, st.spec_path = new_spec, out
+                        st.workspaces.set_current(auth, out)
                         self._json({"ok": True, "spec": new_spec, "file": out.name,
                                     "usage": res.get("usage")})
                     except Exception as e:
                         self._json({"ok": False, "error": str(e)[:300]})
-                elif self.path == "/api/versions":    # версии спеки (D2)
-                    self._json({"versions": _list_versions(st.spec_path)})
-                elif self.path == "/api/restore":     # восстановить версию (D2)
+                elif path == "/api/versions":    # версии спеки (D2)
+                    self._json({"versions": _list_versions(spec_path)})
+                elif path == "/api/restore":     # восстановить версию (D2)
                     idx = int(body.get("index", -1))
-                    vs = _read_versions(st.spec_path)
+                    vs = _read_versions(spec_path)
                     if 0 <= idx < len(vs):
-                        st.spec = vs[idx]["spec"]
-                        self._json({"ok": True, "spec": st.spec,
+                        restored = vs[idx]["spec"]
+                        self._json({"ok": True, "spec": restored,
                                     "ts": vs[idx]["ts"]})
                     else:
                         self._json({"ok": False, "error": "нет такой версии"}, 404)
-                elif self.path == "/api/projects":    # каталог спек (D1)
-                    self._json({"projects": _list_projects(st.spec_path.parent),
-                                "current": st.spec_path.name})
-                elif self.path == "/api/open":        # открыть другую спеку (D1)
-                    p = _safe_spec_file(st.spec_path.parent, str(body.get("file", "")))
-                    st.spec = json.loads(p.read_text(encoding="utf-8"))
-                    st.spec_path = p
-                    self._json({"ok": True, "spec": st.spec, "file": p.name})
-                elif self.path == "/api/new":         # новое изделие: черновик (AKD-214)
+                elif path == "/api/projects":    # каталог спек (D1)
+                    self._json({"projects": _list_projects(workspace.spec_dir),
+                                "current": spec_path.name})
+                elif path == "/api/open":        # открыть другую спеку (D1)
+                    p = _safe_spec_file(workspace.spec_dir, str(body.get("file", "")))
+                    opened = json.loads(p.read_text(encoding="utf-8"))
+                    st.workspaces.set_current(auth, p)
+                    self._json({"ok": True, "spec": opened, "file": p.name})
+                elif path == "/api/new":         # новое изделие: черновик (AKD-214)
                     name = str(body.get("name") or "Новое изделие")
                     new_spec = {"schemaVersion": "paramspec-v1", "draft": True,
                                 "project_name": name}
-                    p = st.spec_path.parent / f"{_slugify(name)}.json"
+                    p = workspace.spec_dir / f"{_slugify(name)}.json"
                     i = 2
                     while p.exists():
-                        p = st.spec_path.parent / f"{_slugify(name)}_{i}.json"
+                        p = workspace.spec_dir / f"{_slugify(name)}_{i}.json"
                         i += 1
                     p.write_text(json.dumps(new_spec, ensure_ascii=False, indent=2),
                                  encoding="utf-8")
-                    st.spec, st.spec_path = new_spec, p
+                    st.workspaces.set_current(auth, p)
                     self._json({"ok": True, "spec": new_spec, "file": p.name})
-                elif self.path == "/api/duplicate":   # дубликат текущего (D1)
-                    dup = json.loads(json.dumps(spec or st.spec))
+                elif path == "/api/duplicate":   # дубликат текущего (D1)
+                    dup = json.loads(json.dumps(spec or current_spec))
                     dup["project_name"] = str(dup.get("project_name", "модель")) + " (копия)"
-                    p = st.spec_path.parent / f"{st.spec_path.stem}_copy.json"
+                    p = workspace.spec_dir / f"{spec_path.stem}_copy.json"
                     i = 2
                     while p.exists():
-                        p = st.spec_path.parent / f"{st.spec_path.stem}_copy{i}.json"
+                        p = workspace.spec_dir / f"{spec_path.stem}_copy{i}.json"
                         i += 1
                     p.write_text(json.dumps(dup, ensure_ascii=False, indent=2),
                                  encoding="utf-8")
-                    st.spec, st.spec_path = dup, p
+                    st.workspaces.set_current(auth, p)
                     self._json({"ok": True, "spec": dup, "file": p.name})
-                elif self.path == "/api/nesting":     # раскрой-превью (C2)
+                elif path == "/api/nesting":     # раскрой-превью (C2)
                     from .generators import generate_from_paramspec
                     from .nesting import nesting_svg
                     try:
                         self._json({"svg": nesting_svg(generate_from_paramspec(spec))})
                     except Exception as e:
                         self._json({"svg": "", "error": str(e)[:200]})
-                elif self.path == "/api/decors":
+                elif path == "/api/decors":
                     from .materials import list_sheet_decors
                     th = body.get("thickness")
                     self._json({"items": list_sheet_decors(
                         str(body.get("q", "")),
                         thickness=float(th) if th else None,
                         limit=int(body.get("limit", 30)))})
-                elif self.path == "/api/save":
+                elif path == "/api/save":
                     # демо-режим (AKD-271): исходные образцы каталога защищены
-                    if st.public and st.spec_path.name in st.protected:
+                    if workspace.mode == "demo" or (
+                        st.public and workspace.organization_id is None
+                        and spec_path.name in st.protected
+                    ):
                         self._json({"ok": False, "error":
                                     "демо-режим: исходное изделие защищено — "
                                     "нажмите «Дублировать» и правьте копию"}, 403)
                         return
-                    st.spec = spec
-                    st.spec_path.write_text(json.dumps(spec, ensure_ascii=False, indent=2),
-                                            encoding="utf-8")
+                    spec_path.write_text(json.dumps(spec, ensure_ascii=False, indent=2),
+                                         encoding="utf-8")
                     prev = body.get("preview")         # снапшот 3D для каталога (AKD-217)
                     if isinstance(prev, str) and prev.startswith("data:image/png;base64,"):
                         try:
                             import base64
-                            pd = st.spec_path.parent / ".previews"
+                            pd = workspace.spec_dir / ".previews"
                             pd.mkdir(exist_ok=True)
-                            (pd / (st.spec_path.stem + ".png")).write_bytes(
+                            (pd / (spec_path.stem + ".png")).write_bytes(
                                 base64.b64decode(prev.split(",", 1)[1]))
                         except Exception:
                             pass
                     if spec.get("draft"):              # черновик: только файл, без модели
-                        self._json({"ok": True, "spec": str(st.spec_path), "project": None})
+                        self._json({"ok": True, "spec": str(spec_path), "project": None})
                         return
-                    _snapshot_version(st.spec_path, spec)          # версия (D2)
+                    _snapshot_version(spec_path, spec)          # версия (D2)
                     from .generators import generate_from_paramspec
                     project = generate_from_paramspec(spec)
-                    out = st.out_dir / (st.spec_path.stem + ".project.json")
+                    out = workspace.out_dir / (spec_path.stem + ".project.json")
                     out.write_text(json.dumps(project, ensure_ascii=False, indent=2),
                                    encoding="utf-8")
-                    self._json({"ok": True, "spec": str(st.spec_path), "project": str(out)})
-                elif self.path == "/api/export-cfrn":
+                    self._json({"ok": True, "spec": str(spec_path), "project": str(out)})
+                elif path == "/api/export-cfrn":
                     from .generators import generate_from_paramspec
                     from .materials import resolve_project_materials
                     from .cfrn import project_to_cfrn_bytes
@@ -823,30 +1272,30 @@ def make_handler(st: _Studio):
                         project["material_refs"] = resolve_project_materials(project)
                     except Exception:
                         pass
-                    out = st.out_dir / (st.spec_path.stem + ".cfrn")
+                    out = workspace.out_dir / (spec_path.stem + ".cfrn")
                     out.write_bytes(project_to_cfrn_bytes(project))
                     self._json({"ok": True, "cfrn": str(out)})
-                elif self.path == "/api/build-b3d":
+                elif path == "/api/build-b3d":
                     payload = build_payload(spec)
                     if not payload["ok"]:                # деньги — только на зелёную модель
                         self._json({"ok": False, "error": "проверки не пройдены",
                                     "issues": payload["issues"]}, 409)
                         return
                     from .build_b3d import build_b3d_from_paramspec
-                    out = st.out_dir / (st.spec_path.stem + ".b3d")
+                    out = workspace.out_dir / (spec_path.stem + ".b3d")
                     try:
                         rep = build_b3d_from_paramspec(spec, out)
                         parity = _verify_parity(spec, out)         # паритет ✓ (AKD-169)
-                        _log_build(st.out_dir, spec, out, parity)  # история сборок (C3)
+                        _log_build(workspace.out_dir, spec, out, parity)  # история сборок (C3)
                         self._json({"ok": True, "parity": parity,
                                     **{k: str(v) for k, v in rep.items()}})
                     except Exception as e:
                         self._json({"ok": False, "error": str(e)[:300]}, 502)
-                elif self.path == "/api/builds":         # история сборок .b3d (C3)
-                    self._json(_read_builds(st.out_dir))
-                elif self.path == "/api/open-file":      # открыть результат (C3)
-                    self._json(_open_file(st.out_dir, str(body.get("path", ""))))
-                elif self.path == "/api/deliver":        # лист согласования (C3)
+                elif path == "/api/builds":         # история сборок .b3d (C3)
+                    self._json(_read_builds(workspace.out_dir))
+                elif path == "/api/open-file":      # открыть результат (C3)
+                    self._json(_open_file(workspace.out_dir, str(body.get("path", ""))))
+                elif path == "/api/deliver":        # лист согласования (C3)
                     from datetime import datetime
                     from .generators import generate_from_paramspec
                     from .materials import resolve_project_materials
@@ -856,7 +1305,7 @@ def make_handler(st: _Studio):
                         project["material_refs"] = resolve_project_materials(project)
                     except Exception:
                         pass
-                    res = create_delivery(spec, project, out_root=st.out_dir,
+                    res = create_delivery(spec, project, out_root=workspace.out_dir,
                                           created_iso=datetime.now().isoformat(timespec="seconds"),
                                           export=False)
                     import webbrowser
@@ -871,11 +1320,25 @@ def make_handler(st: _Studio):
     return Handler
 
 
-def run_studio(spec_path: str | Path, *, port: int = 8765, out_dir: str | Path | None = None,
-               open_browser: bool = True) -> None:
+def run_studio(
+    spec_path: str | Path,
+    *,
+    port: int = 8765,
+    out_dir: str | Path | None = None,
+    open_browser: bool = True,
+    identity_db: str | Path | None = None,
+    tenant_root: str | Path | None = None,
+    require_auth: bool = False,
+) -> None:
     spec_path = Path(spec_path)
     out = Path(out_dir) if out_dir else spec_path.parent
-    st = _Studio(spec_path, out)
+    st = _Studio(
+        spec_path,
+        out,
+        identity_db=Path(identity_db) if identity_db else None,
+        tenant_root=Path(tenant_root) if tenant_root else None,
+        require_auth=require_auth,
+    )
     srv = ThreadingHTTPServer(("127.0.0.1", port), make_handler(st))
     url = f"http://127.0.0.1:{port}/"
     print(f"Akeda Studio: {url}  (спека: {spec_path.name}; Ctrl+C — стоп)")
@@ -933,6 +1396,27 @@ PAGE = r"""<!DOCTYPE html>
   #side .studio-brand-mark{display:block;width:64px;height:auto;object-fit:contain}
   #side .studio-brand-tagline{display:block;margin-left:1px;color:#687180;
     font-size:9.5px;line-height:13px;font-weight:400;letter-spacing:.015em}
+  .profile-shell{position:relative;margin:0 0 12px}
+  #profileChip{display:grid;grid-template-columns:32px minmax(0,1fr) 14px;align-items:center;
+    gap:9px;width:100%;min-height:48px;padding:7px 9px;border:1px solid #e0e5eb;border-radius:11px;
+    background:#f8fafc;color:#202631;text-align:left;box-shadow:none}
+  #profileChip:hover,#profileChip[aria-expanded="true"]{border-color:#c8d5e7;background:#f2f6fb}
+  #profileChip[hidden]{display:none}
+  .profile-avatar{display:grid;place-items:center;width:32px;height:32px;border-radius:9px;
+    background:#1f66d3;color:#fff;font-size:11px;font-weight:750;letter-spacing:.03em}
+  .profile-copy{display:grid;min-width:0;gap:1px}.profile-copy strong,.profile-copy span{
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .profile-copy strong{font-size:11.5px;line-height:15px}.profile-copy span{color:#687180;
+    font-size:10px;line-height:14px}.profile-chevron{color:#7b8491;font-size:13px;text-align:center}
+  #profileMenu{position:absolute;z-index:40;top:54px;left:0;right:0;padding:10px;border:1px solid #dbe1e8;
+    border-radius:12px;background:#fff;box-shadow:0 14px 34px rgba(27,37,52,.16)}
+  #profileMenu[hidden]{display:none}.profile-menu-name{font-size:12px;font-weight:700}
+  .profile-menu-email{margin-top:2px;color:#687180;font-size:10.5px;overflow-wrap:anywhere}
+  .profile-menu-role{display:inline-flex;margin-top:8px;padding:3px 6px;border-radius:999px;
+    background:#eef4ff;color:#275fae;font-size:9.5px;font-weight:650}
+  #profileLogout{display:flex;align-items:center;justify-content:center;width:100%;margin-top:10px;
+    border-color:#e2e6eb;background:#fff;color:#3e4754}
+  #profileLogout:hover{border-color:#d5a7aa;background:#fff6f6;color:#a12e33}
   #side fieldset{border:0;border-radius:0;margin:0;padding:0}
   #side legend{font-size:12px;line-height:18px;font-weight:600;text-transform:none;
     color:var(--ink);padding:0;margin-bottom:6px}
@@ -1028,6 +1512,15 @@ PAGE = r"""<!DOCTYPE html>
   #main{--chat-stack-height:133px;--viewport-status-height:24px;
     grid-column:2;grid-row:1;position:relative;min-width:0;min-height:0;
     container-type:inline-size}
+  #supportBanner{position:absolute;z-index:9;top:0;left:0;right:0;min-height:36px;
+    display:flex;align-items:center;justify-content:center;gap:10px;padding:5px 12px;
+    background:#172b4d;color:#fff;box-shadow:0 1px 4px rgba(19,33,55,.22)}
+  #supportBanner[hidden]{display:none}#supportBanner span{font-size:11.5px}
+  #supportBanner strong{font-weight:750}#supportBack{height:26px;padding:0 9px;border-color:#71809a;
+    background:rgba(255,255,255,.08);color:#fff;font-size:10.5px}
+  #supportBack:hover{background:rgba(255,255,255,.16)}
+  #app.support-active #viewportTopbar{top:48px}
+  #app.support-active #hud{top:90px}
   #rightside{grid-column:3;grid-row:1;min-width:0;width:100%;background:var(--card);
     border-left:1px solid var(--line);overflow-y:auto;padding:0 12px 12px;
     opacity:1;visibility:visible;transition:opacity .12s ease}
@@ -1534,6 +2027,19 @@ PAGE = r"""<!DOCTYPE html>
     </span>
     <span class="studio-brand-tagline">от ТЗ до производства</span>
   </h1>
+  <div id="profileShell" class="profile-shell" hidden>
+    <button id="profileChip" type="button" aria-expanded="false" aria-controls="profileMenu">
+      <span id="profileInitials" class="profile-avatar" aria-hidden="true"></span>
+      <span class="profile-copy"><strong id="profileName"></strong><span id="profileCompany"></span></span>
+      <span class="profile-chevron" aria-hidden="true">⌄</span>
+    </button>
+    <div id="profileMenu" hidden>
+      <div id="profileMenuName" class="profile-menu-name"></div>
+      <div id="profileEmail" class="profile-menu-email"></div>
+      <span id="profileRole" class="profile-menu-role"></span>
+      <button id="profileLogout" type="button">Выйти из аккаунта</button>
+    </div>
+  </div>
 
   <fieldset id="fs_project"><legend>Проект</legend>
     <div class="row project-select"><label for="projSel">Изделие</label><select id="projSel"></select>
@@ -1824,6 +2330,10 @@ PAGE = r"""<!DOCTYPE html>
 </nav>
 
 <div id="main">
+  <div id="supportBanner" role="status" hidden>
+    <span>Вы просматриваете компанию <strong id="supportCompanyName"></strong> от имени Akeda</span>
+    <button id="supportBack" type="button">Вернуться в админку</button>
+  </div>
   <div id="view3d"></div>
   <div id="viewportTopbar">
     <div id="tabs" role="tablist" aria-label="Режим рабочего поля">
@@ -2013,6 +2523,26 @@ PAGE = r"""<!DOCTYPE html>
 <script src="/vendor/OrbitControls.js"></script>
 <script>
 __SCENE_JS__
+const AUTH_CONTEXT = __AUTH__;
+const nativeFetch = window.fetch.bind(window);
+function studioCookie(name){
+  const prefix=name+'=';
+  return document.cookie.split(';').map(item=>item.trim()).find(item=>item.startsWith(prefix))
+    ?.slice(prefix.length)||'';
+}
+window.fetch = (input, init={}) => {
+  const requestMethod=(init.method||(input instanceof Request?input.method:'GET')).toUpperCase();
+  const headers=new Headers(init.headers||(input instanceof Request?input.headers:undefined));
+  if(!['GET','HEAD','OPTIONS'].includes(requestMethod)){
+    const csrf=studioCookie('akeda_csrf');
+    if(csrf&&!headers.has('X-CSRF-Token'))headers.set('X-CSRF-Token',csrf);
+  }
+  return nativeFetch(input,{...init,headers,credentials:init.credentials||'same-origin'}).then(response=>{
+    const url=typeof input==='string'?input:(input&&input.url)||'';
+    if(response.status===401&&!url.includes('/api/auth/login'))location.href='/login';
+    return response;
+  });
+};
 let SPEC = __SPEC__;
 const FIELDS = __FIELDS__;                 // archetype -> [{key,label,type,...}]
 const SECTION_ARCHS = __SECTION_ARCHS__;   // архетипы с секциями
@@ -2020,6 +2550,40 @@ const $ = id => document.getElementById(id);
 const toast = (m,bad,sticky)=>{const t=$('toast');t.textContent=m;t.style.background=bad?'#b3261e':'#1a1d21';
   t.style.opacity=1;clearTimeout(t._h);
   if(!sticky) t._h=setTimeout(()=>t.style.opacity=0,bad?5000:2600);};
+
+/* ---------- текущий сотрудник и компания ---------- */
+function setupProfile(){
+  if(!AUTH_CONTEXT||!AUTH_CONTEXT.user||!AUTH_CONTEXT.organization)return;
+  const user=AUTH_CONTEXT.user,organization=AUTH_CONTEXT.organization,
+    membership=AUTH_CONTEXT.membership||{};
+  const displayName=user.display_name||user.email||'Сотрудник';
+  const initials=displayName.split(/\s+/).filter(Boolean).slice(0,2).map(part=>part[0]).join('').toUpperCase();
+  const roles={owner:'Владелец',admin:'Администратор',designer:'Конструктор',
+    technologist:'Технолог',reviewer:'Наблюдатель'};
+  $('profileInitials').textContent=initials||'А';$('profileName').textContent=displayName;
+  $('profileCompany').textContent=organization.name||'Компания';
+  $('profileMenuName').textContent=displayName;$('profileEmail').textContent=user.email||'';
+  $('profileRole').textContent=roles[membership.role]||membership.role||'Сотрудник';
+  if(AUTH_CONTEXT.viewing_as_akeda){
+    $('profileRole').textContent='Просмотр от Akeda';
+    $('supportCompanyName').textContent=organization.name||'компанию';
+    $('supportBanner').hidden=false;$('app').classList.add('support-active');
+    $('supportBack').onclick=async()=>{
+      const button=$('supportBack');button.disabled=true;
+      try{await fetch('/api/admin/company-view/end',{method:'POST',
+        headers:{'Content-Type':'application/json'},body:'{}'});}finally{location.href='/admin';}
+    };
+  }
+  $('profileShell').hidden=false;
+  $('profileChip').onclick=()=>{const open=$('profileMenu').hidden;
+    $('profileMenu').hidden=!open;$('profileChip').setAttribute('aria-expanded',String(open));};
+  document.addEventListener('click',event=>{if(!$('profileShell').contains(event.target)){
+    $('profileMenu').hidden=true;$('profileChip').setAttribute('aria-expanded','false');}});
+  $('profileLogout').onclick=async()=>{const button=$('profileLogout');button.disabled=true;
+    try{await fetch('/api/auth/logout',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});}
+    finally{location.href='/login';}};
+}
+setupProfile();
 
 /* ---------- 3D: общий движок MebelScene (как webviewer, + анимация открытия) ---------- */
 const view=$('view3d');
