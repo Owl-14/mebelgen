@@ -115,6 +115,8 @@ process-global состояние.
 
 - `/opt/bazis/data/identity.sqlite3` — учётки, memberships, сессии и аудит;
 - `/opt/bazis/tenants/<organization-id>/paramspecs/` — изделия, версии и previews;
+- `/opt/bazis/tenants/<organization-id>/paramspecs/.history/` — AI-команды и
+  ответы по каждому изделию, с автором и ревизиями до/после;
 - `/opt/bazis/tenants/<organization-id>/out/` — экспорты и сборки;
 - текущее изделие хранится на сессию, а не в process-global `_Studio.spec_path`.
 

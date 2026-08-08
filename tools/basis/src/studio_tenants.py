@@ -10,10 +10,13 @@ No geometry or viewer concerns belong here.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import threading
+import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -162,6 +165,144 @@ class TenantWorkspaceManager:
     def clear_session(self, auth: Mapping[str, Any] | None) -> None:
         with self._lock:
             self._current.pop(self.session_key(auth), None)
+
+    @staticmethod
+    def _spec_revision(spec: Mapping[str, Any] | None) -> str:
+        encoded = json.dumps(
+            dict(spec or {}),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()[:20]
+
+    def _history_file(
+        self,
+        auth: Mapping[str, Any] | None,
+        spec_path: Path,
+    ) -> Path:
+        workspace = self.workspace(auth)
+        candidate = spec_path.resolve()
+        if candidate.parent != workspace.spec_dir.resolve() or candidate.suffix != ".json":
+            raise ValueError("История относится к файлу вне каталога компании")
+        history_dir = workspace.spec_dir / ".history"
+        history_dir.mkdir(parents=True, exist_ok=True)
+        return history_dir / f"{candidate.stem}.ai.json"
+
+    def read_ai_history(
+        self,
+        auth: Mapping[str, Any] | None,
+        spec_path: Path,
+        *,
+        limit: int = 30,
+    ) -> list[dict[str, Any]]:
+        """Return recent server-owned AI operations for the selected product."""
+
+        if self.organization_id(auth) is None:
+            return []
+        history_file = self._history_file(auth, spec_path)
+        with self._lock:
+            try:
+                raw = json.loads(history_file.read_text(encoding="utf-8"))
+            except (OSError, ValueError, TypeError):
+                raw = []
+        if not isinstance(raw, list):
+            return []
+        safe_limit = max(1, min(int(limit), 200))
+        return [dict(item) for item in raw[-safe_limit:] if isinstance(item, Mapping)]
+
+    def append_ai_history(
+        self,
+        auth: Mapping[str, Any] | None,
+        spec_path: Path,
+        *,
+        message: str,
+        reply: str,
+        before_spec: Mapping[str, Any] | None,
+        after_spec: Mapping[str, Any] | None,
+        changes: list[Any] | None = None,
+        provider: str | None = None,
+        usage: Mapping[str, Any] | None = None,
+        context: Mapping[str, Any] | None = None,
+        image_count: int = 0,
+        keep: int = 200,
+    ) -> dict[str, Any]:
+        """Persist a compact AI operation without trusting a browser tenant id."""
+
+        organization_id = self.organization_id(auth)
+        if organization_id is None:
+            raise ValueError("AI-история требует контекст компании")
+        auth_context = self._context(auth)
+        user = _mapping(auth_context.get("user"))
+        selected_part = _mapping(_mapping(context).get("selected_part"))
+        clean_context: dict[str, Any] = {"scope": "model"}
+        if selected_part.get("name"):
+            clean_context = {
+                "scope": "part",
+                "part_name": str(selected_part.get("name"))[:240],
+                "part_type": str(selected_part.get("type") or "")[:120],
+            }
+        clean_usage: dict[str, int] = {}
+        for key in ("prompt", "completion", "total"):
+            try:
+                value = int(_mapping(usage).get(key) or 0)
+            except (TypeError, ValueError):
+                value = 0
+            if value > 0:
+                clean_usage[key] = value
+        entry = {
+            "id": str(uuid.uuid4()),
+            "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "organization_id": organization_id,
+            "actor_user_id": str(user.get("id") or ""),
+            "project_file": spec_path.name,
+            "before_revision": self._spec_revision(before_spec),
+            "after_revision": self._spec_revision(after_spec or before_spec),
+            "message": str(message or "")[:12000],
+            "reply": str(reply or "")[:24000],
+            "changes": [str(item)[:2000] for item in (changes or [])[:100]],
+            "provider": str(provider or "")[:120],
+            "usage": clean_usage,
+            "context": clean_context,
+            "image_count": max(0, min(int(image_count or 0), 20)),
+            "changed": bool(after_spec),
+        }
+        history_file = self._history_file(auth, spec_path)
+        safe_keep = max(1, min(int(keep), 1000))
+        with self._lock:
+            try:
+                raw = json.loads(history_file.read_text(encoding="utf-8"))
+            except (OSError, ValueError, TypeError):
+                raw = []
+            history = raw if isinstance(raw, list) else []
+            history.append(entry)
+            temporary = history_file.with_suffix(history_file.suffix + ".tmp")
+            temporary.write_text(
+                json.dumps(history[-safe_keep:], ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            temporary.replace(history_file)
+        return dict(entry)
+
+    def ai_messages(
+        self,
+        auth: Mapping[str, Any] | None,
+        spec_path: Path,
+        *,
+        limit: int = 16,
+    ) -> list[dict[str, str]]:
+        """Flatten persisted operations into the short context expected by providers."""
+
+        operations = self.read_ai_history(auth, spec_path, limit=max(1, limit // 2))
+        messages: list[dict[str, str]] = []
+        for operation in operations:
+            message = str(operation.get("message") or "").strip()
+            reply = str(operation.get("reply") or "").strip()
+            if message:
+                messages.append({"role": "user", "text": message})
+            if reply:
+                messages.append({"role": "assistant", "text": reply})
+        return messages[-max(1, min(int(limit), 64)):]
 
 
 __all__ = ["StudioWorkspace", "TenantWorkspaceManager"]

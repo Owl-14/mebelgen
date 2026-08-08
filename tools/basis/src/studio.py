@@ -861,6 +861,29 @@ def make_handler(st: _Studio):
                 "viewing_as_akeda": bool(context.get("support_session")),
             }
 
+        def _audit_product_action(
+            self,
+            auth: dict[str, Any] | None,
+            action: str,
+            spec_path: Path,
+            metadata: dict[str, Any] | None = None,
+        ) -> None:
+            if auth is None or st.identity_store is None:
+                return
+            context = auth.get("context") or {}
+            user = context.get("user") or {}
+            organization = context.get("organization") or {}
+            support = context.get("support_session") or {}
+            st.identity_store.append_audit(
+                action,
+                actor_user_id=user.get("id"),
+                organization_id=organization.get("id"),
+                support_session_id=support.get("id"),
+                target_type="studio_project",
+                target_id=spec_path.name,
+                metadata=metadata or {},
+            )
+
         def _body(self) -> dict[str, Any]:
             n = int(self.headers.get("Content-Length") or 0)
             return json.loads(self.rfile.read(n).decode("utf-8")) if n else {}
@@ -1089,6 +1112,12 @@ def make_handler(st: _Studio):
                     self._json(build_payload(spec))
                 elif path == "/api/techview":
                     self._json(techview_svg(spec, body.get("panel")))
+                elif path == "/api/chat-history":
+                    operations = st.workspaces.read_ai_history(auth, spec_path)
+                    self._json({
+                        "operations": operations,
+                        "history": st.workspaces.ai_messages(auth, spec_path),
+                    })
                 elif path == "/api/chat":
                     from .spec_chat import chat_edit
                     ctx = body.get("context") or None
@@ -1120,12 +1149,45 @@ def make_handler(st: _Studio):
                                 ctx["base_candidates"] = cand
                         except Exception:
                             pass
-                    res = chat_edit(spec, str(body.get("message", "")),
-                                    body.get("history") or [],
+                    message = str(body.get("message", ""))
+                    provider = body.get("provider") or None
+                    history = (st.workspaces.ai_messages(auth, spec_path)
+                               if auth is not None else body.get("history") or [])
+                    res = chat_edit(spec, message,
+                                    history,
                                     ctx,
                                     body.get("images") or None,
-                                    body.get("provider") or None)
+                                    provider)
                     st.guard.add_tokens(int(((res.get("usage") or {}).get("total")) or 0))
+                    if auth is not None:
+                        entry = st.workspaces.append_ai_history(
+                            auth,
+                            spec_path,
+                            message=message,
+                            reply=str(res.get("reply") or ""),
+                            before_spec=spec,
+                            after_spec=res.get("spec") if isinstance(res.get("spec"), dict) else None,
+                            changes=res.get("changes") if isinstance(res.get("changes"), list) else [],
+                            provider=str((res.get("usage") or {}).get("model") or provider or ""),
+                            usage=res.get("usage") if isinstance(res.get("usage"), dict) else {},
+                            context=ctx if isinstance(ctx, dict) else {},
+                            image_count=len(body.get("images") or []),
+                        )
+                        res = dict(res)
+                        res["history_entry"] = entry
+                        self._audit_product_action(
+                            auth,
+                            "studio.ai.completed",
+                            spec_path,
+                            {
+                                "before_revision": entry["before_revision"],
+                                "after_revision": entry["after_revision"],
+                                "provider": entry["provider"],
+                                "changes_count": len(entry["changes"]),
+                                "usage_total": entry["usage"].get("total", 0),
+                                "attachments_count": entry["image_count"],
+                            },
+                        )
                     self._json(res)
                 elif path == "/api/providers":       # список нейросетей для селектора
                     from .spec_chat import available_providers
@@ -3415,7 +3477,7 @@ function adoptSpec(p){
   showEmpty(dr);
   scene3d.select(null); fillForm();
   if(!dr) apply();
-  loadProjects(); loadBuilds();
+  loadProjects(); loadBuilds(); loadChatHistory();
   toast('Открыто: '+p.file);
 }
 // пустое рабочее пространство (AKD-214): «Новое» → чистый экран с приглашением загрузить ТЗ
@@ -3737,15 +3799,20 @@ function setOperationStatus(operation,state,label){
   operation.el.classList.add('is-'+state);
   operation.status.textContent=label;
 }
-function createOperation(command,{images=[],forceModel=false,kind='command'}={}){
-  const id=`operation-${++operationSeq}`, context=operationContextSnapshot(forceModel);
+function createOperation(command,{images=[],forceModel=false,kind='command',recordedAt='',
+  contextOverride=null,provider=''}={}){
+  const id=`operation-${++operationSeq}`,
+    context=contextOverride||operationContextSnapshot(forceModel);
   const attachmentMeta=(images||[]).map(im=>({name:im.name||'',mime:im.mime||''}));
   const el=operationNode('article','operation-record is-pending'); el.id=id;
   el.setAttribute('aria-labelledby',id+'-title');
   const head=operationNode('div','operation-head');
   const status=operationNode('span','operation-state','В работе');
-  const time=operationNode('time','operation-time',new Date().toLocaleTimeString('ru-RU',
-    {hour:'2-digit',minute:'2-digit'})); time.dateTime=new Date().toISOString();
+  const recordedDate=recordedAt?new Date(recordedAt):new Date(), validDate=!Number.isNaN(recordedDate.getTime());
+  const shownDate=validDate?recordedDate:new Date();
+  const time=operationNode('time','operation-time',shownDate.toLocaleString('ru-RU',
+    {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}));
+  time.dateTime=shownDate.toISOString();
   head.append(status,time);
   const title=operationNode('p','operation-command',trimOperationCommand(command,attachmentMeta.length));
   title.id=id+'-title';
@@ -3766,7 +3833,7 @@ function createOperation(command,{images=[],forceModel=false,kind='command'}={})
   const technical=operationNode('div','operation-technical'); technical.hidden=true;
   el.append(head,title,contextLine,summary,changes,more,check,actions,technical);
   const operation={id,kind,el,status,summary,changes,more,check,actions,show,details,undo,technical,
-    context,attachments:attachmentMeta,provider:$('aiProvider').selectedOptions[0]?.textContent||CHAT_PROVIDER||'—',
+    context,attachments:attachmentMeta,provider:provider||$('aiProvider').selectedOptions[0]?.textContent||CHAT_PROVIDER||'—',
     startedAt:time.dateTime,command:title.textContent,beforeSpecJson:JSON.stringify(SPEC),
     beforeIssueCount:issueCount(),undoDepthBefore:UNDO.length,state:'pending',rawChanges:[]};
   show.onclick=()=>showOperationTarget(operation.id);
@@ -3989,6 +4056,28 @@ function refreshOperationTargets(){
 function resetOperationLog(){
   OPERATIONS.clear();operationSeq=0;clearQuickUndo();$('chatlog').innerHTML='';
   $('operationLog').hidden=true;refreshUndoState();
+}
+async function loadChatHistory(){
+  const generation=chatWorkspaceGeneration;
+  try{
+    const response=await fetch('/api/chat-history',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:'{}'});
+    if(!response.ok)return;
+    const payload=await response.json();
+    if(generation!==chatWorkspaceGeneration||OPERATIONS.size)return;
+    CHAT_HISTORY.splice(0,CHAT_HISTORY.length,...(payload.history||[]).slice(-16));
+    (payload.operations||[]).slice(-OPERATION_LIMIT).forEach(item=>{
+      const stored=item.context||{},partName=stored.scope==='part'?stored.part_name:null;
+      const context=partName?{scope:'part',label:`Деталь · ${partName}`,partName,
+        partType:stored.part_type||'',placement:null}:{scope:'model',label:'Всё изделие',partName:null};
+      const operation=createOperation(item.message||'Команда без текста',{
+        forceModel:true,kind:'history',recordedAt:item.created_at||'',contextOverride:context,
+        provider:item.provider||'—'});
+      finishOperation(operation,{state:item.changed?'applied':'answer',reply:item.reply||'',
+        changes:item.changes||[],usage:item.usage||null,canUndo:false,
+        summary:item.changed?'':'Модель не изменялась.'});
+    });
+  }catch(_error){}
 }
 function setChatState(text,error=false,mode='',canUndo=false,operationId=null){
   const state=$('chatState'); state.textContent=text||'';
@@ -4444,6 +4533,7 @@ $('verRestore').onclick=async()=>{
   else toast('Ошибка: '+(p.error||''),true);
 };
 loadVersions();
+loadChatHistory();
 
 /* ---------- экспорт-центр (AKD-130) ---------- */
 $('btnDeliver').onclick=async()=>{

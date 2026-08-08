@@ -47,6 +47,7 @@ AKD-214) — запись в каталоге + пустой воркспейс 
 | `/api/techview` | чертёж SVG (+`panel` — деталировка одной детали) |
 | `/api/nesting` | раскрой-превью SVG |
 | `/api/chat` | ИИ-правка: `{spec,message,history,context,images,provider}` → `{reply,spec,changes,usage}`; в context — реальные кандидаты базы для нерешённых слотов и `panels` (геометрия всех деталей — для добавления/подгонки встык) |
+| `/api/chat-history` | Серверная история AI-команд текущего изделия. В auth-режиме браузерная `history` не считается источником истины: контекст читается из tenant-хранилища |
 | `/api/providers`, `/api/token-balance` | список нейросетей / лимиты выбранной |
 | `/api/import-tz` | фото ТЗ → распознавание → новая спека (в черновик — тот же файл) |
 | `/api/projects`, `/api/open`, `/api/new`, `/api/duplicate` | каталог/открыть/черновик/копия |
@@ -67,7 +68,7 @@ AKD-214) — запись в каталоге + пустой воркспейс 
 - тесты: `tests/test_studio.py` (payload, аксонометрия), `tests/test_webviewer.py`;
   e2e ИИ — `qa/e2e_ai.py`.
 
-## Identity/admin — отдельный контур
+## Identity/admin и tenant-режим
 
 Локальный первый срез управления компаниями запускается отдельно:
 
@@ -76,9 +77,14 @@ AKEDA_BOOTSTRAP_PASSWORD='<секрет минимум 15 символов>' \
 python main.py admin --bootstrap-email admin@example.com
 ```
 
-Он реализует вход, компании, memberships, приглашения, роли, аудит и простой
-переход `Открыть компанию` без тикетов/TTL. Переход к клиентским проектам пока
-заблокирован до tenant-миграции Studio: нынешние `paramspecs/`, версии, previews,
-build history и `_Studio.spec_path` общие для процесса. Контракт и этапы — в
-`rules/identity-access.md`, `ux/IDENTITY_ACCESS_ADMIN_SPEC.md` и
-`ux/DEMO_COMPANY_AND_ADMIN_VIEW_SPEC.md`.
+Studio подключается к той же identity-базе флагом `--require-auth` и путями
+`--identity-db` / `--tenant-root`. В этом режиме каталог, версии, previews,
+AI-история и production outputs выбираются только из компании серверной сессии;
+текущее изделие хранится отдельно для каждой сессии. Клиентская `history` у
+`/api/chat` игнорируется, а каждая завершённая AI-команда получает автора,
+компанию, изделие, ревизии до/после и компактное событие append-only аудита.
+
+Platform owner открывает компанию через админку и остаётся настоящим актором;
+Studio показывает постоянный support-banner и разрешает только чтение.
+Контракт и этапы — в `rules/identity-access.md`,
+`ux/IDENTITY_ACCESS_ADMIN_SPEC.md` и `ux/DEMO_COMPANY_AND_ADMIN_VIEW_SPEC.md`.

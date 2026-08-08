@@ -9,6 +9,7 @@ import threading
 from http.cookies import SimpleCookie
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 from argon2 import PasswordHasher, Type
 
@@ -152,6 +153,61 @@ def test_authenticated_studio_scopes_catalog_and_renders_profile(tmp_path: Path)
         projects = json.loads(projects_body)["projects"]
         assert [item["name"] for item in projects] == ["Тумба Константы"]
 
+        ai_result = {
+            "reply": "Ширина изменена",
+            "spec": _spec("Тумба Константы после правки"),
+            "changes": ["dimensions.width: 800 → 900"],
+            "usage": {"model": "test-model", "prompt": 12, "completion": 4, "total": 16},
+        }
+        with patch("src.spec_chat.chat_edit", return_value=ai_result) as chat_edit:
+            status, _headers, chat_body = browser.request(
+                "POST",
+                "/api/chat",
+                {
+                    "spec": _spec("Тумба Константы"),
+                    "message": "Сделай шире",
+                    "history": [{"role": "user", "text": "чужая клиентская история"}],
+                    "provider": "mock",
+                },
+                csrf=True,
+            )
+            assert status == 200, chat_body
+            assert chat_edit.call_args.args[2] == []
+
+            browser.request(
+                "POST",
+                "/api/chat",
+                {
+                    "spec": _spec("Тумба Константы после правки"),
+                    "message": "Добавь полку",
+                    "history": [],
+                    "provider": "mock",
+                },
+                csrf=True,
+            )
+            assert chat_edit.call_args.args[2] == [
+                {"role": "user", "text": "Сделай шире"},
+                {"role": "assistant", "text": "Ширина изменена"},
+            ]
+
+        status, _headers, history_body = browser.request(
+            "POST", "/api/chat-history", {}, csrf=True
+        )
+        assert status == 200
+        history = json.loads(history_body)
+        assert [item["message"] for item in history["operations"]] == [
+            "Сделай шире",
+            "Добавь полку",
+        ]
+        assert all(
+            item["organization_id"] == constanta["organization"]["id"]
+            and item["actor_user_id"] == constanta["user"]["id"]
+            and item["project_file"] == "product.json"
+            and item["before_revision"]
+            and item["after_revision"]
+            for item in history["operations"]
+        )
+
         other_browser = Browser(port)
         other_browser.login(other["login"], other["starter_password"])
         status, _headers, other_body = other_browser.request(
@@ -161,6 +217,18 @@ def test_authenticated_studio_scopes_catalog_and_renders_profile(tmp_path: Path)
         assert [item["name"] for item in json.loads(other_body)["projects"]] == [
             "Шкаф другой компании"
         ]
+        status, _headers, other_history_body = other_browser.request(
+            "POST", "/api/chat-history", {}, csrf=True
+        )
+        assert status == 200
+        assert json.loads(other_history_body)["operations"] == []
+
+        audit = store.list_audit(platform["id"], constanta["organization"]["id"])
+        ai_events = [item for item in audit if item["action"] == "studio.ai.completed"]
+        assert len(ai_events) == 2
+        assert ai_events[0]["actor_user_id"] == constanta["user"]["id"]
+        assert ai_events[0]["metadata"]["provider"] == "test-model"
+        assert "message" not in ai_events[0]["metadata"]
 
         platform_browser = Browser(port)
         platform_login = platform_browser.login("platform@akeda.test", ADMIN_PASSWORD)
