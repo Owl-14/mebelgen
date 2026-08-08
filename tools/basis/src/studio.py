@@ -366,9 +366,12 @@ def _default_spec(archetype: str, name: str) -> dict[str, Any]:
 
 
 def _safe_spec_file(spec_dir: Path, fname: str) -> Path:
-    p = (spec_dir / Path(fname).name).resolve()
-    if p.parent != spec_dir.resolve() or p.suffix != ".json":
-        raise ValueError("файл вне каталога спек")
+    raw = str(fname or "")
+    if not raw or Path(raw).name != raw or "/" in raw or "\\" in raw:
+        raise FileNotFoundError("изделие не найдено")
+    p = (spec_dir / raw).resolve()
+    if p.parent != spec_dir.resolve() or p.suffix != ".json" or not p.is_file():
+        raise FileNotFoundError("изделие не найдено")
     return p
 
 
@@ -1449,6 +1452,17 @@ def make_handler(st: _Studio):
                                 "version": res["version"]})
                 else:
                     self._send(404, b"{}")
+            except FileNotFoundError:
+                self._json(
+                    {"ok": False, "error": "Изделие не найдено", "code": "not_found"},
+                    404,
+                )
+            except ValueError as e:
+                self._json(
+                    {"ok": False, "error": str(e)[:300] or "Некорректный запрос",
+                     "code": "invalid_request"},
+                    400,
+                )
             except Exception as e:
                 self._json({"ok": False, "error": str(e)[:300]}, 500)
 

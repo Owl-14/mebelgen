@@ -19,6 +19,7 @@ sys.path.insert(0, str(ROOT))
 from src.admin import CSRF_COOKIE, SESSION_COOKIE, SUPPORT_COOKIE
 from src.identity import IdentityStore
 from src.studio import _Studio, make_handler
+from src.webviewer import SCENE_JS
 from http.server import ThreadingHTTPServer
 
 
@@ -110,12 +111,36 @@ def test_authenticated_studio_scopes_catalog_and_renders_profile(tmp_path: Path)
     legacy_path = legacy_dir / "legacy.json"
     legacy_path.write_text(json.dumps(_spec("Общий старый каталог")), encoding="utf-8")
     tenant_root = tmp_path / "tenants"
-    for provisioned, product in ((constanta, "Тумба Константы"), (other, "Шкаф другой компании")):
+    for provisioned, product, version_width in (
+        (constanta, "Тумба Константы", 811),
+        (other, "Шкаф другой компании", 922),
+    ):
         target = tenant_root / provisioned["organization"]["id"] / "paramspecs"
         target.mkdir(parents=True)
         (target / "product.json").write_text(
             json.dumps(_spec(product), ensure_ascii=False), encoding="utf-8"
         )
+        version_spec = _spec(product)
+        version_spec["dimensions"] = {
+            "width": version_width,
+            "depth": 400,
+            "height": 750,
+        }
+        (target / "product.versions.json").write_text(
+            json.dumps(
+                [{"ts": "2026-08-08T12:00:00", "spec": version_spec}],
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+    designer = store.provision_member(
+        platform["id"],
+        constanta["organization"]["id"],
+        "designer@constanta.test",
+        "Проектировщик Константы",
+        "designer",
+    )
 
     studio = _Studio(
         legacy_path,
@@ -144,6 +169,14 @@ def test_authenticated_studio_scopes_catalog_and_renders_profile(tmp_path: Path)
         assert "Константа" in html and "Алексей Лазарев" in html
         assert "Тумба Константы" in html
         assert "Общий старый каталог" not in html
+        assert SCENE_JS in html
+
+        status, _headers, me_body = browser.request("GET", "/api/auth/me")
+        assert status == 200
+        me = json.loads(me_body)
+        assert me["authenticated"] is True
+        assert me["user"]["id"] == constanta["user"]["id"]
+        assert me["organization"]["id"] == constanta["organization"]["id"]
 
         assert browser.request("POST", "/api/projects", {})[0] == 403
         status, _headers, projects_body = browser.request(
@@ -153,6 +186,22 @@ def test_authenticated_studio_scopes_catalog_and_renders_profile(tmp_path: Path)
         projects = json.loads(projects_body)["projects"]
         assert [item["name"] for item in projects] == ["Тумба Константы"]
         assert projects[0]["updated_at"] > 0
+
+        status, _headers, versions_body = browser.request(
+            "POST", "/api/versions", {}, csrf=True
+        )
+        assert status == 200
+        assert json.loads(versions_body)["versions"][0]["dims"] == "811×400×750"
+
+        foreign_path = (
+            f"../{other['organization']['id']}/paramspecs/product.json"
+        )
+        status, _headers, foreign_body = browser.request(
+            "POST", "/api/open", {"file": foreign_path}, csrf=True
+        )
+        assert status == 404
+        assert json.loads(foreign_body)["code"] == "not_found"
+        assert "Шкаф другой компании" not in foreign_body.decode("utf-8")
 
         assert browser.request(
             "POST", "/api/rename", {"file": "product.json", "name": "Без CSRF"}
@@ -249,6 +298,11 @@ def test_authenticated_studio_scopes_catalog_and_renders_profile(tmp_path: Path)
         assert [item["name"] for item in json.loads(other_body)["projects"]] == [
             "Шкаф другой компании"
         ]
+        status, _headers, other_versions_body = other_browser.request(
+            "POST", "/api/versions", {}, csrf=True
+        )
+        assert status == 200
+        assert json.loads(other_versions_body)["versions"][0]["dims"] == "922×400×750"
         status, _headers, other_history_body = other_browser.request(
             "POST", "/api/chat-history", {}, csrf=True
         )
@@ -283,6 +337,44 @@ def test_authenticated_studio_scopes_catalog_and_renders_profile(tmp_path: Path)
         assert browser.request("POST", "/api/auth/logout", {}, csrf=True)[0] == 200
         assert SESSION_COOKIE not in browser.cookies
         assert browser.request("GET", "/index.html")[0] == 303
+
+        designer_browser = Browser(port)
+        designer_browser.login(designer["login"], designer["starter_password"])
+        assert designer_browser.request("GET", "/api/auth/me")[0] == 200
+        store.update_membership(
+            platform["id"],
+            constanta["organization"]["id"],
+            designer["membership"]["id"],
+            status="disabled",
+        )
+        status, _headers, blocked_member_body = designer_browser.request(
+            "GET", "/api/auth/me"
+        )
+        assert status == 401
+        assert json.loads(blocked_member_body)["code"] == "unauthenticated"
+        assert SESSION_COOKIE not in designer_browser.cookies
+
+        store.update_membership(
+            platform["id"],
+            constanta["organization"]["id"],
+            designer["membership"]["id"],
+            status="active",
+        )
+        designer_browser.login(designer["login"], designer["starter_password"])
+        store.update_organization_status(
+            platform["id"], constanta["organization"]["id"], "disabled"
+        )
+        status, _headers, blocked_company_body = designer_browser.request(
+            "GET", "/api/auth/me"
+        )
+        assert status == 401
+        assert json.loads(blocked_company_body)["code"] == "unauthenticated"
+        assert SESSION_COOKIE not in designer_browser.cookies
+        assert designer_browser.request(
+            "POST",
+            "/api/auth/login",
+            {"email": designer["login"], "password": designer["starter_password"]},
+        )[0] == 401
     finally:
         server.shutdown()
         server.server_close()

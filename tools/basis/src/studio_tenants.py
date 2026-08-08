@@ -144,9 +144,12 @@ class TenantWorkspaceManager:
 
     def select(self, auth: Mapping[str, Any] | None, file_name: str) -> Path:
         workspace = self.workspace(auth)
-        candidate = (workspace.spec_dir / Path(str(file_name)).name).resolve()
+        raw = str(file_name or "")
+        if not raw or Path(raw).name != raw or "/" in raw or "\\" in raw:
+            raise FileNotFoundError("Изделие не найдено")
+        candidate = (workspace.spec_dir / raw).resolve()
         if candidate.parent != workspace.spec_dir.resolve() or candidate.suffix != ".json":
-            raise ValueError("Файл вне каталога компании")
+            raise FileNotFoundError("Изделие не найдено")
         if not candidate.is_file():
             raise FileNotFoundError("Изделие не найдено")
         with self._lock:
