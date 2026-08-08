@@ -27,8 +27,17 @@
 
 ## Миграция каталога в компанию
 
-Сначала dry-run, затем тот же вызов с `--apply`:
-`python scripts/migrate_tenant_catalog.py --source paramspecs --tenant-root /opt/bazis/tenants --organization-id <uuid>`.
+Сначала dry-run, затем тот же вызов с `--apply`. На production миграцию запускать
+от системного пользователя Studio, иначе новые каталоги окажутся недоступны для
+записи сервису:
+
+```bash
+sudo -u bazis /opt/bazis/venv/bin/python scripts/migrate_tenant_catalog.py \
+  --source paramspecs \
+  --tenant-root /opt/bazis/tenants \
+  --organization-id <uuid>
+```
+
 Исходники не удаляются; черновики и дубли попадают в архив tenant-а.
 
 ## Бэкапы изделий

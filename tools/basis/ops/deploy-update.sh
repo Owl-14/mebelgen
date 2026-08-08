@@ -5,9 +5,13 @@ set -euo pipefail
 HOST=root@80.66.89.3
 KEY="${BAZIS_DEPLOY_KEY:-$HOME/.ssh/bazis_deploy}"
 SHA=$(git rev-parse --short HEAD)
-echo "$SHA" > DEPLOY_SHA
-tar czf /tmp/basis_update.tgz --exclude='__pycache__' --exclude='.previews' \
-    DEPLOY_SHA main.py requirements.txt README.md AGENTS.md RULES.md STUDIO.md \
+META_DIR=$(mktemp -d)
+trap 'rm -rf -- "$META_DIR"' EXIT
+printf '%s\n' "$SHA" > "$META_DIR/DEPLOY_SHA"
+COPYFILE_DISABLE=1 tar czf /tmp/basis_update.tgz \
+    --exclude='__pycache__' --exclude='.previews' \
+    -C "$META_DIR" DEPLOY_SHA -C "$PWD" \
+    main.py requirements.txt README.md AGENTS.md RULES.md STUDIO.md \
     src schema prompts rules materials scripts tests qa landing vendor assets ops
 scp -i "$KEY" /tmp/basis_update.tgz "$HOST":/tmp/
 ssh -i "$KEY" "$HOST" 'cd /opt/bazis/basis && tar xzf /tmp/basis_update.tgz \
