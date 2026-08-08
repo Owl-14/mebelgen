@@ -24,7 +24,7 @@ from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import quote, unquote, urlsplit
 
 # ------------------------------------------------------------------ формы архетипов
 #
@@ -304,7 +304,133 @@ def _slugify(name: str) -> str:
     return s[:60] or "model"
 
 
-def _list_projects(spec_dir: Path) -> list[dict[str, Any]]:
+_CATALOG_IDENTITY_FIELDS = (
+    "creator_user_id",
+    "responsible_user_id",
+    "author",
+    "responsible",
+)
+
+
+def _catalog_section(*, archetype: str, furniture_type: str, draft: bool) -> str:
+    """Stable server-owned type facet used by the catalog API."""
+
+    if draft:
+        return "Черновики"
+    kind = furniture_type.casefold()
+    if "тумб" in kind or archetype == "drawer_unit":
+        return "Тумбы"
+    if "стол" in kind or archetype in {"desk", "table", "round_table"}:
+        return "Столы"
+    if any(word in kind for word in ("шкаф", "гардероб")) or archetype in {
+        "wardrobe",
+        "door_unit",
+        "cabinet",
+    }:
+        return "Шкафы"
+    if any(word in kind for word in ("стеллаж", "полк")) or archetype == "shelving":
+        return "Стеллажи"
+    return "Прочее"
+
+
+def _catalog_actor(auth: dict[str, Any] | None) -> dict[str, str] | None:
+    """Return a real organization member, never a support impersonator."""
+
+    context = (auth or {}).get("context") or {}
+    user = context.get("user") or {}
+    membership = context.get("membership") or {}
+    user_id = str(user.get("id") or "")
+    if not user_id or str(membership.get("user_id") or "") != user_id:
+        return None
+    return {
+        "user_id": user_id,
+        "display_name": str(user.get("display_name") or user.get("email") or "Сотрудник"),
+        "role": str(membership.get("role") or ""),
+    }
+
+
+def _catalog_members(studio: Any, auth: dict[str, Any] | None) -> list[dict[str, str]]:
+    if auth is None or studio.identity_store is None:
+        return []
+    context = auth.get("context") or {}
+    user = context.get("user") or {}
+    organization = context.get("organization") or {}
+    session = context.get("session") or {}
+    support = context.get("support_session") or {}
+    rows = studio.identity_store.list_project_collaborators(
+        str(user.get("id") or ""),
+        str(organization.get("id") or ""),
+        support_session_id=str(support.get("id") or "") or None,
+        primary_session_id=str(session.get("id") or "") or None,
+    )
+    return [
+        {
+            "user_id": str(row.get("user_id") or ""),
+            "display_name": str(row.get("display_name") or "Сотрудник"),
+            "role": str(row.get("role") or ""),
+        }
+        for row in rows
+        if row.get("user_id")
+    ]
+
+
+def _stamp_catalog_identity(
+    spec: dict[str, Any],
+    actor: dict[str, str] | None,
+    *,
+    preserved: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Keep ownership fields server-controlled while preserving other metadata."""
+
+    catalog = dict(spec.get("catalog") or {})
+    source = dict((preserved or {}).get("catalog") or {})
+    for field in _CATALOG_IDENTITY_FIELDS:
+        if field in source:
+            catalog[field] = source[field]
+    if actor:
+        catalog.setdefault("creator_user_id", actor["user_id"])
+        catalog.setdefault("responsible_user_id", actor["user_id"])
+        catalog.setdefault("author", actor["display_name"])
+        catalog.setdefault("responsible", actor["display_name"])
+    if catalog:
+        spec["catalog"] = catalog
+    return spec
+
+
+def _migrate_catalog_identity(spec_dir: Path, owner: dict[str, str] | None) -> None:
+    """Attach legacy tenant products to the organization owner without touching mtime."""
+
+    if not owner:
+        return
+    for path in sorted(spec_dir.glob("*.json")):
+        if path.name.endswith((".project.json", ".versions.json")):
+            continue
+        try:
+            stat = path.stat()
+            spec = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError):
+            continue
+        if not isinstance(spec, dict) or spec.get("schemaVersion") != "paramspec-v1":
+            continue
+        catalog = dict(spec.get("catalog") or {})
+        before = dict(catalog)
+        catalog.setdefault("creator_user_id", owner["user_id"])
+        catalog.setdefault("responsible_user_id", owner["user_id"])
+        catalog.setdefault("author", owner["display_name"])
+        catalog.setdefault("responsible", owner["display_name"])
+        if catalog == before:
+            continue
+        spec["catalog"] = catalog
+        path.write_text(json.dumps(spec, ensure_ascii=False, indent=2), encoding="utf-8")
+        _os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+
+
+def _list_projects(
+    spec_dir: Path,
+    *,
+    member_names: dict[str, str] | None = None,
+) -> list[dict[str, Any]]:
+    names = member_names or {}
     out = []
     for f in sorted(spec_dir.glob("*.json")):
         if f.name.endswith((".project.json", ".versions.json")):
@@ -317,27 +443,78 @@ def _list_projects(spec_dir: Path) -> list[dict[str, Any]]:
             continue
         d = s.get("dimensions", {})
         catalog_meta = s.get("catalog") if isinstance(s.get("catalog"), dict) else {}
+        creator_user_id = str(catalog_meta.get("creator_user_id") or "")
+        responsible_user_id = str(catalog_meta.get("responsible_user_id") or "")
         updated_at = int(f.stat().st_mtime)
         people = {
-            "responsible": str(catalog_meta.get("responsible") or ""),
-            "author": str(catalog_meta.get("author") or ""),
+            "creator_user_id": creator_user_id,
+            "responsible_user_id": responsible_user_id,
+            "responsible": names.get(responsible_user_id)
+            or str(catalog_meta.get("responsible") or ""),
+            "author": names.get(creator_user_id) or str(catalog_meta.get("author") or ""),
             "updated_at": updated_at,
         }
+        archetype = str(s.get("archetype") or "?")
+        furniture_type = str(s.get("furniture_type") or "")
+        draft = bool(s.get("draft"))
+        catalog_values = {
+            "category": _catalog_section(
+                archetype=archetype,
+                furniture_type=furniture_type,
+                draft=draft,
+            ),
+            "status": "draft" if draft else str(catalog_meta.get("status") or "active"),
+        }
         has_prev = (spec_dir / ".previews" / (f.stem + ".png")).is_file()
-        if s.get("draft"):                            # черновик (AKD-214)
+        if draft:                                      # черновик (AKD-214)
             out.append({"file": f.name, "name": s.get("project_name", f.stem),
                         "archetype": "черновик", "dims": "—", "decor": "",
                         "draft": True, "preview": False,
-                        "ftype": s.get("furniture_type", ""), **people})
+                        "ftype": furniture_type, **catalog_values, **people})
             continue
         out.append({"file": f.name,
                     "name": s.get("project_name", f.stem),
-                    "archetype": s.get("archetype", "?"),
+                    "archetype": archetype,
                     "dims": f'{d.get("width", "?")}×{d.get("depth", "?")}×{d.get("height", "?")}',
                     "decor": (s.get("materials") or {}).get("color", ""),
                     "preview": has_prev,
-                    "ftype": s.get("furniture_type", ""), **people})
+                    "ftype": furniture_type, **catalog_values, **people})
     return out
+
+
+def _filter_catalog_projects(
+    projects: list[dict[str, Any]],
+    filters: dict[str, Any],
+    *,
+    current_user_id: str = "",
+) -> list[dict[str, Any]]:
+    scope = str(filters.get("scope") or "all")
+    responsible = str(filters.get("responsible_user_id") or "all")
+    category = str(filters.get("type") or "all")
+    status = str(filters.get("status") or "all")
+    query = str(filters.get("q") or "").strip().casefold()
+
+    def visible(project: dict[str, Any]) -> bool:
+        responsible_user_id = str(project.get("responsible_user_id") or "")
+        if scope == "mine" and (
+            not current_user_id or responsible_user_id != current_user_id
+        ):
+            return False
+        if scope == "unassigned" and responsible_user_id:
+            return False
+        if responsible == "unassigned" and responsible_user_id:
+            return False
+        if responsible not in {"", "all", "unassigned"} and responsible_user_id != responsible:
+            return False
+        if category not in {"", "all"} and project.get("category") != category:
+            return False
+        if status not in {"", "all"} and project.get("status") != status:
+            return False
+        if query and query not in str(project.get("name") or "").casefold():
+            return False
+        return True
+
+    return [project for project in projects if visible(project)]
 
 
 def _default_spec(archetype: str, name: str) -> dict[str, Any]:
@@ -575,6 +752,14 @@ class _Studio:
             self.out_dir,
             tenant_root=tenant_root if self.require_auth else None,
         )
+        from .studio_reviews import StudioReviewStore
+
+        review_root = (
+            self.workspaces.tenant_root / "_review_links"
+            if self.workspaces.tenant_root is not None
+            else self.out_dir / ".review_links"
+        )
+        self.reviews = StudioReviewStore(review_root)
         self.guard = _ChatGuard(self.out_dir)
         self.started = _time.time()               # /healthz, /version (AKD-264)
         # демо-режим: изделия, существовавшие на старте, защищены от перезаписи
@@ -709,6 +894,21 @@ def make_handler(st: _Studio):
                 code,
                 json.dumps(obj, ensure_ascii=False).encode("utf-8"),
                 headers=headers,
+            )
+
+        def _send_review_attachment(self, metadata: dict[str, Any], path: Path) -> None:
+            content_type = str(metadata.get("content_type") or "application/octet-stream")
+            disposition = "inline" if content_type.startswith("image/") else "attachment"
+            filename = quote(str(metadata.get("name") or "attachment"), safe="")
+            self._send(
+                200,
+                path.read_bytes(),
+                content_type,
+                headers=[
+                    ("Content-Disposition", f"{disposition}; filename*=UTF-8''{filename}"),
+                    ("Cache-Control", "private, no-store"),
+                    ("Referrer-Policy", "no-referrer"),
+                ],
             )
 
         def _redirect(self, location: str, *, headers: list[tuple[str, str]] | None = None):
@@ -929,7 +1129,90 @@ def make_handler(st: _Studio):
 
         def do_GET(self):
             path = urlsplit(self.path).path
-            if path == "/login":
+            parts = path.strip("/").split("/")
+            if len(parts) == 4 and parts[0] == "review" and parts[2] == "attachments":
+                try:
+                    metadata, attachment_path = st.reviews.attachment_for_token(
+                        parts[1], parts[3]
+                    )
+                    self._send_review_attachment(metadata, attachment_path)
+                except FileNotFoundError:
+                    self._send(404, b"{}")
+                return
+            if (
+                len(parts) == 5
+                and parts[:3] == ["api", "reviews", "attachments"]
+            ):
+                auth = self._require_access("project.read")
+                if st.require_auth and auth is None:
+                    return
+                context = (auth or {}).get("context") or {}
+                organization = context.get("organization") or {}
+                spec_path = st.workspaces.current_spec_path(auth)
+                try:
+                    metadata, attachment_path = st.reviews.attachment_for_project(
+                        review_id=parts[3],
+                        attachment_id=parts[4],
+                        organization_id=str(organization.get("id") or "") or None,
+                        project_file=spec_path.name,
+                    )
+                    self._send_review_attachment(metadata, attachment_path)
+                except FileNotFoundError:
+                    self._send(404, b"{}")
+                return
+            if path.startswith("/review/"):
+                token = path[len("/review/"):].strip("/")
+                if not token or "/" in token:
+                    self._send(404, b"Review link not found")
+                    return
+                try:
+                    record = st.reviews.load(token)
+                    spec = record.get("spec") or {}
+                    if not isinstance(spec, dict):
+                        raise FileNotFoundError("review snapshot missing")
+                    from .delivery import spec_summary
+                    from .generators import generate_from_paramspec
+                    from .studio_review_page import build_review_page
+                    from .webviewer import SCENE_JS, viewer_payload
+
+                    project = generate_from_paramspec(spec)
+                    summary = spec_summary(project)
+                    dimensions = summary["dims"]
+                    page = build_review_page(
+                        record,
+                        viewer=viewer_payload(project),
+                        stats={
+                            "n_panels": summary["n_panels"],
+                            "n_holes": summary["n_holes"],
+                            "dims": (
+                                f'{dimensions.get("w", "?")}×'
+                                f'{dimensions.get("d", "?")}×'
+                                f'{dimensions.get("h", "?")} мм'
+                            ),
+                            "decor": summary["decor"],
+                        },
+                        scene_js=SCENE_JS,
+                    )
+                    self._send(
+                        200,
+                        page.encode("utf-8"),
+                        "text/html; charset=utf-8",
+                        headers=[
+                            ("X-Robots-Tag", "noindex, nofollow, noarchive"),
+                            ("Referrer-Policy", "no-referrer"),
+                            ("Cache-Control", "private, no-store"),
+                            ("X-Frame-Options", "DENY"),
+                        ],
+                    )
+                except Exception:
+                    page = ("<!doctype html><html lang='ru'><meta charset='utf-8'>"
+                            "<meta name='viewport' content='width=device-width'>"
+                            "<title>Ссылка недоступна</title><body style='font:14px system-ui;"
+                            "margin:48px;color:#303743'><h1 style='font-size:20px'>"
+                            "Ссылка недоступна</h1><p>Проверьте адрес или запросите новую "
+                            "ссылку у проектировщика.</p></body></html>")
+                    self._send(404, page.encode("utf-8"), "text/html; charset=utf-8")
+            elif path == "/login":
                 auth = self._load_auth()
                 if auth and (auth["context"].get("organization") or {}).get("id"):
                     self._redirect("/index.html")
@@ -1040,7 +1323,99 @@ def make_handler(st: _Studio):
                 path = urlsplit(self.path).path
                 if not self._require_same_origin():
                     return
+                review_parts = path.strip("/").split("/")
+                if (
+                    len(review_parts) == 3
+                    and review_parts[0] == "review"
+                    and review_parts[2] == "attachments"
+                ):
+                    from .studio_reviews import (
+                        MAX_ATTACHMENT_BYTES,
+                        ReviewAttachmentError,
+                    )
+
+                    try:
+                        content_length = int(self.headers.get("Content-Length") or 0)
+                    except ValueError:
+                        content_length = 0
+                    if content_length > MAX_ATTACHMENT_BYTES:
+                        self._json({
+                            "ok": False,
+                            "error": "Один файл должен быть не больше 10 МБ",
+                        }, 413)
+                        return
+                    try:
+                        attachment = st.reviews.stage_attachment(
+                            review_parts[1],
+                            filename=unquote(
+                                str(self.headers.get("X-Akeda-Filename") or "")[:1000]
+                            ),
+                            content_length=content_length,
+                            source=self.rfile,
+                        )
+                    except FileNotFoundError:
+                        self._json({"ok": False, "error": "Ссылка недоступна"}, 404)
+                        return
+                    except ReviewAttachmentError as error:
+                        self._json({"ok": False, "error": str(error)}, 400)
+                        return
+                    self._json({"ok": True, "attachment": attachment})
+                    return
+                if len(review_parts) == 3 and review_parts[0] == "review" and review_parts[2] == "decision":
+                    try:
+                        decision_length = int(self.headers.get("Content-Length") or 0)
+                    except ValueError:
+                        self._json({"ok": False, "error": "Некорректный размер ответа"}, 400)
+                        return
+                    if decision_length > 64 * 1024:
+                        self._json({"ok": False, "error": "Ответ слишком большой"}, 413)
+                        return
                 body = self._body()
+                if (
+                    len(review_parts) == 3
+                    and review_parts[0] == "review"
+                    and review_parts[2] == "decision"
+                ):
+                    attachment_ids = body.get("attachment_ids") or []
+                    if not isinstance(attachment_ids, list):
+                        self._json({"ok": False, "error": "Некорректный список вложений"}, 400)
+                        return
+                    try:
+                        record = st.reviews.decide(
+                            review_parts[1],
+                            decision=str(body.get("decision") or ""),
+                            reviewer_name=str(body.get("reviewer_name") or ""),
+                            comment=str(body.get("comment") or ""),
+                            attachment_ids=[str(value or "") for value in attachment_ids],
+                        )
+                    except FileNotFoundError:
+                        self._json({"ok": False, "error": "Ссылка недоступна"}, 404)
+                        return
+                    except ValueError as error:
+                        self._json({"ok": False, "error": str(error)}, 400)
+                        return
+                    if st.identity_store is not None:
+                        st.identity_store.append_audit(
+                            "studio.review.decision_received",
+                            actor_user_id=None,
+                            organization_id=str(record.get("organization_id") or "") or None,
+                            target_type="studio_review",
+                            target_id=str(record.get("id") or ""),
+                            metadata={
+                                "revision": str(record.get("revision") or ""),
+                                "status": str(record.get("status") or ""),
+                                "attachments_count": len(
+                                    list((record.get("decision") or {}).get("attachments") or [])
+                                ),
+                            },
+                        )
+                    self._json({
+                        "ok": True,
+                        "status": record["status"],
+                        "decision": record["decision"],
+                        "revision": record["revision"],
+                    })
+                    return
                 if path == "/api/auth/login":
                     if not st.require_auth or st.identity_store is None or st.login_throttle is None:
                         self._send(404, b"{}")
@@ -1121,6 +1496,7 @@ def make_handler(st: _Studio):
                     "/api/new": "project.create",
                     "/api/duplicate": "project.create",
                     "/api/rename": "project.write",
+                    "/api/reviews/create": "project.write",
                     "/api/save": "project.write",
                     "/api/restore": "project.write",
                     "/api/export-cfrn": "production.export",
@@ -1258,7 +1634,15 @@ def make_handler(st: _Studio):
                             return
                         if isinstance(current_spec, dict) and current_spec.get("draft"):
                             out = spec_path        # ТЗ в черновик — тот же файл
+                            new_spec = _stamp_catalog_identity(
+                                new_spec,
+                                _catalog_actor(auth),
+                                preserved=current_spec,
+                            )
                         else:
+                            new_spec = _stamp_catalog_identity(
+                                new_spec, _catalog_actor(auth)
+                            )
                             title = new_spec.get("project_name", "Из ТЗ")
                             out = workspace.spec_dir / f"{_slugify(title)}.json"
                             i = 2
@@ -1284,8 +1668,41 @@ def make_handler(st: _Studio):
                     else:
                         self._json({"ok": False, "error": "нет такой версии"}, 404)
                 elif path == "/api/projects":    # каталог спек (D1)
-                    self._json({"projects": _list_projects(workspace.spec_dir),
-                                "current": spec_path.name})
+                    members = _catalog_members(st, auth)
+                    member_names = {
+                        member["user_id"]: member["display_name"] for member in members
+                    }
+                    owner = next(
+                        (member for member in members if member.get("role") == "owner"),
+                        members[0] if members else None,
+                    )
+                    _migrate_catalog_identity(workspace.spec_dir, owner)
+                    all_projects = _list_projects(
+                        workspace.spec_dir, member_names=member_names
+                    )
+                    actor = _catalog_actor(auth)
+                    current_user_id = str((actor or {}).get("user_id") or "")
+                    projects = _filter_catalog_projects(
+                        all_projects, body, current_user_id=current_user_id
+                    )
+                    self._json({
+                        "projects": projects,
+                        "current": spec_path.name,
+                        "total": len(all_projects),
+                        "counts": {
+                            "all": len(all_projects),
+                            "mine": sum(
+                                item.get("responsible_user_id") == current_user_id
+                                for item in all_projects
+                            ) if current_user_id else 0,
+                            "unassigned": sum(
+                                not item.get("responsible_user_id") for item in all_projects
+                            ),
+                        },
+                        "members": members,
+                        "types": sorted({str(item["category"]) for item in all_projects}),
+                        "current_user_id": current_user_id,
+                    })
                 elif path == "/api/open":        # открыть другую спеку (D1)
                     p = _safe_spec_file(workspace.spec_dir, str(body.get("file", "")))
                     opened = json.loads(p.read_text(encoding="utf-8"))
@@ -1314,15 +1731,24 @@ def make_handler(st: _Studio):
                         auth, "studio.project.renamed", p,
                         {"previous_name": previous_name, "name": name},
                     )
+                    member_names = {
+                        member["user_id"]: member["display_name"]
+                        for member in _catalog_members(st, auth)
+                    }
                     project = next(
-                        (item for item in _list_projects(workspace.spec_dir)
+                        (item for item in _list_projects(
+                            workspace.spec_dir, member_names=member_names
+                        )
                          if item["file"] == p.name), None
                     )
                     self._json({"ok": True, "file": p.name, "project": project})
                 elif path == "/api/new":         # новое изделие: черновик (AKD-214)
                     name = str(body.get("name") or "Новое изделие")
-                    new_spec = {"schemaVersion": "paramspec-v1", "draft": True,
-                                "project_name": name}
+                    new_spec = _stamp_catalog_identity(
+                        {"schemaVersion": "paramspec-v1", "draft": True,
+                         "project_name": name},
+                        _catalog_actor(auth),
+                    )
                     p = workspace.spec_dir / f"{_slugify(name)}.json"
                     i = 2
                     while p.exists():
@@ -1341,6 +1767,13 @@ def make_handler(st: _Studio):
                                    if body.get("file") else (spec or current_spec))
                     dup = json.loads(json.dumps(source_spec))
                     dup["project_name"] = str(dup.get("project_name", "модель")) + " (копия)"
+                    actor = _catalog_actor(auth)
+                    if actor:
+                        dup["catalog"] = {
+                            key: value for key, value in dict(dup.get("catalog") or {}).items()
+                            if key not in _CATALOG_IDENTITY_FIELDS
+                        }
+                        _stamp_catalog_identity(dup, actor)
                     p = workspace.spec_dir / f"{source_path.stem}_copy.json"
                     i = 2
                     while p.exists():
@@ -1355,6 +1788,92 @@ def make_handler(st: _Studio):
                         {"source_file": source_path.name},
                     )
                     self._json({"ok": True, "spec": dup, "file": p.name})
+                elif path == "/api/reviews":
+                    context = (auth or {}).get("context") or {}
+                    organization = context.get("organization") or {}
+                    self._json({
+                        "ok": True,
+                        "project_file": spec_path.name,
+                        "reviews": st.reviews.list_for_project(
+                            organization_id=str(organization.get("id") or "") or None,
+                            project_file=spec_path.name,
+                        ),
+                    })
+                elif path == "/api/reviews/create":
+                    review_path = spec_path
+                    if body.get("file"):
+                        review_path = _safe_spec_file(
+                            workspace.spec_dir, str(body.get("file") or "")
+                        )
+                    stored_spec = json.loads(review_path.read_text(encoding="utf-8"))
+                    incoming_spec = body.get("spec")
+                    review_spec = (
+                        json.loads(json.dumps(incoming_spec))
+                        if isinstance(incoming_spec, dict)
+                        else stored_spec
+                    )
+                    review_spec = _stamp_catalog_identity(
+                        review_spec, _catalog_actor(auth), preserved=stored_spec
+                    )
+                    if not isinstance(review_spec, dict) or review_spec.get("draft"):
+                        self._json({
+                            "ok": False,
+                            "error": "Сначала соберите модель изделия",
+                            "code": "model_required",
+                        }, 409)
+                        return
+                    try:
+                        from .generators import generate_from_paramspec
+                        generate_from_paramspec(review_spec)
+                    except Exception as error:
+                        self._json({
+                            "ok": False,
+                            "error": "Текущую модель нельзя открыть для просмотра: "
+                            + str(error)[:220],
+                            "code": "model_invalid",
+                        }, 409)
+                        return
+                    context = (auth or {}).get("context") or {}
+                    organization = context.get("organization") or {}
+                    user = context.get("user") or {}
+                    catalog = review_spec.get("catalog") or {}
+                    if not isinstance(catalog, dict):
+                        catalog = {}
+                    token, review = st.reviews.create(
+                        review_spec,
+                        organization_id=str(organization.get("id") or "") or None,
+                        organization_name=str(organization.get("name") or ""),
+                        project_file=review_path.name,
+                        actor_user_id=str(user.get("id") or "") or None,
+                        actor_name=str(
+                            user.get("display_name") or user.get("email")
+                            or "Локальный проектировщик"
+                        ),
+                        responsible_user_id=str(
+                            catalog.get("responsible_user_id") or user.get("id") or ""
+                        ) or None,
+                        responsible_name=str(
+                            catalog.get("responsible") or user.get("display_name")
+                            or user.get("email") or "Локальный проектировщик"
+                        ),
+                    )
+                    self._audit_product_action(
+                        auth,
+                        "studio.review.created",
+                        review_path,
+                        {"review_id": review["id"], "revision": review["revision"]},
+                    )
+                    self._json({
+                        "ok": True,
+                        "url": self._request_origin() + "/review/" + token,
+                        "review": {
+                            "id": review["id"],
+                            "revision": review["revision"],
+                            "created_at": review["created_at"],
+                            "status": review["status"],
+                            "project_name": review["project_name"],
+                        },
+                    })
                 elif path == "/api/nesting":     # раскрой-превью (C2)
                     from .generators import generate_from_paramspec
                     from .nesting import nesting_svg
@@ -1379,6 +1898,12 @@ def make_handler(st: _Studio):
                                     "демо-режим: исходное изделие защищено — "
                                     "нажмите «Дублировать» и правьте копию"}, 403)
                         return
+                    if not isinstance(spec, dict):
+                        self._json({"ok": False, "error": "Некорректное изделие"}, 400)
+                        return
+                    spec = _stamp_catalog_identity(
+                        dict(spec), _catalog_actor(auth), preserved=current_spec
+                    )
                     spec_path.write_text(json.dumps(spec, ensure_ascii=False, indent=2),
                                          encoding="utf-8")
                     prev = body.get("preview")         # снапшот 3D для каталога (AKD-217)
@@ -1534,6 +2059,10 @@ PAGE = r"""<!DOCTYPE html>
     gap:5px!important;margin-top:7px}
   #side .project-actions button{display:flex;align-items:center;justify-content:center;
     gap:5px;min-width:0;padding:6px 5px}
+  #side .project-share{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;
+    margin-top:6px;padding:7px 8px;border-color:#b9c9e7;background:#f4f7fd;color:#285ba9;
+    font-weight:600}
+  #side .project-share:hover{background:#eaf1ff;border-color:#91addb}
   #side svg.ui-icon,#fs_chat svg.ui-icon{width:16px;height:16px;flex:0 0 16px;fill:none;stroke:currentColor;
     stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
   #side .icon-button{display:grid;place-items:center;flex:0 0 32px;width:32px;height:32px;padding:0}
@@ -1688,7 +2217,7 @@ PAGE = r"""<!DOCTYPE html>
   #rightPanelHead b{flex:1;font-size:12.5px}
   #rightPanelClose{display:grid;place-items:center;width:32px;height:32px;padding:0;border-color:transparent}
   #rightPanelTabs{position:sticky;top:48px;z-index:3;display:grid;
-    grid-template-columns:repeat(3,minmax(0,1fr));margin:0 -12px 6px;padding:0 8px;
+    grid-template-columns:repeat(4,minmax(0,1fr));margin:0 -12px 6px;padding:0 8px;
     background:var(--card);border-bottom:1px solid var(--line)}
   #rightPanelTabs button{min-width:0;height:36px;padding:0 5px;border:0;border-bottom:2px solid transparent;
     border-radius:0;background:transparent;color:#66707e;font-size:11px;white-space:nowrap;
@@ -1700,6 +2229,21 @@ PAGE = r"""<!DOCTYPE html>
     outline-offset:-2px}
   .right-panel-view[hidden]{display:none}
   .right-panel-view{min-width:0;padding-bottom:8px}
+  .review-inbox-head{display:flex;align-items:center;gap:8px;padding:10px 2px 9px;
+    border-bottom:1px solid #e3e7ec}.review-inbox-head p{flex:1;margin:0;color:#697381;
+    font-size:10.5px;line-height:14px}.review-inbox-head button{height:28px;padding:0 8px;font-size:10.5px}
+  #reviewInbox{min-height:86px}.review-inbox-empty{padding:18px 2px;color:#737d89;font-size:11px;
+    line-height:16px}.review-inbox-item{padding:12px 2px;border-bottom:1px solid #e6e9ed}
+  .review-inbox-status{display:flex;align-items:center;gap:6px;margin-bottom:5px;font-size:11px;font-weight:700}
+  .review-inbox-status::before{content:"";width:7px;height:7px;border-radius:50%;background:#bd7b25}
+  .review-inbox-item.approved .review-inbox-status{color:#167142}.review-inbox-item.approved .review-inbox-status::before{background:#16834a}
+  .review-inbox-item.changes_requested .review-inbox-status{color:#975614}.review-inbox-item.changes_requested .review-inbox-status::before{background:#c37a22}
+  .review-inbox-meta{display:flex;flex-wrap:wrap;gap:3px 8px;color:#77818e;font-size:9.5px;line-height:14px}
+  .review-inbox-decision{margin-top:8px;color:#3f4956;font-size:10.5px;line-height:15px}
+  .review-inbox-comment{margin:5px 0 0;padding-left:8px;border-left:2px solid #dce2e9;color:#505b68;
+    white-space:pre-wrap;overflow-wrap:anywhere}.review-inbox-files{display:grid;gap:4px;margin-top:7px}
+  .review-inbox-files a{color:#245eae;font-size:10px;text-decoration:none;overflow-wrap:anywhere}
+  .review-inbox-files a:hover{text-decoration:underline}
   #rightside .right-panel-view>fieldset{border:0;border-bottom:1px solid #edf0f3;
     border-radius:0;margin:0;padding:11px 2px 13px}
   #rightside .right-panel-view>fieldset>legend{margin:0 0 7px;padding:0;color:#303947;
@@ -1860,11 +2404,27 @@ PAGE = r"""<!DOCTYPE html>
     border-top:1px solid var(--line);overflow:hidden}
   #catWorkspace.has-selection{grid-template-columns:minmax(0,1fr) 304px}
   #catBrowser{display:flex;flex-direction:column;min-width:0;min-height:0;padding-top:10px}
-  #catCats{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+  #catFilterbar{display:flex;align-items:center;gap:10px;min-height:38px;margin-bottom:8px;
+    border-bottom:1px solid #dfe3e8}
+  #catScopes{display:flex;align-self:stretch;gap:2px;flex:0 0 auto}
+  .cat-scope{position:relative;display:flex;align-items:center;gap:6px;padding:0 9px;
+    border:0;border-radius:0;background:transparent;color:#596473;font-size:11.5px;
+    font-weight:600;cursor:pointer}
+  .cat-scope::after{content:"";position:absolute;left:9px;right:9px;bottom:-1px;height:2px;
+    background:transparent}
+  .cat-scope.on{color:#1f5fc9}.cat-scope.on::after{background:var(--accent)}
+  .cat-scope output{min-width:18px;padding:1px 5px;border-radius:8px;background:#edf0f4;
+    color:#65707e;font-size:9.5px;font-variant-numeric:tabular-nums;text-align:center}
+  .cat-scope.on output{background:#e6efff;color:#1f5fc9}
+  #catFilterFields{display:flex;align-items:center;gap:6px;margin-left:auto;padding-bottom:6px}
+  .cat-filter-select{height:27px;max-width:172px;padding:0 25px 0 8px;border:1px solid #d6dbe2;
+    border-radius:4px;background:#fff;color:#3f4855;font-size:10.5px}
+  #catCats{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
   .catchip{padding:4px 9px;border:1px solid var(--line);border-radius:16px;background:#fff;
     cursor:pointer;font-size:12px}
   .catchip.on{background:var(--accent);border-color:var(--accent);color:#fff}
-  .catchip:focus-visible,#catClose:focus-visible,#catInspectorClose:focus-visible,
+  .catchip:focus-visible,.cat-scope:focus-visible,.cat-filter-select:focus-visible,
+    #catClose:focus-visible,#catInspectorClose:focus-visible,
     #catInspectorActions button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
   #catGrid{display:grid;flex:1;min-height:0;align-content:start;
     grid-template-columns:repeat(auto-fill,minmax(200px,1fr));grid-auto-rows:max-content;gap:12px;
@@ -1882,9 +2442,16 @@ PAGE = r"""<!DOCTYPE html>
     color:#687180;font-size:11px;font-weight:600}
   .catCard .draft-placeholder svg{width:28px;height:28px;fill:none;stroke:#7e8896;
     stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
-  .catCard .nm{padding:7px 10px 2px;font-weight:600;font-size:12.5px;
+  .catCard .nm{display:block;padding:7px 10px 2px;font-weight:600;font-size:12.5px;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .catCard .sub{padding:0 10px 8px;font-size:11px;color:var(--mut)}
+  .catCard .sub{display:block;padding:0 10px 6px;font-size:11px;color:var(--mut);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cat-card-owner{display:flex;align-items:center;gap:5px;min-width:0;margin:0 10px 8px;
+    padding-top:6px;border-top:1px solid #e8ebef;color:#5f6977;font-size:10.5px}
+  .cat-card-owner svg{width:13px;height:13px;flex:0 0 13px;fill:none;stroke:#6f7986;
+    stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+  .cat-card-owner span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cat-card-owner.is-empty{color:#a06816}.cat-card-owner.is-empty svg{stroke:#a06816}
   .catCard .dr{display:inline-block;background:#c78a2b;color:#fff;border-radius:8px;
     padding:0 6px;font-size:10px;margin-left:4px}
   .catEmpty{padding:24px 4px;color:var(--mut);font-size:12px}
@@ -1931,6 +2498,9 @@ PAGE = r"""<!DOCTYPE html>
   @media (max-width:1200px){
     #catWorkspace.has-selection{grid-template-columns:minmax(0,1fr) 268px}
     #catInspectPreview{height:150px;flex-basis:150px}
+    #catFilterbar{align-items:flex-start;flex-direction:column;gap:4px;padding-bottom:7px}
+    #catScopes{height:34px}
+    #catFilterFields{margin-left:0;padding-bottom:0}
   }
   /* AKD-214: пустое рабочее пространство нового изделия */
   #emptyState{position:absolute;inset:0;z-index:6;display:none;align-items:center;justify-content:center;background:var(--bg)}
@@ -2055,6 +2625,22 @@ PAGE = r"""<!DOCTYPE html>
          transform:translateX(-50%);z-index:9;
          background:#1a1d21;color:#fff;padding:7px 14px;border-radius:8px;font-size:12.5px;
          opacity:0;transition:opacity .25s;pointer-events:none;max-width:80%}
+  #shareDialog{width:min(470px,calc(100vw - 32px));padding:0;border:1px solid #cfd5dd;
+    border-radius:8px;background:#fff;color:var(--ink);box-shadow:0 24px 70px rgba(20,31,44,.24)}
+  #shareDialog::backdrop{background:rgba(30,39,50,.42)}
+  .share-dialog-head{padding:17px 18px 12px;border-bottom:1px solid #e2e6ea}
+  .share-dialog-head span{display:block;margin-bottom:3px;color:#647080;font-size:9.5px;
+    font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+  .share-dialog-head h2{margin:0;font-size:16px;line-height:21px}
+  .share-dialog-body{padding:14px 18px 18px}.share-dialog-body p{margin:0 0 11px;color:#65707e;
+    font-size:11.5px;line-height:17px}.share-link-row{display:grid;grid-template-columns:minmax(0,1fr) auto;
+    gap:6px}.share-link-row input{min-width:0;height:34px;padding:0 9px;border:1px solid #ccd2da;
+    border-radius:4px;background:#f7f8fa;color:#38424f;font:10.5px/1 ui-monospace,SFMono-Regular,
+    Consolas,monospace}.share-link-row button{height:34px}.share-dialog-meta{margin-top:8px;color:#77818e;
+    font-size:10px}.share-dialog-actions{display:flex;justify-content:flex-end;gap:6px;margin-top:15px}
+  .share-dialog-actions a{display:flex;align-items:center;justify-content:center;min-height:32px;
+    padding:0 12px;border:1px solid var(--accent);border-radius:5px;background:var(--accent);
+    color:#fff;text-decoration:none;font-size:11.5px;font-weight:600}
   details{margin-top:8px} textarea{width:100%;height:170px;font:11px/1.4 Consolas,monospace}
   #bom table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:11.5px}
   #bom td{border-bottom:1px solid var(--line);padding:3px 4px;overflow-wrap:anywhere}
@@ -2306,6 +2892,14 @@ PAGE = r"""<!DOCTYPE html>
         Каталог
       </button>
     </div>
+    <button id="projShare" class="project-share" type="button"
+      title="Зафиксировать текущую версию и создать ссылку только для просмотра">
+      <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"/>
+        <path d="M14 11a5 5 0 0 0-7.1-.1l-2 2A5 5 0 0 0 12 20l1.1-1.1"/>
+      </svg>
+      Создать ссылку на просмотр
+    </button>
   </fieldset>
 
   <section id="modelState" aria-labelledby="modelStateTitle">
@@ -2427,6 +3021,9 @@ PAGE = r"""<!DOCTYPE html>
       aria-controls="rightViewComponents" data-mode="components" tabindex="-1">Комплектация</button>
     <button id="rightTabProduction" type="button" role="tab" aria-selected="false"
       aria-controls="rightViewProduction" data-mode="production" tabindex="-1">Производство</button>
+    <button id="rightTabReviews" type="button" role="tab" aria-selected="false"
+      aria-controls="rightViewReviews" data-mode="reviews" tabindex="-1"
+      aria-label="Согласования">Ответы</button>
   </nav>
 
   <div id="rightViewProperties" class="right-panel-view" role="tabpanel"
@@ -2541,6 +3138,13 @@ PAGE = r"""<!DOCTYPE html>
       <div id="builds" style="margin-top:6px"></div>
     </fieldset>
   </div>
+
+  <div id="rightViewReviews" class="right-panel-view" role="tabpanel"
+    aria-labelledby="rightTabReviews" hidden inert>
+    <div class="review-inbox-head"><p>Ответы клиентов по текущему изделию и каждой зафиксированной версии.</p>
+      <button id="reviewInboxRefresh" type="button">Обновить</button></div>
+    <div id="reviewInbox" aria-live="polite"><div class="review-inbox-empty">Загружаем согласования…</div></div>
+  </div>
 </div>
 
 <nav id="rightRail" aria-label="Разделы параметров изделия">
@@ -2564,6 +3168,13 @@ PAGE = r"""<!DOCTYPE html>
       <path d="M3 21V10l6 3V9l6 4V5h6v16H3Z"/><path d="M17 9h2M7 17h2M12 17h2M17 17h2"/>
     </svg>
     <span class="sr-only">Производство</span>
+  </button>
+  <button id="rightRailReviews" type="button" aria-label="Открыть согласования"
+    aria-controls="rightside" aria-expanded="false" title="Согласования">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 5h16v11H9l-5 4V5Z"/><path d="m8 10 2.5 2.5L16 8"/>
+    </svg>
+    <span class="sr-only">Согласования</span>
   </button>
 </nav>
 
@@ -2670,6 +3281,21 @@ PAGE = r"""<!DOCTYPE html>
     </div>
     <div id="catWorkspace">
       <div id="catBrowser">
+        <div id="catFilterbar">
+          <div id="catScopes" role="group" aria-label="Область каталога"></div>
+          <div id="catFilterFields">
+            <label class="sr-only" for="catResponsible">Ответственный</label>
+            <select id="catResponsible" class="cat-filter-select" aria-label="Ответственный">
+              <option value="all">Все ответственные</option>
+            </select>
+            <label class="sr-only" for="catStatus">Статус изделия</label>
+            <select id="catStatus" class="cat-filter-select" aria-label="Статус изделия">
+              <option value="all">Все статусы</option>
+              <option value="active">Рабочие изделия</option>
+              <option value="draft">Черновики</option>
+            </select>
+          </div>
+        </div>
         <div id="catCats" role="group" aria-label="Категории изделий"></div>
         <div id="catGrid" role="listbox" aria-label="Изделия каталога"></div>
       </div>
@@ -2800,6 +3426,18 @@ PAGE = r"""<!DOCTYPE html>
     </div>
     <div id="viewportUnits" class="viewport-status-segment">мм</div>
   </div>
+  <dialog id="shareDialog" aria-labelledby="shareDialogTitle">
+    <div class="share-dialog-head"><span>Версия зафиксирована</span>
+      <h2 id="shareDialogTitle">Ссылка на просмотр готова</h2></div>
+    <div class="share-dialog-body">
+      <p>Клиент увидит именно эту версию изделия. Следующие правки в Studio её не изменят.</p>
+      <div class="share-link-row"><input id="shareUrl" readonly aria-label="Ссылка на просмотр">
+        <button id="shareCopy" type="button">Копировать</button></div>
+      <div id="shareMeta" class="share-dialog-meta"></div>
+      <div class="share-dialog-actions"><button id="shareClose" type="button">Закрыть</button>
+        <a id="shareOpen" href="#" target="_blank" rel="noopener">Открыть просмотр</a></div>
+    </div>
+  </dialog>
   <div id="toast"></div>
 </div>
 </div>
@@ -2883,7 +3521,9 @@ const rightPanelModes={
   components:{title:'Комплектация',tab:$('rightTabComponents'),
     rail:$('rightRailComponents'),panel:$('rightViewComponents'),scrollTop:0},
   production:{title:'Производство',tab:$('rightTabProduction'),
-    rail:$('rightRailProduction'),panel:$('rightViewProduction'),scrollTop:0}
+    rail:$('rightRailProduction'),panel:$('rightViewProduction'),scrollTop:0},
+  reviews:{title:'Согласования',tab:$('rightTabReviews'),
+    rail:$('rightRailReviews'),panel:$('rightViewReviews'),scrollTop:0}
 };
 let lastRightRailControl=rightPanelModes.properties.rail;
 function setRightPanelMode(mode){
@@ -2902,6 +3542,7 @@ function setRightPanelMode(mode){
   $('rightPanelTitle').textContent=current.title;
   $('rightPanelClose').setAttribute('aria-label',`Свернуть панель «${current.title}»`);
   lastRightRailControl=current.rail;
+  if(mode==='reviews')loadReviews();
   if(changed)requestAnimationFrame(()=>{side.scrollTop=current.scrollTop||0;});
 }
 function setRightPanel(open,mode=rightPanelMode,fromUser=false){
@@ -3687,6 +4328,43 @@ document.addEventListener('click',e=>{           // клик по детали �
 /* ---------- каталог проектов (AKD-132) ---------- */
 let CATALOG_MODE=false,CATALOG_PREVIOUS_HASH='';
 let catalogReturnFocus=null;
+const reviewStatusLabels={pending:'Ожидает решения',approved:'Согласовано',changes_requested:'Нужны изменения'};
+function reviewDate(value){const date=new Date(value);return Number.isNaN(date.getTime())?'':
+  date.toLocaleString('ru-RU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}).replace(',',' ·');}
+function reviewFileSize(bytes){const value=Number(bytes)||0;return value<1048576?
+  `${Math.max(1,Math.round(value/1024))} КБ`:`${(value/1048576).toFixed(1).replace('.',',')} МБ`;}
+function reviewText(tag,className,text){const element=document.createElement(tag);if(className)element.className=className;
+  element.textContent=text;return element;}
+function renderReviews(reviews){const inbox=$('reviewInbox');inbox.replaceChildren();
+  $('rightTabReviews').setAttribute('aria-label',`Согласования: ${reviews.length}`);
+  if(!reviews.length){inbox.append(reviewText('div','review-inbox-empty',
+    'Для этого изделия ещё нет ссылок на просмотр. Создайте ссылку слева — ответ клиента появится здесь.'));return;}
+  reviews.forEach(review=>{const item=document.createElement('article');item.className='review-inbox-item '+review.status;
+    item.append(reviewText('div','review-inbox-status',reviewStatusLabels[review.status]||'Версия отправлена'));
+    const meta=document.createElement('div');meta.className='review-inbox-meta';
+    meta.append(reviewText('span','',`Версия ${(review.revision||'').slice(0,10)}`));
+    if(review.created_at)meta.append(reviewText('span','',reviewDate(review.created_at)));
+    meta.append(reviewText('span','',`Ответственный: ${review.responsible_name||'не назначен'}`));
+    if(review.created_by_name)meta.append(reviewText('span','',`Ссылку создал: ${review.created_by_name}`));item.append(meta);
+    const decision=review.decision;if(decision){const result=document.createElement('div');result.className='review-inbox-decision';
+      result.append(reviewText('strong','',decision.reviewer_name||'Клиент'));
+      if(decision.created_at)result.append(document.createTextNode(' · '+reviewDate(decision.created_at)));
+      if(decision.comment)result.append(reviewText('p','review-inbox-comment',decision.comment));
+      const files=Array.isArray(decision.attachments)?decision.attachments:[];
+      if(files.length){const links=document.createElement('div');links.className='review-inbox-files';files.forEach(file=>{
+          const link=document.createElement('a');link.href=`/api/reviews/attachments/${encodeURIComponent(review.id)}/${encodeURIComponent(file.id)}`;
+          link.target='_blank';link.rel='noopener';link.textContent=`↗ ${file.name} · ${reviewFileSize(file.bytes)}`;links.append(link);});result.append(links);}item.append(result);}
+    inbox.append(item);});}
+let reviewLoadSequence=0;
+async function loadReviews(){const sequence=++reviewLoadSequence,expectedFile=$('projSel').value,button=$('reviewInboxRefresh');
+  if(button)button.disabled=true;try{const response=await fetch('/api/reviews',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:'{}'});const result=await response.json();
+    if(sequence!==reviewLoadSequence||result.project_file!==$('projSel').value)return;
+    if(!response.ok||!result.ok)throw new Error(result.error||'Не удалось загрузить согласования');renderReviews(result.reviews||[]);
+  }catch(error){if(sequence===reviewLoadSequence)$('reviewInbox').replaceChildren(
+      reviewText('div','review-inbox-empty','Согласования не загрузились. Нажмите «Обновить».'));
+  }finally{if(button&&sequence===reviewLoadSequence)button.disabled=false;}}
+$('reviewInboxRefresh').onclick=loadReviews;
 async function loadProjects(){
   const r=await fetch('/api/projects',{method:'POST',
     headers:{'Content-Type':'application/json'},body:'{}'});
@@ -3694,6 +4372,7 @@ async function loadProjects(){
   $('projSel').innerHTML=(p.projects||[]).map(x=>
     `<option value="${x.file}" ${x.file===p.current?'selected':''}>`+
     `${x.name.slice(0,38)} · ${x.archetype} ${x.dims}</option>`).join('');
+  loadReviews();
 }
 function adoptSpec(p){
   SPEC=p.spec; UNDO.length=0; $('btnUndo').disabled=true;
@@ -3778,6 +4457,30 @@ $('projRen').onclick=async()=>{   // переименовать текущее �
   if(p.ok){fillForm();loadProjects();schedule();toast('Переименовано: '+name);}
   else{SPEC.project_name=previousName;toast('Ошибка: '+(p.error||''),true);}
 };
+$('projShare').onclick=async()=>{
+  if(modelMutationLocked()){toast('Дождитесь завершения текущего изменения модели',true);return;}
+  const button=$('projShare'),label=button.lastChild&&button.lastChild.textContent;
+  button.disabled=true;
+  try{
+    const response=await fetch('/api/reviews/create',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({file:$('projSel').value,spec:SPEC})});
+    const result=await response.json();
+    if(!response.ok||!result.ok){toast('Ссылка не создана: '+(result.error||'ошибка'),true);return;}
+    $('shareUrl').value=result.url;$('shareOpen').href=result.url;
+    const created=new Date(result.review.created_at),createdText=Number.isNaN(created.getTime())?'':
+      created.toLocaleString('ru-RU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}).replace(',',' ·');
+    $('shareMeta').textContent=`${result.review.project_name} · версия ${result.review.revision.slice(0,10)}${createdText?' · '+createdText:''}`;
+    const dialog=$('shareDialog');if(dialog.showModal)dialog.showModal();else dialog.setAttribute('open','');loadReviews();
+  }catch(error){toast('Ссылка не создана: '+error.message,true);}
+  finally{button.disabled=false;if(label)button.lastChild.textContent=label;}
+};
+$('shareCopy').onclick=async()=>{
+  const field=$('shareUrl');
+  try{await navigator.clipboard.writeText(field.value);toast('Ссылка скопирована');}
+  catch(error){field.focus();field.select();document.execCommand('copy');toast('Ссылка скопирована');}
+};
+$('shareClose').onclick=()=>{const dialog=$('shareDialog');dialog.close?dialog.close():dialog.removeAttribute('open');};
 /* ---------- каталог изделий (AKD-217) ---------- */
 // аксонометрия не собралась (битая спека) → PNG-снапшот, если был, иначе заглушка
 function thumbErr(img){
@@ -3792,8 +4495,10 @@ const CAT_RULES=[  // раздел ← archetype/furniture_type
   ['Стеллажи',p=>/стеллаж|полк/i.test(p.ftype)||['shelving'].includes(p.archetype)],
   ['Черновики',p=>p.draft],
 ];
-let CAT_ITEMS=[],CAT_VISIBLE_ITEMS=[],CAT_SEL='Все',CAT_SELECTED_FILE='',CAT_CURRENT_FILE='',
-  CAT_LAST_CLICK_FILE='',CAT_LAST_CLICK_AT=0;
+let CAT_ITEMS=[],CAT_VISIBLE_ITEMS=[],CAT_SELECTED_FILE='',CAT_CURRENT_FILE='',
+  CAT_LAST_CLICK_FILE='',CAT_LAST_CLICK_AT=0,CAT_SCOPE='all',CAT_TYPE='all',
+  CAT_STATUS='all',CAT_RESPONSIBLE='all',CAT_TOTAL=0,CAT_CURRENT_USER_ID='',
+  CAT_COUNTS={all:0,mine:0,unassigned:0},CAT_MEMBERS=[],CAT_TYPES=[],CAT_SEARCH_TIMER=null;
 const CATALOG_INACTIVE_IDS=['fs_project','modelState','fs_part','rightside','rightRail',
   'viewportTopbar','hud','draw','emptyState','fs_chat','viewportStatus'];
 const CAT_ARCHETYPE_LABELS={desk:'Стол',table:'Стол',round_table:'Круглый стол',
@@ -3831,7 +4536,46 @@ function catalogCountText(count){
   return `${count} ${noun}`;
 }
 function updateCatalogContext(){
-  $('catalogContextCount').textContent=catalogCountText(CAT_ITEMS.length);
+  const visible=CAT_ITEMS.length;
+  $('catalogContextCount').textContent=visible===CAT_TOTAL?catalogCountText(CAT_TOTAL):
+    `Показано ${visible} из ${CAT_TOTAL}`;
+}
+function catalogOwnerMarkup(item){
+  const name=item.responsible||'Без ответственного',empty=!item.responsible_user_id;
+  return `<span class="cat-card-owner${empty?' is-empty':''}">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/>
+      <path d="M4.5 21a7.5 7.5 0 0 1 15 0"/></svg>
+    <span>${catalogEscape(name)}</span></span>`;
+}
+function renderCatalogControls(){
+  const scopes=[
+    ['all','Все изделия',CAT_COUNTS.all],
+    ['mine','Мои',CAT_COUNTS.mine],
+    ['unassigned','Без ответственного',CAT_COUNTS.unassigned],
+  ];
+  $('catScopes').innerHTML=scopes.map(([value,label,count])=>
+    `<button type="button" class="cat-scope ${value===CAT_SCOPE?'on':''}" data-scope="${value}"
+      aria-pressed="${value===CAT_SCOPE}" ${value==='mine'&&!CAT_CURRENT_USER_ID?'disabled':''}>
+      <span>${label}</span><output>${count}</output></button>`).join('');
+  $('catScopes').querySelectorAll('.cat-scope').forEach(button=>button.onclick=()=>{
+    CAT_SCOPE=button.dataset.scope;CAT_RESPONSIBLE='all';refreshCatalog({clearSelection:true});
+  });
+  $('catResponsible').innerHTML=`<option value="all">Все ответственные</option>
+    <option value="unassigned">Без ответственного</option>`+CAT_MEMBERS.map(member=>
+      `<option value="${catalogEscape(member.user_id)}">${catalogEscape(member.display_name)}</option>`
+    ).join('');
+  $('catResponsible').value=CAT_RESPONSIBLE;
+  $('catResponsible').disabled=CAT_SCOPE!=='all';
+  $('catStatus').value=CAT_STATUS;
+  const categories=['all',...CAT_TYPES];
+  $('catCats').innerHTML=categories.map(value=>{
+    const label=value==='all'?'Все типы':value;
+    return `<button type="button" class="catchip ${value===CAT_TYPE?'on':''}"
+      data-type="${catalogEscape(value)}" aria-pressed="${value===CAT_TYPE}">${catalogEscape(label)}</button>`;
+  }).join('');
+  $('catCats').querySelectorAll('.catchip').forEach(button=>button.onclick=()=>{
+    CAT_TYPE=button.dataset.type;refreshCatalog({clearSelection:true});
+  });
 }
 function selectedCatalogItem(){
   return CAT_ITEMS.find(item=>item.file===CAT_SELECTED_FILE)||null;
@@ -3905,23 +4649,35 @@ function setCatalogMode(on,{restoreFocus=true}={}){
     });
   }
 }
+function catalogRequestPayload(){
+  return {scope:CAT_SCOPE,type:CAT_TYPE,status:CAT_STATUS,
+    responsible_user_id:CAT_RESPONSIBLE,q:($('catQ').value||'').trim()};
+}
+async function refreshCatalog({clearSelection=false}={}){
+  try{
+    const r=await fetch('/api/projects',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(catalogRequestPayload())});
+    const p=await r.json();
+    if(!r.ok){toast('Каталог не обновился: '+(p.error||'ошибка загрузки'),true);return false;}
+    CAT_ITEMS=p.projects||[];CAT_CURRENT_FILE=p.current||CAT_CURRENT_FILE;
+    CAT_TOTAL=Number(p.total??CAT_ITEMS.length);CAT_COUNTS=p.counts||{all:CAT_TOTAL,mine:0,unassigned:0};
+    CAT_MEMBERS=p.members||[];CAT_TYPES=p.types||[];CAT_CURRENT_USER_ID=p.current_user_id||'';
+    if(clearSelection)CAT_SELECTED_FILE='';
+    renderCatalog();return true;
+  }catch(error){toast('Каталог не обновился: '+error.message,true);return false;}
+}
 async function openCatalog({pushHistory=true}={}){
   if(modelMutationLocked()){
     toast('Дождитесь завершения текущего изменения модели',true);return;
   }
-  try{
-    const r=await fetch('/api/projects',{method:'POST',
-      headers:{'Content-Type':'application/json'},body:'{}'});
-    const p=await r.json();
-    if(!r.ok){toast('Каталог не открылся: '+(p.error||'ошибка загрузки'),true);return;}
-    CAT_ITEMS=p.projects||[];CAT_CURRENT_FILE=p.current||'';CAT_SEL='Все';
-    CAT_SELECTED_FILE='';$('catQ').value='';
-    if(pushHistory&&location.hash!=='#catalog'){
-      CATALOG_PREVIOUS_HASH=location.hash||'';
-      history.pushState({akedaView:'catalog'},'',location.pathname+location.search+'#catalog');
-    }
-    setCatalogMode(true);renderCatalog();
-  }catch(error){toast('Каталог не открылся: '+error.message,true);}
+  CAT_SCOPE='all';CAT_TYPE='all';CAT_STATUS='all';CAT_RESPONSIBLE='all';
+  CAT_SELECTED_FILE='';$('catQ').value='';
+  if(!await refreshCatalog({clearSelection:true}))return;
+  if(pushHistory&&location.hash!=='#catalog'){
+    CATALOG_PREVIOUS_HASH=location.hash||'';
+    history.pushState({akedaView:'catalog'},'',location.pathname+location.search+'#catalog');
+  }
+  setCatalogMode(true);
 }
 function closeCatalog({fromHistory=false}={}){
   if(!CATALOG_MODE)return;
@@ -3939,22 +4695,14 @@ function leaveCatalogForEditor(){
     location.pathname+location.search+(CATALOG_PREVIOUS_HASH||''));
 }
 function catSection(p){
+  if(p.category)return p.category;
   if(p.draft) return 'Черновики';
   for(const [nm,fn] of CAT_RULES) if(fn(p)) return nm;
   return 'Прочее';
 }
 function renderCatalog(){
-  updateCatalogContext();
-  const q=($('catQ').value||'').toLowerCase().trim();
-  const secs=['Все',...new Set(CAT_ITEMS.map(catSection))];
-  $('catCats').innerHTML=secs.map(s=>
-    `<button type="button" class="catchip ${s===CAT_SEL?'on':''}" data-s="${catalogEscape(s)}"
-      aria-pressed="${s===CAT_SEL}">${catalogEscape(s)}</button>`).join('');
-  $('catCats').querySelectorAll('.catchip').forEach(ch=>
-    ch.onclick=()=>{CAT_SEL=ch.dataset.s; renderCatalog();});
-  const items=CAT_ITEMS.filter(p=>
-    (CAT_SEL==='Все'||catSection(p)===CAT_SEL)&&
-    (!q||String(p.name).toLowerCase().includes(q)));
+  updateCatalogContext();renderCatalogControls();
+  const items=CAT_ITEMS;
   CAT_VISIBLE_ITEMS=items;
   if(CAT_SELECTED_FILE&&!items.some(item=>item.file===CAT_SELECTED_FILE))CAT_SELECTED_FILE='';
   $('catGrid').innerHTML=items.map(p=>`
@@ -3963,6 +4711,7 @@ function renderCatalog(){
       <span class="img">${catalogThumbMarkup(p)}</span>
       <span class="nm" title="${catalogEscape(p.name)}">${catalogEscape(p.name)}${p.draft?'<span class="dr">черновик</span>':''}</span>
       <span class="sub">${catalogEscape(p.dims||'—')}${p.decor?' · '+catalogEscape(p.decor):''}</span>
+      ${catalogOwnerMarkup(p)}
     </button>`).join('')||'<div class="catEmpty">По этому запросу изделий нет.</div>';
   $('catGrid').querySelectorAll('.catCard').forEach(c=>{
     c.onclick=()=>catalogCardClick(c.dataset.f);
@@ -4007,10 +4756,10 @@ async function renameCatalogItem(){
       body:JSON.stringify({file:item.file,name:name.trim()})});
     const p=await r.json();
     if(!r.ok||!p.ok){toast('Не удалось переименовать: '+(p.error||'ошибка'),true);return;}
-    const index=CAT_ITEMS.findIndex(entry=>entry.file===item.file);
-    if(index>=0&&p.project)CAT_ITEMS[index]=p.project;
     if(item.file===CAT_CURRENT_FILE&&SPEC)SPEC.project_name=name.trim();
-    renderCatalog();loadProjects();toast('Переименовано: '+name.trim());
+    await refreshCatalog();
+    if(CAT_ITEMS.some(entry=>entry.file===item.file))CAT_SELECTED_FILE=item.file;
+    syncCatalogSelection();loadProjects();toast('Переименовано: '+name.trim());
   }catch(error){toast('Не удалось переименовать: '+error.message,true);}
   finally{button.disabled=false;}
 }
@@ -4022,9 +4771,7 @@ async function duplicateCatalogItem(){
       body:JSON.stringify({file:item.file,stay_catalog:true})});
     const p=await r.json();
     if(!r.ok||!p.ok){toast('Не удалось создать копию: '+(p.error||'ошибка'),true);return;}
-    const refreshed=await fetch('/api/projects',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
-    const payload=await refreshed.json();CAT_ITEMS=payload.projects||CAT_ITEMS;
-    CAT_CURRENT_FILE=payload.current||CAT_CURRENT_FILE;CAT_SELECTED_FILE=p.file;renderCatalog();
+    await refreshCatalog();CAT_SELECTED_FILE=p.file;renderCatalog();
     selectCatalogItem(p.file,{focus:true});loadProjects();toast('Копия добавлена в каталог');
   }catch(error){toast('Не удалось создать копию: '+error.message,true);}
   finally{button.disabled=false;}
@@ -4035,7 +4782,16 @@ $('catInspectorClose').onclick=()=>clearCatalogSelection({restoreFocus:true});
 $('catOpen').onclick=()=>openCatalogItem();
 $('catRename').onclick=renameCatalogItem;
 $('catDuplicate').onclick=duplicateCatalogItem;
-$('catQ').addEventListener('input',renderCatalog);
+$('catResponsible').onchange=event=>{
+  CAT_RESPONSIBLE=event.target.value;refreshCatalog({clearSelection:true});
+};
+$('catStatus').onchange=event=>{
+  CAT_STATUS=event.target.value;refreshCatalog({clearSelection:true});
+};
+$('catQ').addEventListener('input',()=>{
+  clearTimeout(CAT_SEARCH_TIMER);
+  CAT_SEARCH_TIMER=setTimeout(()=>refreshCatalog({clearSelection:true}),180);
+});
 window.addEventListener('popstate',()=>{
   if(location.hash==='#catalog')openCatalog({pushHistory:false});
   else if(CATALOG_MODE)closeCatalog({fromHistory:true});

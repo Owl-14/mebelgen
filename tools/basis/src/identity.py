@@ -2409,6 +2409,45 @@ class IdentityStore:
             ).fetchall()
             return [dict(row) for row in rows]
 
+    def list_project_collaborators(
+        self,
+        actor_user_id: str,
+        organization_id: str,
+        *,
+        support_session_id: str | None = None,
+        primary_session_id: str | None = None,
+        now: int | float | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return active people that may be shown in project ownership controls.
+
+        Catalog readers need names for authorship and responsibility filters, but
+        they must not receive emails, invitation state or other member-management
+        data.  This deliberately authorizes with ``project.read`` rather than
+        ``member.read`` and exposes only the small public collaboration model.
+        """
+
+        timestamp = _now(now)
+        with self._read() as connection:
+            self._require_organization(
+                connection,
+                actor_user_id,
+                organization_id,
+                "project.read",
+                support_session_id=support_session_id,
+                primary_session_id=primary_session_id,
+                now=timestamp,
+            )
+            rows = connection.execute(
+                """SELECT u.id AS user_id, u.display_name, m.role
+                   FROM memberships m JOIN users u ON u.id = m.user_id
+                   WHERE m.organization_id = ? AND m.status = 'active'
+                     AND u.status = 'active'
+                   ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
+                            u.display_name, u.id""",
+                (organization_id,),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
     def list_invitations(
         self,
         actor_user_id: str,

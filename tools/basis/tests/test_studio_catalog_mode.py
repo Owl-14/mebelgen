@@ -11,7 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from src.studio import PAGE, _list_projects  # noqa: E402
+from src.studio import PAGE, _filter_catalog_projects, _list_projects  # noqa: E402
 
 
 class _DomIndex(HTMLParser):
@@ -62,6 +62,9 @@ def test_catalog_has_its_own_accessible_context() -> None:
     assert "hidden" in inspector
     assert dom.by_id["catGrid"][1].get("role") == "listbox"
     assert dom.by_id["catOpen"][1].get("type") == "button"
+    assert dom.by_id["catScopes"][1].get("role") == "group"
+    assert dom.by_id["catResponsible"][1].get("aria-label") == "Ответственный"
+    assert dom.by_id["catStatus"][1].get("aria-label") == "Статус изделия"
 
 
 def test_catalog_mode_removes_stale_product_panels_from_layout() -> None:
@@ -115,6 +118,7 @@ def test_catalog_selection_does_not_open_model_context() -> None:
     assert "catInspectResponsible" in inspector
     assert "catInspectAuthor" in inspector
     assert "catInspectUpdated" in inspector
+    assert "catalogOwnerMarkup(p)" in render
 
 
 def test_catalog_keyboard_contract_and_escape_priority() -> None:
@@ -134,12 +138,57 @@ def test_catalog_projects_publish_real_metadata(tmp_path: Path) -> None:
         "archetype": "cabinet",
         "dimensions": {"width": 800, "depth": 400, "height": 720},
         "materials": {"color": "Дуб"},
-        "catalog": {"responsible": "Алексей", "author": "Илья"},
+        "catalog": {
+            "creator_user_id": "user-1",
+            "responsible_user_id": "user-2",
+            "responsible": "Старое имя",
+            "author": "Старый автор",
+        },
     }
     (tmp_path / "product.json").write_text(
         json.dumps(spec, ensure_ascii=False), encoding="utf-8"
     )
-    [project] = _list_projects(tmp_path)
+    [project] = _list_projects(
+        tmp_path, member_names={"user-1": "Илья", "user-2": "Алексей"}
+    )
     assert project["responsible"] == "Алексей"
     assert project["author"] == "Илья"
+    assert project["creator_user_id"] == "user-1"
+    assert project["responsible_user_id"] == "user-2"
+    assert project["category"] == "Тумбы"
+    assert project["status"] == "active"
     assert isinstance(project["updated_at"], int) and project["updated_at"] > 0
+
+
+def test_catalog_filters_are_server_side_and_composable() -> None:
+    projects = [
+        {
+            "name": "Тумба Алексея",
+            "responsible_user_id": "alexey",
+            "category": "Тумбы",
+            "status": "active",
+        },
+        {
+            "name": "Шкаф Ильи",
+            "responsible_user_id": "ilya",
+            "category": "Шкафы",
+            "status": "active",
+        },
+        {
+            "name": "Черновик тумбы",
+            "responsible_user_id": "",
+            "category": "Черновики",
+            "status": "draft",
+        },
+    ]
+    assert [item["name"] for item in _filter_catalog_projects(
+        projects, {"scope": "mine"}, current_user_id="alexey"
+    )] == ["Тумба Алексея"]
+    assert [item["name"] for item in _filter_catalog_projects(
+        projects, {"scope": "unassigned"}, current_user_id="alexey"
+    )] == ["Черновик тумбы"]
+    assert [item["name"] for item in _filter_catalog_projects(
+        projects,
+        {"responsible_user_id": "ilya", "type": "Шкафы", "status": "active", "q": "шкаф"},
+        current_user_id="alexey",
+    )] == ["Шкаф Ильи"]

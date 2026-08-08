@@ -183,9 +183,25 @@ def test_authenticated_studio_scopes_catalog_and_renders_profile(tmp_path: Path)
             "POST", "/api/projects", {}, csrf=True
         )
         assert status == 200
-        projects = json.loads(projects_body)["projects"]
+        catalog_payload = json.loads(projects_body)
+        projects = catalog_payload["projects"]
         assert [item["name"] for item in projects] == ["Тумба Константы"]
         assert projects[0]["updated_at"] > 0
+        assert projects[0]["creator_user_id"] == constanta["user"]["id"]
+        assert projects[0]["responsible_user_id"] == constanta["user"]["id"]
+        assert projects[0]["author"] == "Алексей Лазарев"
+        assert projects[0]["responsible"] == "Алексей Лазарев"
+        assert catalog_payload["counts"] == {"all": 1, "mine": 1, "unassigned": 0}
+        assert {member["user_id"] for member in catalog_payload["members"]} == {
+            constanta["user"]["id"],
+            designer["user"]["id"],
+        }
+        migrated = json.loads(
+            (tenant_root / constanta["organization"]["id"] / "paramspecs" / "product.json")
+            .read_text(encoding="utf-8")
+        )
+        assert migrated["catalog"]["creator_user_id"] == constanta["user"]["id"]
+        assert migrated["catalog"]["responsible_user_id"] == constanta["user"]["id"]
 
         status, _headers, versions_body = browser.request(
             "POST", "/api/versions", {}, csrf=True
@@ -330,6 +346,13 @@ def test_authenticated_studio_scopes_catalog_and_renders_profile(tmp_path: Path)
         assert status == 200
         assert "Вы просматриваете компанию" in support_html
         assert "Тумба Константы" in support_html
+        status, _headers, support_projects_body = platform_browser.request(
+            "POST", "/api/projects", {}, csrf=True
+        )
+        assert status == 200, support_projects_body
+        assert json.loads(support_projects_body)["members"][0]["display_name"] == (
+            "Алексей Лазарев"
+        )
         assert platform_browser.request(
             "POST", "/api/save", {"spec": _spec("Нельзя записать")}, csrf=True
         )[0] == 403
@@ -341,6 +364,31 @@ def test_authenticated_studio_scopes_catalog_and_renders_profile(tmp_path: Path)
         designer_browser = Browser(port)
         designer_browser.login(designer["login"], designer["starter_password"])
         assert designer_browser.request("GET", "/api/auth/me")[0] == 200
+        status, _headers, new_body = designer_browser.request(
+            "POST", "/api/new", {"name": "Изделие проектировщика"}, csrf=True
+        )
+        assert status == 200, new_body
+        designer_file = json.loads(new_body)["file"]
+        status, _headers, mine_body = designer_browser.request(
+            "POST", "/api/projects", {"scope": "mine"}, csrf=True
+        )
+        assert status == 200
+        mine = json.loads(mine_body)
+        assert [item["file"] for item in mine["projects"]] == [designer_file]
+        assert mine["projects"][0]["responsible_user_id"] == designer["user"]["id"]
+
+        owner_filter_browser = Browser(port)
+        owner_filter_browser.login(constanta["login"], constanta["starter_password"])
+        status, _headers, assigned_body = owner_filter_browser.request(
+            "POST",
+            "/api/projects",
+            {"responsible_user_id": designer["user"]["id"]},
+            csrf=True,
+        )
+        assert status == 200
+        assert [item["file"] for item in json.loads(assigned_body)["projects"]] == [
+            designer_file
+        ]
         store.update_membership(
             platform["id"],
             constanta["organization"]["id"],
