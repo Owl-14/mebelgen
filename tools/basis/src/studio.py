@@ -316,12 +316,19 @@ def _list_projects(spec_dir: Path) -> list[dict[str, Any]]:
         if not isinstance(s, dict) or s.get("schemaVersion") != "paramspec-v1":
             continue
         d = s.get("dimensions", {})
+        catalog_meta = s.get("catalog") if isinstance(s.get("catalog"), dict) else {}
+        updated_at = int(f.stat().st_mtime)
+        people = {
+            "responsible": str(catalog_meta.get("responsible") or ""),
+            "author": str(catalog_meta.get("author") or ""),
+            "updated_at": updated_at,
+        }
         has_prev = (spec_dir / ".previews" / (f.stem + ".png")).is_file()
         if s.get("draft"):                            # черновик (AKD-214)
             out.append({"file": f.name, "name": s.get("project_name", f.stem),
                         "archetype": "черновик", "dims": "—", "decor": "",
                         "draft": True, "preview": False,
-                        "ftype": s.get("furniture_type", "")})
+                        "ftype": s.get("furniture_type", ""), **people})
             continue
         out.append({"file": f.name,
                     "name": s.get("project_name", f.stem),
@@ -329,7 +336,7 @@ def _list_projects(spec_dir: Path) -> list[dict[str, Any]]:
                     "dims": f'{d.get("width", "?")}×{d.get("depth", "?")}×{d.get("height", "?")}',
                     "decor": (s.get("materials") or {}).get("color", ""),
                     "preview": has_prev,
-                    "ftype": s.get("furniture_type", "")})
+                    "ftype": s.get("furniture_type", ""), **people})
     return out
 
 
@@ -585,29 +592,58 @@ def _studio_login_page() -> str:
   background:radial-gradient(circle at 20% 0,#fff 0,#f4f6f9 38%,#e9edf3 100%)}
 .card{width:min(430px,calc(100vw - 32px));padding:34px;border:1px solid #dfe4ea;
   border-radius:22px;background:rgba(255,255,255,.94);box-shadow:0 24px 70px rgba(30,39,54,.12)}
-.brand{display:flex;align-items:center;gap:12px;margin-bottom:26px}.brand img{width:178px;height:auto}
-.brand span{color:#707987;font-size:12px}.eyebrow{margin:0 0 8px;color:#2563d9;font-size:11px;
-  font-weight:750;letter-spacing:.12em;text-transform:uppercase}h1{margin:0 0 8px;font-size:25px}
-.lead{margin:0 0 24px;color:#687180;line-height:1.5}label{display:grid;gap:7px;margin:14px 0;
-  color:#454e5c;font-size:12px;font-weight:650}input{width:100%;height:46px;border:1px solid #ccd3dd;
+.brand{display:flex;align-items:center;justify-content:center;gap:10px;margin:2px auto 31px}
+.brand-wordmark{width:70%;max-width:240px;height:auto}.brand-mark{width:24%;max-width:84px;height:auto}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+  clip:rect(0,0,0,0);white-space:nowrap;border:0}.field{display:grid;gap:7px;margin:14px 0}
+label{color:#454e5c;font-size:12px;font-weight:650}input{width:100%;height:46px;border:1px solid #ccd3dd;
   border-radius:12px;padding:0 13px;font:inherit;background:#fff;outline:none}input:focus{border-color:#3478ea;
-  box-shadow:0 0 0 3px rgba(52,120,234,.12)}button{width:100%;height:46px;border:0;border-radius:12px;
+  box-shadow:0 0 0 3px rgba(52,120,234,.12)}.password-field{position:relative}
+.password-field input{padding-right:52px}.password-toggle{position:absolute;top:1px;right:1px;
+  display:flex;width:44px;height:44px;align-items:center;justify-content:center;padding:0;
+  border-radius:11px;background:transparent;color:#687180}.password-toggle:hover{background:#f1f4f8;color:#303844}
+.password-toggle:focus-visible{outline:2px solid #3478ea;outline-offset:1px}
+.password-toggle svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.7;
+  stroke-linecap:round;stroke-linejoin:round}.password-toggle .eye-off{display:none}
+.password-toggle.is-visible .eye-on{display:none}.password-toggle.is-visible .eye-off{display:block}
+button{width:100%;height:46px;border:0;border-radius:12px;
   background:#2466d8;color:white;font:inherit;font-weight:750;cursor:pointer}button:disabled{opacity:.55;cursor:wait}
 #error{min-height:20px;margin:12px 0 0;color:#c73d43;font-size:12px;line-height:1.4}
 #companies{display:none;margin:14px 0;padding:12px;border-radius:12px;background:#f4f7fb}
 #companies.on{display:grid;gap:8px}#companies button{height:auto;min-height:40px;padding:9px 12px;
   background:white;color:#283140;border:1px solid #d8dee7;text-align:left}
-.foot{margin-top:22px;color:#8a929e;font-size:11px;text-align:center}
+.foot{margin:25px auto 0;max-width:310px;color:#9098a4;font-size:10.5px;line-height:15px;text-align:center}
+@media(max-width:460px){.card{padding:28px 24px}.brand{margin-bottom:27px}}
 </style></head><body><main class="card">
-<div class="brand"><img src="/assets/studio/akeda-studio-wordmark.png" alt="Akeda Studio"><span>от ТЗ до производства</span></div>
-<p class="eyebrow">Рабочее пространство</p><h1>Вход в Studio</h1>
-<p class="lead">Используйте логин сотрудника, выданный командой Akeda.</p>
-<form id="form"><label>Почта<input id="email" name="email" type="email" autocomplete="username" required></label>
-<label>Пароль<input id="password" name="password" type="password" autocomplete="current-password" required></label>
+<h1 id="loginTitle" class="sr-only">Вход в Akeda Studio</h1>
+<div class="brand" aria-hidden="true">
+  <img class="brand-wordmark" src="/assets/studio/akeda-studio-wordmark.png" width="520" height="84" alt="">
+  <img class="brand-mark" src="/assets/studio/akeda-studio-mark.png" width="216" height="98" alt="">
+</div>
+<form id="form" aria-labelledby="loginTitle">
+<div class="field"><label for="email">Почта</label><input id="email" name="email" type="email" autocomplete="username" required></div>
+<div class="field"><label for="password">Пароль</label><div class="password-field">
+  <input id="password" name="password" type="password" autocomplete="current-password" required>
+  <button id="passwordToggle" class="password-toggle" type="button" aria-label="Показать пароль"
+    aria-pressed="false" title="Показать пароль">
+    <svg class="eye-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+    <svg class="eye-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4 20 20M9.2 6.5A10.5 10.5 0 0 1 12 6c6 0 9.5 6 9.5 6a15.8 15.8 0 0 1-2.3 3M14.6 17.6A10 10 0 0 1 12 18c-6 0-9.5-6-9.5-6a16 16 0 0 1 3-3.7M10.2 10.2a2.5 2.5 0 0 0 3.6 3.6"/></svg>
+  </button>
+</div></div>
 <div id="companies" aria-label="Выбор компании"></div><button id="submit" type="submit">Войти</button>
-<p id="error" role="alert"></p></form><div class="foot">Доступ выдаётся администратором Akeda</div>
+<p id="error" role="alert"></p></form>
+<div class="foot">Используйте логин сотрудника, выданный командой Akeda.</div>
 </main><script>
-let organizationId=null;const form=document.getElementById('form'),error=document.getElementById('error');
+let organizationId=null;const form=document.getElementById('form'),error=document.getElementById('error'),
+  password=document.getElementById('password'),passwordToggle=document.getElementById('passwordToggle');
+passwordToggle.addEventListener('click',()=>{
+  const visible=password.type==='text';password.type=visible?'password':'text';
+  passwordToggle.classList.toggle('is-visible',!visible);
+  passwordToggle.setAttribute('aria-pressed',String(!visible));
+  const label=visible?'Показать пароль':'Скрыть пароль';
+  passwordToggle.setAttribute('aria-label',label);passwordToggle.title=label;
+  password.focus({preventScroll:true});
+});
 async function login(){const button=document.getElementById('submit');button.disabled=true;error.textContent='';
   try{const response=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({email:document.getElementById('email').value,password:document.getElementById('password').value,
@@ -1081,6 +1117,7 @@ def make_handler(st: _Studio):
                     "/api/import-tz": "ai.run",
                     "/api/new": "project.create",
                     "/api/duplicate": "project.create",
+                    "/api/rename": "project.write",
                     "/api/save": "project.write",
                     "/api/restore": "project.write",
                     "/api/export-cfrn": "production.export",
@@ -1251,6 +1288,34 @@ def make_handler(st: _Studio):
                     opened = json.loads(p.read_text(encoding="utf-8"))
                     st.workspaces.set_current(auth, p)
                     self._json({"ok": True, "spec": opened, "file": p.name})
+                elif path == "/api/rename":      # переименовать из каталога без открытия
+                    p = _safe_spec_file(workspace.spec_dir, str(body.get("file", "")))
+                    if workspace.mode == "demo" or (
+                        st.public and workspace.organization_id is None and p.name in st.protected
+                    ):
+                        self._json({"ok": False, "error":
+                                    "демо-режим: исходное изделие защищено"}, 403)
+                        return
+                    name = str(body.get("name") or "").strip()
+                    if not name:
+                        self._json({"ok": False, "error": "Укажите название изделия"}, 400)
+                        return
+                    renamed = json.loads(p.read_text(encoding="utf-8"))
+                    previous_name = str(renamed.get("project_name") or p.stem)
+                    _snapshot_version(p, renamed)
+                    renamed["project_name"] = name
+                    p.write_text(json.dumps(renamed, ensure_ascii=False, indent=2),
+                                 encoding="utf-8")
+                    _snapshot_version(p, renamed)
+                    self._audit_product_action(
+                        auth, "studio.project.renamed", p,
+                        {"previous_name": previous_name, "name": name},
+                    )
+                    project = next(
+                        (item for item in _list_projects(workspace.spec_dir)
+                         if item["file"] == p.name), None
+                    )
+                    self._json({"ok": True, "file": p.name, "project": project})
                 elif path == "/api/new":         # новое изделие: черновик (AKD-214)
                     name = str(body.get("name") or "Новое изделие")
                     new_spec = {"schemaVersion": "paramspec-v1", "draft": True,
@@ -1265,16 +1330,27 @@ def make_handler(st: _Studio):
                     st.workspaces.set_current(auth, p)
                     self._json({"ok": True, "spec": new_spec, "file": p.name})
                 elif path == "/api/duplicate":   # дубликат текущего (D1)
-                    dup = json.loads(json.dumps(spec or current_spec))
+                    source_path = spec_path
+                    if body.get("file"):
+                        source_path = _safe_spec_file(
+                            workspace.spec_dir, str(body.get("file", "")))
+                    source_spec = (json.loads(source_path.read_text(encoding="utf-8"))
+                                   if body.get("file") else (spec or current_spec))
+                    dup = json.loads(json.dumps(source_spec))
                     dup["project_name"] = str(dup.get("project_name", "модель")) + " (копия)"
-                    p = workspace.spec_dir / f"{spec_path.stem}_copy.json"
+                    p = workspace.spec_dir / f"{source_path.stem}_copy.json"
                     i = 2
                     while p.exists():
-                        p = workspace.spec_dir / f"{spec_path.stem}_copy{i}.json"
+                        p = workspace.spec_dir / f"{source_path.stem}_copy{i}.json"
                         i += 1
                     p.write_text(json.dumps(dup, ensure_ascii=False, indent=2),
                                  encoding="utf-8")
-                    st.workspaces.set_current(auth, p)
+                    if not body.get("stay_catalog"):
+                        st.workspaces.set_current(auth, p)
+                    self._audit_product_action(
+                        auth, "studio.project.duplicated", p,
+                        {"source_file": source_path.name},
+                    )
                     self._json({"ok": True, "spec": dup, "file": p.name})
                 elif path == "/api/nesting":     # раскрой-превью (C2)
                     from .generators import generate_from_paramspec
@@ -1476,6 +1552,16 @@ PAGE = r"""<!DOCTYPE html>
   #profileLogout{display:flex;align-items:center;justify-content:center;width:100%;margin-top:10px;
     border-color:#e2e6eb;background:#fff;color:#3e4754}
   #profileLogout:hover{border-color:#d5a7aa;background:#fff6f6;color:#a12e33}
+  #catalogContext{display:none;padding:11px 0 13px;border-top:1px solid var(--line);
+    border-bottom:1px solid var(--line)}
+  #catalogContext .catalog-context-kicker{display:block;margin-bottom:3px;color:#687180;
+    font-size:10.5px;line-height:14px}
+  #catalogContext strong{display:block;font-size:13.5px;line-height:18px}
+  #catalogContext p{margin:5px 0 9px;color:#606a77;font-size:11px;line-height:15px}
+  #catalogContextCount{display:flex;align-items:center;gap:6px;color:#46505e;
+    font-size:10.5px;font-variant-numeric:tabular-nums}
+  #catalogContextCount::before{content:"";width:6px;height:6px;border-radius:50%;
+    background:var(--accent)}
   #side fieldset{border:0;border-radius:0;margin:0;padding:0}
   #side legend{font-size:12px;line-height:18px;font-weight:600;text-transform:none;
     color:var(--ink);padding:0;margin-bottom:6px}
@@ -1671,6 +1757,16 @@ PAGE = r"""<!DOCTYPE html>
     outline:2px solid var(--accent);outline-offset:1px}
   #app.right-collapsed #rightside{opacity:0;visibility:hidden;pointer-events:none;overflow:hidden}
   #app.right-collapsed #rightRail{opacity:1;visibility:visible;pointer-events:auto}
+  /* MEB-116: каталог — самостоятельный режим рабочего пространства. Модель
+     остаётся в памяти для возврата, но её контекст и инструменты не выдаются
+     за контекст каталога. */
+  #app.catalog-mode,#app.catalog-mode.right-collapsed{
+    grid-template-columns:var(--side-width) minmax(0,1fr)}
+  #app.catalog-mode #main{grid-column:2}
+  #app.catalog-mode #fs_project,#app.catalog-mode #modelState,
+  #app.catalog-mode #fs_part{display:none!important}
+  #app.catalog-mode #catalogContext{display:block}
+  #app.catalog-mode #rightside,#app.catalog-mode #rightRail{display:none!important}
   #rightside fieldset{scroll-margin-top:94px}
   .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
     clip:rect(0,0,0,0);white-space:nowrap;border:0}
@@ -1742,24 +1838,86 @@ PAGE = r"""<!DOCTYPE html>
     background:var(--bg);padding:14px 18px;overflow:hidden}
   #catalog.on{display:flex}
   #catHead{display:flex;gap:10px;align-items:center;margin-bottom:10px}
-  #catHead input{flex:1;max-width:360px;padding:6px 10px;border:1px solid var(--line);border-radius:8px}
+  #catHead input{flex:1;max-width:420px;padding:6px 10px;border:1px solid var(--line);border-radius:5px}
+  #catClose{display:flex;align-items:center;gap:5px}
+  #catClose svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.8;
+    stroke-linecap:round}
+  #catWorkspace{display:grid;grid-template-columns:minmax(0,1fr);flex:1;min-height:0;
+    border-top:1px solid var(--line);overflow:hidden}
+  #catWorkspace.has-selection{grid-template-columns:minmax(0,1fr) 304px}
+  #catBrowser{display:flex;flex-direction:column;min-width:0;min-height:0;padding-top:10px}
   #catCats{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
-  .catchip{padding:4px 12px;border:1px solid var(--line);border-radius:16px;background:#fff;
+  .catchip{padding:4px 9px;border:1px solid var(--line);border-radius:16px;background:#fff;
     cursor:pointer;font-size:12px}
   .catchip.on{background:var(--accent);border-color:var(--accent);color:#fff}
-  #catGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;
-    overflow-y:auto;padding-bottom:20px}
-  .catCard{background:var(--card);border:1px solid var(--line);border-radius:10px;
-    cursor:pointer;overflow:hidden;transition:box-shadow .15s}
-  .catCard:hover{box-shadow:0 4px 14px rgba(0,0,0,.12)}
-  .catCard .img{height:130px;background:linear-gradient(180deg,#f8fafc,#e6ebf1);
+  .catchip:focus-visible,#catClose:focus-visible,#catInspectorClose:focus-visible,
+    #catInspectorActions button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  #catGrid{display:grid;flex:1;min-height:0;align-content:start;
+    grid-template-columns:repeat(auto-fill,minmax(200px,1fr));grid-auto-rows:max-content;gap:12px;
+    overflow-y:auto;padding:1px 14px 20px 1px;scrollbar-gutter:stable}
+  .catCard{display:block;width:100%;padding:0;text-align:left;color:var(--ink);
+    background:var(--card);border:1px solid var(--line);border-radius:6px;
+    cursor:pointer;overflow:hidden;transition:border-color .12s ease,box-shadow .12s ease}
+  .catCard:hover{border-color:#b8c1cd;box-shadow:0 2px 7px rgba(29,39,52,.09)}
+  .catCard[aria-selected="true"]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+  .catCard:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .catCard .img{height:130px;background:#eef1f5;
     display:flex;align-items:center;justify-content:center;color:var(--mut);font-size:30px}
   .catCard .img img{width:100%;height:100%;object-fit:contain;padding:6px;box-sizing:border-box}
+  .catCard .draft-placeholder{display:flex;flex-direction:column;align-items:center;gap:7px;
+    color:#687180;font-size:11px;font-weight:600}
+  .catCard .draft-placeholder svg{width:28px;height:28px;fill:none;stroke:#7e8896;
+    stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
   .catCard .nm{padding:7px 10px 2px;font-weight:600;font-size:12.5px;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .catCard .sub{padding:0 10px 8px;font-size:11px;color:var(--mut)}
   .catCard .dr{display:inline-block;background:#c78a2b;color:#fff;border-radius:8px;
     padding:0 6px;font-size:10px;margin-left:4px}
+  .catEmpty{padding:24px 4px;color:var(--mut);font-size:12px}
+  #catInspector{display:flex;flex-direction:column;min-width:0;min-height:0;margin-left:14px;
+    border-left:1px solid var(--line);background:#fff}
+  #catInspector[hidden]{display:none!important}
+  #catInspectorHead{display:flex;align-items:flex-start;gap:10px;padding:13px 14px 10px;
+    border-bottom:1px solid var(--line)}
+  #catInspectorHeadCopy{min-width:0;flex:1}
+  #catInspectorKicker{display:block;margin-bottom:3px;color:#6e7784;font-size:10px;
+    line-height:13px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+  #catInspectName{display:-webkit-box;margin:0;font-size:14px;line-height:19px;
+    overflow:hidden;overflow-wrap:anywhere;-webkit-box-orient:vertical;-webkit-line-clamp:3}
+  #catInspectorClose{display:flex;width:28px;height:28px;flex:0 0 28px;align-items:center;
+    justify-content:center;padding:0;border-color:transparent;background:transparent}
+  #catInspectorClose:hover{background:#eef1f4}
+  #catInspectorClose svg{width:15px;height:15px;fill:none;stroke:currentColor;
+    stroke-width:1.8;stroke-linecap:round}
+  #catInspectPreview{height:180px;flex:0 0 180px;margin:12px 14px 0;border:1px solid #dfe3e8;
+    border-radius:4px;background:#eef1f5;display:flex;align-items:center;justify-content:center;
+    color:#687180;font-size:11px;font-weight:600;overflow:hidden}
+  #catInspectPreview img{width:100%;height:100%;object-fit:contain;padding:8px;box-sizing:border-box}
+  #catInspectPreview svg{width:34px;height:34px;fill:none;stroke:#7e8896;stroke-width:1.4}
+  #catInspectorBody{flex:1;min-height:0;overflow:auto;padding:12px 14px}
+  .cat-inspector-status{display:inline-flex;align-items:center;gap:6px;margin-bottom:12px;
+    color:#485260;font-size:11px;line-height:15px;font-weight:600}
+  .cat-inspector-status::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--ok)}
+  .cat-inspector-status.is-draft::before{background:#c78a2b}
+  .cat-inspector-group{margin:0;padding:0}
+  .cat-inspector-group+.cat-inspector-group{margin-top:13px;padding-top:11px;
+    border-top:1px solid #e7eaee}
+  .cat-inspector-group h4{margin:0 0 7px;color:#687180;font-size:10px;line-height:13px;
+    font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+  .cat-inspector-group dl{margin:0}
+  .cat-inspector-row{display:grid;grid-template-columns:92px minmax(0,1fr);gap:8px;
+    padding:3px 0;font-size:11.5px;line-height:16px}
+  .cat-inspector-row dt{color:#737c89}
+  .cat-inspector-row dd{margin:0;color:#303844;font-weight:500;overflow-wrap:anywhere;
+    font-variant-numeric:tabular-nums}
+  .cat-inspector-note{margin:8px 0 0;color:#747d89;font-size:10.5px;line-height:15px}
+  #catInspectorActions{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:10px 14px 14px;
+    border-top:1px solid var(--line);background:#fff}
+  #catOpen{grid-column:1/-1}
+  @media (max-width:1200px){
+    #catWorkspace.has-selection{grid-template-columns:minmax(0,1fr) 268px}
+    #catInspectPreview{height:150px;flex-basis:150px}
+  }
   /* AKD-214: пустое рабочее пространство нового изделия */
   #emptyState{position:absolute;inset:0;z-index:6;display:none;align-items:center;justify-content:center;background:var(--bg)}
   #emptyState.on{display:flex}
@@ -2099,6 +2257,13 @@ PAGE = r"""<!DOCTYPE html>
       <button id="profileLogout" type="button">Выйти из аккаунта</button>
     </div>
   </div>
+
+  <section id="catalogContext" aria-labelledby="catalogContextTitle" hidden>
+    <span class="catalog-context-kicker">Рабочий раздел</span>
+    <strong id="catalogContextTitle">Каталог компании</strong>
+    <p>Выберите изделие, чтобы открыть его в Studio.</p>
+    <span id="catalogContextCount" aria-live="polite">Загрузка изделий…</span>
+  </section>
 
   <fieldset id="fs_project"><legend>Проект</legend>
     <div class="row project-select"><label for="projSel">Изделие</label><select id="projSel"></select>
@@ -2479,14 +2644,61 @@ PAGE = r"""<!DOCTYPE html>
     </section>
   </div>
   <div id="draw"></div>
-  <div id="catalog">
+  <div id="catalog" role="region" aria-labelledby="catalogTitle" aria-hidden="true">
     <div id="catHead">
-      <b style="font-size:16px">Каталог изделий</b>
-      <input type="text" id="catQ" placeholder="поиск по названию…">
-      <button id="catClose">✕ Закрыть</button>
+      <b id="catalogTitle" style="font-size:16px">Каталог изделий</b>
+      <label class="sr-only" for="catQ">Поиск изделий по названию</label>
+      <input type="text" id="catQ" placeholder="Поиск по названию…">
+      <button id="catClose" type="button" aria-label="Закрыть каталог">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg>
+        Закрыть
+      </button>
     </div>
-    <div id="catCats"></div>
-    <div id="catGrid"></div>
+    <div id="catWorkspace">
+      <div id="catBrowser">
+        <div id="catCats" role="group" aria-label="Категории изделий"></div>
+        <div id="catGrid" role="listbox" aria-label="Изделия каталога"></div>
+      </div>
+      <aside id="catInspector" aria-labelledby="catInspectName" hidden>
+        <div id="catInspectorHead">
+          <div id="catInspectorHeadCopy">
+            <span id="catInspectorKicker">Выбрано в каталоге</span>
+            <h3 id="catInspectName"></h3>
+          </div>
+          <button id="catInspectorClose" type="button" aria-label="Снять выбор">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg>
+          </button>
+        </div>
+        <div id="catInspectPreview" aria-hidden="true"></div>
+        <div id="catInspectorBody">
+          <div id="catInspectStatus" class="cat-inspector-status"></div>
+          <section class="cat-inspector-group">
+            <h4>Изделие</h4>
+            <dl>
+              <div class="cat-inspector-row"><dt>Тип</dt><dd id="catInspectType"></dd></div>
+              <div class="cat-inspector-row"><dt>Габариты</dt><dd id="catInspectDims"></dd></div>
+              <div class="cat-inspector-row"><dt>Материал</dt><dd id="catInspectDecor"></dd></div>
+              <div class="cat-inspector-row"><dt>Изменено</dt><dd id="catInspectUpdated"></dd></div>
+            </dl>
+          </section>
+          <section class="cat-inspector-group">
+            <h4>Работа</h4>
+            <dl>
+              <div class="cat-inspector-row"><dt>Ответственный</dt><dd id="catInspectResponsible"></dd></div>
+              <div class="cat-inspector-row"><dt>Автор</dt><dd id="catInspectAuthor"></dd></div>
+            </dl>
+          </section>
+          <p id="catInspectorPeopleNote" class="cat-inspector-note" hidden>
+            Ответственный и автор появятся после подключения сотрудников к изделиям.
+          </p>
+        </div>
+        <div id="catInspectorActions">
+          <button id="catOpen" class="primary" type="button">Открыть в Studio</button>
+          <button id="catRename" type="button">Переименовать</button>
+          <button id="catDuplicate" type="button">Дублировать</button>
+        </div>
+      </aside>
+    </div>
   </div>
   <div id="emptyState">
     <div class="es-box">
@@ -3438,6 +3650,10 @@ scene3d.onTransform=(name,delta)=>{
 };
 document.addEventListener('keydown',e=>{
   if(e.key!=='Escape')return;
+  if(CATALOG_MODE){
+    if(CAT_SELECTED_FILE){clearCatalogSelection({restoreFocus:true});return;}
+    closeCatalog();return;
+  }
   const exact=$('partExact'),draft=currentSelectedPart()?readPartDraft():null;
   if(exact&&exact.open&&draft&&draft.dirty){
     fillPartCoordinateInputs(draft.panel);partEditMessage='';partEditMessageTone='';partEditMessageFor=null;
@@ -3455,6 +3671,8 @@ document.addEventListener('click',e=>{           // клик по детали �
 });
 
 /* ---------- каталог проектов (AKD-132) ---------- */
+let CATALOG_MODE=false,CATALOG_PREVIOUS_HASH='';
+let catalogReturnFocus=null;
 async function loadProjects(){
   const r=await fetch('/api/projects',{method:'POST',
     headers:{'Content-Type':'application/json'},body:'{}'});
@@ -3550,8 +3768,8 @@ $('projRen').onclick=async()=>{   // переименовать текущее �
 // аксонометрия не собралась (битая спека) → PNG-снапшот, если был, иначе заглушка
 function thumbErr(img){
   const png=img.dataset.png;
-  if(png){img.removeAttribute('data-png'); img.onerror=()=>{img.parentNode.textContent='🪑';}; img.src=png;}
-  else img.parentNode.textContent='🪑';
+  if(png){img.removeAttribute('data-png'); img.onerror=()=>{img.parentNode.textContent='Нет превью';}; img.src=png;}
+  else img.parentNode.textContent='Нет превью';
 }
 const CAT_RULES=[  // раздел ← archetype/furniture_type
   ['Тумбы',   p=>/тумб/i.test(p.ftype)||['drawer_unit'].includes(p.archetype)],
@@ -3560,50 +3778,255 @@ const CAT_RULES=[  // раздел ← archetype/furniture_type
   ['Стеллажи',p=>/стеллаж|полк/i.test(p.ftype)||['shelving'].includes(p.archetype)],
   ['Черновики',p=>p.draft],
 ];
-let CAT_ITEMS=[], CAT_SEL='Все';
+let CAT_ITEMS=[],CAT_VISIBLE_ITEMS=[],CAT_SEL='Все',CAT_SELECTED_FILE='',CAT_CURRENT_FILE='',
+  CAT_LAST_CLICK_FILE='',CAT_LAST_CLICK_AT=0;
+const CATALOG_INACTIVE_IDS=['fs_project','modelState','fs_part','rightside','rightRail',
+  'viewportTopbar','hud','draw','emptyState','fs_chat','viewportStatus'];
+const CAT_ARCHETYPE_LABELS={desk:'Стол',table:'Стол',round_table:'Круглый стол',
+  wardrobe:'Шкаф',door_unit:'Изделие с фасадом',cabinet:'Корпусное изделие',
+  drawer_unit:'Тумба с ящиками',shelving:'Стеллаж',corpus:'Корпус',composite:'Составное изделие'};
+function catalogEscape(value){
+  return String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',
+    '"':'&quot;',"'":'&#39;'}[char]));
+}
+function catalogDraftMarkup(){
+  return `<div class="draft-placeholder">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 4h13l5 5v19H7V4Z"/>
+      <path d="M20 4v6h5M11 16h10M11 21h7"/></svg><span>Черновик</span></div>`;
+}
+function catalogThumbMarkup(item){
+  if(item.draft)return catalogDraftMarkup();
+  return `<img src="/thumb/${encodeURIComponent(item.file)}" loading="lazy"
+    data-png="${item.preview?`/preview/${encodeURIComponent(item.file.replace(/\.json$/,'.png'))}`:''}"
+    alt="" onerror="thumbErr(this)">`;
+}
+function catalogTypeLabel(item){
+  const ftype=String(item.ftype||'').trim();
+  return ftype||CAT_ARCHETYPE_LABELS[item.archetype]||catSection(item);
+}
+function catalogUpdatedLabel(seconds){
+  const date=new Date(Number(seconds||0)*1000);
+  if(!Number(seconds)||Number.isNaN(date.getTime()))return 'Не записано';
+  return date.toLocaleString('ru-RU',{day:'numeric',month:'short',year:'numeric',
+    hour:'2-digit',minute:'2-digit'}).replace(',', ' ·');
+}
+function catalogCountText(count){
+  const mod100=count%100,mod10=count%10;
+  const noun=mod100>=11&&mod100<=14?'изделий':mod10===1?'изделие':
+    mod10>=2&&mod10<=4?'изделия':'изделий';
+  return `${count} ${noun}`;
+}
+function updateCatalogContext(){
+  $('catalogContextCount').textContent=catalogCountText(CAT_ITEMS.length);
+}
+function selectedCatalogItem(){
+  return CAT_ITEMS.find(item=>item.file===CAT_SELECTED_FILE)||null;
+}
+function renderCatalogInspector(){
+  const item=selectedCatalogItem(),inspector=$('catInspector');
+  $('catWorkspace').classList.toggle('has-selection',!!item);
+  inspector.hidden=!item;
+  if(!item)return;
+  $('catInspectName').textContent=item.name||'Без названия';
+  $('catInspectPreview').innerHTML=catalogThumbMarkup(item);
+  const status=$('catInspectStatus');
+  status.textContent=item.draft?'Черновик':'Рабочее изделие';
+  status.classList.toggle('is-draft',!!item.draft);
+  $('catInspectType').textContent=catalogTypeLabel(item);
+  $('catInspectDims').textContent=item.dims||'—';
+  $('catInspectDecor').textContent=item.decor||'Не указан';
+  $('catInspectUpdated').textContent=catalogUpdatedLabel(item.updated_at);
+  $('catInspectResponsible').textContent=item.responsible||'Не назначен';
+  $('catInspectAuthor').textContent=item.author||'Не указан';
+  $('catInspectorPeopleNote').hidden=!!(item.responsible&&item.author);
+}
+function syncCatalogSelection({focus=false}={}){
+  $('catGrid').querySelectorAll('.catCard').forEach((card,index)=>{
+    const selected=card.dataset.f===CAT_SELECTED_FILE;
+    card.setAttribute('aria-selected',String(selected));
+    card.tabIndex=selected||(!CAT_SELECTED_FILE&&index===0)?0:-1;
+  });
+  renderCatalogInspector();
+  if(focus){
+    const target=[...$('catGrid').querySelectorAll('.catCard')]
+      .find(card=>card.dataset.f===CAT_SELECTED_FILE);
+    if(target)requestAnimationFrame(()=>target.focus({preventScroll:true}));
+  }
+}
+function selectCatalogItem(file,{focus=false}={}){
+  if(!CAT_ITEMS.some(item=>item.file===file))return;
+  CAT_SELECTED_FILE=file;syncCatalogSelection({focus});
+}
+function catalogCardClick(file){
+  const now=performance.now(),doubleClick=file===CAT_LAST_CLICK_FILE&&now-CAT_LAST_CLICK_AT<420;
+  CAT_LAST_CLICK_FILE=file;CAT_LAST_CLICK_AT=now;selectCatalogItem(file);
+  if(doubleClick){CAT_LAST_CLICK_FILE='';CAT_LAST_CLICK_AT=0;openCatalogItem(file);}
+}
+function clearCatalogSelection({restoreFocus=false}={}){
+  const previous=CAT_SELECTED_FILE;CAT_SELECTED_FILE='';syncCatalogSelection();
+  if(restoreFocus&&previous){
+    const card=[...$('catGrid').querySelectorAll('.catCard')]
+      .find(item=>item.dataset.f===previous);
+    if(card)requestAnimationFrame(()=>card.focus({preventScroll:true}));
+  }
+}
+function setCatalogMode(on,{restoreFocus=true}={}){
+  on=!!on;
+  if(on&&!CATALOG_MODE)catalogReturnFocus=document.activeElement;
+  CATALOG_MODE=on;
+  $('app').classList.toggle('catalog-mode',on);
+  $('catalog').classList.toggle('on',on);
+  $('catalog').setAttribute('aria-hidden',String(!on));
+  $('catalogContext').hidden=!on;
+  CATALOG_INACTIVE_IDS.forEach(id=>{const element=$(id);if(element)element.inert=on;});
+  document.title=on?'Каталог изделий — Akeda Studio':'Akeda Studio — предпросмотр и правки';
+  if(on){
+    updateCatalogContext();
+    requestAnimationFrame(()=>{$('catQ').focus({preventScroll:true});scene3d.resize();});
+  }else{
+    requestAnimationFrame(()=>{
+      scene3d.resize();
+      if(restoreFocus&&catalogReturnFocus&&catalogReturnFocus.isConnected)
+        catalogReturnFocus.focus({preventScroll:true});
+    });
+  }
+}
+async function openCatalog({pushHistory=true}={}){
+  if(modelMutationLocked()){
+    toast('Дождитесь завершения текущего изменения модели',true);return;
+  }
+  try{
+    const r=await fetch('/api/projects',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:'{}'});
+    const p=await r.json();
+    if(!r.ok){toast('Каталог не открылся: '+(p.error||'ошибка загрузки'),true);return;}
+    CAT_ITEMS=p.projects||[];CAT_CURRENT_FILE=p.current||'';CAT_SEL='Все';
+    CAT_SELECTED_FILE='';$('catQ').value='';
+    if(pushHistory&&location.hash!=='#catalog'){
+      CATALOG_PREVIOUS_HASH=location.hash||'';
+      history.pushState({akedaView:'catalog'},'',location.pathname+location.search+'#catalog');
+    }
+    setCatalogMode(true);renderCatalog();
+  }catch(error){toast('Каталог не открылся: '+error.message,true);}
+}
+function closeCatalog({fromHistory=false}={}){
+  if(!CATALOG_MODE)return;
+  CAT_SELECTED_FILE='';renderCatalogInspector();
+  setCatalogMode(false);
+  if(fromHistory||location.hash!=='#catalog')return;
+  if(history.state&&history.state.akedaView==='catalog')history.back();
+  else history.replaceState({akedaView:'editor'},'',
+    location.pathname+location.search+(CATALOG_PREVIOUS_HASH||''));
+}
+function leaveCatalogForEditor(){
+  CAT_SELECTED_FILE='';renderCatalogInspector();
+  setCatalogMode(false,{restoreFocus:false});
+  if(location.hash==='#catalog')history.replaceState({akedaView:'editor'},'',
+    location.pathname+location.search+(CATALOG_PREVIOUS_HASH||''));
+}
 function catSection(p){
   if(p.draft) return 'Черновики';
   for(const [nm,fn] of CAT_RULES) if(fn(p)) return nm;
   return 'Прочее';
 }
 function renderCatalog(){
+  updateCatalogContext();
   const q=($('catQ').value||'').toLowerCase().trim();
   const secs=['Все',...new Set(CAT_ITEMS.map(catSection))];
   $('catCats').innerHTML=secs.map(s=>
-    `<span class="catchip ${s===CAT_SEL?'on':''}" data-s="${s}">${s}</span>`).join('');
+    `<button type="button" class="catchip ${s===CAT_SEL?'on':''}" data-s="${catalogEscape(s)}"
+      aria-pressed="${s===CAT_SEL}">${catalogEscape(s)}</button>`).join('');
   $('catCats').querySelectorAll('.catchip').forEach(ch=>
     ch.onclick=()=>{CAT_SEL=ch.dataset.s; renderCatalog();});
   const items=CAT_ITEMS.filter(p=>
     (CAT_SEL==='Все'||catSection(p)===CAT_SEL)&&
     (!q||String(p.name).toLowerCase().includes(q)));
+  CAT_VISIBLE_ITEMS=items;
+  if(CAT_SELECTED_FILE&&!items.some(item=>item.file===CAT_SELECTED_FILE))CAT_SELECTED_FILE='';
   $('catGrid').innerHTML=items.map(p=>`
-    <div class="catCard" data-f="${p.file}">
-      <div class="img">${p.draft?'✏️'
-        :`<img src="/thumb/${encodeURIComponent(p.file)}" loading="lazy"
-            data-png="${p.preview?`/preview/${encodeURIComponent(p.file.replace(/\.json$/,'.png'))}`:''}"
-            onerror="thumbErr(this)">`}</div>
-      <div class="nm" title="${p.name}">${p.name}${p.draft?'<span class="dr">черновик</span>':''}</div>
-      <div class="sub">${p.dims}${p.decor?' · '+p.decor:''}</div>
-    </div>`).join('')||'<div class="mini">ничего не найдено</div>';
-  $('catGrid').querySelectorAll('.catCard').forEach(c=>
-    c.onclick=async()=>{
-      const r=await fetch('/api/open',{method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({file:c.dataset.f})});
-      const p=await r.json();
-      if(p.ok){$('catalog').classList.remove('on'); adoptSpec(p);}
-      else toast('Ошибка: '+(p.error||''),true);
-    });
+    <button type="button" class="catCard" role="option" data-f="${catalogEscape(p.file)}"
+      aria-selected="${p.file===CAT_SELECTED_FILE}" aria-label="${catalogEscape(p.name)}">
+      <span class="img">${catalogThumbMarkup(p)}</span>
+      <span class="nm" title="${catalogEscape(p.name)}">${catalogEscape(p.name)}${p.draft?'<span class="dr">черновик</span>':''}</span>
+      <span class="sub">${catalogEscape(p.dims||'—')}${p.decor?' · '+catalogEscape(p.decor):''}</span>
+    </button>`).join('')||'<div class="catEmpty">По этому запросу изделий нет.</div>';
+  $('catGrid').querySelectorAll('.catCard').forEach(c=>{
+    c.onclick=()=>catalogCardClick(c.dataset.f);
+    c.onkeydown=event=>catalogCardKeydown(event,c.dataset.f);
+  });
+  syncCatalogSelection();
 }
-$('projCat').onclick=async()=>{
-  const r=await fetch('/api/projects',{method:'POST',
-    headers:{'Content-Type':'application/json'},body:'{}'});
-  const p=await r.json();
-  CAT_ITEMS=p.projects||[]; CAT_SEL='Все'; $('catQ').value='';
-  $('catalog').classList.add('on'); renderCatalog();
-};
-$('catClose').onclick=()=>$('catalog').classList.remove('on');
+async function openCatalogItem(file=CAT_SELECTED_FILE){
+  if(!file)return;
+  const button=$('catOpen');button.disabled=true;
+  try{
+    const r=await fetch('/api/open',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({file})});
+    const p=await r.json();
+    if(p.ok){leaveCatalogForEditor();adoptSpec(p);}
+    else toast('Ошибка: '+(p.error||''),true);
+  }catch(error){toast('Изделие не открылось: '+error.message,true);}
+  finally{button.disabled=false;}
+}
+function catalogCardKeydown(event,file){
+  if(event.key==='Enter'){event.preventDefault();openCatalogItem(file);return;}
+  if(event.key==='Escape'){
+    if(!CAT_SELECTED_FILE){event.preventDefault();event.stopPropagation();closeCatalog();return;}
+    event.preventDefault();event.stopPropagation();clearCatalogSelection({restoreFocus:true});return;
+  }
+  if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key))return;
+  event.preventDefault();
+  const cards=[...$('catGrid').querySelectorAll('.catCard')],index=cards.findIndex(c=>c.dataset.f===file);
+  if(index<0)return;
+  const columns=Math.max(1,getComputedStyle($('catGrid')).gridTemplateColumns.split(' ').length);
+  const step={ArrowLeft:-1,ArrowRight:1,ArrowUp:-columns,ArrowDown:columns}[event.key];
+  const next=Math.max(0,Math.min(cards.length-1,index+step));
+  selectCatalogItem(cards[next].dataset.f,{focus:true});
+}
+async function renameCatalogItem(){
+  const item=selectedCatalogItem();if(!item)return;
+  const name=prompt('Название изделия:',item.name||'');
+  if(!name||name.trim()===item.name)return;
+  const button=$('catRename');button.disabled=true;
+  try{
+    const r=await fetch('/api/rename',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({file:item.file,name:name.trim()})});
+    const p=await r.json();
+    if(!r.ok||!p.ok){toast('Не удалось переименовать: '+(p.error||'ошибка'),true);return;}
+    const index=CAT_ITEMS.findIndex(entry=>entry.file===item.file);
+    if(index>=0&&p.project)CAT_ITEMS[index]=p.project;
+    if(item.file===CAT_CURRENT_FILE&&SPEC)SPEC.project_name=name.trim();
+    renderCatalog();loadProjects();toast('Переименовано: '+name.trim());
+  }catch(error){toast('Не удалось переименовать: '+error.message,true);}
+  finally{button.disabled=false;}
+}
+async function duplicateCatalogItem(){
+  const item=selectedCatalogItem();if(!item)return;
+  const button=$('catDuplicate');button.disabled=true;
+  try{
+    const r=await fetch('/api/duplicate',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({file:item.file,stay_catalog:true})});
+    const p=await r.json();
+    if(!r.ok||!p.ok){toast('Не удалось создать копию: '+(p.error||'ошибка'),true);return;}
+    const refreshed=await fetch('/api/projects',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    const payload=await refreshed.json();CAT_ITEMS=payload.projects||CAT_ITEMS;
+    CAT_CURRENT_FILE=payload.current||CAT_CURRENT_FILE;CAT_SELECTED_FILE=p.file;renderCatalog();
+    selectCatalogItem(p.file,{focus:true});loadProjects();toast('Копия добавлена в каталог');
+  }catch(error){toast('Не удалось создать копию: '+error.message,true);}
+  finally{button.disabled=false;}
+}
+$('projCat').onclick=()=>openCatalog();
+$('catClose').onclick=()=>closeCatalog();
+$('catInspectorClose').onclick=()=>clearCatalogSelection({restoreFocus:true});
+$('catOpen').onclick=()=>openCatalogItem();
+$('catRename').onclick=renameCatalogItem;
+$('catDuplicate').onclick=duplicateCatalogItem;
 $('catQ').addEventListener('input',renderCatalog);
+window.addEventListener('popstate',()=>{
+  if(location.hash==='#catalog')openCatalog({pushHistory:false});
+  else if(CATALOG_MODE)closeCatalog({fromHistory:true});
+});
+if(location.hash==='#catalog')queueMicrotask(()=>openCatalog({pushHistory:false}));
 
 $('projDup').onclick=async()=>{
   const r=await fetch('/api/duplicate',{method:'POST',

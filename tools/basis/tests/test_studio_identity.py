@@ -152,6 +152,38 @@ def test_authenticated_studio_scopes_catalog_and_renders_profile(tmp_path: Path)
         assert status == 200
         projects = json.loads(projects_body)["projects"]
         assert [item["name"] for item in projects] == ["Тумба Константы"]
+        assert projects[0]["updated_at"] > 0
+
+        assert browser.request(
+            "POST", "/api/rename", {"file": "product.json", "name": "Без CSRF"}
+        )[0] == 403
+        status, _headers, renamed_body = browser.request(
+            "POST",
+            "/api/rename",
+            {"file": "product.json", "name": "Тумба Константы — рабочая"},
+            csrf=True,
+        )
+        assert status == 200
+        assert json.loads(renamed_body)["project"]["name"] == "Тумба Константы — рабочая"
+
+        status, _headers, duplicate_body = browser.request(
+            "POST",
+            "/api/duplicate",
+            {"file": "product.json", "stay_catalog": True},
+            csrf=True,
+        )
+        assert status == 200
+        duplicate = json.loads(duplicate_body)
+        assert duplicate["file"] == "product_copy.json"
+        status, _headers, projects_body = browser.request(
+            "POST", "/api/projects", {}, csrf=True
+        )
+        catalog_after_actions = json.loads(projects_body)
+        assert catalog_after_actions["current"] == "product.json"
+        assert [item["name"] for item in catalog_after_actions["projects"]] == [
+            "Тумба Константы — рабочая",
+            "Тумба Константы — рабочая (копия)",
+        ]
 
         ai_result = {
             "reply": "Ширина изменена",
