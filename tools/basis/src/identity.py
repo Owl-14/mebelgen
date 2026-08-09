@@ -58,6 +58,8 @@ _ALL_ORGANIZATION_PERMISSIONS = frozenset(
         "organization.read",
         "organization.manage",
         "member.read",
+        "member.invite",
+        "member.manage",
         "project.read",
         "project.create",
         "project.write",
@@ -1368,12 +1370,11 @@ class IdentityStore:
 
         with self._transaction() as connection:
             platform_admin = False
-            actor_membership = None
             try:
                 self._require_platform(connection, actor_user_id, "platform.user.manage")
                 platform_admin = True
             except (NotFound, PermissionDenied):
-                _actor, _organization, actor_membership = self._active_membership(
+                self._active_membership(
                     connection, actor_user_id, organization_id
                 )
                 self._require_organization(
@@ -1384,17 +1385,14 @@ class IdentityStore:
                     now=timestamp,
                 )
             organization = connection.execute(
-                "SELECT status FROM organizations WHERE id = ?", (organization_id,)
+                "SELECT status, mode FROM organizations WHERE id = ?", (organization_id,)
             ).fetchone()
             if organization is None or organization["status"] != "active":
                 raise NotFound("Активная компания не найдена")
-            if (
-                clean_role == "owner"
-                and not platform_admin
-                and actor_membership is not None
-                and actor_membership["role"] != "owner"
-            ):
-                raise PermissionDenied("Только владелец может назначить владельца")
+            if organization["mode"] == "demo":
+                raise PermissionDenied("Сотрудниками демо-компании управляет только Akeda")
+            if clean_role == "owner" and not platform_admin:
+                raise PermissionDenied("Владелец компании не может назначать владельцев")
 
             existing = connection.execute(
                 """SELECT m.id FROM memberships m JOIN users u ON u.id = m.user_id
@@ -1540,7 +1538,13 @@ class IdentityStore:
         *,
         now: int | float | None = None,
     ) -> dict[str, Any]:
-        """Create an active employee and one-time starter credentials."""
+        """Create an active employee and one-time starter credentials.
+
+        Platform operators may provision any organization role.  A company
+        owner may provision only non-owner employees inside their own standard
+        organization.  This keeps self-service useful without turning it into
+        an ownership-transfer or platform-escalation path.
+        """
 
         clean_role = _role(role)
         shown_email, normalized_email = _normalize_email(email)
@@ -1551,7 +1555,20 @@ class IdentityStore:
         user_id, membership_id = _uuid(), _uuid()
 
         with self._transaction() as connection:
-            self._require_platform(connection, actor_user_id, "platform.user.manage")
+            authority = "platform"
+            try:
+                self._require_platform(connection, actor_user_id, "platform.user.manage")
+            except (NotFound, PermissionDenied):
+                authority = "organization"
+                self._require_organization(
+                    connection,
+                    actor_user_id,
+                    organization_id,
+                    "member.invite",
+                    now=timestamp,
+                )
+                if clean_role == "owner":
+                    raise PermissionDenied("Владелец компании не может назначать владельцев")
             organization = connection.execute(
                 "SELECT * FROM organizations WHERE id = ?", (organization_id,)
             ).fetchone()
@@ -1591,7 +1608,11 @@ class IdentityStore:
                 organization_id=organization_id,
                 target_type="membership",
                 target_id=membership_id,
-                metadata={"email": normalized_email, "role": clean_role},
+                metadata={
+                    "email": normalized_email,
+                    "role": clean_role,
+                    "authority": authority,
+                },
                 now=timestamp,
             )
             user = connection.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
@@ -1617,7 +1638,7 @@ class IdentityStore:
         status: str,
         now: int | float | None = None,
     ) -> dict[str, Any]:
-        """Edit a company employee from the Akeda platform console."""
+        """Edit a company employee from platform or owner self-service."""
 
         clean_name = _display_name(name)
         shown_email, normalized_email = _normalize_email(email)
@@ -1626,7 +1647,18 @@ class IdentityStore:
         timestamp = _now(now)
 
         with self._transaction() as connection:
-            self._require_platform(connection, actor_user_id, "platform.user.manage")
+            authority = "platform"
+            try:
+                self._require_platform(connection, actor_user_id, "platform.user.manage")
+            except (NotFound, PermissionDenied):
+                authority = "organization"
+                self._require_organization(
+                    connection,
+                    actor_user_id,
+                    organization_id,
+                    "member.manage",
+                    now=timestamp,
+                )
             target = connection.execute(
                 """SELECT m.*, u.email, u.email_normalized, u.display_name, u.status AS user_status
                    FROM memberships m JOIN users u ON u.id=m.user_id
@@ -1635,6 +1667,29 @@ class IdentityStore:
             ).fetchone()
             if target is None:
                 raise NotFound("Сотрудник компании не найден")
+            if authority == "organization" and (
+                target["role"] == "owner" or clean_role == "owner"
+            ):
+                raise PermissionDenied("Управление владельцами доступно только Akeda")
+            organization = connection.execute(
+                "SELECT mode FROM organizations WHERE id = ?", (organization_id,)
+            ).fetchone()
+            if organization is None or organization["mode"] == "demo":
+                raise PermissionDenied("Сотрудниками демо-компании управляет только Akeda")
+            other_memberships = int(
+                connection.execute(
+                    "SELECT COUNT(*) FROM memberships WHERE user_id=? AND organization_id!=?",
+                    (target["user_id"], organization_id),
+                ).fetchone()[0]
+            )
+            identity_changes = (
+                clean_name != target["display_name"]
+                or normalized_email != target["email_normalized"]
+            )
+            if authority == "organization" and other_memberships and identity_changes:
+                raise PermissionDenied(
+                    "Имя и логин сотрудника с доступом к нескольким компаниям меняет Akeda"
+                )
             duplicate = connection.execute(
                 "SELECT id FROM users WHERE email_normalized=? AND id!=?",
                 (normalized_email, target["user_id"]),
@@ -1685,7 +1740,7 @@ class IdentityStore:
                         "new_role": clean_role,
                         "old_status": target["status"],
                         "new_status": clean_status,
-                        "authority": "platform",
+                        "authority": authority,
                     },
                     now=timestamp,
                 )
@@ -1710,15 +1765,39 @@ class IdentityStore:
         encoded_password = self._hasher.hash(starter_password)
         timestamp = _now(now)
         with self._transaction() as connection:
-            self._require_platform(connection, actor_user_id, "platform.user.manage")
+            authority = "platform"
+            try:
+                self._require_platform(connection, actor_user_id, "platform.user.manage")
+            except (NotFound, PermissionDenied):
+                authority = "organization"
+                self._require_organization(
+                    connection,
+                    actor_user_id,
+                    organization_id,
+                    "member.manage",
+                    now=timestamp,
+                )
             target = connection.execute(
-                """SELECT m.id AS membership_id, m.user_id, u.email, u.email_normalized
+                """SELECT m.id AS membership_id, m.user_id, m.role,
+                          u.email, u.email_normalized, o.mode AS organization_mode
                    FROM memberships m JOIN users u ON u.id=m.user_id
+                   JOIN organizations o ON o.id=m.organization_id
                    WHERE m.id=? AND m.organization_id=?""",
                 (membership_id, organization_id),
             ).fetchone()
             if target is None:
                 raise NotFound("Сотрудник компании не найден")
+            if target["organization_mode"] == "demo":
+                raise PermissionDenied("Сотрудниками демо-компании управляет только Akeda")
+            if authority == "organization" and target["role"] == "owner":
+                raise PermissionDenied("Пароль владельца может перевыпустить только Akeda")
+            if authority == "organization" and connection.execute(
+                "SELECT 1 FROM memberships WHERE user_id=? AND organization_id!=? LIMIT 1",
+                (target["user_id"], organization_id),
+            ).fetchone():
+                raise PermissionDenied(
+                    "Пароль сотрудника с доступом к нескольким компаниям перевыпускает Akeda"
+                )
             connection.execute(
                 "UPDATE users SET password_hash=?, updated_at=? WHERE id=?",
                 (encoded_password, timestamp, target["user_id"]),
@@ -1731,7 +1810,10 @@ class IdentityStore:
                 organization_id=organization_id,
                 target_type="membership",
                 target_id=membership_id,
-                metadata={"login": target["email_normalized"]},
+                metadata={
+                    "login": target["email_normalized"],
+                    "authority": authority,
+                },
                 now=timestamp,
             )
             return {
@@ -1965,10 +2047,10 @@ class IdentityStore:
 
             resulting_role = new_role or target["role"]
             resulting_status = new_status or target["status"]
-            if not platform_admin and actor_membership["role"] != "owner" and (
+            if not platform_admin and (
                 target["role"] == "owner" or resulting_role == "owner"
             ):
-                raise PermissionDenied("Только владелец может изменять роль владельца")
+                raise PermissionDenied("Управление владельцами доступно только Akeda")
 
             removes_active_owner = (
                 target["role"] == "owner"

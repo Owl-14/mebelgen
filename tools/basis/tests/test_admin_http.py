@@ -515,6 +515,131 @@ def test_platform_manages_employee_credentials_without_email_delivery(
     assert response.status == 200, response.body
 
 
+def test_owner_cabinet_manages_only_non_owner_members_of_own_company(
+    live_admin: LiveAdmin,
+) -> None:
+    platform = live_admin.browser
+    login(platform)
+    created = platform.request(
+        "POST",
+        "/api/admin/organizations/provision",
+        {
+            "name": "Owner Cabinet Company",
+            "owner_name": "Cabinet Owner",
+            "owner_email": "cabinet-owner@example.test",
+        },
+        headers=platform.csrf_headers(),
+    )
+    assert created.status == 201, created.body
+    created_payload = created.json()
+    organization_id = created_payload["organization"]["id"]
+
+    foreign = platform.request(
+        "POST",
+        "/api/admin/organizations/provision",
+        {
+            "name": "Foreign Company",
+            "owner_name": "Foreign Owner",
+            "owner_email": "foreign-owner@example.test",
+        },
+        headers=platform.csrf_headers(),
+    )
+    assert foreign.status == 201, foreign.body
+
+    owner = Browser(platform.host, platform.port)
+    login(
+        owner,
+        created_payload["credentials"]["login"],
+        created_payload["credentials"]["password"],
+    )
+    own_snapshot = owner.request(
+        "GET", f"/api/admin/snapshot?organization_id={organization_id}", content_type=None
+    )
+    assert own_snapshot.status == 200
+    snapshot = own_snapshot.json()
+    assert {"member.read", "member.invite", "member.manage", "audit.read"} <= set(
+        snapshot["permissions"]
+    )
+    owner_membership = next(
+        member for member in snapshot["members"] if member["role"] == "owner"
+    )
+
+    employee = owner.request(
+        "POST",
+        "/api/admin/members/provision",
+        {
+            "organization_id": organization_id,
+            "name": "Company Designer",
+            "email": "company-designer@example.test",
+            "role": "designer",
+        },
+        headers=owner.csrf_headers(),
+    )
+    assert employee.status == 201, employee.body
+    employee_payload = employee.json()
+    membership_id = employee_payload["membership"]["id"]
+    assert re.fullmatch(r"[A-Za-z0-9]{6}", employee_payload["credentials"]["password"])
+
+    changed = owner.request(
+        "POST",
+        "/api/admin/members/update",
+        {
+            "organization_id": organization_id,
+            "membership_id": membership_id,
+            "name": "Company Technologist",
+            "email": "company-technologist@example.test",
+            "role": "technologist",
+            "status": "active",
+        },
+        headers=owner.csrf_headers(),
+    )
+    assert changed.status == 200, changed.body
+    assert changed.json()["role"] == "technologist"
+
+    reset = owner.request(
+        "POST",
+        "/api/admin/members/reset-password",
+        {"organization_id": organization_id, "membership_id": membership_id},
+        headers=owner.csrf_headers(),
+    )
+    assert reset.status == 200, reset.body
+    assert reset.json()["credentials"]["login"] == "company-technologist@example.test"
+
+    owner_change = owner.request(
+        "POST",
+        "/api/admin/members/update",
+        {
+            "organization_id": organization_id,
+            "membership_id": owner_membership["id"],
+            "name": "Cabinet Owner",
+            "email": "cabinet-owner@example.test",
+            "role": "owner",
+            "status": "disabled",
+        },
+        headers=owner.csrf_headers(),
+    )
+    assert owner_change.status == 403
+
+    foreign_create = owner.request(
+        "POST",
+        "/api/admin/members/provision",
+        {
+            "organization_id": foreign.json()["organization"]["id"],
+            "name": "Foreign Intruder",
+            "email": "foreign-intruder@example.test",
+            "role": "reviewer",
+        },
+        headers=owner.csrf_headers(),
+    )
+    assert foreign_create.status == 403
+
+    final_snapshot = owner.request(
+        "GET", f"/api/admin/snapshot?organization_id={organization_id}", content_type=None
+    )
+    actions = {event["action"] for event in final_snapshot.json()["audit_events"]}
+    assert {"member.provisioned", "member.updated", "member.access_rotated"} <= actions
+
+
 def test_login_throttle_tracks_account_independently_of_source_ip() -> None:
     throttle = _LoginThrottle(limit=2, window=60)
     throttle.failure("127.0.0.1", "person@example.test")

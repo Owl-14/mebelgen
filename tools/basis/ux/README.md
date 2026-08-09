@@ -78,6 +78,8 @@
   и функциональный parity-контракт.
 - [IDENTITY_ACCESS_ADMIN_SPEC.md](IDENTITY_ACCESS_ADMIN_SPEC.md) — отдельный
   контур логина, компаний, сотрудников, ролей и аудита.
+- [OWNER_CABINET_SPEC.md](OWNER_CABINET_SPEC.md) — кабинет владельца компании,
+  границы self-service и первый рабочий вертикальный срез.
 - [DEMO_COMPANY_AND_ADMIN_VIEW_SPEC.md](DEMO_COMPANY_AND_ADMIN_VIEW_SPEC.md) —
   простой переход Akeda в компанию и изолированная demo-песочница на сессию.
 - [../rules/identity-access.md](../rules/identity-access.md) — обязательные

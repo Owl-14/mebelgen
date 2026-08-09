@@ -59,6 +59,20 @@ def test_admin_ui_preserves_identity_and_migration_boundaries() -> None:
     assert "'support.started':'Администратор Akeda открыл компанию'" in html
 
 
+def test_owner_cabinet_exposes_team_management_without_owner_escalation() -> None:
+    html = admin_page()
+
+    assert "function canManageMembers()" in html
+    assert "hasCompanyPermission('member.manage')" in html
+    assert "memberRole(member)!=='owner'" in html
+    assert "Управление компанией" in html
+    assert "Вернуться в Studio" in html
+    assert "Роль владельца и передача владения управляются только через Akeda." in html
+    assert "roleOptions(role,platformManagesCompany())" in html
+    assert "'member.provisioned':'Добавлен сотрудник'" in html
+    assert "'member.access_rotated':'Выпущен новый пароль сотрудника'" in html
+
+
 def test_company_entry_hides_internal_access_mechanics() -> None:
     html = admin_page()
 

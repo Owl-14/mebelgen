@@ -237,6 +237,7 @@ class _AdminServer(ThreadingHTTPServer):
             "AKEDA_ADMIN_COOKIE_SECURE"
         )
         self.configured_origin = os.environ.get("AKEDA_ADMIN_ORIGIN", "").rstrip("/")
+        self.studio_url = os.environ.get("AKEDA_STUDIO_URL", "/index.html").strip() or "/index.html"
         self.login_throttle = _LoginThrottle(
             limit=int(os.environ.get("AKEDA_LOGIN_FAILURE_LIMIT", LOGIN_FAILURE_LIMIT)),
             window=int(os.environ.get("AKEDA_LOGIN_WINDOW_SECONDS", LOGIN_WINDOW_SECONDS)),
@@ -312,8 +313,13 @@ class _AdminHandler(BaseHTTPRequestHandler):
 
     def _html(self, page: str) -> None:
         nonce = secrets.token_urlsafe(18)
-        rendered = page.replace("<style>", f'<style nonce="{nonce}">').replace(
-            "<script>", f'<script nonce="{nonce}">'
+        rendered = (
+            page.replace(
+                "__STUDIO_URL__",
+                json.dumps(self.server.studio_url, ensure_ascii=False).replace("</", "<\\/"),
+            )
+            .replace("<style>", f'<style nonce="{nonce}">')
+            .replace("<script>", f'<script nonce="{nonce}">')
         )
         self._send(200, rendered.encode("utf-8"), "text/html; charset=utf-8", nonce=nonce)
 

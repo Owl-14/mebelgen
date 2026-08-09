@@ -1291,6 +1291,8 @@ def make_handler(st: _Studio):
                         .replace("__SECTION_ARCHS__", json.dumps(SECTION_ARCHETYPES))
                         .replace("__AUTH__", json.dumps(self._public_auth(auth), ensure_ascii=False)
                                  .replace("</", "<\\/"))
+                        .replace("__ADMIN_URL__", json.dumps(st.admin_url, ensure_ascii=False)
+                                 .replace("</", "<\\/"))
                         .replace("__SPEC__", json.dumps(spec, ensure_ascii=False)
                                  .replace("</", "<\\/")))
                 self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
@@ -2220,7 +2222,11 @@ PAGE = r"""<!DOCTYPE html>
   .profile-menu-email{margin-top:2px;color:#687180;font-size:10.5px;overflow-wrap:anywhere}
   .profile-menu-role{display:inline-flex;margin-top:8px;padding:3px 6px;border-radius:999px;
     background:#eef4ff;color:#275fae;font-size:9.5px;font-weight:650}
-  #profileLogout{display:flex;align-items:center;justify-content:center;width:100%;margin-top:10px;
+  #profileCompanyAdmin{display:flex;align-items:center;justify-content:center;width:100%;min-height:30px;
+    margin-top:10px;padding:6px 9px;border:1px solid #c8d5e7;border-radius:5px;
+    background:#f5f8fd;color:#285ba9;font-size:10.5px;font-weight:650;text-decoration:none}
+  #profileCompanyAdmin:hover{border-color:#91addb;background:#eaf1ff}
+  #profileLogout{display:flex;align-items:center;justify-content:center;width:100%;margin-top:7px;
     border-color:#e2e6eb;background:#fff;color:#3e4754}
   #profileLogout:hover{border-color:#d5a7aa;background:#fff6f6;color:#a12e33}
   #catalogContext{display:none;padding:11px 0 13px;border-top:1px solid var(--line);
@@ -2984,6 +2990,7 @@ PAGE = r"""<!DOCTYPE html>
       <div id="profileMenuName" class="profile-menu-name"></div>
       <div id="profileEmail" class="profile-menu-email"></div>
       <span id="profileRole" class="profile-menu-role"></span>
+      <a id="profileCompanyAdmin" href="/admin" hidden>Управление компанией</a>
       <button id="profileLogout" type="button">Выйти из аккаунта</button>
     </div>
   </div>
@@ -3578,6 +3585,7 @@ PAGE = r"""<!DOCTYPE html>
 <script>
 __SCENE_JS__
 const AUTH_CONTEXT = __AUTH__;
+const ADMIN_URL = __ADMIN_URL__;
 const nativeFetch = window.fetch.bind(window);
 function studioCookie(name){
   const prefix=name+'=';
@@ -3618,6 +3626,15 @@ function setupProfile(){
   $('profileCompany').textContent=organization.name||'Компания';
   $('profileMenuName').textContent=displayName;$('profileEmail').textContent=user.email||'';
   $('profileRole').textContent=roles[membership.role]||membership.role||'Сотрудник';
+  if(membership.role==='owner'){
+    $('profileCompanyAdmin').href=ADMIN_URL;
+    $('profileCompanyAdmin').hidden=false;
+    $('profileCompanyAdmin').onclick=async event=>{
+      event.preventDefault();
+      if(!await prepareWorkspaceChange('открыть управление компанией'))return;
+      location.href=ADMIN_URL;
+    };
+  }
   if(AUTH_CONTEXT.viewing_as_akeda){
     $('profileRole').textContent='Просмотр от Akeda';
     $('supportCompanyName').textContent=organization.name||'компанию';

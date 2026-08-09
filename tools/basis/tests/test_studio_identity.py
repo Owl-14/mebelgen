@@ -167,6 +167,9 @@ def test_authenticated_studio_scopes_catalog_and_renders_profile(tmp_path: Path)
         html = page.decode("utf-8")
         assert status == 200
         assert "Константа" in html and "Алексей Лазарев" in html
+        assert 'id="profileCompanyAdmin"' in html
+        assert "membership.role==='owner'" in html
+        assert "Управление компанией" in html
         assert "Тумба Константы" in html
         assert "Общий старый каталог" not in html
         assert SCENE_JS in html

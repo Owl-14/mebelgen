@@ -280,8 +280,8 @@ def test_session_expiry_csrf_logout_and_bootstrap_guard(store: IdentityStore) ->
 def test_permission_matrix_and_platform_admin_membership_actions(store: IdentityStore) -> None:
     platform, organization, owner_login = _organization_with_owner(store)
     owner = owner_login["user"]
-    assert not store.has_organization_permission(owner["id"], organization["id"], "member.invite")
-    assert not store.has_organization_permission(owner["id"], organization["id"], "member.manage")
+    assert store.has_organization_permission(owner["id"], organization["id"], "member.invite")
+    assert store.has_organization_permission(owner["id"], organization["id"], "member.manage")
     assert not store.has_organization_permission(owner["id"], organization["id"], "platform.user.manage")
     assert store.has_platform_permission(platform["id"], "platform.user.manage")
     assert not store.has_organization_permission(platform["id"], organization["id"], "project.read")
@@ -312,14 +312,23 @@ def test_permission_matrix_and_platform_admin_membership_actions(store: Identity
             "reviewer",
             now=1_005,
         )
-    with pytest.raises(PermissionDenied):
+    owner_invite = store.invite_member(
+        owner["id"],
+        organization["id"],
+        "owner-can-add@example.test",
+        "Owner Managed Reviewer",
+        "reviewer",
+        now=1_005,
+    )
+    assert owner_invite["invitation"]["role"] == "reviewer"
+    with pytest.raises(PermissionDenied, match="не может назначать владельцев"):
         store.invite_member(
             owner["id"],
             organization["id"],
-            "owner-cannot-add@example.test",
-            "Blocked Owner Action",
-            "reviewer",
-            now=1_005,
+            "second-owner@example.test",
+            "Second Owner",
+            "owner",
+            now=1_006,
         )
 
 
@@ -374,6 +383,93 @@ def test_platform_provisions_and_rotates_compact_employee_credentials(
     with pytest.raises(AuthenticationFailed):
         store.login(member["login"], member["starter_password"], now=1_007)
     assert store.login(rotated["login"], rotated["starter_password"], now=1_008)
+
+
+def test_owner_self_service_is_tenant_scoped_and_cannot_manage_owners(
+    store: IdentityStore,
+) -> None:
+    platform, organization, owner_login = _organization_with_owner(store)
+    owner = owner_login["user"]
+    employee = store.provision_member(
+        owner["id"],
+        organization["id"],
+        "owner-managed@example.test",
+        "Owner Managed",
+        "designer",
+        now=1_003,
+    )
+    assert re.fullmatch(r"[A-Za-z0-9]{6}", employee["starter_password"])
+    employee_login = store.login(
+        employee["login"], employee["starter_password"], now=1_004
+    )
+
+    updated = store.update_managed_member(
+        owner["id"],
+        organization["id"],
+        employee["membership"]["id"],
+        name="Updated by Owner",
+        email="owner-managed-updated@example.test",
+        role="technologist",
+        status="active",
+        now=1_005,
+    )
+    assert updated["role"] == "technologist"
+    assert store.session(employee_login["session_token"], now=1_005) is None
+
+    rotated = store.reset_managed_member_password(
+        owner["id"], organization["id"], employee["membership"]["id"], now=1_006
+    )
+    assert rotated["login"] == "owner-managed-updated@example.test"
+    assert store.login(rotated["login"], rotated["starter_password"], now=1_007)
+
+    owner_membership_id = owner_login["membership"]["id"]
+    with pytest.raises(PermissionDenied, match="владельц"):
+        store.update_managed_member(
+            owner["id"],
+            organization["id"],
+            owner_membership_id,
+            name=owner["display_name"],
+            email=owner["email"],
+            role="owner",
+            status="disabled",
+            now=1_008,
+        )
+    with pytest.raises(PermissionDenied, match="владельца"):
+        store.reset_managed_member_password(
+            owner["id"], organization["id"], owner_membership_id, now=1_009
+        )
+    with pytest.raises(PermissionDenied, match="не может назначать владельцев"):
+        store.provision_member(
+            owner["id"],
+            organization["id"],
+            "owner-escalation@example.test",
+            "Owner Escalation",
+            "owner",
+            now=1_010,
+        )
+
+    other = store.provision_organization(
+        platform["id"],
+        "Other Company",
+        "Other Owner",
+        "other-owner@example.test",
+        now=1_011,
+    )
+    with pytest.raises(PermissionDenied):
+        store.provision_member(
+            owner["id"],
+            other["organization"]["id"],
+            "foreign@example.test",
+            "Foreign Employee",
+            "reviewer",
+            now=1_012,
+        )
+
+    audit = store.list_audit(owner["id"], organization["id"], now=1_013)
+    actions = {event["action"] for event in audit}
+    assert {"member.provisioned", "member.updated", "member.access_rotated"} <= actions
+    assert employee["starter_password"].encode() not in store.path.read_bytes()
+    assert rotated["starter_password"].encode() not in store.path.read_bytes()
 
 
 def test_sole_owner_invariant_and_role_change_revokes_session(store: IdentityStore) -> None:

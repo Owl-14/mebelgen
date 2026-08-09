@@ -304,9 +304,9 @@ ADMIN_PAGE = r"""<!doctype html>
     html,body{margin:0;height:100%;font-family:"Segoe UI",Arial,sans-serif;
       background:var(--bg);color:var(--ink);font-size:13px;overflow:hidden}
     button,input,select,textarea{font:inherit}
-    button{min-height:30px;padding:5px 9px;border:1px solid var(--line);border-radius:5px;
+    button,.button-link{min-height:30px;padding:5px 9px;border:1px solid var(--line);border-radius:5px;
       background:#fff;color:#303743;cursor:pointer}
-    button:hover{background:#eef1f4}
+    button:hover,.button-link:hover{background:#eef1f4}
     button:disabled{opacity:.46;cursor:not-allowed}
     button.primary{border-color:var(--accent);background:var(--accent);color:#fff;font-weight:600}
     button.primary:hover{background:#2f73df}
@@ -366,6 +366,8 @@ ADMIN_PAGE = r"""<!doctype html>
       white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .workspace-title p{margin:2px 0 0;color:var(--mut);font-size:10.5px;line-height:14px}
     .head-actions{display:flex;align-items:center;gap:6px}
+    .button-link{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;
+      font-size:11.5px;line-height:18px;white-space:nowrap}
     .content{min-width:0;padding:0 16px 22px}
     .toolbar{display:flex;align-items:center;gap:7px;min-height:52px;border-bottom:1px solid var(--line-soft)}
     .search-field{position:relative;width:min(380px,55%)}
@@ -430,6 +432,11 @@ ADMIN_PAGE = r"""<!doctype html>
     .migration-sheet strong{display:block;margin-bottom:3px;color:#694718;font-size:11.5px}
     .migration-sheet p{margin:0;color:#7a5721;font-size:10.5px;line-height:15px}
     .migration-sheet button{white-space:nowrap}
+    .owner-workspace{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;
+      gap:14px;max-width:760px;padding:12px 0;border-top:1px solid var(--line-soft);
+      border-bottom:1px solid var(--line-soft)}
+    .owner-workspace strong{display:block;margin-bottom:3px;font-size:11.5px}
+    .owner-workspace p{margin:0;color:var(--mut);font-size:10.5px;line-height:15px}
     .field{display:grid;gap:4px;min-width:0;color:#5f6977;font-size:10.5px;line-height:14px}
     .fixed-value{display:flex;align-items:center;height:32px;padding:0 8px;border:1px solid var(--line);
       border-radius:4px;background:#f7f8fa;color:#3f4855;font-variant-numeric:tabular-nums}
@@ -575,7 +582,8 @@ ADMIN_PAGE = r"""<!doctype html>
     const AUDIT_LABELS={'platform.bootstrap':'Создан владелец платформы','auth.login':'Вход в систему',
       'auth.logout':'Выход из системы','organization.created':'Создана компания',
       'organization.status_updated':'Изменён статус компании','member.invited':'Отправлено приглашение',
-      'member.invitation_accepted':'Сотрудник активировал доступ','member.updated':'Изменены права сотрудника',
+      'member.invitation_accepted':'Сотрудник активировал доступ','member.provisioned':'Добавлен сотрудник',
+      'member.updated':'Изменены права сотрудника','member.access_rotated':'Выпущен новый пароль сотрудника',
       'user.status_updated':'Изменён статус пользователя','support.started':'Администратор Akeda открыл компанию',
       'support.ended':'Администратор Akeda вернулся в админку'};
     const state={me:null,csrf:'',isPlatform:false,page:'companies',companyTab:'overview',
@@ -636,6 +644,9 @@ ADMIN_PAGE = r"""<!doctype html>
     }
     function hasCompanyPermission(permission){return asArray(state.current&&state.current.permissions).includes(permission);}
     function platformManagesCompany(){return !!(state.isPlatform&&state.current&&state.current.adminAuthority==='platform');}
+    function canManageMembers(){return platformManagesCompany()||hasCompanyPermission('member.manage');}
+    function memberRole(member){return String(pick(member,'role')||'');}
+    function memberCanBeManaged(member){return canManageMembers()&&(platformManagesCompany()||memberRole(member)!=='owner');}
     async function readJson(response){const text=await response.text();if(!text)return {};
       try{return JSON.parse(text);}catch(_error){return {error:text};}}
     async function api(path,options={}){
@@ -757,7 +768,8 @@ ADMIN_PAGE = r"""<!doctype html>
       const org=currentOrg();if(!org){state.page=state.isPlatform?'companies':'company';
         renderHeader('Компания','Данные компании недоступны');$('pageContent').innerHTML='<div class="notice error">Компания не найдена или недоступна для этой сессии.</div>';return;}
       const viewing=state.isPlatform&&!!activeSupport();
-      renderHeader(orgName(org),viewing?'Рабочее пространство компании':state.isPlatform?'Карточка компании':'Настройки вашей компании');
+      renderHeader(orgName(org),viewing?'Рабочее пространство компании':state.isPlatform?'Карточка компании':'Управление компанией',
+        state.isPlatform?'':'<a class="button-link" data-studio-link href="/index.html">Вернуться в Studio</a>');
       $('pageContent').innerHTML=`<div class="company-head">${state.isPlatform?`<button id="backCompanies" class="back-button" type="button">
         <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg>${viewing?'Вернуться в админку':'К реестру'}</button>`:''}
         <div class="company-identity"><h2>${esc(orgName(org))}</h2><div class="company-meta">${statusHtml(orgStatus(org))}<span class="mono">${esc(orgId(org))}</span></div></div>
@@ -776,14 +788,23 @@ ADMIN_PAGE = r"""<!doctype html>
     function renderCompanyPanel(){const panel=$('companyPanel'),org=currentOrg(),snapshot=state.current||normalizeSnapshot({});
       if(state.companyTab==='members'){renderMembers(panel,snapshot);return;}
       if(state.companyTab==='audit'){renderAudit(panel,snapshot.audit,'Журнал компании');return;}
+      const members=snapshot.memberships,activeMembers=members.filter(member=>String(pick(member,'status')||'active')==='active').length;
       panel.innerHTML=`<section class="panel"><div class="section"><div class="section-head"><h3>Компания</h3></div>
         <dl class="definition-list"><div><dt>Название</dt><dd>${esc(orgName(org))}</dd></div><div><dt>Идентификатор</dt><dd class="mono">${esc(orgId(org))}</dd></div>
         <div><dt>Статус</dt><dd>${statusHtml(orgStatus(org))}</dd></div><div><dt>Владелец</dt><dd>${esc(organizationOwner(org))}</dd></div>
+        <div><dt>Сотрудники</dt><dd>${activeMembers} активных · ${members.length} всего</dd></div>
         <div><dt>Создана</dt><dd>${esc(formatDate(pick(org,'created_at')))}</dd></div></dl></div>
-        <div class="section"><div class="section-head"><h3>Рабочее пространство</h3></div>${migrationNotice()}</div></section>`;
+        <div class="section"><div class="section-head"><h3>Команда</h3></div><div class="owner-workspace"><div><strong>Доступы сотрудников</strong>
+        <p>${canManageMembers()?'Добавляйте сотрудников, назначайте рабочие роли и отключайте доступ.':'Состав команды доступен только для просмотра.'}</p></div>
+        <button id="openMembersFromOverview" type="button">Открыть сотрудников</button></div></div>
+        <div class="section"><div class="section-head"><h3>Рабочее пространство</h3></div><div class="owner-workspace"><div><strong>Akeda Studio</strong>
+        <p>Каталог, изделия, AI-правки и производственные данные остаются в основном рабочем интерфейсе.</p></div>
+        <a class="button-link" data-studio-link href="/index.html">Открыть Studio</a></div></div></section>`;
+      bindStudioLinks();
+      $('openMembersFromOverview').onclick=()=>{state.companyTab='members';render();};
     }
     function renderMembers(panel,snapshot){
-      const members=snapshot.memberships,canManage=platformManagesCompany();
+      const members=snapshot.memberships,canManage=canManageMembers();
       panel.innerHTML=`<section class="panel"><div class="section"><div class="section-head"><h3>Сотрудники</h3>
         ${canManage?'<button id="inviteMember" class="primary" type="button">Добавить сотрудника</button>':''}</div><div id="membersTable"></div></div>
         ${snapshot.invitations.length?`<div class="section"><div class="section-head"><h3>Ожидают активации</h3></div>
@@ -793,9 +814,9 @@ ADMIN_PAGE = r"""<!doctype html>
       if(!members.length)target.innerHTML='<div class="notice">Сотрудники ещё не добавлены. В компании всегда должен оставаться хотя бы один владелец.</div>';
       else target.innerHTML=`<div class="table-wrap"><table aria-label="Сотрудники"><colgroup><col style="width:32%"><col style="width:20%"><col style="width:16%"><col style="width:20%"><col style="width:12%"></colgroup>
         <thead><tr><th scope="col">Сотрудник</th><th scope="col">Роль</th><th scope="col">Статус</th><th scope="col">Последний вход</th><th scope="col">${canManage?'Действия':''}</th></tr></thead>
-        <tbody>${members.map(member=>`<tr><td><strong>${esc(memberName(member))}</strong><span class="entity-sub">${esc(memberEmail(member))}</span></td>
+        <tbody>${members.map(member=>{const editable=memberCanBeManaged(member);return `<tr><td><strong>${esc(memberName(member))}</strong><span class="entity-sub">${esc(memberEmail(member))}</span></td>
         <td>${esc(roleLabel(pick(member,'role')))}</td><td>${statusHtml(pick(member,'status')||'active')}</td><td>${esc(formatDate(pick(member,'last_login_at','last_seen_at'),true))}</td>
-        <td>${canManage?`<button class="row-action" type="button" data-member="${esc(memberId(member))}">Изменить</button>`:''}</td></tr>`).join('')}</tbody></table></div>`;
+        <td>${editable?`<button class="row-action" type="button" data-member="${esc(memberId(member))}">Изменить</button>`:memberRole(member)==='owner'?'<span class="muted">Владелец</span>':''}</td></tr>`;}).join('')}</tbody></table></div>`;
       if($('inviteMember'))$('inviteMember').onclick=event=>openInspector('invite-member',null,event.currentTarget);
       if(canManage)target.querySelectorAll('[data-member]').forEach(button=>button.onclick=()=>{
         const member=members.find(item=>memberId(item)===button.dataset.member);openInspector('edit-member',member,button);});
@@ -858,12 +879,12 @@ ADMIN_PAGE = r"""<!doctype html>
           <form id="editMemberForm" class="inspector-form">
           <label class="field" for="editMemberName">Имя<input id="editMemberName" required maxlength="120" value="${esc(memberName(member))}"></label>
           <label class="field" for="editMemberEmail">Логин · почта<input id="editMemberEmail" type="email" required value="${esc(memberEmail(member))}"></label>
-          <label class="field" for="editMemberRole">Роль<select id="editMemberRole">${roleOptions(role,true)}</select></label>
+          <label class="field" for="editMemberRole">Роль<select id="editMemberRole">${roleOptions(role,platformManagesCompany())}</select></label>
           <div id="editRoleHelp" class="notice">${esc(rolePermissionSummary(role))}</div><label class="field" for="editMemberStatus">Состояние<select id="editMemberStatus">
           <option value="active" ${status==='active'?'selected':''}>Активен</option><option value="disabled" ${status==='disabled'?'selected':''}>Отключён</option></select></label>
           <div class="notice">Старый пароль посмотреть нельзя. Если он утерян, выпустите новый — старый сразу перестанет работать.</div>
           <button id="resetMemberPassword" type="button">Выпустить новый пароль</button>
-          <div class="notice warning">Нельзя отключить или понизить единственного владельца.</div>
+          <div class="notice warning">Роль владельца и передача владения управляются только через Akeda.</div>
           <p id="editMemberMessage" class="form-message" role="alert"></p><div class="form-actions"><button type="button" data-close-inspector>Отменить</button>
           <button class="primary" type="submit">Сохранить</button></div></form>`;
         $('editMemberRole').onchange=()=>{$('editRoleHelp').textContent=rolePermissionSummary($('editMemberRole').value);};
@@ -884,8 +905,8 @@ ADMIN_PAGE = r"""<!doctype html>
       $('inspectorBody').querySelectorAll('[data-open-company]').forEach(button=>button.onclick=()=>openCompany(orgId(selected),button.dataset.openCompany));
     }
     function bindInspectorClose(){$('inspectorBody').querySelectorAll('[data-close-inspector]').forEach(button=>button.onclick=closeInspector);}
-    function rolePermissionSummary(role){return ({owner:'Все действия компании, сотрудники и производство.',
-      admin:'Настройки, сотрудники и проекты без передачи владения.',designer:'Создание и изменение проектов, AI и бесплатные экспорты.',
+    function rolePermissionSummary(role){return ({owner:'Все действия компании, команда и производство.',
+      admin:'Проекты, настройки и производство без управления командой.',designer:'Создание и изменение проектов, AI и бесплатные экспорты.',
       technologist:'Производственная проверка, BOM и разрешённые сборки.',reviewer:'Только просмотр и согласование.'})[role]||'Выберите роль и проверьте область доступа.';}
     function mutationBusy(form,busy){[...form.elements].forEach(element=>element.disabled=busy);}
     function showCredentials(data){const credentials=data&&data.credentials||data||{},login=pick(credentials,'login'),password=pick(credentials,'password','starter_password');
@@ -933,6 +954,8 @@ ADMIN_PAGE = r"""<!doctype html>
         await loadSnapshot(null);render();toast('Вы вернулись в админку.');}
       catch(error){toast(error.message,true);}finally{$('supportEndTop').disabled=false;}}
 
+    const STUDIO_URL=__STUDIO_URL__;
+    function bindStudioLinks(){document.querySelectorAll('[data-studio-link]').forEach(link=>link.href=STUDIO_URL);}
     async function init(){setLoading(true);
       try{
         const raw=await api('/api/auth/me'),user=raw.user||(raw.email?raw:null);
