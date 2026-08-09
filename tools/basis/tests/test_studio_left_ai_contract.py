@@ -443,9 +443,9 @@ def test_busy_helper_exposes_state_and_keeps_a_cancel_action_available():
 
     primary = _function("syncChatPrimaryAction")
     assert "activeChatController" in primary
-    assert "chatRequestInFlight" in primary
+    assert "activeChatController.signal.aborted" in primary
     assert "Остановить" in primary
-    assert "chatAbortReason==='user'" in primary
+    assert "['user','navigation'].includes(chatAbortReason)" in primary
     assert "Выполняю…" in primary
     assert "is-cancel" in primary
     assert "button.disabled=chatBusy?!canCancel:partEditBusy" in primary
@@ -486,11 +486,32 @@ def test_ai_request_has_user_cancel_and_bounded_wait():
     assert "signal:controller.signal" in request
     assert "controller.abort()" in request
     assert "chatAbortReason='timeout'" in request
-    assert "chatAbortReason='user'" in cancel
-    assert "chatRequestInFlight" in cancel
+    assert "reason='user'" in cancel
+    assert "chatAbortReason=reason" in cancel
+    assert "fetch('/api/chat/cancel'" in cancel
     assert "activeChatController.abort()" in cancel
     assert "if(chatBusy){cancelActiveChatRequest();return;}" in send
     assert "Остановлено пользователем. Модель не изменена." in PAGE
+
+
+def test_ai_navigation_is_confirmed_cancelled_and_guarded_against_late_results():
+    transition = _function("prepareWorkspaceChange")
+    assert "confirm(" in transition
+    assert "cancelActiveChatRequest('navigation')" in transition
+    assert "while(chatBusy" in transition
+
+    run_chat = _function("runChat", limit=9000)
+    assert "chatWorkspaceGeneration!==requestGeneration" in run_chat
+    assert "JSON.stringify(SPEC)!==requestSpecJson" in run_chat
+    assert "abortReason==='navigation'" in run_chat
+    assert "beforeunload" in PAGE
+
+    catalog = _function("openCatalog")
+    assert "modelMutationLocked()" not in catalog
+    assert "partEditBusy" in catalog
+    assert "prepareWorkspaceChange('открыть выбранное изделие')" in PAGE
+    assert "prepareWorkspaceChange('создать новое изделие')" in PAGE
+    assert "prepareWorkspaceChange('выйти из аккаунта')" in PAGE
 
 
 def test_chat_http_error_restores_command_and_attachments():

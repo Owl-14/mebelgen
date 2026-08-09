@@ -164,7 +164,8 @@ def test_set_right_panel_is_single_state_api_for_class_and_aria():
     assert mode_declaration
     mode_slice = PAGE[mode_declaration.start():mode_declaration.start() + 1600]
     assert "item.panel.hidden=!active" in mode_slice
-    assert "item.panel.inert=!active||$('sideScroll').inert" in mode_slice
+    assert "item.panel.inert=!active" in mode_slice
+    assert "$('sideScroll').inert" not in mode_slice
     assert "aria-selected" in mode_slice
     assert "item.tab.tabIndex=active?0:-1" in mode_slice
     assert "item.rail.classList.toggle('is-active',active)" in mode_slice

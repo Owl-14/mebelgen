@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import json
 import hmac
+import base64
+import hashlib
 import secrets
 import threading
 import webbrowser
@@ -465,11 +467,15 @@ def _list_projects(
             ),
             "status": "draft" if draft else str(catalog_meta.get("status") or "active"),
         }
-        has_prev = (spec_dir / ".previews" / (f.stem + ".png")).is_file()
+        preview_path = spec_dir / ".previews" / (f.stem + ".png")
+        has_prev = preview_path.is_file()
+        preview_current = bool(
+            has_prev and preview_path.stat().st_mtime_ns >= f.stat().st_mtime_ns
+        )
         if draft:                                      # черновик (AKD-214)
             out.append({"file": f.name, "name": s.get("project_name", f.stem),
                         "archetype": "черновик", "dims": "—", "decor": "",
-                        "draft": True, "preview": False,
+                        "draft": True, "preview": False, "preview_current": False,
                         "ftype": furniture_type, **catalog_values, **people})
             continue
         out.append({"file": f.name,
@@ -477,7 +483,7 @@ def _list_projects(
                     "archetype": archetype,
                     "dims": f'{d.get("width", "?")}×{d.get("depth", "?")}×{d.get("height", "?")}',
                     "decor": (s.get("materials") or {}).get("color", ""),
-                    "preview": has_prev,
+                    "preview": has_prev, "preview_current": preview_current,
                     "ftype": furniture_type, **catalog_values, **people})
     return out
 
@@ -550,6 +556,15 @@ def _safe_spec_file(spec_dir: Path, fname: str) -> Path:
     if p.parent != spec_dir.resolve() or p.suffix != ".json" or not p.is_file():
         raise FileNotFoundError("изделие не найдено")
     return p
+
+
+def _spec_revision(spec: dict[str, Any]) -> str:
+    """Stable revision used to reject a preview rendered for an old model."""
+
+    payload = json.dumps(
+        spec, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
 
 
 # ------------------------------------------------------------------ версии (D2)
@@ -761,12 +776,43 @@ class _Studio:
         )
         self.reviews = StudioReviewStore(review_root)
         self.guard = _ChatGuard(self.out_dir)
+        self._cancelled_chat_operations: dict[str, float] = {}
+        self._cancelled_chat_lock = threading.RLock()
         self.started = _time.time()               # /healthz, /version (AKD-264)
         # демо-режим: изделия, существовавшие на старте, защищены от перезаписи
         self.protected: set[str] = (
             {f.name for f in spec_path.parent.glob("*.json")
              if not f.name.endswith((".project.json", ".versions.json"))}
             if self.public else set())
+
+    @staticmethod
+    def _valid_chat_operation_id(value: Any) -> str:
+        operation_id = str(value or "")
+        if not operation_id or len(operation_id) > 96:
+            return ""
+        if any(ch not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_" for ch in operation_id):
+            return ""
+        return operation_id
+
+    def cancel_chat_operation(self, value: Any) -> bool:
+        operation_id = self._valid_chat_operation_id(value)
+        if not operation_id:
+            return False
+        now = _time.monotonic()
+        with self._cancelled_chat_lock:
+            self._cancelled_chat_operations = {
+                key: ts for key, ts in self._cancelled_chat_operations.items()
+                if now - ts < 600
+            }
+            self._cancelled_chat_operations[operation_id] = now
+        return True
+
+    def consume_chat_cancellation(self, value: Any) -> bool:
+        operation_id = self._valid_chat_operation_id(value)
+        if not operation_id:
+            return False
+        with self._cancelled_chat_lock:
+            return self._cancelled_chat_operations.pop(operation_id, None) is not None
 
 
 def _studio_login_page() -> str:
@@ -1370,6 +1416,14 @@ def make_handler(st: _Studio):
                     if decision_length > 64 * 1024:
                         self._json({"ok": False, "error": "Ответ слишком большой"}, 413)
                         return
+                if path == "/api/catalog-preview":
+                    try:
+                        preview_length = int(self.headers.get("Content-Length") or 0)
+                    except ValueError:
+                        preview_length = 0
+                    if preview_length > 3 * 1024 * 1024:
+                        self._json({"ok": False, "error": "Превью слишком большое"}, 413)
+                        return
                 body = self._body()
                 if (
                     len(review_parts) == 3
@@ -1492,10 +1546,13 @@ def make_handler(st: _Studio):
 
                 permissions = {
                     "/api/chat": "ai.run",
+                    "/api/chat/cancel": "ai.run",
                     "/api/import-tz": "ai.run",
                     "/api/new": "project.create",
                     "/api/duplicate": "project.create",
                     "/api/rename": "project.write",
+                    "/api/catalog-preview": "project.write",
+                    "/api/catalog-preview-source": "project.read",
                     "/api/reviews/create": "project.write",
                     "/api/save": "project.write",
                     "/api/restore": "project.write",
@@ -1526,8 +1583,73 @@ def make_handler(st: _Studio):
                         return
                 if path == "/api/generate":
                     self._json(build_payload(spec))
+                elif path == "/api/catalog-preview-source":
+                    try:
+                        preview_spec_path = _safe_spec_file(
+                            workspace.spec_dir, str(body.get("file") or "")
+                        )
+                        preview_spec = json.loads(
+                            preview_spec_path.read_text(encoding="utf-8")
+                        )
+                        if not isinstance(preview_spec, dict) or preview_spec.get("draft"):
+                            raise ValueError("Для черновика превью не строится")
+                        payload = build_payload(preview_spec)
+                        viewer = payload.get("viewer") if isinstance(payload, dict) else None
+                        if not isinstance(viewer, dict):
+                            raise ValueError("3D-модель для превью не построилась")
+                        self._json({
+                            "ok": True,
+                            "file": preview_spec_path.name,
+                            "revision": _spec_revision(preview_spec),
+                            "viewer": viewer,
+                        })
+                    except (FileNotFoundError, ValueError, TypeError, json.JSONDecodeError) as error:
+                        self._json({"ok": False, "error": str(error)}, 400)
+                elif path == "/api/catalog-preview":
+                    try:
+                        preview_spec_path = _safe_spec_file(
+                            workspace.spec_dir, str(body.get("file") or "")
+                        )
+                        preview_spec = json.loads(
+                            preview_spec_path.read_text(encoding="utf-8")
+                        )
+                        revision = str(body.get("revision") or "")
+                        if not hmac.compare_digest(revision, _spec_revision(preview_spec)):
+                            self._json({
+                                "ok": False,
+                                "error": "Изделие изменилось — превью будет построено заново",
+                                "code": "stale_preview",
+                            }, 409)
+                            return
+                        preview = str(body.get("preview") or "")
+                        prefix = "data:image/png;base64,"
+                        if not preview.startswith(prefix):
+                            raise ValueError("Ожидалось PNG-превью")
+                        raw = base64.b64decode(preview[len(prefix):], validate=True)
+                        if len(raw) > 2 * 1024 * 1024 or not raw.startswith(b"\x89PNG\r\n\x1a\n"):
+                            raise ValueError("Некорректное PNG-превью")
+                        preview_dir = workspace.spec_dir / ".previews"
+                        preview_dir.mkdir(exist_ok=True)
+                        target = preview_dir / (preview_spec_path.stem + ".png")
+                        temporary = preview_dir / (
+                            f".{preview_spec_path.stem}.{secrets.token_hex(6)}.tmp"
+                        )
+                        temporary.write_bytes(raw)
+                        temporary.replace(target)
+                        self._json({
+                            "ok": True,
+                            "file": preview_spec_path.name,
+                            "url": f"/preview/{quote(target.name)}?v={target.stat().st_mtime_ns}",
+                        })
+                    except (FileNotFoundError, ValueError, TypeError, json.JSONDecodeError) as error:
+                        self._json({"ok": False, "error": str(error)}, 400)
                 elif path == "/api/techview":
                     self._json(techview_svg(spec, body.get("panel")))
+                elif path == "/api/chat/cancel":
+                    if not st.cancel_chat_operation(body.get("operation_id")):
+                        self._json({"ok": False, "error": "Некорректная команда"}, 400)
+                        return
+                    self._json({"ok": True})
                 elif path == "/api/chat-history":
                     operations = st.workspaces.read_ai_history(auth, spec_path)
                     self._json({
@@ -1575,6 +1697,13 @@ def make_handler(st: _Studio):
                                     body.get("images") or None,
                                     provider)
                     st.guard.add_tokens(int(((res.get("usage") or {}).get("total")) or 0))
+                    if st.consume_chat_cancellation(body.get("operation_id")):
+                        self._json({
+                            "ok": False,
+                            "error": "Команда остановлена",
+                            "code": "operation_cancelled",
+                        }, 409)
+                        return
                     if auth is not None:
                         entry = st.workspaces.append_ai_history(
                             auth,
@@ -1909,7 +2038,6 @@ def make_handler(st: _Studio):
                     prev = body.get("preview")         # снапшот 3D для каталога (AKD-217)
                     if isinstance(prev, str) and prev.startswith("data:image/png;base64,"):
                         try:
-                            import base64
                             pd = workspace.spec_dir / ".previews"
                             pd.mkdir(exist_ok=True)
                             (pd / (spec_path.stem + ".png")).write_bytes(
@@ -2429,6 +2557,8 @@ PAGE = r"""<!DOCTYPE html>
   #catGrid{display:grid;flex:1;min-height:0;align-content:start;
     grid-template-columns:repeat(auto-fill,minmax(200px,1fr));grid-auto-rows:max-content;gap:12px;
     overflow-y:auto;padding:1px 14px 20px 1px;scrollbar-gutter:stable}
+  #catalogPreviewRenderer{position:fixed;left:-10000px;top:0;width:420px;height:315px;
+    overflow:hidden;opacity:0;pointer-events:none;z-index:-1}
   .catCard{display:block;width:100%;padding:0;text-align:left;color:var(--ink);
     background:var(--card);border:1px solid var(--line);border-radius:6px;
     cursor:pointer;overflow:hidden;transition:border-color .12s ease,box-shadow .12s ease}
@@ -3184,6 +3314,7 @@ PAGE = r"""<!DOCTYPE html>
     <button id="supportBack" type="button">Вернуться в админку</button>
   </div>
   <div id="view3d"></div>
+  <div id="catalogPreviewRenderer" aria-hidden="true"></div>
   <div id="viewportTopbar">
     <div id="tabs" role="tablist" aria-label="Режим рабочего поля">
       <button id="tab3d" class="on" type="button" role="tab" aria-selected="true"
@@ -3502,7 +3633,8 @@ function setupProfile(){
     $('profileMenu').hidden=!open;$('profileChip').setAttribute('aria-expanded',String(open));};
   document.addEventListener('click',event=>{if(!$('profileShell').contains(event.target)){
     $('profileMenu').hidden=true;$('profileChip').setAttribute('aria-expanded','false');}});
-  $('profileLogout').onclick=async()=>{const button=$('profileLogout');button.disabled=true;
+  $('profileLogout').onclick=async()=>{if(!await prepareWorkspaceChange('выйти из аккаунта'))return;
+    const button=$('profileLogout');button.disabled=true;
     try{await fetch('/api/auth/logout',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});}
     finally{location.href='/login';}};
 }
@@ -3534,7 +3666,7 @@ function setRightPanelMode(mode){
   rightPanelMode=mode;side.dataset.mode=mode;
   Object.entries(rightPanelModes).forEach(([key,item])=>{
     const active=key===mode;
-    item.panel.hidden=!active;item.panel.inert=!active||$('sideScroll').inert;
+    item.panel.hidden=!active;item.panel.inert=!active;
     item.tab.setAttribute('aria-selected',String(active));item.tab.tabIndex=active?0:-1;
     item.rail.classList.toggle('is-active',active);
   });
@@ -3659,6 +3791,7 @@ function fillForm(){
   $('rawspec').value=JSON.stringify(SPEC,null,2);
   renderArchetype();
   renderSections();
+  if(typeof syncModelEditLock==='function')syncModelEditLock();
 }
 function renderArchetype(){
   const sel=$('archSel');
@@ -3963,6 +4096,7 @@ function paint(p){
     tb.innerHTML=(p.bom||[]).map(b=>`<tr><td>${b.slot}</td><td>${b.name}</td><td>${b.art}</td></tr>`).join('');
     renderEstimate(p.estimate);
   }
+  syncModelEditLock();
 }
 
 /* ---------- чертёж / раскрой ---------- */
@@ -4120,7 +4254,7 @@ function syncPartEditState(){
   $('partCard').querySelectorAll('input[data-ov]').forEach(input=>input.disabled=locked);
   $('ovApply').disabled=locked||!draft.dirty||!draft.valid;
   $('partEditCancel').disabled=locked||!draft.dirty;
-  [$('ovReset'),$('ovDelete'),$('ovDetail'),$('partCommandFocus')]
+  [$('ovReset'),$('ovDelete'),$('partCommandFocus')]
     .forEach(button=>{if(button)button.disabled=locked;});
   $('fs_part').setAttribute('aria-busy',String(partEditBusy));
   const status=$('partEditStatus'); status.className='';
@@ -4369,13 +4503,14 @@ async function loadProjects(){
   const r=await fetch('/api/projects',{method:'POST',
     headers:{'Content-Type':'application/json'},body:'{}'});
   const p=await r.json();
+  CAT_CURRENT_FILE=p.current||CAT_CURRENT_FILE;
   $('projSel').innerHTML=(p.projects||[]).map(x=>
     `<option value="${x.file}" ${x.file===p.current?'selected':''}>`+
     `${x.name.slice(0,38)} · ${x.archetype} ${x.dims}</option>`).join('');
   loadReviews();
 }
 function adoptSpec(p){
-  SPEC=p.spec; UNDO.length=0; $('btnUndo').disabled=true;
+  SPEC=p.spec;CAT_CURRENT_FILE=p.file||CAT_CURRENT_FILE;UNDO.length=0;$('btnUndo').disabled=true;
   // другой объект — другой разговор: история чата, лог и вложения не должны
   // утекать между изделиями (иначе ИИ «помнит» чужие правки)
   CHAT_HISTORY.length=0; chatWorkspaceGeneration++; resetOperationLog();
@@ -4432,13 +4567,18 @@ function importTzFile(f){
 $('esUpload').onclick=()=>$('esFile').click();
 $('esFile').onchange=e=>{importTzFile(e.target.files[0]); e.target.value='';};
 $('projSel').onchange=async e=>{
+  const nextFile=e.target.value,previousFile=CAT_CURRENT_FILE;
+  if(!await prepareWorkspaceChange('открыть другое изделие')){
+    e.target.value=previousFile;return;
+  }
   const r=await fetch('/api/open',{method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({file:e.target.value})});
+    body:JSON.stringify({file:nextFile})});
   const p=await r.json();
   if(p.ok) adoptSpec(p); else toast('Ошибка: '+(p.error||''),true);
 };
 $('projNew').onclick=async()=>{   // черновик: запись в каталоге + пустой воркспейс (AKD-214)
+  if(!await prepareWorkspaceChange('создать новое изделие'))return;
   const name=prompt('Название нового изделия:','Новое изделие');
   if(name===null) return;
   const r=await fetch('/api/new',{method:'POST',
@@ -4482,10 +4622,12 @@ $('shareCopy').onclick=async()=>{
 };
 $('shareClose').onclick=()=>{const dialog=$('shareDialog');dialog.close?dialog.close():dialog.removeAttribute('open');};
 /* ---------- каталог изделий (AKD-217) ---------- */
-// аксонометрия не собралась (битая спека) → PNG-снапшот, если был, иначе заглушка
+// Точное PNG строится тем же MebelScene, что и рабочая 3D. Старый SVG нужен
+// только как временная заглушка, пока карточка переснимается в фоне.
 function thumbErr(img){
-  const png=img.dataset.png;
-  if(png){img.removeAttribute('data-png'); img.onerror=()=>{img.parentNode.textContent='Нет превью';}; img.src=png;}
+  const fallback=img.dataset.fallback;
+  if(fallback){img.removeAttribute('data-fallback');
+    img.onerror=()=>{img.parentNode.textContent='Нет превью';};img.src=fallback;}
   else img.parentNode.textContent='Нет превью';
 }
 const CAT_RULES=[  // раздел ← archetype/furniture_type
@@ -4499,6 +4641,8 @@ let CAT_ITEMS=[],CAT_VISIBLE_ITEMS=[],CAT_SELECTED_FILE='',CAT_CURRENT_FILE='',
   CAT_LAST_CLICK_FILE='',CAT_LAST_CLICK_AT=0,CAT_SCOPE='all',CAT_TYPE='all',
   CAT_STATUS='all',CAT_RESPONSIBLE='all',CAT_TOTAL=0,CAT_CURRENT_USER_ID='',
   CAT_COUNTS={all:0,mine:0,unassigned:0},CAT_MEMBERS=[],CAT_TYPES=[],CAT_SEARCH_TIMER=null;
+let CATALOG_PREVIEW_SCENE=null,CATALOG_PREVIEW_RUNNING=false;
+const CATALOG_PREVIEW_QUEUE=[],CATALOG_PREVIEW_SEEN=new Set();
 const CATALOG_INACTIVE_IDS=['fs_project','modelState','fs_part','rightside','rightRail',
   'viewportTopbar','hud','draw','emptyState','fs_chat','viewportStatus'];
 const CAT_ARCHETYPE_LABELS={desk:'Стол',table:'Стол',round_table:'Круглый стол',
@@ -4515,9 +4659,60 @@ function catalogDraftMarkup(){
 }
 function catalogThumbMarkup(item){
   if(item.draft)return catalogDraftMarkup();
-  return `<img src="/thumb/${encodeURIComponent(item.file)}" loading="lazy"
-    data-png="${item.preview?`/preview/${encodeURIComponent(item.file.replace(/\.json$/,'.png'))}`:''}"
-    alt="" onerror="thumbErr(this)">`;
+  const exact=`/preview/${encodeURIComponent(item.file.replace(/\.json$/,'.png'))}?v=${Number(item.updated_at||0)}`;
+  const fallback=`/thumb/${encodeURIComponent(item.file)}`;
+  return `<img src="${item.preview_current?exact:fallback}" loading="lazy"
+    data-preview-file="${catalogEscape(item.file)}"
+    data-fallback="${item.preview_current?fallback:''}" alt="" onerror="thumbErr(this)">`;
+}
+function canBuildCatalogPreviews(){
+  return !AUTH_CONTEXT||new Set(AUTH_CONTEXT.permissions||[]).has('project.write');
+}
+function waitCatalogPreviewFrame(){
+  return new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+}
+function updateCatalogPreviewImage(file,url){
+  const item=CAT_ITEMS.find(value=>value.file===file);
+  if(item){item.preview=true;item.preview_current=true;}
+  document.querySelectorAll('img[data-preview-file]').forEach(img=>{
+    if(img.dataset.previewFile!==file)return;
+    img.dataset.fallback=`/thumb/${encodeURIComponent(file)}`;img.src=url;
+  });
+}
+async function buildNextCatalogPreview(){
+  if(CATALOG_PREVIEW_RUNNING)return;
+  const file=CATALOG_PREVIEW_QUEUE.shift();if(!file)return;
+  CATALOG_PREVIEW_RUNNING=true;
+  try{
+    const sourceResponse=await fetch('/api/catalog-preview-source',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({file})});
+    const source=await sourceResponse.json();
+    if(!sourceResponse.ok||!source.ok||!source.viewer)
+      throw new Error(source.error||'3D-модель не построилась');
+    if(!CATALOG_PREVIEW_SCENE)CATALOG_PREVIEW_SCENE=MebelScene($('catalogPreviewRenderer'));
+    CATALOG_PREVIEW_SCENE.setPayload(source.viewer);
+    if(CATALOG_PREVIEW_SCENE.setView)CATALOG_PREVIEW_SCENE.setView('axon');
+    if(CATALOG_PREVIEW_SCENE.closeAll)CATALOG_PREVIEW_SCENE.closeAll();
+    CATALOG_PREVIEW_SCENE.resize();await waitCatalogPreviewFrame();
+    await new Promise(resolve=>setTimeout(resolve,90));
+    const preview=CATALOG_PREVIEW_SCENE.snapshot(360);
+    if(!preview)throw new Error('Снимок 3D не получен');
+    const saveResponse=await fetch('/api/catalog-preview',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({file,revision:source.revision,preview})});
+    const saved=await saveResponse.json();
+    if(!saveResponse.ok||!saved.ok)throw new Error(saved.error||'Превью не сохранилось');
+    updateCatalogPreviewImage(file,saved.url);
+  }catch(_error){/* SVG остаётся временным фолбэком; повтор — после перезагрузки Studio. */}
+  finally{CATALOG_PREVIEW_RUNNING=false;queueMicrotask(buildNextCatalogPreview);}
+}
+function queueCatalogPreviews(items){
+  if(!canBuildCatalogPreviews())return;
+  (items||[]).forEach(item=>{
+    if(item.draft||item.preview_current||CATALOG_PREVIEW_SEEN.has(item.file))return;
+    CATALOG_PREVIEW_SEEN.add(item.file);CATALOG_PREVIEW_QUEUE.push(item.file);
+  });
+  buildNextCatalogPreview();
 }
 function catalogTypeLabel(item){
   const ftype=String(item.ftype||'').trim();
@@ -4667,9 +4862,7 @@ async function refreshCatalog({clearSelection=false}={}){
   }catch(error){toast('Каталог не обновился: '+error.message,true);return false;}
 }
 async function openCatalog({pushHistory=true}={}){
-  if(modelMutationLocked()){
-    toast('Дождитесь завершения текущего изменения модели',true);return;
-  }
+  if(partEditBusy){toast('Дождитесь короткого пересчёта детали',true);return;}
   CAT_SCOPE='all';CAT_TYPE='all';CAT_STATUS='all';CAT_RESPONSIBLE='all';
   CAT_SELECTED_FILE='';$('catQ').value='';
   if(!await refreshCatalog({clearSelection:true}))return;
@@ -4717,10 +4910,11 @@ function renderCatalog(){
     c.onclick=()=>catalogCardClick(c.dataset.f);
     c.onkeydown=event=>catalogCardKeydown(event,c.dataset.f);
   });
-  syncCatalogSelection();
+  syncCatalogSelection();queueCatalogPreviews(items);
 }
 async function openCatalogItem(file=CAT_SELECTED_FILE){
   if(!file)return;
+  if(!await prepareWorkspaceChange('открыть выбранное изделие'))return;
   const button=$('catOpen');button.disabled=true;
   try{
     const r=await fetch('/api/open',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -4914,7 +5108,7 @@ const UNDO=[], CHAT_HISTORY=[], OPERATIONS=new Map();
 const OPERATION_LIMIT=30;
 const CHAT_REQUEST_TIMEOUT_MS=130000;
 let chatBusy=false, operationSeq=0, chatWorkspaceGeneration=0;
-let activeChatController=null,chatAbortReason='',chatRequestInFlight=false;
+let activeChatController=null,activeChatOperationId='',chatAbortReason='',chatRequestInFlight=false;
 let chatQuickUndoDepth=null, chatQuickUndoOperationId=null;
 let chatQuickUndoBeforeSpecJson=null, chatQuickUndoAfterSpecJson=null;
 function presentChatReply(text){
@@ -5288,10 +5482,35 @@ function setChatState(text,error=false,mode='',canUndo=false,operationId=null){
   refreshUndoState();
 }
 function modelMutationLocked(){return chatBusy||partEditBusy;}
+const MODEL_LOCK_DISABLED_STATE=new Map();
+function modelMutationControls(){
+  return [...document.querySelectorAll([
+    '#projRen','#projDup','#projShare','#btnUndo','#btnFixAll',
+    '#rightViewProperties input','#rightViewProperties select','#rightViewProperties textarea',
+    '#rightViewProperties button','#rightViewComponents input','#rightViewComponents select',
+    '#rightViewComponents textarea','#rightViewComponents button',
+    '#rightViewProduction input','#rightViewProduction select','#rightViewProduction textarea',
+    '#rightViewProduction button','#fs_part input[data-ov]','#ovApply','#partEditCancel',
+    '#ovReset','#ovDelete','#partCommandFocus'
+  ].join(','))];
+}
+function setModelMutationControlsLocked(locked){
+  if(locked){
+    modelMutationControls().forEach(control=>{
+      if(!MODEL_LOCK_DISABLED_STATE.has(control))MODEL_LOCK_DISABLED_STATE.set(control,control.disabled);
+      control.disabled=true;
+    });
+    return;
+  }
+  MODEL_LOCK_DISABLED_STATE.forEach((wasDisabled,control)=>{control.disabled=wasDisabled;});
+  MODEL_LOCK_DISABLED_STATE.clear();
+  if($('btnB3d'))$('btnB3d').disabled=!lastOk;
+  syncWorkspacePrintState();refreshUndoState();
+}
 function syncChatPrimaryAction(){
   const button=$('chatSend'),canCancel=!!(chatBusy&&activeChatController&&
-    chatRequestInFlight&&!activeChatController.signal.aborted),
-    stopping=!!(chatBusy&&chatAbortReason==='user'&&activeChatController&&
+    !activeChatController.signal.aborted),
+    stopping=!!(chatBusy&&['user','navigation'].includes(chatAbortReason)&&activeChatController&&
       activeChatController.signal.aborted);
   button.classList.toggle('is-cancel',canCancel);
   button.disabled=chatBusy?!canCancel:partEditBusy;
@@ -5302,9 +5521,8 @@ function syncChatPrimaryAction(){
 }
 function syncModelEditLock(){
   const locked=modelMutationLocked();
-  $('sideScroll').inert=locked;
-  Object.entries(rightPanelModes).forEach(([key,item])=>
-    item.panel.inert=locked||key!==rightPanelMode);
+  setModelMutationControlsLocked(locked);
+  Object.entries(rightPanelModes).forEach(([key,item])=>item.panel.inert=key!==rightPanelMode);
   [$('chatMsg'),$('chatAttach'),$('aiProvider'),$('partChat'),$('partChatSend')]
     .filter(Boolean).forEach(el=>el.disabled=locked);
   $('btnFixAll').disabled=locked;
@@ -5331,6 +5549,8 @@ view.addEventListener('pointerdown',event=>{
 },true);
 function beginChatRequest(){
   activeChatController=new AbortController();chatAbortReason='';
+  activeChatOperationId=(typeof crypto!=='undefined'&&crypto.randomUUID)?crypto.randomUUID():
+    `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   return activeChatController;
 }
 async function requestChat(payload,controller){
@@ -5339,19 +5559,45 @@ async function requestChat(payload,controller){
     if(!controller.signal.aborted){chatAbortReason='timeout';controller.abort();}
   },CHAT_REQUEST_TIMEOUT_MS);
   try{return await fetch('/api/chat',{method:'POST',
-    headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:controller.signal});}
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({...payload,operation_id:activeChatOperationId}),signal:controller.signal});}
   finally{clearTimeout(timeout);chatRequestInFlight=false;syncChatPrimaryAction();}
 }
-function cancelActiveChatRequest(){
-  if(!chatBusy||!chatRequestInFlight||!activeChatController||
-     activeChatController.signal.aborted)return;
-  chatAbortReason='user';activeChatController.abort();syncChatPrimaryAction();
-  setChatState('Останавливаю команду…',false,'busy');
+async function cancelActiveChatRequest(reason='user'){
+  if(!chatBusy||!activeChatController||activeChatController.signal.aborted)return false;
+  chatAbortReason=reason;
+  const operationId=activeChatOperationId;
+  if(operationId){
+    const notice=fetch('/api/chat/cancel',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({operation_id:operationId})}).catch(()=>null);
+    await Promise.race([notice,new Promise(resolve=>setTimeout(resolve,250))]);
+  }
+  activeChatController.abort();syncChatPrimaryAction();
+  setChatState(reason==='navigation'?'Останавливаю команду перед переходом…':
+    'Останавливаю команду…',false,'busy');
+  return true;
 }
 function finishChatRequest(controller){
   if(activeChatController===controller){activeChatController=null;chatAbortReason='';
-    chatRequestInFlight=false;}
+    activeChatOperationId='';chatRequestInFlight=false;}
 }
+async function prepareWorkspaceChange(action){
+  if(partEditBusy){toast('Дождитесь короткого пересчёта детали',true);return false;}
+  if(!chatBusy)return true;
+  if(!activeChatController){toast('Дождитесь короткого пересчёта модели',true);return false;}
+  const confirmed=confirm(`Сейчас ИИ изменяет изделие. Остановить команду и ${action}?\n\n`+
+    'Незавершённый результат не будет применён.');
+  if(!confirmed)return false;
+  await cancelActiveChatRequest('navigation');
+  const deadline=Date.now()+2500;
+  while(chatBusy&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,25));
+  if(chatBusy){toast('Команда ещё останавливается. Повторите переход через секунду.',true);return false;}
+  return true;
+}
+window.addEventListener('beforeunload',event=>{
+  if(!modelMutationLocked())return;
+  event.preventDefault();event.returnValue='';
+});
 const PENDING_IMGS=[];                       // фото ТЗ: [{mime,data(base64)}]
 function renderImgs(){
   $('chatImgs').innerHTML=PENDING_IMGS.map((im,i)=>
@@ -5481,6 +5727,10 @@ async function runChat(text){
         finishOperation(operation,{state:'undone',summary:'Остановлено пользователем. Модель не изменена.',
           statusLabel:'Остановлено'});
         setChatState('Команда остановлена · текст и вложения сохранены',false,'');
+      }else if(abortReason==='navigation'){
+        finishOperation(operation,{state:'undone',summary:'Остановлено перед переходом. Модель не изменена.',
+          statusLabel:'Остановлено'});
+        setChatState('Команда остановлена перед переходом',false,'');
       }else if(abortReason==='timeout'){
         failOperation(operation,'AI не ответил за отведённое время. Модель не изменена.');
         setChatState('AI не ответил · команду можно повторить',true,'error');
@@ -5511,6 +5761,7 @@ async function fixAll(){
   if(!startIssues){toast('Все проверки зелёные, база подобрана — чинить нечего');return;}
   const operation=createOperation('Автоматическое исправление проверок',{forceModel:true,kind:'fix-all'});
   const requestGeneration=chatWorkspaceGeneration;
+  const initialSpecJson=JSON.stringify(SPEC),initialUndoDepth=UNDO.length;
   let before=startIssues,appliedPasses=0,stopReason='',operationTokens=0;
   const allChanges=[],replies=[];
   const controller=beginChatRequest();
@@ -5573,19 +5824,24 @@ async function fixAll(){
       false,'success',false,operation.id);
   }catch(e){
     const abortReason=e&&e.name==='AbortError'?chatAbortReason:'';
+    const requestedStop=['user','navigation'].includes(abortReason);
     const workspaceChanged=chatWorkspaceGeneration!==requestGeneration;
+    if(!workspaceChanged&&abortReason==='navigation'&&appliedPasses){
+      SPEC=JSON.parse(initialSpecJson);UNDO.splice(initialUndoDepth);appliedPasses=0;
+      refreshUndoState();fillForm();try{await apply();}catch(_restoreError){}
+    }
     if(!workspaceChanged&&appliedPasses){
       const remaining=issueCount();
       finishOperation(operation,{state:'warning',reply:replies.join('\n'),changes:allChanges,
         usage:operationTokens?{total:operationTokens}:null,canUndo:false,
-        summary:abortReason==='user'
-          ?`Остановлено пользователем после ${appliedPasses} ${passWord(appliedPasses)}. Осталось ${remaining} ${findingWord(remaining)}.`
+        summary:requestedStop
+          ?`Остановлено после ${appliedPasses} ${passWord(appliedPasses)}. Осталось ${remaining} ${findingWord(remaining)}.`
           :`Остановлено после ${appliedPasses} ${passWord(appliedPasses)}: ${e.message}`,
         checkSnapshot:currentCheckSnapshot(),statusLabel:'Исправлено частично'});
-      setChatState('Автоисправление остановлено · часть правок применена',abortReason!=='user',
-        abortReason==='user'?'':'error');
-    }else if(!workspaceChanged&&abortReason==='user'){
-      finishOperation(operation,{state:'undone',summary:'Остановлено пользователем. Модель не изменена.',
+      setChatState('Автоисправление остановлено · часть правок применена',!requestedStop,
+        requestedStop?'':'error');
+    }else if(!workspaceChanged&&requestedStop){
+      finishOperation(operation,{state:'undone',summary:'Остановлено. Модель не изменена.',
         statusLabel:'Остановлено'});
       setChatState('Автоисправление остановлено · модель не изменена',false,'');
     }else if(!workspaceChanged&&abortReason==='timeout'){
@@ -5672,13 +5928,21 @@ loadProviders();
 async function post(url){const r=await fetch(url,{method:'POST',
   headers:{'Content-Type':'application/json'},body:JSON.stringify({spec:SPEC})});
   return await r.json();}
-// сохранение со снапшотом-превью для каталога (AKD-217)
+// После сохранения каноническое превью пересобирается скрытой MebelScene.
+// Снимок текущей пользовательской камеры сюда не подходит: он может оказаться
+// повёрнутым или разобранным и снова исказить карточку каталога.
 async function saveSpec(){
-  const prev=(scene3d.snapshot&&!EMPTY)?scene3d.snapshot(320):null;
   const r=await fetch('/api/save',{method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({spec:SPEC,preview:prev})});
-  return await r.json();
+    body:JSON.stringify({spec:SPEC})});
+  const result=await r.json();
+  if(result.ok&&!SPEC.draft){
+    const file=$('projSel').value,item=CAT_ITEMS.find(value=>value.file===file);
+    if(item)item.preview_current=false;
+    CATALOG_PREVIEW_SEEN.delete(file);
+    queueCatalogPreviews([item||{file,draft:false,preview_current:false}]);
+  }
+  return result;
 }
 $('btnSave').onclick=async()=>{const p=await saveSpec();
   toast(p.ok?('Сохранено: '+p.spec):('Ошибка: '+p.error),!p.ok);

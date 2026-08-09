@@ -304,10 +304,17 @@ def test_chat_and_part_mutations_share_one_interaction_lock() -> None:
 
     lock = _compact(_function("syncModelEditLock"))
     assert "locked=modelMutationLocked()" in lock
-    assert "$('sideScroll').inert=locked" in lock
-    assert "item.panel.inert=locked||key!==rightPanelMode" in lock
+    assert "$('sideScroll').inert=locked" not in lock
+    assert "setModelMutationControlsLocked(locked)" in lock
+    assert "item.panel.inert=key!==rightPanelMode" in lock
     assert "view.style.pointerEvents" not in lock
     assert "syncViewportStatus()" in lock
+
+    mutation_controls = _compact(_function("modelMutationControls"))
+    for control in ("#projRen", "#projDup", "#projShare", "#rightViewProperties"):
+        assert control in mutation_controls
+    for safe_control in ("#projCat", "#profileChip", "#profileLogout", "#projSel"):
+        assert safe_control not in mutation_controls
 
     chat = _compact(_function("setChatBusy"))
     assert "syncModelEditLock()" in chat

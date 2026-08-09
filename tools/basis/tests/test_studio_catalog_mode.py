@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from html.parser import HTMLParser
@@ -65,6 +66,23 @@ def test_catalog_has_its_own_accessible_context() -> None:
     assert dom.by_id["catScopes"][1].get("role") == "group"
     assert dom.by_id["catResponsible"][1].get("aria-label") == "Ответственный"
     assert dom.by_id["catStatus"][1].get("aria-label") == "Статус изделия"
+    assert dom.by_id["catalogPreviewRenderer"][1].get("aria-hidden") == "true"
+
+
+def test_catalog_uses_canonical_3d_snapshots_and_background_refresh() -> None:
+    markup = PAGE[PAGE.index("function catalogThumbMarkup") : PAGE.index("function catalogTypeLabel")]
+    assert "item.preview_current?exact:fallback" in markup
+    assert "data-preview-file" in markup
+    assert "data-fallback" in markup
+    assert "MebelScene($('catalogPreviewRenderer'))" in PAGE
+    assert "fetch('/api/catalog-preview-source'" in PAGE
+    assert "fetch('/api/catalog-preview'" in PAGE
+    assert "CATALOG_PREVIEW_SCENE.setView('axon')" in PAGE
+    assert "CATALOG_PREVIEW_SCENE.snapshot(360)" in PAGE
+    assert "queueCatalogPreviews(items)" in PAGE
+    save = PAGE[PAGE.index("async function saveSpec") : PAGE.index("$('btnSave').onclick")]
+    assert "scene3d.snapshot" not in save
+    assert "queueCatalogPreviews" in save
 
 
 def test_catalog_mode_removes_stale_product_panels_from_layout() -> None:
@@ -158,6 +176,33 @@ def test_catalog_projects_publish_real_metadata(tmp_path: Path) -> None:
     assert project["category"] == "Тумбы"
     assert project["status"] == "active"
     assert isinstance(project["updated_at"], int) and project["updated_at"] > 0
+    assert project["preview"] is False
+    assert project["preview_current"] is False
+
+
+def test_catalog_preview_is_current_only_after_the_spec_mtime(tmp_path: Path) -> None:
+    spec_path = tmp_path / "product.json"
+    spec_path.write_text(json.dumps({
+        "schemaVersion": "paramspec-v1",
+        "project_name": "Тест",
+        "archetype": "cabinet",
+        "dimensions": {"width": 800, "depth": 400, "height": 720},
+        "materials": {"color": "Белый"},
+    }), encoding="utf-8")
+    preview_dir = tmp_path / ".previews"
+    preview_dir.mkdir()
+    preview_path = preview_dir / "product.png"
+    preview_path.write_bytes(b"png")
+
+    os.utime(preview_path, ns=(1_000_000_000, 1_000_000_000))
+    os.utime(spec_path, ns=(2_000_000_000, 2_000_000_000))
+    [stale] = _list_projects(tmp_path)
+    assert stale["preview"] is True
+    assert stale["preview_current"] is False
+
+    os.utime(preview_path, ns=(3_000_000_000, 3_000_000_000))
+    [current] = _list_projects(tmp_path)
+    assert current["preview_current"] is True
 
 
 def test_catalog_filters_are_server_side_and_composable() -> None:
