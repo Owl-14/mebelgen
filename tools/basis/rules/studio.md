@@ -80,6 +80,9 @@ ParamSpec, версии, preview, AI-историю и существующие 
 | `/api/rename`, `/api/catalog/assign` | переименовать изделие / назначить активного ответственного своей компании |
 | `/api/catalog/archive`, `/api/catalog/restore` | обратимо архивировать с причиной / вернуть без перезаписи |
 | `/api/catalog-preview-source`, `/api/catalog-preview` | payload указанного изделия и revision-safe кэш канонического PNG |
+| `/api/reviews`, `/api/reviews/create`, `/api/reviews/revoke` | список ссылок текущего изделия / создать snapshot или live ссылку / немедленно отозвать |
+| `GET /review/<token>` | публичный read-only просмотр: фиксированная либо последняя сохранённая ревизия без ParamSpec и производства; из этой же точной ревизии скачивается двухстраничный презентационный PDF |
+| `POST /review/<token>/decision` | решение клиента с revision guard; устаревшая live-ревизия возвращает `409` |
 | `/api/versions`, `/api/restore` | снапшоты спеки (при сохранении, до 30) |
 | `/api/decors` | поиск листовых декоров базы (для поля «Из базы») |
 | `/api/save` | спека в файл + `<имя>.project.json`; каноническое превью обновляется в фоне |

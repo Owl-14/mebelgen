@@ -1,9 +1,9 @@
-"""Immutable client-review snapshots for Akeda Studio.
+"""Managed client-review links for Akeda Studio.
 
-Possession of a high-entropy review token grants access to one frozen product
-snapshot.  Raw tokens are never stored: the SHA-256 digest is the lookup key.
-The source ParamSpec remains in its tenant workspace and cannot be changed from
-the public review surface.
+Possession of a high-entropy review token grants read-only access either to one
+frozen product snapshot or to the latest saved revision of the same tenant
+product.  Raw tokens are never stored: the SHA-256 digest is the lookup key.
+The public review surface cannot change the source ParamSpec.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ import secrets
 import threading
 import unicodedata
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, BinaryIO, Mapping, Sequence
 
@@ -26,6 +26,8 @@ _ID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
 )
 _DECISIONS = {"approved", "changes_requested"}
+_LINK_MODES = {"snapshot", "live"}
+_EXPIRY_DAYS = {7, 30, 90}
 MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
 MAX_REVIEW_ATTACHMENT_BYTES = 25 * 1024 * 1024
 MAX_DECISION_ATTACHMENTS = 5
@@ -39,6 +41,24 @@ _ATTACHMENT_TYPES = {
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _parse_time(value: Any) -> datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _expired(record: Mapping[str, Any]) -> bool:
+    expires_at = _parse_time(record.get("expires_at"))
+    return expires_at is not None and expires_at <= datetime.now(timezone.utc)
 
 
 def _copy_json(value: Mapping[str, Any]) -> dict[str, Any]:
@@ -83,8 +103,12 @@ class ReviewAttachmentError(ValueError):
     """A public review attachment failed validation or quota checks."""
 
 
+class ReviewRevisionConflict(ValueError):
+    """A live review changed after the client opened or started answering it."""
+
+
 class StudioReviewStore:
-    """Thread-safe filesystem store for frozen review links."""
+    """Thread-safe filesystem store for snapshot and live review links."""
 
     def __init__(self, root: Path) -> None:
         self.root = root.resolve()
@@ -107,6 +131,63 @@ class StudioReviewStore:
             json.dumps(dict(record), ensure_ascii=False, indent=2), encoding="utf-8"
         )
         temporary.replace(path)
+
+    @staticmethod
+    def _link_mode(record: Mapping[str, Any]) -> str:
+        mode = str(record.get("link_mode") or "snapshot")
+        return mode if mode in _LINK_MODES else "snapshot"
+
+    @staticmethod
+    def _decision_history(record: Mapping[str, Any]) -> list[dict[str, Any]]:
+        history = [
+            dict(item)
+            for item in list(record.get("decision_history") or [])
+            if isinstance(item, dict)
+        ]
+        legacy = record.get("decision")
+        if not history and isinstance(legacy, dict):
+            history.append(dict(legacy))
+        return history
+
+    def resolve_record(
+        self,
+        record: Mapping[str, Any],
+        *,
+        current_spec: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Return the exact public revision and its decision state."""
+
+        resolved = _copy_json(record)
+        mode = self._link_mode(record)
+        if mode == "live":
+            if not isinstance(current_spec, Mapping):
+                raise ReviewNotFound("Обновляемое изделие недоступно")
+            spec = _copy_json(current_spec)
+            revision = _revision(spec)
+        else:
+            stored = record.get("spec")
+            if not isinstance(stored, Mapping):
+                raise ReviewNotFound("Версия изделия недоступна")
+            spec = _copy_json(stored)
+            revision = str(record.get("revision") or _revision(spec))
+
+        history = self._decision_history(record)
+        matching = [
+            item for item in history if str(item.get("revision") or "") == revision
+        ]
+        decision = matching[-1] if matching else None
+        resolved.update({
+            "link_mode": mode,
+            "project_name": str(
+                spec.get("project_name") or record.get("project_name") or "Изделие"
+            ),
+            "revision": revision,
+            "spec": spec,
+            "status": str((decision or {}).get("status") or "pending"),
+            "decision": decision,
+            "decision_history": history,
+        })
+        return resolved
 
     def _attachment_dir(self, record: Mapping[str, Any]) -> Path:
         organization_id = str(record.get("organization_id") or "local")
@@ -163,18 +244,34 @@ class StudioReviewStore:
         actor_name: str,
         responsible_user_id: str | None = None,
         responsible_name: str = "",
+        link_mode: str = "snapshot",
+        expires_in_days: int | None = None,
     ) -> tuple[str, dict[str, Any]]:
+        mode = str(link_mode or "snapshot")
+        if mode not in _LINK_MODES:
+            raise ValueError("Выберите тип ссылки")
+        if expires_in_days is not None and expires_in_days not in _EXPIRY_DAYS:
+            raise ValueError("Выберите срок действия ссылки")
         snapshot = _copy_json(spec)
         created_at = _utc_now()
+        expires_at = (
+            (datetime.now(timezone.utc) + timedelta(days=expires_in_days)).isoformat(
+                timespec="seconds"
+            )
+            if expires_in_days is not None
+            else None
+        )
         record = {
-            "schema_version": 1,
+            "schema_version": 2,
             "id": str(uuid.uuid4()),
             "organization_id": str(organization_id or ""),
             "organization_name": str(organization_name or ""),
             "project_file": str(project_file),
             "project_name": str(snapshot.get("project_name") or Path(project_file).stem),
             "revision": _revision(snapshot),
+            "link_mode": mode,
             "created_at": created_at,
+            "expires_at": expires_at,
             "created_by_user_id": str(actor_user_id or ""),
             "created_by_name": str(actor_name or ""),
             "responsible_user_id": str(responsible_user_id or actor_user_id or ""),
@@ -204,7 +301,11 @@ class StudioReviewStore:
                 record = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, ValueError, TypeError) as error:
                 raise ReviewNotFound("Ссылка на согласование не найдена") from error
-        if not isinstance(record, dict) or record.get("revoked_at"):
+        if (
+            not isinstance(record, dict)
+            or record.get("revoked_at")
+            or _expired(record)
+        ):
             raise ReviewNotFound("Ссылка на согласование не найдена")
         return record
 
@@ -215,6 +316,8 @@ class StudioReviewStore:
         filename: str,
         content_length: int,
         source: BinaryIO,
+        expected_revision: str = "",
+        current_spec: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         if content_length <= 0:
             raise ReviewAttachmentError("Файл пустой")
@@ -224,6 +327,17 @@ class StudioReviewStore:
         path = self._path(token)
         with self._lock:
             record = self.load(token)
+            resolved = self.resolve_record(record, current_spec=current_spec)
+            active_revision = str(resolved.get("revision") or "")
+            submitted_revision = str(expected_revision or "")
+            if self._link_mode(record) == "live" and not submitted_revision:
+                raise ReviewRevisionConflict(
+                    "Версия изделия не указана. Обновите страницу и повторите."
+                )
+            if submitted_revision and submitted_revision != active_revision:
+                raise ReviewRevisionConflict(
+                    "Изделие уже обновилось. Откройте актуальную версию и проверьте её заново."
+                )
             attachments = [
                 dict(item) for item in list(record.get("attachments") or [])
                 if isinstance(item, dict)
@@ -274,6 +388,7 @@ class StudioReviewStore:
                 "bytes": content_length,
                 "sha256": digest.hexdigest(),
                 "created_at": _utc_now(),
+                "revision": active_revision,
                 "status": "staged",
                 "decision_id": None,
             }
@@ -293,7 +408,11 @@ class StudioReviewStore:
             return attachment, path
 
     def list_for_project(
-        self, *, organization_id: str | None, project_file: str
+        self,
+        *,
+        organization_id: str | None,
+        project_file: str,
+        current_spec: Mapping[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         expected_organization = str(organization_id or "")
         expected_file = str(project_file or "")
@@ -304,14 +423,14 @@ class StudioReviewStore:
                     record = json.loads(path.read_text(encoding="utf-8"))
                 except (OSError, ValueError, TypeError):
                     continue
-                if not isinstance(record, dict) or record.get("revoked_at"):
+                if not isinstance(record, dict):
                     continue
                 if str(record.get("organization_id") or "") != expected_organization:
                     continue
                 if str(record.get("project_file") or "") != expected_file:
                     continue
                 history = []
-                for event in list(record.get("decision_history") or []):
+                for event in self._decision_history(record):
                     if not isinstance(event, dict):
                         continue
                     public_event = dict(event)
@@ -321,18 +440,41 @@ class StudioReviewStore:
                         if isinstance(item, dict)
                     ]
                     history.append(public_event)
+                mode = self._link_mode(record)
+                try:
+                    resolved = self.resolve_record(
+                        record,
+                        current_spec=current_spec if mode == "live" else None,
+                    )
+                    active_revision = str(resolved.get("revision") or "")
+                    current_decision = resolved.get("decision")
+                    current_status = str(resolved.get("status") or "pending")
+                except ReviewNotFound:
+                    active_revision = str(record.get("revision") or "")
+                    current_decision = None
+                    current_status = "pending"
+                access_status = (
+                    "revoked" if record.get("revoked_at")
+                    else "expired" if _expired(record)
+                    else "active"
+                )
                 records.append({
                     "id": str(record.get("id") or ""),
                     "project_name": str(record.get("project_name") or "Изделие"),
                     "project_file": str(record.get("project_file") or ""),
-                    "revision": str(record.get("revision") or ""),
+                    "revision": active_revision,
+                    "initial_revision": str(record.get("revision") or ""),
+                    "link_mode": mode,
                     "created_at": str(record.get("created_at") or ""),
+                    "expires_at": str(record.get("expires_at") or ""),
+                    "revoked_at": str(record.get("revoked_at") or ""),
+                    "access_status": access_status,
                     "created_by_user_id": str(record.get("created_by_user_id") or ""),
                     "created_by_name": str(record.get("created_by_name") or ""),
                     "responsible_user_id": str(record.get("responsible_user_id") or ""),
                     "responsible_name": str(record.get("responsible_name") or ""),
-                    "status": str(record.get("status") or "pending"),
-                    "decision": history[-1] if history else None,
+                    "status": current_status,
+                    "decision": current_decision,
                     "decision_history": history,
                 })
         return sorted(records, key=lambda item: item["created_at"], reverse=True)
@@ -378,6 +520,8 @@ class StudioReviewStore:
         reviewer_name: str,
         comment: str = "",
         attachment_ids: Sequence[str] | None = None,
+        expected_revision: str = "",
+        current_spec: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         status = str(decision or "")
         if status not in _DECISIONS:
@@ -397,6 +541,17 @@ class StudioReviewStore:
         path = self._path(token)
         with self._lock:
             record = self.load(token)
+            resolved = self.resolve_record(record, current_spec=current_spec)
+            active_revision = str(resolved.get("revision") or "")
+            submitted_revision = str(expected_revision or "")
+            if self._link_mode(record) == "live" and not submitted_revision:
+                raise ReviewRevisionConflict(
+                    "Версия изделия не указана. Обновите страницу и повторите."
+                )
+            if submitted_revision and submitted_revision != active_revision:
+                raise ReviewRevisionConflict(
+                    "Изделие уже обновилось. Откройте актуальную версию и проверьте её заново."
+                )
             all_attachments = [
                 dict(item) for item in list(record.get("attachments") or [])
                 if isinstance(item, dict)
@@ -408,6 +563,7 @@ class StudioReviewStore:
                         item for item in all_attachments
                         if str(item.get("id") or "") == attachment_id
                         and item.get("status") == "staged"
+                        and str(item.get("revision") or active_revision) == active_revision
                     ),
                     None,
                 )
@@ -420,7 +576,7 @@ class StudioReviewStore:
                 "reviewer_name": name,
                 "comment": note,
                 "created_at": _utc_now(),
-                "revision": str(record.get("revision") or ""),
+                "revision": active_revision,
                 "attachments": [self._public_attachment(item) for item in selected],
             }
             for item in selected:
@@ -433,7 +589,37 @@ class StudioReviewStore:
             record["decision_history"] = history[-50:]
             record["attachments"] = all_attachments
             self._write(path, record)
-            return _copy_json(record)
+            return self.resolve_record(record, current_spec=current_spec)
+
+    def revoke(
+        self,
+        *,
+        review_id: str,
+        organization_id: str | None,
+        project_file: str,
+    ) -> dict[str, Any]:
+        value = str(review_id or "")
+        if not _ID_RE.fullmatch(value):
+            raise ReviewNotFound("Ссылка на согласование не найдена")
+        expected_organization = str(organization_id or "")
+        expected_file = str(project_file or "")
+        with self._lock:
+            for path in self.root.glob("*.json"):
+                try:
+                    record = json.loads(path.read_text(encoding="utf-8"))
+                except (OSError, ValueError, TypeError):
+                    continue
+                if not isinstance(record, dict) or str(record.get("id") or "") != value:
+                    continue
+                if str(record.get("organization_id") or "") != expected_organization:
+                    break
+                if str(record.get("project_file") or "") != expected_file:
+                    break
+                if not record.get("revoked_at"):
+                    record["revoked_at"] = _utc_now()
+                    self._write(path, record)
+                return _copy_json(record)
+        raise ReviewNotFound("Ссылка на согласование не найдена")
 
 
 __all__ = [
@@ -441,5 +627,6 @@ __all__ = [
     "MAX_DECISION_ATTACHMENTS",
     "ReviewAttachmentError",
     "ReviewNotFound",
+    "ReviewRevisionConflict",
     "StudioReviewStore",
 ]

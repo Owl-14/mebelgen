@@ -930,6 +930,36 @@ class _Studio:
              if not f.name.endswith((".project.json", ".versions.json"))}
             if self.public else set())
 
+    def review_current_spec(self, record: dict[str, Any]) -> dict[str, Any] | None:
+        """Resolve a live review only inside its server-owned tenant product."""
+
+        if str(record.get("link_mode") or "snapshot") != "live":
+            return None
+        project_file = str(record.get("project_file") or "")
+        if not project_file or Path(project_file).name != project_file:
+            raise FileNotFoundError("review product missing")
+        if self.workspaces.tenant_root is None:
+            spec_dir = self.workspaces.legacy_spec_dir
+        else:
+            organization_id = str(record.get("organization_id") or "")
+            if (
+                not organization_id
+                or Path(organization_id).name != organization_id
+                or "/" in organization_id
+                or "\\" in organization_id
+            ):
+                raise FileNotFoundError("review tenant missing")
+            tenant_root = self.workspaces.tenant_root.resolve()
+            organization_root = (tenant_root / organization_id).resolve()
+            if organization_root.parent != tenant_root:
+                raise FileNotFoundError("review tenant missing")
+            spec_dir = organization_root / "paramspecs"
+        path = _safe_spec_file(spec_dir, project_file)
+        value = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(value, dict) or value.get("draft"):
+            raise FileNotFoundError("review product missing")
+        return value
+
     @staticmethod
     def _valid_chat_operation_id(value: Any) -> str:
         operation_id = str(value or "")
@@ -1373,6 +1403,10 @@ def make_handler(st: _Studio):
                     return
                 try:
                     record = st.reviews.load(token)
+                    record = st.reviews.resolve_record(
+                        record,
+                        current_spec=st.review_current_spec(record),
+                    )
                     spec = record.get("spec") or {}
                     if not isinstance(spec, dict):
                         raise FileNotFoundError("review snapshot missing")
@@ -1540,6 +1574,7 @@ def make_handler(st: _Studio):
                     from .studio_reviews import (
                         MAX_ATTACHMENT_BYTES,
                         ReviewAttachmentError,
+                        ReviewRevisionConflict,
                     )
 
                     try:
@@ -1553,6 +1588,7 @@ def make_handler(st: _Studio):
                         }, 413)
                         return
                     try:
+                        review_record = st.reviews.load(review_parts[1])
                         attachment = st.reviews.stage_attachment(
                             review_parts[1],
                             filename=unquote(
@@ -1560,9 +1596,20 @@ def make_handler(st: _Studio):
                             ),
                             content_length=content_length,
                             source=self.rfile,
+                            expected_revision=str(
+                                self.headers.get("X-Akeda-Revision") or ""
+                            ),
+                            current_spec=st.review_current_spec(review_record),
                         )
                     except FileNotFoundError:
                         self._json({"ok": False, "error": "Ссылка недоступна"}, 404)
+                        return
+                    except ReviewRevisionConflict as error:
+                        self._json({
+                            "ok": False,
+                            "error": str(error),
+                            "code": "review_revision_changed",
+                        }, 409)
                         return
                     except ReviewAttachmentError as error:
                         self._json({"ok": False, "error": str(error)}, 400)
@@ -1592,20 +1639,32 @@ def make_handler(st: _Studio):
                     and review_parts[0] == "review"
                     and review_parts[2] == "decision"
                 ):
+                    from .studio_reviews import ReviewRevisionConflict
+
                     attachment_ids = body.get("attachment_ids") or []
                     if not isinstance(attachment_ids, list):
                         self._json({"ok": False, "error": "Некорректный список вложений"}, 400)
                         return
                     try:
+                        review_record = st.reviews.load(review_parts[1])
                         record = st.reviews.decide(
                             review_parts[1],
                             decision=str(body.get("decision") or ""),
                             reviewer_name=str(body.get("reviewer_name") or ""),
                             comment=str(body.get("comment") or ""),
                             attachment_ids=[str(value or "") for value in attachment_ids],
+                            expected_revision=str(body.get("revision") or ""),
+                            current_spec=st.review_current_spec(review_record),
                         )
                     except FileNotFoundError:
                         self._json({"ok": False, "error": "Ссылка недоступна"}, 404)
+                        return
+                    except ReviewRevisionConflict as error:
+                        self._json({
+                            "ok": False,
+                            "error": str(error),
+                            "code": "review_revision_changed",
+                        }, 409)
                         return
                     except ValueError as error:
                         self._json({"ok": False, "error": str(error)}, 400)
@@ -1719,6 +1778,7 @@ def make_handler(st: _Studio):
                     "/api/catalog-preview": "project.write",
                     "/api/catalog-preview-source": "project.read",
                     "/api/reviews/create": "project.write",
+                    "/api/reviews/revoke": "project.write",
                     "/api/save": "project.write",
                     "/api/restore": "project.write",
                     "/api/export-cfrn": "production.export",
@@ -2274,6 +2334,7 @@ def make_handler(st: _Studio):
                         "reviews": st.reviews.list_for_project(
                             organization_id=str(organization.get("id") or "") or None,
                             project_file=spec_path.name,
+                            current_spec=current_spec,
                         ),
                     })
                 elif path == "/api/reviews/create":
@@ -2284,14 +2345,50 @@ def make_handler(st: _Studio):
                         )
                     stored_spec = json.loads(review_path.read_text(encoding="utf-8"))
                     incoming_spec = body.get("spec")
+                    link_mode = str(body.get("link_mode") or "snapshot")
+                    expires_value = body.get("expires_in_days")
+                    try:
+                        expires_in_days = (
+                            int(expires_value)
+                            if expires_value not in (None, "", 0, "0")
+                            else None
+                        )
+                    except (TypeError, ValueError):
+                        self._json({"ok": False, "error": "Выберите срок действия ссылки"}, 400)
+                        return
+                    if link_mode not in {"snapshot", "live"} or expires_in_days not in {
+                        None, 7, 30, 90,
+                    }:
+                        self._json({
+                            "ok": False,
+                            "error": "Выберите тип и срок действия ссылки",
+                        }, 400)
+                        return
+                    if (
+                        link_mode == "live"
+                        and isinstance(incoming_spec, dict)
+                        and not hmac.compare_digest(
+                            _spec_revision(incoming_spec), _spec_revision(stored_spec)
+                        )
+                    ):
+                        self._json({
+                            "ok": False,
+                            "error": (
+                                "Обновляемая ссылка показывает последнюю сохранённую версию. "
+                                "Сначала сохраните текущие изменения."
+                            ),
+                            "code": "save_required",
+                        }, 409)
+                        return
                     review_spec = (
                         json.loads(json.dumps(incoming_spec))
-                        if isinstance(incoming_spec, dict)
+                        if isinstance(incoming_spec, dict) and link_mode != "live"
                         else stored_spec
                     )
-                    review_spec = _stamp_catalog_identity(
-                        review_spec, _catalog_actor(auth), preserved=stored_spec
-                    )
+                    if link_mode != "live":
+                        review_spec = _stamp_catalog_identity(
+                            review_spec, _catalog_actor(auth), preserved=stored_spec
+                        )
                     if not isinstance(review_spec, dict) or review_spec.get("draft"):
                         self._json({
                             "ok": False,
@@ -2333,12 +2430,19 @@ def make_handler(st: _Studio):
                             catalog.get("responsible") or user.get("display_name")
                             or user.get("email") or "Локальный проектировщик"
                         ),
+                        link_mode=link_mode,
+                        expires_in_days=expires_in_days,
                     )
                     self._audit_product_action(
                         auth,
                         "studio.review.created",
                         review_path,
-                        {"review_id": review["id"], "revision": review["revision"]},
+                        {
+                            "review_id": review["id"],
+                            "revision": review["revision"],
+                            "link_mode": review["link_mode"],
+                            "expires_at": review["expires_at"],
+                        },
                     )
                     self._json({
                         "ok": True,
@@ -2349,7 +2453,35 @@ def make_handler(st: _Studio):
                             "created_at": review["created_at"],
                             "status": review["status"],
                             "project_name": review["project_name"],
+                            "link_mode": review["link_mode"],
+                            "expires_at": review["expires_at"],
                         },
+                    })
+                elif path == "/api/reviews/revoke":
+                    context = (auth or {}).get("context") or {}
+                    organization = context.get("organization") or {}
+                    try:
+                        review = st.reviews.revoke(
+                            review_id=str(body.get("review_id") or ""),
+                            organization_id=str(organization.get("id") or "") or None,
+                            project_file=spec_path.name,
+                        )
+                    except FileNotFoundError:
+                        self._json({"ok": False, "error": "Ссылка не найдена"}, 404)
+                        return
+                    self._audit_product_action(
+                        auth,
+                        "studio.review.revoked",
+                        spec_path,
+                        {
+                            "review_id": str(review.get("id") or ""),
+                            "revision": str(review.get("revision") or ""),
+                        },
+                    )
+                    self._json({
+                        "ok": True,
+                        "review_id": str(review.get("id") or ""),
+                        "revoked_at": str(review.get("revoked_at") or ""),
                     })
                 elif path == "/api/nesting":     # раскрой-превью (C2)
                     from .generators import generate_from_paramspec
@@ -2724,6 +2856,15 @@ PAGE = r"""<!DOCTYPE html>
     white-space:pre-wrap;overflow-wrap:anywhere}.review-inbox-files{display:grid;gap:4px;margin-top:7px}
   .review-inbox-files a{color:#245eae;font-size:10px;text-decoration:none;overflow-wrap:anywhere}
   .review-inbox-files a:hover{text-decoration:underline}
+  .review-inbox-item.revoked,.review-inbox-item.expired{background:#fafbfc}
+  .review-inbox-item.revoked .review-inbox-status,.review-inbox-item.expired .review-inbox-status{color:#6f7884}
+  .review-inbox-item.revoked .review-inbox-status::before,.review-inbox-item.expired .review-inbox-status::before{background:#8e97a3}
+  .review-inbox-actions{display:flex;align-items:center;gap:7px;margin-top:9px}
+  .review-inbox-actions button{height:27px;padding:0 8px;border:1px solid #ccd2da;border-radius:4px;
+    background:#fff;color:#4e5967;font-size:10px;cursor:pointer}
+  .review-inbox-actions button:hover{background:#f0f3f6}.review-inbox-actions button.danger{color:#a03338}
+  .review-inbox-history{margin-top:8px;color:#596473;font-size:10px}.review-inbox-history summary{cursor:pointer}
+  .review-inbox-history-event{padding:7px 0;border-top:1px solid #e5e8ec}.review-inbox-history-event:first-of-type{margin-top:5px}
   #rightside .right-panel-view>fieldset{border:0;border-bottom:1px solid #edf0f3;
     border-radius:0;margin:0;padding:11px 2px 13px}
   #rightside .right-panel-view>fieldset>legend{margin:0 0 7px;padding:0;color:#303947;
@@ -3132,6 +3273,20 @@ PAGE = r"""<!DOCTYPE html>
   .share-dialog-actions a{display:flex;align-items:center;justify-content:center;min-height:32px;
     padding:0 12px;border:1px solid var(--accent);border-radius:5px;background:var(--accent);
     color:#fff;text-decoration:none;font-size:11.5px;font-weight:600}
+  .share-config-group{margin:0 0 14px;padding:0;border:0}.share-config-group legend{margin-bottom:7px;
+    color:#586473;font-size:10.5px;font-weight:700}.share-mode-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+  .share-mode-option{display:grid;grid-template-columns:16px minmax(0,1fr);gap:6px;padding:10px;
+    border:1px solid #d4d9e0;border-radius:5px;background:#fff;cursor:pointer}
+  .share-mode-option:has(input:checked){border-color:#7ca2df;background:#f4f8ff}
+  .share-mode-option input{margin:2px 0 0;accent-color:var(--accent)}.share-mode-option strong{display:block;
+    margin-bottom:2px;color:#313b48;font-size:11.5px}.share-mode-option span{display:block;color:#6e7885;font-size:10px;line-height:14px}
+  .share-expiry{display:grid;grid-template-columns:92px minmax(0,1fr);align-items:center;gap:10px;
+    color:#586473;font-size:10.5px;font-weight:700}.share-expiry select{height:32px;padding:0 8px;border:1px solid #ccd2da;
+    border-radius:4px;background:#fff;color:#35404c;font-size:11px}
+  .share-config-note{margin:10px 0 0!important;padding:8px 10px;border-left:2px solid #7fa3db;
+    background:#f5f8fc;color:#536171!important}.share-dialog-actions .primary{border-color:var(--accent);
+    background:var(--accent);color:#fff;font-weight:600}.share-dialog-actions .primary:hover{background:#245ebf}
+  [hidden]{display:none!important}
   .archive-dialog-target{padding:8px 10px;border-left:2px solid #c9862b;background:#fff9ef;
     color:#3f4855;font-size:11.5px;font-weight:600;overflow-wrap:anywhere}
   .archive-dialog-field{display:grid;gap:5px;margin-top:12px;color:#5d6876;font-size:10.5px}
@@ -3524,7 +3679,7 @@ PAGE = r"""<!DOCTYPE html>
       aria-controls="rightViewProduction" data-mode="production" tabindex="-1">Производство</button>
     <button id="rightTabReviews" type="button" role="tab" aria-selected="false"
       aria-controls="rightViewReviews" data-mode="reviews" tabindex="-1"
-      aria-label="Согласования">Ответы</button>
+      aria-label="Ссылки и согласования">Ссылки</button>
   </nav>
 
   <div id="rightViewProperties" class="right-panel-view" role="tabpanel"
@@ -3642,7 +3797,7 @@ PAGE = r"""<!DOCTYPE html>
 
   <div id="rightViewReviews" class="right-panel-view" role="tabpanel"
     aria-labelledby="rightTabReviews" hidden inert>
-    <div class="review-inbox-head"><p>Ответы клиентов по текущему изделию и каждой зафиксированной версии.</p>
+    <div class="review-inbox-head"><p>Ссылки на просмотр, их срок и решения клиентов по каждой версии изделия.</p>
       <button id="reviewInboxRefresh" type="button">Обновить</button></div>
     <div id="reviewInbox" aria-live="polite"><div class="review-inbox-empty">Загружаем согласования…</div></div>
   </div>
@@ -3942,15 +4097,34 @@ PAGE = r"""<!DOCTYPE html>
     <div id="viewportUnits" class="viewport-status-segment">мм</div>
   </div>
   <dialog id="shareDialog" aria-labelledby="shareDialogTitle">
-    <div class="share-dialog-head"><span>Версия зафиксирована</span>
-      <h2 id="shareDialogTitle">Ссылка на просмотр готова</h2></div>
+    <div class="share-dialog-head"><span id="shareEyebrow">Просмотр для клиента</span>
+      <h2 id="shareDialogTitle">Создать ссылку</h2></div>
     <div class="share-dialog-body">
-      <p>Клиент увидит именно эту версию изделия. Следующие правки в Studio её не изменят.</p>
-      <div class="share-link-row"><input id="shareUrl" readonly aria-label="Ссылка на просмотр">
-        <button id="shareCopy" type="button">Копировать</button></div>
-      <div id="shareMeta" class="share-dialog-meta"></div>
-      <div class="share-dialog-actions"><button id="shareClose" type="button">Закрыть</button>
-        <a id="shareOpen" href="#" target="_blank" rel="noopener">Открыть просмотр</a></div>
+      <div id="shareSetup">
+        <fieldset class="share-config-group"><legend>Как ссылка будет обновляться</legend>
+          <div class="share-mode-grid">
+            <label class="share-mode-option"><input type="radio" name="shareMode" value="snapshot" checked>
+              <span><strong>Фиксированная</strong>Покажет состояние изделия в момент создания.</span></label>
+            <label class="share-mode-option"><input type="radio" name="shareMode" value="live">
+              <span><strong>Обновляемая</strong>Всегда откроет последнюю сохранённую версию.</span></label>
+          </div>
+        </fieldset>
+        <label class="share-expiry">Срок доступа
+          <select id="shareExpiry"><option value="30" selected>30 дней</option><option value="7">7 дней</option>
+            <option value="90">90 дней</option><option value="">Бессрочно</option></select>
+        </label>
+        <p id="shareModeNote" class="share-config-note">Будущие правки не изменят то, что увидит клиент.</p>
+        <div class="share-dialog-actions"><button id="shareCancel" type="button">Отмена</button>
+          <button id="shareCreate" class="primary" type="button">Создать ссылку</button></div>
+      </div>
+      <div id="shareResult" hidden>
+        <p id="shareResultCopy"></p>
+        <div class="share-link-row"><input id="shareUrl" readonly aria-label="Ссылка на просмотр">
+          <button id="shareCopy" type="button">Копировать</button></div>
+        <div id="shareMeta" class="share-dialog-meta"></div>
+        <div class="share-dialog-actions"><button id="shareClose" type="button">Закрыть</button>
+          <a id="shareOpen" href="#" target="_blank" rel="noopener">Открыть просмотр</a></div>
+      </div>
     </div>
   </dialog>
   <dialog id="catArchiveDialog" aria-labelledby="catArchiveDialogTitle">
@@ -4876,32 +5050,53 @@ document.addEventListener('click',e=>{           // клик по детали �
 let CATALOG_MODE=false,CATALOG_PREVIOUS_HASH='';
 let catalogReturnFocus=null;
 const reviewStatusLabels={pending:'Ожидает решения',approved:'Согласовано',changes_requested:'Нужны изменения'};
+const reviewAccessLabels={revoked:'Ссылка отозвана',expired:'Срок ссылки истёк'};
 function reviewDate(value){const date=new Date(value);return Number.isNaN(date.getTime())?'':
   date.toLocaleString('ru-RU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}).replace(',',' ·');}
 function reviewFileSize(bytes){const value=Number(bytes)||0;return value<1048576?
   `${Math.max(1,Math.round(value/1024))} КБ`:`${(value/1048576).toFixed(1).replace('.',',')} МБ`;}
 function reviewText(tag,className,text){const element=document.createElement(tag);if(className)element.className=className;
   element.textContent=text;return element;}
+function appendReviewDecision(parent,decision,review,{compact=false}={}){const result=document.createElement('div');
+  result.className=compact?'review-inbox-history-event':'review-inbox-decision';
+  const label=reviewStatusLabels[decision.status]||'Решение клиента';
+  result.append(reviewText('strong','',`${label} · ${decision.reviewer_name||'Клиент'}`));
+  if(decision.created_at)result.append(document.createTextNode(' · '+reviewDate(decision.created_at)));
+  if(decision.revision)result.append(document.createTextNode(` · версия ${decision.revision.slice(0,10)}`));
+  if(decision.comment)result.append(reviewText('p','review-inbox-comment',decision.comment));
+  const files=Array.isArray(decision.attachments)?decision.attachments:[];
+  if(files.length){const links=document.createElement('div');links.className='review-inbox-files';files.forEach(file=>{
+      const link=document.createElement('a');link.href=`/api/reviews/attachments/${encodeURIComponent(review.id)}/${encodeURIComponent(file.id)}`;
+      link.target='_blank';link.rel='noopener';link.textContent=`↗ ${file.name} · ${reviewFileSize(file.bytes)}`;links.append(link);});result.append(links);}
+  parent.append(result);}
 function renderReviews(reviews){const inbox=$('reviewInbox');inbox.replaceChildren();
   $('rightTabReviews').setAttribute('aria-label',`Согласования: ${reviews.length}`);
   if(!reviews.length){inbox.append(reviewText('div','review-inbox-empty',
     'Для этого изделия ещё нет ссылок на просмотр. Создайте ссылку слева — ответ клиента появится здесь.'));return;}
-  reviews.forEach(review=>{const item=document.createElement('article');item.className='review-inbox-item '+review.status;
-    item.append(reviewText('div','review-inbox-status',reviewStatusLabels[review.status]||'Версия отправлена'));
+  reviews.forEach(review=>{const access=review.access_status||'active',item=document.createElement('article');
+    item.className='review-inbox-item '+(access==='active'?review.status:access);
+    item.append(reviewText('div','review-inbox-status',reviewAccessLabels[access]||reviewStatusLabels[review.status]||'Версия отправлена'));
     const meta=document.createElement('div');meta.className='review-inbox-meta';
+    meta.append(reviewText('span','',review.link_mode==='live'?'Обновляемая ссылка':'Фиксированная версия'));
     meta.append(reviewText('span','',`Версия ${(review.revision||'').slice(0,10)}`));
     if(review.created_at)meta.append(reviewText('span','',reviewDate(review.created_at)));
+    meta.append(reviewText('span','',review.expires_at?`Доступ до ${reviewDate(review.expires_at)}`:'Бессрочный доступ'));
     meta.append(reviewText('span','',`Ответственный: ${review.responsible_name||'не назначен'}`));
     if(review.created_by_name)meta.append(reviewText('span','',`Ссылку создал: ${review.created_by_name}`));item.append(meta);
-    const decision=review.decision;if(decision){const result=document.createElement('div');result.className='review-inbox-decision';
-      result.append(reviewText('strong','',decision.reviewer_name||'Клиент'));
-      if(decision.created_at)result.append(document.createTextNode(' · '+reviewDate(decision.created_at)));
-      if(decision.comment)result.append(reviewText('p','review-inbox-comment',decision.comment));
-      const files=Array.isArray(decision.attachments)?decision.attachments:[];
-      if(files.length){const links=document.createElement('div');links.className='review-inbox-files';files.forEach(file=>{
-          const link=document.createElement('a');link.href=`/api/reviews/attachments/${encodeURIComponent(review.id)}/${encodeURIComponent(file.id)}`;
-          link.target='_blank';link.rel='noopener';link.textContent=`↗ ${file.name} · ${reviewFileSize(file.bytes)}`;links.append(link);});result.append(links);}item.append(result);}
+    const decision=review.decision;if(decision)appendReviewDecision(item,decision,review);
+    const history=Array.isArray(review.decision_history)?review.decision_history:[],past=history.filter(event=>!decision||event.id!==decision.id).reverse();
+    if(past.length){const details=document.createElement('details');details.className='review-inbox-history';
+      const summary=document.createElement('summary');summary.textContent=`Предыдущие решения · ${past.length}`;details.append(summary);
+      past.forEach(event=>appendReviewDecision(details,event,review,{compact:true}));item.append(details);}
+    if(access==='active'){const actions=document.createElement('div');actions.className='review-inbox-actions';
+      const revoke=document.createElement('button');revoke.type='button';revoke.className='danger';revoke.textContent='Отозвать ссылку';
+      revoke.onclick=()=>revokeReview(review);actions.append(revoke);item.append(actions);}
     inbox.append(item);});}
+async function revokeReview(review){if(!confirm('Отозвать эту ссылку? Клиент сразу потеряет доступ, но история решений сохранится.'))return;
+  try{const response=await fetch('/api/reviews/revoke',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({review_id:review.id})});const result=await response.json();
+    if(!response.ok||!result.ok)throw new Error(result.error||'Ссылка не отозвана');toast('Ссылка отозвана');loadReviews();
+  }catch(error){toast('Не удалось отозвать ссылку: '+error.message,true);}}
 let reviewLoadSequence=0;
 async function loadReviews(){const sequence=++reviewLoadSequence,expectedFile=$('projSel').value,button=$('reviewInboxRefresh');
   if(button)button.disabled=true;try{const response=await fetch('/api/reviews',{method:'POST',
@@ -5010,30 +5205,47 @@ $('projRen').onclick=async()=>{   // переименовать текущее �
   if(p.ok){fillForm();loadProjects();schedule();toast('Переименовано: '+name);}
   else{SPEC.project_name=previousName;toast('Ошибка: '+(p.error||''),true);}
 };
-$('projShare').onclick=async()=>{
+$('projShare').onclick=()=>{
   if(modelMutationLocked()){toast('Дождитесь завершения текущего изменения модели',true);return;}
-  const button=$('projShare'),label=button.lastChild&&button.lastChild.textContent;
+  $('shareSetup').hidden=false;$('shareResult').hidden=true;$('shareEyebrow').textContent='Просмотр для клиента';
+  $('shareDialogTitle').textContent='Создать ссылку';$('shareUrl').value='';$('shareOpen').href='#';
+  const dialog=$('shareDialog');if(dialog.showModal)dialog.showModal();else dialog.setAttribute('open','');
+};
+function selectedShareMode(){return document.querySelector('input[name="shareMode"]:checked')?.value||'snapshot';}
+function syncShareModeNote(){$('shareModeNote').textContent=selectedShareMode()==='live'?
+  'Клиент по тому же адресу увидит последнюю сохранённую версию. Несохранённые правки в ссылку не попадут.':
+  'Будущие правки не изменят то, что увидит клиент.';}
+document.querySelectorAll('input[name="shareMode"]').forEach(input=>input.onchange=syncShareModeNote);syncShareModeNote();
+$('shareCreate').onclick=async()=>{
+  const button=$('shareCreate'),mode=selectedShareMode(),expiry=$('shareExpiry').value;
   button.disabled=true;
   try{
     const response=await fetch('/api/reviews/create',{method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({file:$('projSel').value,spec:SPEC})});
+      body:JSON.stringify({file:$('projSel').value,spec:SPEC,link_mode:mode,
+        expires_in_days:expiry?Number(expiry):null})});
     const result=await response.json();
     if(!response.ok||!result.ok){toast('Ссылка не создана: '+(result.error||'ошибка'),true);return;}
     $('shareUrl').value=result.url;$('shareOpen').href=result.url;
     const created=new Date(result.review.created_at),createdText=Number.isNaN(created.getTime())?'':
       created.toLocaleString('ru-RU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}).replace(',',' ·');
-    $('shareMeta').textContent=`${result.review.project_name} · версия ${result.review.revision.slice(0,10)}${createdText?' · '+createdText:''}`;
-    const dialog=$('shareDialog');if(dialog.showModal)dialog.showModal();else dialog.setAttribute('open','');loadReviews();
+    const expires=result.review.expires_at?` · до ${reviewDate(result.review.expires_at)}`:' · бессрочно';
+    $('shareMeta').textContent=`${result.review.project_name} · версия ${result.review.revision.slice(0,10)}${createdText?' · '+createdText:''}${expires}`;
+    $('shareResultCopy').textContent=mode==='live'?
+      'Эта ссылка будет открывать последнюю сохранённую версию изделия. Полный адрес показывается только сейчас.':
+      'Клиент увидит именно эту зафиксированную версию. Полный адрес показывается только сейчас.';
+    $('shareSetup').hidden=true;$('shareResult').hidden=false;$('shareEyebrow').textContent=mode==='live'?'Обновляемая ссылка':'Версия зафиксирована';
+    $('shareDialogTitle').textContent='Ссылка на просмотр готова';loadReviews();
   }catch(error){toast('Ссылка не создана: '+error.message,true);}
-  finally{button.disabled=false;if(label)button.lastChild.textContent=label;}
+  finally{button.disabled=false;}
 };
 $('shareCopy').onclick=async()=>{
   const field=$('shareUrl');
   try{await navigator.clipboard.writeText(field.value);toast('Ссылка скопирована');}
   catch(error){field.focus();field.select();document.execCommand('copy');toast('Ссылка скопирована');}
 };
-$('shareClose').onclick=()=>{const dialog=$('shareDialog');dialog.close?dialog.close():dialog.removeAttribute('open');};
+function closeShareDialog(){const dialog=$('shareDialog');dialog.close?dialog.close():dialog.removeAttribute('open');}
+$('shareCancel').onclick=closeShareDialog;$('shareClose').onclick=closeShareDialog;
 /* ---------- каталог изделий (AKD-217) ---------- */
 // Точное PNG строится тем же MebelScene, что и рабочая 3D. Старый SVG нужен
 // только как временная заглушка, пока карточка переснимается в фоне.

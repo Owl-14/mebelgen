@@ -17,17 +17,22 @@ def build_review_page(
     stats: Mapping[str, Any],
     scene_js: str,
 ) -> str:
+    from .studio_review_pdf import PRESENTATION_JS
+
     public_review = {
         "project_name": str(record.get("project_name") or "Изделие"),
         "organization_name": str(record.get("organization_name") or ""),
         "revision": str(record.get("revision") or ""),
+        "link_mode": str(record.get("link_mode") or "snapshot"),
         "created_at": str(record.get("created_at") or ""),
+        "expires_at": str(record.get("expires_at") or ""),
         "status": str(record.get("status") or "pending"),
         "decision": record.get("decision"),
     }
     payload = {"viewer": dict(viewer), "stats": dict(stats)}
     return (
         _PAGE.replace("__SCENE_JS__", scene_js)
+        .replace("__PRESENTATION_JS__", PRESENTATION_JS)
         .replace("__REVIEW__", _safe_json(public_review))
         .replace("__PAYLOAD__", _safe_json(payload))
     )
@@ -67,6 +72,9 @@ _PAGE = r"""<!doctype html>
   .status::before{content:"";width:6px;height:6px;border-radius:50%;background:#c18227}
   .status.approved{background:#e9f6ef;color:#126c3d}.status.approved::before{background:var(--ok)}
   .status.changes_requested{background:#fff3e5;color:#8a5211}.status.changes_requested::before{background:#c57a20}
+  .pdf-action{height:31px;padding:0 10px;border:1px solid var(--line-strong);border-radius:4px;
+    background:#fff;color:#35404d;font-size:10.5px;font-weight:700;cursor:pointer;white-space:nowrap}
+  .pdf-action:hover{background:#f1f4f7}.pdf-action:disabled{opacity:.58;cursor:wait}
   main{display:grid;grid-template-columns:minmax(0,1fr) 330px;min-height:0}
   .stage{position:relative;min-width:0;min-height:0;overflow:hidden;background:#e8ecf1}
   #view3d{position:absolute;inset:0}.stage-tools{position:absolute;z-index:8;display:flex;
@@ -121,6 +129,8 @@ _PAGE = r"""<!doctype html>
   .decision-result{display:none;margin-top:8px;padding:7px 8px;border-radius:3px;background:#edf3ff;
     color:#31547f;font-size:10.5px}.decision-result.on{display:block}.decision button:disabled{opacity:.55;cursor:wait}
   .mobile-dock,.sheet-head,.sheet-scrim{display:none}
+  #presentationCapture{position:fixed;left:-10000px;top:0;width:1280px;height:800px;visibility:hidden;
+    pointer-events:none;overflow:hidden}
   @media(max-width:900px){main{grid-template-columns:minmax(0,1fr) 286px}.revision span{display:none}}
   @media(max-width:700px){
     .shell{grid-template-rows:52px minmax(0,1fr)}header{padding:0 max(10px,env(safe-area-inset-right)) 0 max(10px,env(safe-area-inset-left));gap:8px}
@@ -132,7 +142,7 @@ _PAGE = r"""<!doctype html>
     .stage-tools button{min-width:46px;height:42px;padding:0 10px;font-size:11px;white-space:nowrap}
     #views{top:8px}#layers{top:56px}.model-actions{top:104px}.model-actions button{min-width:93px}
     .explode{grid-template-columns:auto 90px 31px;min-height:42px;font-size:11px}.explode input{width:90px}.hint{display:none}
-    .mobile-dock{position:absolute;display:grid;grid-template-columns:1fr 1fr;gap:8px;left:max(10px,env(safe-area-inset-left));
+    .mobile-dock{position:absolute;display:grid;grid-template-columns:.75fr 1fr 1fr;gap:8px;left:max(10px,env(safe-area-inset-left));
       right:max(10px,env(safe-area-inset-right));bottom:max(9px,env(safe-area-inset-bottom));z-index:11;padding:5px;
       border:1px solid rgba(199,205,214,.96);border-radius:10px;background:rgba(255,255,255,.94);
       box-shadow:0 7px 22px rgba(24,34,47,.16);backdrop-filter:blur(12px)}
@@ -153,6 +163,7 @@ _PAGE = r"""<!doctype html>
     .decision textarea{height:82px;padding:10px 11px}.attachment-trigger{min-height:44px;font-size:12px}
     .attachment-item{min-height:44px;font-size:11px}.attachment-item button{width:36px;height:36px}
     .decision-actions{gap:8px}.decision-actions button{height:44px;font-size:12px}
+    header>.pdf-action{display:none}
   }
   @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
 </style></head><body>
@@ -164,6 +175,7 @@ _PAGE = r"""<!doctype html>
     </a>
     <div class="title-block"><span id="reviewContext" class="eyebrow">Версия для согласования</span><h1 id="projectName"></h1></div>
     <div class="revision"><span id="createdAt"></span><code id="revision"></code></div>
+    <button id="downloadPdf" class="pdf-action" type="button">Скачать PDF</button>
     <div id="reviewStatus" class="status"></div>
   </header>
   <main>
@@ -189,6 +201,7 @@ _PAGE = r"""<!doctype html>
       <div class="hint">Перетаскивание — вращать · колесо — масштаб · клик — выбрать деталь или открыть фасад</div>
     </section>
     <nav class="mobile-dock" aria-label="Действия с версией">
+      <button id="mobilePdf" type="button">PDF</button>
       <button id="mobileDetails" type="button">Об изделии</button>
       <button id="mobileDecision" type="button">Согласовать</button>
     </nav>
@@ -221,7 +234,7 @@ _PAGE = r"""<!doctype html>
         </section>
       </div>
       <section class="decision" aria-labelledby="decisionTitle"><h2 id="decisionTitle">Решение по этой версии</h2>
-        <p class="decision-copy">Ответ сохранится именно для версии, которую вы сейчас видите.</p>
+        <p id="decisionCopy" class="decision-copy">Ответ сохранится именно для версии, которую вы сейчас видите.</p>
         <label><span class="panel-label">Ваше имя</span><input id="reviewerName" autocomplete="name"></label>
         <label><span class="panel-label" style="margin-top:7px">Комментарий</span>
           <textarea id="reviewComment" placeholder="Если нужны изменения — опишите их здесь"></textarea></label>
@@ -240,6 +253,7 @@ _PAGE = r"""<!doctype html>
     </aside>
   </main>
 </div>
+<div id="presentationCapture" aria-hidden="true"></div>
 <script src="/vendor/three.min.js"></script><script src="/vendor/OrbitControls.js"></script>
 <script>
 __SCENE_JS__
@@ -253,7 +267,11 @@ function renderReviewStatus(){const element=$('reviewStatus');element.className=
   if(REVIEW.decision){$('decisionResult').classList.add('on');$('decisionResult').textContent=
     `${statusLabels[REVIEW.decision.status]} · ${REVIEW.decision.reviewer_name}`+
     (REVIEW.decision.comment?` — ${REVIEW.decision.comment}`:'');renderAttachmentList();}}
-$('reviewContext').textContent=(REVIEW.organization_name?REVIEW.organization_name+' · ':'')+'Версия для согласования';
+$('reviewContext').textContent=(REVIEW.organization_name?REVIEW.organization_name+' · ':'')+
+  (REVIEW.link_mode==='live'?'Обновляемый просмотр':'Фиксированная версия');
+$('decisionCopy').textContent=REVIEW.link_mode==='live'?
+  'Ответ сохранится для версии, которую вы сейчас видите. Если изделие обновится во время просмотра, мы попросим проверить его заново.':
+  'Ответ сохранится именно для зафиксированной версии, которую вы сейчас видите.';
 $('projectName').textContent=REVIEW.project_name;$('overviewName').textContent=REVIEW.project_name;
 $('createdAt').textContent=formatDate(REVIEW.created_at);$('revision').textContent=(REVIEW.revision||'').slice(0,10);
 $('overviewDims').textContent=PAYLOAD.stats.dims||'—';$('overviewPanels').textContent=PAYLOAD.stats.n_panels??'—';
@@ -266,6 +284,8 @@ function setSheet(open,target='details'){
   requestAnimationFrame(()=>{if(target==='decision')$('decisionTitle').scrollIntoView({block:'start'});else sheetScroll.scrollTop=0;});
 }
 $('mobileDetails').onclick=()=>setSheet(true,'details');$('mobileDecision').onclick=()=>setSheet(true,'decision');
+$('downloadPdf').onclick=event=>downloadPresentationPdf(event.currentTarget);
+$('mobilePdf').onclick=event=>downloadPresentationPdf(event.currentTarget);
 $('sheetClose').onclick=()=>setSheet(false);$('sheetScrim').onclick=()=>setSheet(false);
 function syncMobileState(){if(!mobileQuery.matches){sheet.classList.remove('open');$('sheetScrim').classList.remove('open');
     sheet.setAttribute('aria-hidden','false');}
@@ -325,16 +345,18 @@ async function decide(status){const name=$('reviewerName').value.trim(),comment=
   try{for(let index=0;index<selectedFiles.length;index++){const entry=selectedFiles[index];if(entry.attachmentId)continue;
       $('decisionResult').textContent=`Загружаем файл ${index+1} из ${selectedFiles.length}…`;
       const upload=await fetch(location.pathname+'/attachments',{method:'POST',headers:{'Content-Type':entry.file.type,
-        'X-Akeda-Filename':encodeURIComponent(entry.file.name)},body:entry.file});
+        'X-Akeda-Filename':encodeURIComponent(entry.file.name),'X-Akeda-Revision':REVIEW.revision},body:entry.file});
       const uploaded=await upload.json();if(!upload.ok)throw new Error(uploaded.error||'Файл не загружен');entry.attachmentId=uploaded.attachment.id;}
     $('decisionResult').textContent='Сохраняем решение…';
     const response=await fetch(location.pathname+'/decision',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({decision:status,reviewer_name:name,comment,attachment_ids:selectedFiles.map(item=>item.attachmentId)})});
+    body:JSON.stringify({decision:status,reviewer_name:name,comment,revision:REVIEW.revision,
+      attachment_ids:selectedFiles.map(item=>item.attachmentId)})});
     const result=await response.json();if(!response.ok)throw new Error(result.error||'Ответ не сохранён');
     REVIEW.status=result.status;REVIEW.decision=result.decision;selectedFiles=[];renderReviewStatus();
   }catch(error){$('decisionResult').classList.add('on');$('decisionResult').textContent=error.message;}
   finally{buttons.forEach(button=>button.disabled=false);}}
 $('approve').onclick=()=>decide('approved');$('requestChanges').onclick=()=>decide('changes_requested');
+__PRESENTATION_JS__
 </script></body></html>"""
 
 

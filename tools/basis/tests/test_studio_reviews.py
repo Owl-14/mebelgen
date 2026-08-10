@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+import pytest
 from argon2 import PasswordHasher, Type
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -20,6 +21,7 @@ sys.path.insert(0, str(ROOT))
 from src.admin import CSRF_COOKIE, SESSION_COOKIE
 from src.identity import IdentityStore
 from src.studio import _Studio, make_handler
+from src.studio_reviews import ReviewNotFound, StudioReviewStore
 from src.webviewer import SCENE_JS
 
 
@@ -95,6 +97,35 @@ class Browser:
         )
         assert status == 200, body
         assert SESSION_COOKIE in self.cookies and CSRF_COOKIE in self.cookies
+
+
+def test_review_store_expires_link_but_keeps_management_record(tmp_path: Path) -> None:
+    reviews = StudioReviewStore(tmp_path / "reviews")
+    spec = {
+        "schemaVersion": "paramspec-v1",
+        "project_name": "Версия со сроком",
+    }
+    token, created = reviews.create(
+        spec,
+        organization_id="org-1",
+        organization_name="Константа",
+        project_file="product.json",
+        actor_user_id="user-1",
+        actor_name="Алексей",
+        expires_in_days=7,
+    )
+    path = reviews.root / f"{reviews.token_hash(token)}.json"
+    record = json.loads(path.read_text(encoding="utf-8"))
+    record["expires_at"] = "2000-01-01T00:00:00+00:00"
+    path.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
+
+    with pytest.raises(ReviewNotFound):
+        reviews.load(token)
+    managed = reviews.list_for_project(
+        organization_id="org-1", project_file="product.json"
+    )
+    assert managed[0]["id"] == created["id"]
+    assert managed[0]["access_status"] == "expired"
 
 
 def test_review_link_freezes_version_and_accepts_public_decision(tmp_path: Path) -> None:
@@ -175,6 +206,8 @@ def test_review_link_freezes_version_and_accepts_public_decision(tmp_path: Path)
         token = review_path.rsplit("/", 1)[-1]
         revision = created["review"]["revision"]
         assert len(token) >= 32 and len(revision) == 64
+        assert created["review"]["link_mode"] == "snapshot"
+        assert created["review"]["expires_at"] is None
 
         stored_text = "\n".join(
             path.read_text(encoding="utf-8")
@@ -201,8 +234,13 @@ def test_review_link_freezes_version_and_accepts_public_decision(tmp_path: Path)
         assert "viewport-fit=cover" in html and 'class="mobile-dock"' in html
         assert 'id="reviewSheet"' in html and 'id="layers" class="stage-tools"' in html
         assert 'data-layer="holes"' in html and 'aria-pressed="true"' in html
+        assert "Фиксированная версия" in html
         assert "4 / 5" not in html and "layersToggle" not in html
         assert "Прикрепить файлы" in html and "formatEdges" in html
+        assert "Скачать PDF" in html and 'id="mobilePdf"' in html
+        assert "downloadPresentationPdf" in html and "presentationPdf" in html
+        assert "РАЗОБРАННЫЙ ВИД И ОСНОВНЫЕ ХАРАКТЕРИСТИКИ" in html
+        assert "REVIEW.revision" in html and "производственных данных" in html
         assert "chatMsg" not in html and "btnSave" not in html and "btnB3d" not in html
         assert "paramspec-v1" not in html
 
@@ -286,6 +324,107 @@ def test_review_link_freezes_version_and_accepts_public_decision(tmp_path: Path)
         assert status == 200
         assert '"status": "approved"' in approved_html
         assert "Мария, дизайнер клиента" in approved_html
+
+        unsaved = json.loads(json.dumps(changed))
+        unsaved["dimensions"]["width"] += 1
+        status, unsaved_body = editor.request(
+            "POST",
+            "/api/reviews/create",
+            {
+                "file": "product.json",
+                "spec": unsaved,
+                "link_mode": "live",
+                "expires_in_days": 7,
+            },
+            csrf=True,
+        )
+        assert status == 409
+        assert json.loads(unsaved_body)["code"] == "save_required"
+
+        status, live_create_body = editor.request(
+            "POST",
+            "/api/reviews/create",
+            {
+                "file": "product.json",
+                "spec": changed,
+                "link_mode": "live",
+                "expires_in_days": 7,
+            },
+            csrf=True,
+        )
+        assert status == 200, live_create_body
+        live_created = json.loads(live_create_body)
+        live_path = urlsplit(live_created["url"]).path
+        live_revision = live_created["review"]["revision"]
+        assert live_created["review"]["link_mode"] == "live"
+        assert live_created["review"]["expires_at"]
+
+        status, live_body = client.request("GET", live_path)
+        live_html = live_body.decode("utf-8")
+        assert status == 200
+        assert "Шкаф уже изменён после отправки" in live_html
+        assert "2999" in live_html
+        assert "Обновляемый просмотр" in live_html
+
+        latest = json.loads(json.dumps(changed))
+        latest["project_name"] = "Шкаф — актуальная сохранённая версия"
+        latest["dimensions"]["width"] = 3011
+        product_path.write_text(json.dumps(latest, ensure_ascii=False), encoding="utf-8")
+        status, latest_body = client.request("GET", live_path)
+        latest_html = latest_body.decode("utf-8")
+        assert status == 200
+        assert "Шкаф — актуальная сохранённая версия" in latest_html
+        assert "3011" in latest_html
+        assert live_revision not in latest_html
+
+        status, stale_body = client.request(
+            "POST",
+            live_path + "/decision",
+            {
+                "decision": "approved",
+                "reviewer_name": "Мария",
+                "revision": live_revision,
+            },
+        )
+        assert status == 409
+        assert json.loads(stale_body)["code"] == "review_revision_changed"
+
+        import hashlib
+
+        latest_revision = hashlib.sha256(
+            json.dumps(
+                latest, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            ).encode("utf-8")
+        ).hexdigest()
+        status, live_decision_body = client.request(
+            "POST",
+            live_path + "/decision",
+            {
+                "decision": "approved",
+                "reviewer_name": "Мария",
+                "revision": latest_revision,
+            },
+        )
+        assert status == 200, live_decision_body
+        assert json.loads(live_decision_body)["revision"] == latest_revision
+
+        status, revoke_body = editor.request(
+            "POST",
+            "/api/reviews/revoke",
+            {"review_id": live_created["review"]["id"]},
+            csrf=True,
+        )
+        assert status == 200, revoke_body
+        assert client.request("GET", live_path)[0] == 404
+        status, managed_body = editor.request("POST", "/api/reviews", {}, csrf=True)
+        assert status == 200
+        managed = json.loads(managed_body)["reviews"]
+        revoked = next(
+            item for item in managed if item["id"] == live_created["review"]["id"]
+        )
+        assert revoked["access_status"] == "revoked"
+        assert revoked["link_mode"] == "live"
+        assert revoked["decision"]["revision"] == latest_revision
         assert client.request("GET", "/review/not-a-real-token")[0] == 404
     finally:
         server.shutdown()
