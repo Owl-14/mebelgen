@@ -66,6 +66,14 @@ def test_catalog_has_its_own_accessible_context() -> None:
     assert dom.by_id["catScopes"][1].get("role") == "group"
     assert dom.by_id["catResponsible"][1].get("aria-label") == "Ответственный"
     assert dom.by_id["catStatus"][1].get("aria-label") == "Статус изделия"
+    assert dom.by_id["catInspectResponsibleSelect"][1].get("aria-label") == (
+        "Изменить ответственного"
+    )
+    assert dom.by_id["catArchiveDialog"][1].get("aria-labelledby") == (
+        "catArchiveDialogTitle"
+    )
+    assert dom.by_id["catArchiveReason"][1].get("maxlength") == "240"
+    assert dom.by_id["catRestore"][1].get("type") == "button"
     assert dom.by_id["catalogPreviewRenderer"][1].get("aria-hidden") == "true"
 
 
@@ -146,6 +154,22 @@ def test_catalog_keyboard_contract_and_escape_priority() -> None:
     assert "if(!CAT_SELECTED_FILE){event.preventDefault();event.stopPropagation();closeCatalog();return;}" in keyboard
     assert "if(CAT_SELECTED_FILE){clearCatalogSelection" in PAGE
     assert "openCatalogItem(file)" in keyboard
+
+
+def test_catalog_management_is_recoverable_and_server_backed() -> None:
+    assert "['archived','Архив',CAT_COUNTS.archived]" in PAGE
+    assert "fetch('/api/catalog/assign'" in PAGE
+    assert "fetch('/api/catalog/archive'" in PAGE
+    assert "fetch('/api/catalog/restore'" in PAGE
+    assert "модель, версии, AI-история" in PAGE
+    inspector = PAGE[
+        PAGE.index("function renderCatalogInspector(){") :
+        PAGE.index("function syncCatalogSelection")
+    ]
+    assert "item.can_manage" in inspector
+    assert "item.archived" in inspector
+    assert "catArchiveMeta" in inspector
+    assert "catInspectResponsibleSelect" in inspector
 
 
 def test_catalog_projects_publish_real_metadata(tmp_path: Path) -> None:

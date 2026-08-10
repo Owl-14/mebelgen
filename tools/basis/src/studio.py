@@ -20,6 +20,7 @@ import base64
 import hashlib
 import secrets
 import threading
+import unicodedata
 import webbrowser
 from email.utils import formatdate
 from http.cookies import SimpleCookie
@@ -399,6 +400,137 @@ def _stamp_catalog_identity(
     return spec
 
 
+def _catalog_product_name(value: Any) -> str:
+    """Normalize a display name without turning it into a filesystem path."""
+
+    name = unicodedata.normalize("NFKC", str(value or "")).strip()
+    name = " ".join(name.split())
+    if not name:
+        raise ValueError("Укажите название изделия")
+    if len(name) > 120:
+        raise ValueError("Название не длиннее 120 символов")
+    if any(unicodedata.category(char).startswith("C") for char in name):
+        raise ValueError("Название содержит недопустимые символы")
+    return name
+
+
+def _catalog_archive_reason(value: Any) -> str:
+    reason = unicodedata.normalize("NFKC", str(value or "")).strip()
+    reason = " ".join(reason.split())
+    if len(reason) < 3:
+        raise ValueError("Коротко укажите причину архивирования")
+    if len(reason) > 240:
+        raise ValueError("Причина не длиннее 240 символов")
+    if any(unicodedata.category(char).startswith("C") for char in reason):
+        raise ValueError("Причина содержит недопустимые символы")
+    return reason
+
+
+def _catalog_can_manage(
+    auth: dict[str, Any] | None,
+    product: dict[str, Any],
+) -> bool:
+    """Object-level catalog authorization after the project.write gate."""
+
+    if auth is None:
+        return True
+    actor = _catalog_actor(auth)
+    if not actor:
+        return False
+    if actor.get("role") == "owner":
+        return True
+    actor_id = str(actor.get("user_id") or "")
+    return bool(
+        actor_id
+        and actor_id
+        in {
+            str(product.get("creator_user_id") or ""),
+            str(product.get("responsible_user_id") or ""),
+        }
+    )
+
+
+def _catalog_spec_permissions(spec: dict[str, Any]) -> dict[str, str]:
+    catalog = spec.get("catalog") if isinstance(spec.get("catalog"), dict) else {}
+    return {
+        "creator_user_id": str(catalog.get("creator_user_id") or ""),
+        "responsible_user_id": str(catalog.get("responsible_user_id") or ""),
+    }
+
+
+def _catalog_name_conflict(
+    projects: list[dict[str, Any]],
+    name: str,
+    *,
+    exclude_file: str = "",
+) -> bool:
+    key = unicodedata.normalize("NFKC", name).casefold()
+    return any(
+        str(project.get("file") or "") != exclude_file
+        and unicodedata.normalize("NFKC", str(project.get("name") or "")).casefold() == key
+        for project in projects
+    )
+
+
+def _archived_catalog_projects(
+    manifests: list[dict[str, Any]],
+    *,
+    auth: dict[str, Any] | None,
+    member_names: dict[str, str] | None = None,
+) -> list[dict[str, Any]]:
+    names = member_names or {}
+    projects: list[dict[str, Any]] = []
+    for manifest in manifests:
+        dimensions = manifest.get("dimensions") if isinstance(manifest.get("dimensions"), dict) else {}
+        materials = manifest.get("materials") if isinstance(manifest.get("materials"), dict) else {}
+        creator_user_id = str(manifest.get("creator_user_id") or "")
+        responsible_user_id = str(manifest.get("responsible_user_id") or "")
+        draft = bool(manifest.get("draft"))
+        archetype = str(manifest.get("archetype") or "")
+        furniture_type = str(manifest.get("furniture_type") or "")
+        archived_at = str(manifest.get("archived_at") or "")
+        try:
+            from datetime import datetime
+
+            updated_at = int(datetime.fromisoformat(archived_at).timestamp())
+        except (TypeError, ValueError):
+            updated_at = 0
+        item = {
+            "archive_id": str(manifest.get("id") or ""),
+            "file": str(manifest.get("project_file") or ""),
+            "name": str(manifest.get("project_name") or "Без названия"),
+            "archetype": archetype or ("черновик" if draft else "?"),
+            "dims": (
+                "—" if draft else
+                f'{dimensions.get("width", "?")}×{dimensions.get("depth", "?")}×{dimensions.get("height", "?")}'
+            ),
+            "decor": str(materials.get("color") or ""),
+            "draft": draft,
+            "preview": bool(manifest.get("preview")),
+            "preview_current": False,
+            "ftype": furniture_type,
+            "category": _catalog_section(
+                archetype=archetype,
+                furniture_type=furniture_type,
+                draft=draft,
+            ),
+            "status": "archived",
+            "archived": True,
+            "archived_at": archived_at,
+            "archived_by": str(manifest.get("archived_by") or ""),
+            "archive_reason": str(manifest.get("reason") or ""),
+            "updated_at": updated_at,
+            "creator_user_id": creator_user_id,
+            "responsible_user_id": responsible_user_id,
+            "responsible": names.get(responsible_user_id)
+            or str(manifest.get("responsible") or ""),
+            "author": names.get(creator_user_id) or str(manifest.get("author") or ""),
+        }
+        item["can_manage"] = _catalog_can_manage(auth, item)
+        projects.append(item)
+    return projects
+
+
 def _migrate_catalog_identity(spec_dir: Path, owner: dict[str, str] | None) -> None:
     """Attach legacy tenant products to the organization owner without touching mtime."""
 
@@ -556,6 +688,19 @@ def _safe_spec_file(spec_dir: Path, fname: str) -> Path:
     if p.parent != spec_dir.resolve() or p.suffix != ".json" or not p.is_file():
         raise FileNotFoundError("изделие не найдено")
     return p
+
+
+def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
+    temporary = path.with_name(f".{path.name}.{secrets.token_hex(6)}.tmp")
+    try:
+        temporary.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        temporary.replace(path)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
 
 
 def _spec_revision(spec: dict[str, Any]) -> str:
@@ -1176,6 +1321,21 @@ def make_handler(st: _Studio):
         def do_GET(self):
             path = urlsplit(self.path).path
             parts = path.strip("/").split("/")
+            if len(parts) == 2 and parts[0] == "archive-preview":
+                auth = self._require_access("project.read")
+                if st.require_auth and auth is None:
+                    return
+                try:
+                    preview = st.workspaces.archived_preview_path(auth, parts[1])
+                    self._send(
+                        200,
+                        preview.read_bytes(),
+                        "image/png",
+                        headers=[("Cache-Control", "private, no-store")],
+                    )
+                except FileNotFoundError:
+                    self._send(404, b"{}")
+                return
             if len(parts) == 4 and parts[0] == "review" and parts[2] == "attachments":
                 try:
                     metadata, attachment_path = st.reviews.attachment_for_token(
@@ -1553,6 +1713,9 @@ def make_handler(st: _Studio):
                     "/api/new": "project.create",
                     "/api/duplicate": "project.create",
                     "/api/rename": "project.write",
+                    "/api/catalog/assign": "project.write",
+                    "/api/catalog/archive": "project.write",
+                    "/api/catalog/restore": "project.write",
                     "/api/catalog-preview": "project.write",
                     "/api/catalog-preview-source": "project.read",
                     "/api/reviews/create": "project.write",
@@ -1808,31 +1971,47 @@ def make_handler(st: _Studio):
                         members[0] if members else None,
                     )
                     _migrate_catalog_identity(workspace.spec_dir, owner)
-                    all_projects = _list_projects(
+                    active_projects = _list_projects(
                         workspace.spec_dir, member_names=member_names
                     )
+                    for item in active_projects:
+                        item["can_manage"] = bool(
+                            workspace.mode != "demo" and _catalog_can_manage(auth, item)
+                        )
+                    archived_projects = _archived_catalog_projects(
+                        st.workspaces.list_archived_products(auth),
+                        auth=auth,
+                        member_names=member_names,
+                    )
+                    if workspace.mode == "demo":
+                        for item in archived_projects:
+                            item["can_manage"] = False
                     actor = _catalog_actor(auth)
                     current_user_id = str((actor or {}).get("user_id") or "")
+                    archive_mode = str(body.get("scope") or "all") == "archived"
+                    catalog_source = archived_projects if archive_mode else active_projects
                     projects = _filter_catalog_projects(
-                        all_projects, body, current_user_id=current_user_id
+                        catalog_source, body, current_user_id=current_user_id
                     )
                     self._json({
                         "projects": projects,
                         "current": spec_path.name,
-                        "total": len(all_projects),
+                        "total": len(catalog_source),
                         "counts": {
-                            "all": len(all_projects),
+                            "all": len(active_projects),
                             "mine": sum(
                                 item.get("responsible_user_id") == current_user_id
-                                for item in all_projects
+                                for item in active_projects
                             ) if current_user_id else 0,
                             "unassigned": sum(
-                                not item.get("responsible_user_id") for item in all_projects
+                                not item.get("responsible_user_id") for item in active_projects
                             ),
+                            "archived": len(archived_projects),
                         },
                         "members": members,
-                        "types": sorted({str(item["category"]) for item in all_projects}),
+                        "types": sorted({str(item["category"]) for item in catalog_source}),
                         "current_user_id": current_user_id,
+                        "archive_mode": archive_mode,
                     })
                 elif path == "/api/open":        # открыть другую спеку (D1)
                     p = _safe_spec_file(workspace.spec_dir, str(body.get("file", "")))
@@ -1847,16 +2026,27 @@ def make_handler(st: _Studio):
                         self._json({"ok": False, "error":
                                     "демо-режим: исходное изделие защищено"}, 403)
                         return
-                    name = str(body.get("name") or "").strip()
-                    if not name:
-                        self._json({"ok": False, "error": "Укажите название изделия"}, 400)
-                        return
                     renamed = json.loads(p.read_text(encoding="utf-8"))
+                    if not _catalog_can_manage(auth, _catalog_spec_permissions(renamed)):
+                        self._json({
+                            "ok": False,
+                            "error": "Этим изделием управляет другой сотрудник",
+                            "code": "project_forbidden",
+                        }, 403)
+                        return
+                    name = _catalog_product_name(body.get("name"))
+                    existing = _list_projects(workspace.spec_dir)
+                    if _catalog_name_conflict(existing, name, exclude_file=p.name):
+                        self._json({
+                            "ok": False,
+                            "error": "Изделие с таким названием уже есть в каталоге",
+                            "code": "name_conflict",
+                        }, 409)
+                        return
                     previous_name = str(renamed.get("project_name") or p.stem)
                     _snapshot_version(p, renamed)
                     renamed["project_name"] = name
-                    p.write_text(json.dumps(renamed, ensure_ascii=False, indent=2),
-                                 encoding="utf-8")
+                    _write_json_atomic(p, renamed)
                     _snapshot_version(p, renamed)
                     self._audit_product_action(
                         auth, "studio.project.renamed", p,
@@ -1873,6 +2063,162 @@ def make_handler(st: _Studio):
                          if item["file"] == p.name), None
                     )
                     self._json({"ok": True, "file": p.name, "project": project})
+                elif path == "/api/catalog/assign":
+                    p = _safe_spec_file(workspace.spec_dir, str(body.get("file", "")))
+                    if workspace.mode == "demo":
+                        self._json({"ok": False, "error": "Демо-каталог неизменяем"}, 403)
+                        return
+                    assigned = json.loads(p.read_text(encoding="utf-8"))
+                    if not _catalog_can_manage(auth, _catalog_spec_permissions(assigned)):
+                        self._json({
+                            "ok": False,
+                            "error": "Этим изделием управляет другой сотрудник",
+                            "code": "project_forbidden",
+                        }, 403)
+                        return
+                    responsible_user_id = str(body.get("responsible_user_id") or "")
+                    members = _catalog_members(st, auth)
+                    responsible = next(
+                        (member for member in members
+                         if member["user_id"] == responsible_user_id),
+                        None,
+                    ) if responsible_user_id else None
+                    if responsible_user_id and responsible is None:
+                        self._json({
+                            "ok": False,
+                            "error": "Ответственный не найден среди активных сотрудников",
+                            "code": "member_unavailable",
+                        }, 409)
+                        return
+                    catalog = dict(assigned.get("catalog") or {})
+                    previous_user_id = str(catalog.get("responsible_user_id") or "")
+                    previous_name = str(catalog.get("responsible") or "")
+                    if previous_user_id == responsible_user_id:
+                        self._json({"ok": True, "file": p.name, "unchanged": True})
+                        return
+                    _snapshot_version(p, assigned)
+                    catalog["responsible_user_id"] = responsible_user_id
+                    catalog["responsible"] = str((responsible or {}).get("display_name") or "")
+                    assigned["catalog"] = catalog
+                    _write_json_atomic(p, assigned)
+                    _snapshot_version(p, assigned)
+                    self._audit_product_action(
+                        auth,
+                        "studio.project.responsible_changed",
+                        p,
+                        {
+                            "previous_user_id": previous_user_id,
+                            "previous_name": previous_name,
+                            "responsible_user_id": responsible_user_id,
+                            "responsible": catalog["responsible"],
+                        },
+                    )
+                    self._json({
+                        "ok": True,
+                        "file": p.name,
+                        "responsible_user_id": responsible_user_id,
+                        "responsible": catalog["responsible"],
+                    })
+                elif path == "/api/catalog/archive":
+                    p = _safe_spec_file(workspace.spec_dir, str(body.get("file", "")))
+                    if workspace.mode == "demo":
+                        self._json({"ok": False, "error": "Демо-каталог неизменяем"}, 403)
+                        return
+                    archived_spec = json.loads(p.read_text(encoding="utf-8"))
+                    if not _catalog_can_manage(auth, _catalog_spec_permissions(archived_spec)):
+                        self._json({
+                            "ok": False,
+                            "error": "Этим изделием управляет другой сотрудник",
+                            "code": "project_forbidden",
+                        }, 403)
+                        return
+                    reason = _catalog_archive_reason(body.get("reason"))
+                    actor = _catalog_actor(auth) or {}
+                    try:
+                        manifest = st.workspaces.archive_product(
+                            auth,
+                            p,
+                            actor_user_id=str(actor.get("user_id") or ""),
+                            actor_name=str(actor.get("display_name") or "Локальный пользователь"),
+                            reason=reason,
+                        )
+                    except FileExistsError as error:
+                        self._json({"ok": False, "error": str(error), "code": "archive_conflict"}, 409)
+                        return
+                    self._audit_product_action(
+                        auth,
+                        "studio.project.archived",
+                        p,
+                        {
+                            "archive_id": manifest["id"],
+                            "name": manifest["project_name"],
+                            "reason": reason,
+                            "revision": manifest["revision"],
+                        },
+                    )
+                    self._json({
+                        "ok": True,
+                        "archive_id": manifest["id"],
+                        "file": manifest["project_file"],
+                        "name": manifest["project_name"],
+                    })
+                elif path == "/api/catalog/restore":
+                    if workspace.mode == "demo":
+                        self._json({"ok": False, "error": "Демо-каталог неизменяем"}, 403)
+                        return
+                    archive_id = str(body.get("archive_id") or "")
+                    manifests = st.workspaces.list_archived_products(auth)
+                    manifest = next(
+                        (item for item in manifests if str(item.get("id") or "") == archive_id),
+                        None,
+                    )
+                    if manifest is None:
+                        self._json({"ok": False, "error": "Архив не найден", "code": "not_found"}, 404)
+                        return
+                    if not _catalog_can_manage(auth, manifest):
+                        self._json({
+                            "ok": False,
+                            "error": "Этим изделием управляет другой сотрудник",
+                            "code": "project_forbidden",
+                        }, 403)
+                        return
+                    active_projects = _list_projects(workspace.spec_dir)
+                    restore_name = _catalog_product_name(manifest.get("project_name"))
+                    if _catalog_name_conflict(active_projects, restore_name):
+                        self._json({
+                            "ok": False,
+                            "error": "В каталоге уже есть изделие с таким названием",
+                            "code": "name_conflict",
+                        }, 409)
+                        return
+                    actor = _catalog_actor(auth) or {}
+                    try:
+                        restored = st.workspaces.restore_product(
+                            auth,
+                            archive_id,
+                            actor_user_id=str(actor.get("user_id") or ""),
+                            actor_name=str(actor.get("display_name") or "Локальный пользователь"),
+                        )
+                    except FileExistsError as error:
+                        self._json({"ok": False, "error": str(error), "code": "restore_conflict"}, 409)
+                        return
+                    restored_path = workspace.spec_dir / str(restored["project_file"])
+                    self._audit_product_action(
+                        auth,
+                        "studio.project.restored",
+                        restored_path,
+                        {
+                            "archive_id": archive_id,
+                            "name": restored["project_name"],
+                            "archive_reason": restored.get("reason") or "",
+                        },
+                    )
+                    self._json({
+                        "ok": True,
+                        "archive_id": archive_id,
+                        "file": restored["project_file"],
+                        "name": restored["project_name"],
+                    })
                 elif path == "/api/new":         # новое изделие: черновик (AKD-214)
                     name = str(body.get("name") or "Новое изделие")
                     new_spec = _stamp_catalog_identity(
@@ -2616,6 +2962,8 @@ PAGE = r"""<!DOCTYPE html>
     color:#485260;font-size:11px;line-height:15px;font-weight:600}
   .cat-inspector-status::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--ok)}
   .cat-inspector-status.is-draft::before{background:#c78a2b}
+  .cat-inspector-status.is-archived{color:#75511c}
+  .cat-inspector-status.is-archived::before{background:#b8781d}
   .cat-inspector-group{margin:0;padding:0}
   .cat-inspector-group+.cat-inspector-group{margin-top:13px;padding-top:11px;
     border-top:1px solid #e7eaee}
@@ -2627,10 +2975,16 @@ PAGE = r"""<!DOCTYPE html>
   .cat-inspector-row dt{color:#737c89}
   .cat-inspector-row dd{margin:0;color:#303844;font-weight:500;overflow-wrap:anywhere;
     font-variant-numeric:tabular-nums}
+  #catInspectResponsibleSelect{height:28px;min-width:0;padding:0 24px 0 7px;
+    border:1px solid #ccd3dc;border-radius:4px;background:#fff;color:#303844;font-size:10.5px}
+  #catInspectResponsibleSelect:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
   .cat-inspector-note{margin:8px 0 0;color:#747d89;font-size:10.5px;line-height:15px}
   #catInspectorActions{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:10px 14px 14px;
     border-top:1px solid var(--line);background:#fff}
-  #catOpen{grid-column:1/-1}
+  #catOpen,#catRestore{grid-column:1/-1}
+  #catArchive{grid-column:1/-1;border-color:#e1b7b9;background:#fff7f7;color:#9d3034}
+  #catArchive:hover{border-color:#d49497;background:#fff0f0;color:#88252a}
+  #catRestore{border-color:#9db9e6;background:#eef4ff;color:#245eae;font-weight:600}
   @media (max-width:1200px){
     #catWorkspace.has-selection{grid-template-columns:minmax(0,1fr) 268px}
     #catInspectPreview{height:150px;flex-basis:150px}
@@ -2761,9 +3115,10 @@ PAGE = r"""<!DOCTYPE html>
          transform:translateX(-50%);z-index:9;
          background:#1a1d21;color:#fff;padding:7px 14px;border-radius:8px;font-size:12.5px;
          opacity:0;transition:opacity .25s;pointer-events:none;max-width:80%}
-  #shareDialog{width:min(470px,calc(100vw - 32px));padding:0;border:1px solid #cfd5dd;
+  #shareDialog,#catArchiveDialog{width:min(470px,calc(100vw - 32px));padding:0;border:1px solid #cfd5dd;
     border-radius:8px;background:#fff;color:var(--ink);box-shadow:0 24px 70px rgba(20,31,44,.24)}
-  #shareDialog::backdrop{background:rgba(30,39,50,.42)}
+  #shareDialog::backdrop,#catArchiveDialog::backdrop{background:rgba(30,39,50,.42)}
+  #catArchiveForm{margin:0}
   .share-dialog-head{padding:17px 18px 12px;border-bottom:1px solid #e2e6ea}
   .share-dialog-head span{display:block;margin-bottom:3px;color:#647080;font-size:9.5px;
     font-weight:700;letter-spacing:.06em;text-transform:uppercase}
@@ -2777,6 +3132,15 @@ PAGE = r"""<!DOCTYPE html>
   .share-dialog-actions a{display:flex;align-items:center;justify-content:center;min-height:32px;
     padding:0 12px;border:1px solid var(--accent);border-radius:5px;background:var(--accent);
     color:#fff;text-decoration:none;font-size:11.5px;font-weight:600}
+  .archive-dialog-target{padding:8px 10px;border-left:2px solid #c9862b;background:#fff9ef;
+    color:#3f4855;font-size:11.5px;font-weight:600;overflow-wrap:anywhere}
+  .archive-dialog-field{display:grid;gap:5px;margin-top:12px;color:#5d6876;font-size:10.5px}
+  .archive-dialog-field textarea{height:76px;resize:vertical;padding:8px 9px;border:1px solid #ccd3dc;
+    border-radius:4px;background:#fff;color:#303844;font:11.5px/1.45 "Segoe UI",Arial,sans-serif}
+  .archive-dialog-field textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  #catArchiveError{min-height:16px;margin:7px 0 0;color:#a12e33;font-size:10.5px;line-height:15px}
+  #catArchiveConfirm{border-color:#a6383d;background:#a6383d;color:#fff;font-weight:600}
+  #catArchiveConfirm:hover{border-color:#8f292e;background:#8f292e}
   details{margin-top:8px} textarea{width:100%;height:170px;font:11px/1.4 Consolas,monospace}
   #bom table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:11.5px}
   #bom td{border-bottom:1px solid var(--line);padding:3px 4px;overflow-wrap:anywhere}
@@ -2998,7 +3362,7 @@ PAGE = r"""<!DOCTYPE html>
   <section id="catalogContext" aria-labelledby="catalogContextTitle" hidden>
     <span class="catalog-context-kicker">Рабочий раздел</span>
     <strong id="catalogContextTitle">Каталог компании</strong>
-    <p>Выберите изделие, чтобы открыть его в Studio.</p>
+    <p id="catalogContextHint">Выберите изделие, чтобы открыть его в Studio.</p>
     <span id="catalogContextCount" aria-live="polite">Загрузка изделий…</span>
   </section>
 
@@ -3462,8 +3826,19 @@ PAGE = r"""<!DOCTYPE html>
           <section class="cat-inspector-group">
             <h4>Работа</h4>
             <dl>
-              <div class="cat-inspector-row"><dt>Ответственный</dt><dd id="catInspectResponsible"></dd></div>
+              <div class="cat-inspector-row"><dt>Ответственный</dt><dd>
+                <span id="catInspectResponsible"></span>
+                <select id="catInspectResponsibleSelect" aria-label="Изменить ответственного" hidden></select>
+              </dd></div>
               <div class="cat-inspector-row"><dt>Автор</dt><dd id="catInspectAuthor"></dd></div>
+            </dl>
+          </section>
+          <section id="catArchiveMeta" class="cat-inspector-group" hidden>
+            <h4>Архив</h4>
+            <dl>
+              <div class="cat-inspector-row"><dt>Перемещено</dt><dd id="catInspectArchivedAt"></dd></div>
+              <div class="cat-inspector-row"><dt>Кем</dt><dd id="catInspectArchivedBy"></dd></div>
+              <div class="cat-inspector-row"><dt>Причина</dt><dd id="catInspectArchiveReason"></dd></div>
             </dl>
           </section>
           <p id="catInspectorPeopleNote" class="cat-inspector-note" hidden>
@@ -3474,6 +3849,8 @@ PAGE = r"""<!DOCTYPE html>
           <button id="catOpen" class="primary" type="button">Открыть в Studio</button>
           <button id="catRename" type="button">Переименовать</button>
           <button id="catDuplicate" type="button">Дублировать</button>
+          <button id="catArchive" type="button">Переместить в архив…</button>
+          <button id="catRestore" type="button" hidden>Восстановить в каталог</button>
         </div>
       </aside>
     </div>
@@ -3575,6 +3952,25 @@ PAGE = r"""<!DOCTYPE html>
       <div class="share-dialog-actions"><button id="shareClose" type="button">Закрыть</button>
         <a id="shareOpen" href="#" target="_blank" rel="noopener">Открыть просмотр</a></div>
     </div>
+  </dialog>
+  <dialog id="catArchiveDialog" aria-labelledby="catArchiveDialogTitle">
+    <form id="catArchiveForm" method="dialog">
+      <div class="share-dialog-head"><span>Обратимое действие</span>
+        <h2 id="catArchiveDialogTitle">Переместить изделие в архив?</h2></div>
+      <div class="share-dialog-body">
+        <p>Изделие исчезнет из рабочего каталога, но модель, версии, AI-история и производственные файлы сохранятся.</p>
+        <div id="catArchiveTarget" class="archive-dialog-target"></div>
+        <label class="archive-dialog-field" for="catArchiveReason">Причина
+          <textarea id="catArchiveReason" maxlength="240" required
+            placeholder="Например: дубль или заказ отменён"></textarea>
+        </label>
+        <p id="catArchiveError" role="alert"></p>
+        <div class="share-dialog-actions">
+          <button id="catArchiveCancel" type="button">Отмена</button>
+          <button id="catArchiveConfirm" type="submit">Переместить в архив</button>
+        </div>
+      </div>
+    </form>
   </dialog>
   <div id="toast"></div>
 </div>
@@ -4657,7 +5053,7 @@ const CAT_RULES=[  // раздел ← archetype/furniture_type
 let CAT_ITEMS=[],CAT_VISIBLE_ITEMS=[],CAT_SELECTED_FILE='',CAT_CURRENT_FILE='',
   CAT_LAST_CLICK_FILE='',CAT_LAST_CLICK_AT=0,CAT_SCOPE='all',CAT_TYPE='all',
   CAT_STATUS='all',CAT_RESPONSIBLE='all',CAT_TOTAL=0,CAT_CURRENT_USER_ID='',
-  CAT_COUNTS={all:0,mine:0,unassigned:0},CAT_MEMBERS=[],CAT_TYPES=[],CAT_SEARCH_TIMER=null;
+  CAT_COUNTS={all:0,mine:0,unassigned:0,archived:0},CAT_MEMBERS=[],CAT_TYPES=[],CAT_SEARCH_TIMER=null;
 let CATALOG_PREVIEW_SCENE=null,CATALOG_PREVIEW_RUNNING=false;
 const CATALOG_PREVIEW_QUEUE=[],CATALOG_PREVIEW_SEEN=new Set();
 const CATALOG_INACTIVE_IDS=['fs_project','modelState','fs_part','rightside','rightRail',
@@ -4675,6 +5071,12 @@ function catalogDraftMarkup(){
       <path d="M20 4v6h5M11 16h10M11 21h7"/></svg><span>Черновик</span></div>`;
 }
 function catalogThumbMarkup(item){
+  if(item.archived){
+    if(item.preview)return `<img src="/archive-preview/${encodeURIComponent(item.archive_id)}?v=${encodeURIComponent(item.archived_at||'')}"
+      loading="lazy" alt="" onerror="thumbErr(this)">`;
+    return `<div class="draft-placeholder"><svg viewBox="0 0 32 32" aria-hidden="true">
+      <path d="M5 9h22v18H5V9ZM3 5h26v4H3V5ZM12 14h8"/></svg><span>Без превью</span></div>`;
+  }
   if(item.draft)return catalogDraftMarkup();
   const exact=`/preview/${encodeURIComponent(item.file.replace(/\.json$/,'.png'))}?v=${Number(item.updated_at||0)}`;
   const fallback=`/thumb/${encodeURIComponent(item.file)}`;
@@ -4726,7 +5128,7 @@ async function buildNextCatalogPreview(){
 function queueCatalogPreviews(items){
   if(!canBuildCatalogPreviews())return;
   (items||[]).forEach(item=>{
-    if(item.draft||item.preview_current||CATALOG_PREVIEW_SEEN.has(item.file))return;
+    if(item.archived||item.draft||item.preview_current||CATALOG_PREVIEW_SEEN.has(item.file))return;
     CATALOG_PREVIEW_SEEN.add(item.file);CATALOG_PREVIEW_QUEUE.push(item.file);
   });
   buildNextCatalogPreview();
@@ -4749,6 +5151,11 @@ function catalogCountText(count){
 }
 function updateCatalogContext(){
   const visible=CAT_ITEMS.length;
+  const archived=CAT_SCOPE==='archived';
+  $('catalogTitle').textContent=archived?'Архив изделий':'Каталог изделий';
+  $('catalogContextTitle').textContent=archived?'Архив компании':'Каталог компании';
+  $('catalogContextHint').textContent=archived?'Здесь хранятся изделия, которые можно вернуть в работу.':
+    'Выберите изделие, чтобы открыть его в Studio.';
   $('catalogContextCount').textContent=visible===CAT_TOTAL?catalogCountText(CAT_TOTAL):
     `Показано ${visible} из ${CAT_TOTAL}`;
 }
@@ -4764,21 +5171,24 @@ function renderCatalogControls(){
     ['all','Все изделия',CAT_COUNTS.all],
     ['mine','Мои',CAT_COUNTS.mine],
     ['unassigned','Без ответственного',CAT_COUNTS.unassigned],
+    ['archived','Архив',CAT_COUNTS.archived],
   ];
   $('catScopes').innerHTML=scopes.map(([value,label,count])=>
     `<button type="button" class="cat-scope ${value===CAT_SCOPE?'on':''}" data-scope="${value}"
       aria-pressed="${value===CAT_SCOPE}" ${value==='mine'&&!CAT_CURRENT_USER_ID?'disabled':''}>
       <span>${label}</span><output>${count}</output></button>`).join('');
   $('catScopes').querySelectorAll('.cat-scope').forEach(button=>button.onclick=()=>{
-    CAT_SCOPE=button.dataset.scope;CAT_RESPONSIBLE='all';refreshCatalog({clearSelection:true});
+    CAT_SCOPE=button.dataset.scope;CAT_RESPONSIBLE='all';CAT_STATUS='all';CAT_TYPE='all';
+    refreshCatalog({clearSelection:true});
   });
   $('catResponsible').innerHTML=`<option value="all">Все ответственные</option>
     <option value="unassigned">Без ответственного</option>`+CAT_MEMBERS.map(member=>
       `<option value="${catalogEscape(member.user_id)}">${catalogEscape(member.display_name)}</option>`
     ).join('');
   $('catResponsible').value=CAT_RESPONSIBLE;
-  $('catResponsible').disabled=CAT_SCOPE!=='all';
+  $('catResponsible').disabled=CAT_SCOPE!=='all'||CAT_SCOPE==='archived';
   $('catStatus').value=CAT_STATUS;
+  $('catStatus').disabled=CAT_SCOPE==='archived';
   const categories=['all',...CAT_TYPES];
   $('catCats').innerHTML=categories.map(value=>{
     const label=value==='all'?'Все типы':value;
@@ -4800,15 +5210,34 @@ function renderCatalogInspector(){
   $('catInspectName').textContent=item.name||'Без названия';
   $('catInspectPreview').innerHTML=catalogThumbMarkup(item);
   const status=$('catInspectStatus');
-  status.textContent=item.draft?'Черновик':'Рабочее изделие';
+  status.textContent=item.archived?'В архиве':item.draft?'Черновик':'Рабочее изделие';
   status.classList.toggle('is-draft',!!item.draft);
+  status.classList.toggle('is-archived',!!item.archived);
   $('catInspectType').textContent=catalogTypeLabel(item);
   $('catInspectDims').textContent=item.dims||'—';
   $('catInspectDecor').textContent=item.decor||'Не указан';
   $('catInspectUpdated').textContent=catalogUpdatedLabel(item.updated_at);
-  $('catInspectResponsible').textContent=item.responsible||'Не назначен';
+  const responsibleText=$('catInspectResponsible'),responsibleSelect=$('catInspectResponsibleSelect');
+  responsibleText.textContent=item.responsible||'Не назначен';
+  const mayAssign=!item.archived&&!!item.can_manage;
+  responsibleText.hidden=mayAssign;responsibleSelect.hidden=!mayAssign;
+  if(mayAssign){
+    responsibleSelect.innerHTML='<option value="">Не назначен</option>'+CAT_MEMBERS.map(member=>
+      `<option value="${catalogEscape(member.user_id)}">${catalogEscape(member.display_name)}</option>`).join('');
+    responsibleSelect.value=item.responsible_user_id||'';
+  }
   $('catInspectAuthor').textContent=item.author||'Не указан';
   $('catInspectorPeopleNote').hidden=!!(item.responsible&&item.author);
+  $('catArchiveMeta').hidden=!item.archived;
+  $('catInspectArchivedAt').textContent=catalogUpdatedLabel(item.updated_at);
+  $('catInspectArchivedBy').textContent=item.archived_by||'Не указано';
+  $('catInspectArchiveReason').textContent=item.archive_reason||'Без комментария';
+  const canCreate=!AUTH_CONTEXT||new Set(AUTH_CONTEXT.permissions||[]).has('project.create');
+  $('catOpen').hidden=!!item.archived;
+  $('catRename').hidden=!!item.archived||!item.can_manage;
+  $('catDuplicate').hidden=!!item.archived||!canCreate;
+  $('catArchive').hidden=!!item.archived||!item.can_manage;
+  $('catRestore').hidden=!item.archived||!item.can_manage;
 }
 function syncCatalogSelection({focus=false}={}){
   $('catGrid').querySelectorAll('.catCard').forEach((card,index)=>{
@@ -4862,8 +5291,8 @@ function setCatalogMode(on,{restoreFocus=true}={}){
   }
 }
 function catalogRequestPayload(){
-  return {scope:CAT_SCOPE,type:CAT_TYPE,status:CAT_STATUS,
-    responsible_user_id:CAT_RESPONSIBLE,q:($('catQ').value||'').trim()};
+  return {scope:CAT_SCOPE,type:CAT_TYPE,status:CAT_SCOPE==='archived'?'all':CAT_STATUS,
+    responsible_user_id:CAT_SCOPE==='archived'?'all':CAT_RESPONSIBLE,q:($('catQ').value||'').trim()};
 }
 async function refreshCatalog({clearSelection=false}={}){
   try{
@@ -4872,7 +5301,8 @@ async function refreshCatalog({clearSelection=false}={}){
     const p=await r.json();
     if(!r.ok){toast('Каталог не обновился: '+(p.error||'ошибка загрузки'),true);return false;}
     CAT_ITEMS=p.projects||[];CAT_CURRENT_FILE=p.current||CAT_CURRENT_FILE;
-    CAT_TOTAL=Number(p.total??CAT_ITEMS.length);CAT_COUNTS=p.counts||{all:CAT_TOTAL,mine:0,unassigned:0};
+    CAT_TOTAL=Number(p.total??CAT_ITEMS.length);
+    CAT_COUNTS=p.counts||{all:CAT_TOTAL,mine:0,unassigned:0,archived:0};
     CAT_MEMBERS=p.members||[];CAT_TYPES=p.types||[];CAT_CURRENT_USER_ID=p.current_user_id||'';
     if(clearSelection)CAT_SELECTED_FILE='';
     renderCatalog();return true;
@@ -4919,7 +5349,7 @@ function renderCatalog(){
     <button type="button" class="catCard" role="option" data-f="${catalogEscape(p.file)}"
       aria-selected="${p.file===CAT_SELECTED_FILE}" aria-label="${catalogEscape(p.name)}">
       <span class="img">${catalogThumbMarkup(p)}</span>
-      <span class="nm" title="${catalogEscape(p.name)}">${catalogEscape(p.name)}${p.draft?'<span class="dr">черновик</span>':''}</span>
+      <span class="nm" title="${catalogEscape(p.name)}">${catalogEscape(p.name)}${p.archived?'<span class="dr">архив</span>':p.draft?'<span class="dr">черновик</span>':''}</span>
       <span class="sub">${catalogEscape(p.dims||'—')}${p.decor?' · '+catalogEscape(p.decor):''}</span>
       ${catalogOwnerMarkup(p)}
     </button>`).join('')||'<div class="catEmpty">По этому запросу изделий нет.</div>';
@@ -4931,6 +5361,8 @@ function renderCatalog(){
 }
 async function openCatalogItem(file=CAT_SELECTED_FILE){
   if(!file)return;
+  const selected=selectedCatalogItem();
+  if(selected&&selected.archived){toast('Сначала восстановите изделие из архива',true);return;}
   if(!await prepareWorkspaceChange('открыть выбранное изделие'))return;
   const button=$('catOpen');button.disabled=true;
   try{
@@ -4987,12 +5419,72 @@ async function duplicateCatalogItem(){
   }catch(error){toast('Не удалось создать копию: '+error.message,true);}
   finally{button.disabled=false;}
 }
+async function assignCatalogResponsible(){
+  const item=selectedCatalogItem();if(!item||item.archived||!item.can_manage)return;
+  const select=$('catInspectResponsibleSelect'),responsibleUserId=select.value;
+  select.disabled=true;
+  try{
+    const r=await fetch('/api/catalog/assign',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({file:item.file,responsible_user_id:responsibleUserId})});
+    const p=await r.json();
+    if(!r.ok||!p.ok){toast('Ответственный не изменён: '+(p.error||'ошибка'),true);renderCatalogInspector();return;}
+    await refreshCatalog();CAT_SELECTED_FILE=item.file;syncCatalogSelection();
+    toast(responsibleUserId?'Ответственный изменён':'Ответственный снят');
+  }catch(error){toast('Ответственный не изменён: '+error.message,true);renderCatalogInspector();}
+  finally{select.disabled=false;}
+}
+function openCatalogArchiveDialog(){
+  const item=selectedCatalogItem();if(!item||item.archived||!item.can_manage)return;
+  const dialog=$('catArchiveDialog');dialog.dataset.file=item.file;
+  $('catArchiveTarget').textContent=item.name||'Без названия';
+  $('catArchiveReason').value='';$('catArchiveError').textContent='';
+  if(dialog.showModal)dialog.showModal();else dialog.setAttribute('open','');
+  requestAnimationFrame(()=>$('catArchiveReason').focus({preventScroll:true}));
+}
+function closeCatalogArchiveDialog(){
+  const dialog=$('catArchiveDialog');
+  dialog.close?dialog.close():dialog.removeAttribute('open');delete dialog.dataset.file;
+}
+async function submitCatalogArchive(event){
+  event.preventDefault();
+  const dialog=$('catArchiveDialog'),file=dialog.dataset.file||'',reason=$('catArchiveReason').value.trim();
+  const item=CAT_ITEMS.find(value=>value.file===file&&!value.archived);
+  if(!item){$('catArchiveError').textContent='Изделие уже изменилось. Закройте окно и повторите.';return;}
+  if(reason.length<3){$('catArchiveError').textContent='Укажите короткую причину.';$('catArchiveReason').focus();return;}
+  const button=$('catArchiveConfirm');button.disabled=true;$('catArchiveError').textContent='';
+  try{
+    const r=await fetch('/api/catalog/archive',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({file,reason})});const p=await r.json();
+    if(!r.ok||!p.ok){$('catArchiveError').textContent=p.error||'Не удалось переместить изделие.';return;}
+    closeCatalogArchiveDialog();CAT_SELECTED_FILE='';await refreshCatalog({clearSelection:true});
+    loadProjects();toast(`«${item.name}» перемещено в архив`);
+  }catch(error){$('catArchiveError').textContent=error.message||'Не удалось переместить изделие.';}
+  finally{button.disabled=false;}
+}
+async function restoreCatalogItem(){
+  const item=selectedCatalogItem();if(!item||!item.archived||!item.can_manage)return;
+  if(!confirm(`Вернуть «${item.name}» в рабочий каталог?`))return;
+  const button=$('catRestore');button.disabled=true;
+  try{
+    const r=await fetch('/api/catalog/restore',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({archive_id:item.archive_id})});const p=await r.json();
+    if(!r.ok||!p.ok){toast('Изделие не восстановлено: '+(p.error||'ошибка'),true);return;}
+    CAT_SELECTED_FILE='';await refreshCatalog({clearSelection:true});loadProjects();
+    toast(`«${item.name}» вернуто в каталог`);
+  }catch(error){toast('Изделие не восстановлено: '+error.message,true);}
+  finally{button.disabled=false;}
+}
 $('projCat').onclick=()=>openCatalog();
 $('catClose').onclick=()=>closeCatalog();
 $('catInspectorClose').onclick=()=>clearCatalogSelection({restoreFocus:true});
 $('catOpen').onclick=()=>openCatalogItem();
 $('catRename').onclick=renameCatalogItem;
 $('catDuplicate').onclick=duplicateCatalogItem;
+$('catInspectResponsibleSelect').onchange=assignCatalogResponsible;
+$('catArchive').onclick=openCatalogArchiveDialog;
+$('catArchiveCancel').onclick=closeCatalogArchiveDialog;
+$('catArchiveForm').onsubmit=submitCatalogArchive;
+$('catRestore').onclick=restoreCatalogItem;
 $('catResponsible').onchange=event=>{
   CAT_RESPONSIBLE=event.target.value;refreshCatalog({clearSelection:true});
 };

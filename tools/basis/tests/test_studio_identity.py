@@ -141,6 +141,13 @@ def test_authenticated_studio_scopes_catalog_and_renders_profile(tmp_path: Path)
         "Проектировщик Константы",
         "designer",
     )
+    reviewer = store.provision_member(
+        platform["id"],
+        constanta["organization"]["id"],
+        "reviewer@constanta.test",
+        "Наблюдатель Константы",
+        "reviewer",
+    )
 
     studio = _Studio(
         legacy_path,
@@ -194,10 +201,16 @@ def test_authenticated_studio_scopes_catalog_and_renders_profile(tmp_path: Path)
         assert projects[0]["responsible_user_id"] == constanta["user"]["id"]
         assert projects[0]["author"] == "Алексей Лазарев"
         assert projects[0]["responsible"] == "Алексей Лазарев"
-        assert catalog_payload["counts"] == {"all": 1, "mine": 1, "unassigned": 0}
+        assert catalog_payload["counts"] == {
+            "all": 1,
+            "mine": 1,
+            "unassigned": 0,
+            "archived": 0,
+        }
         assert {member["user_id"] for member in catalog_payload["members"]} == {
             constanta["user"]["id"],
             designer["user"]["id"],
+            reviewer["user"]["id"],
         }
         migrated = json.loads(
             (tenant_root / constanta["organization"]["id"] / "paramspecs" / "product.json")
@@ -252,6 +265,74 @@ def test_authenticated_studio_scopes_catalog_and_renders_profile(tmp_path: Path)
             "Тумба Константы — рабочая",
             "Тумба Константы — рабочая (копия)",
         ]
+
+        status, _headers, conflict_body = browser.request(
+            "POST",
+            "/api/rename",
+            {"file": "product_copy.json", "name": "Тумба Константы — рабочая"},
+            csrf=True,
+        )
+        assert status == 409
+        assert json.loads(conflict_body)["code"] == "name_conflict"
+
+        status, _headers, assigned_body = browser.request(
+            "POST",
+            "/api/catalog/assign",
+            {
+                "file": "product_copy.json",
+                "responsible_user_id": designer["user"]["id"],
+            },
+            csrf=True,
+        )
+        assert status == 200, assigned_body
+        assert json.loads(assigned_body)["responsible"] == "Проектировщик Константы"
+
+        status, _headers, foreign_archive_body = browser.request(
+            "POST",
+            "/api/catalog/archive",
+            {"file": foreign_path, "reason": "Чужой tenant"},
+            csrf=True,
+        )
+        assert status == 404
+        assert json.loads(foreign_archive_body)["code"] == "not_found"
+
+        status, _headers, archive_body = browser.request(
+            "POST",
+            "/api/catalog/archive",
+            {"file": "product_copy.json", "reason": "Проверка обратимого архива"},
+            csrf=True,
+        )
+        assert status == 200, archive_body
+        archive_id = json.loads(archive_body)["archive_id"]
+        status, _headers, archived_body = browser.request(
+            "POST", "/api/projects", {"scope": "archived"}, csrf=True
+        )
+        assert status == 200
+        archived_catalog = json.loads(archived_body)
+        assert archived_catalog["counts"]["archived"] == 1
+        assert archived_catalog["projects"][0]["archive_id"] == archive_id
+        assert archived_catalog["projects"][0]["archive_reason"] == (
+            "Проверка обратимого архива"
+        )
+        assert archived_catalog["projects"][0]["can_manage"] is True
+        status, _headers, restore_body = browser.request(
+            "POST",
+            "/api/catalog/restore",
+            {"archive_id": archive_id},
+            csrf=True,
+        )
+        assert status == 200, restore_body
+        assert json.loads(restore_body)["file"] == "product_copy.json"
+        status, _headers, reassigned_body = browser.request(
+            "POST",
+            "/api/catalog/assign",
+            {
+                "file": "product_copy.json",
+                "responsible_user_id": constanta["user"]["id"],
+            },
+            csrf=True,
+        )
+        assert status == 200, reassigned_body
 
         ai_result = {
             "reply": "Ширина изменена",
@@ -334,6 +415,10 @@ def test_authenticated_studio_scopes_catalog_and_renders_profile(tmp_path: Path)
         assert ai_events[0]["actor_user_id"] == constanta["user"]["id"]
         assert ai_events[0]["metadata"]["provider"] == "test-model"
         assert "message" not in ai_events[0]["metadata"]
+        catalog_actions = {item["action"] for item in audit}
+        assert "studio.project.responsible_changed" in catalog_actions
+        assert "studio.project.archived" in catalog_actions
+        assert "studio.project.restored" in catalog_actions
 
         platform_browser = Browser(port)
         platform_login = platform_browser.login("platform@akeda.test", ADMIN_PASSWORD)
@@ -359,6 +444,21 @@ def test_authenticated_studio_scopes_catalog_and_renders_profile(tmp_path: Path)
         assert platform_browser.request(
             "POST", "/api/save", {"spec": _spec("Нельзя записать")}, csrf=True
         )[0] == 403
+        assert platform_browser.request(
+            "POST",
+            "/api/catalog/archive",
+            {"file": "product.json", "reason": "Нельзя из support-view"},
+            csrf=True,
+        )[0] == 403
+
+        reviewer_browser = Browser(port)
+        reviewer_browser.login(reviewer["login"], reviewer["starter_password"])
+        assert reviewer_browser.request(
+            "POST",
+            "/api/catalog/archive",
+            {"file": "product.json", "reason": "Наблюдатель только читает"},
+            csrf=True,
+        )[0] == 403
 
         assert browser.request("POST", "/api/auth/logout", {}, csrf=True)[0] == 200
         assert SESSION_COOKIE not in browser.cookies
@@ -367,6 +467,12 @@ def test_authenticated_studio_scopes_catalog_and_renders_profile(tmp_path: Path)
         designer_browser = Browser(port)
         designer_browser.login(designer["login"], designer["starter_password"])
         assert designer_browser.request("GET", "/api/auth/me")[0] == 200
+        assert designer_browser.request(
+            "POST",
+            "/api/rename",
+            {"file": "product.json", "name": "Чужое изделие"},
+            csrf=True,
+        )[0] == 403
         status, _headers, new_body = designer_browser.request(
             "POST", "/api/new", {"name": "Изделие проектировщика"}, csrf=True
         )
@@ -398,6 +504,14 @@ def test_authenticated_studio_scopes_catalog_and_renders_profile(tmp_path: Path)
             designer["membership"]["id"],
             status="disabled",
         )
+        status, _headers, disabled_assignment_body = owner_filter_browser.request(
+            "POST",
+            "/api/catalog/assign",
+            {"file": "product.json", "responsible_user_id": designer["user"]["id"]},
+            csrf=True,
+        )
+        assert status == 409
+        assert json.loads(disabled_assignment_body)["code"] == "member_unavailable"
         status, _headers, blocked_member_body = designer_browser.request(
             "GET", "/api/auth/me"
         )

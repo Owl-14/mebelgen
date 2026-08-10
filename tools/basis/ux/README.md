@@ -80,6 +80,8 @@
   контур логина, компаний, сотрудников, ролей и аудита.
 - [OWNER_CABINET_SPEC.md](OWNER_CABINET_SPEC.md) — кабинет владельца компании,
   границы self-service и первый рабочий вертикальный срез.
+- [CATALOG_MANAGEMENT_SPEC.md](CATALOG_MANAGEMENT_SPEC.md) — права на конкретное
+  изделие, назначение ответственного и обратимый архив без потери артефактов.
 - [DEMO_COMPANY_AND_ADMIN_VIEW_SPEC.md](DEMO_COMPANY_AND_ADMIN_VIEW_SPEC.md) —
   простой переход Akeda в компанию и изолированная demo-песочница на сессию.
 - [../rules/identity-access.md](../rules/identity-access.md) — обязательные
