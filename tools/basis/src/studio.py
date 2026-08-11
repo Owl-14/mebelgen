@@ -78,53 +78,46 @@ SECTION_ARCHETYPES = ["cabinet", "wardrobe", "shelving", "drawer_unit", "door_un
 
 def build_payload(spec: dict[str, Any]) -> dict[str, Any]:
     """ParamSpec → всё для редактора: модель, проверки, BOM. Ошибки не бросают."""
-    from .paramspec import validate_paramspec
-
     revision = _spec_revision(spec)
     issues: dict[str, list[str]] = {"schema": [], "consistency": [], "geometry": [],
-                                    "cfrn": [], "holes": [], "drilling": []}
-    issues["schema"] = list(validate_paramspec(spec) or [])
-    if issues["schema"]:
-        return {"ok": False, "issues": issues, "revision": revision}
+                                    "cfrn": [], "holes": [], "drilling": [],
+                                    "completeness": [], "materials": []}
+    from .production_gate import evaluate_production_gate
 
-    from .generators import generate_from_paramspec
-    try:
-        project = generate_from_paramspec(spec)
-    except Exception as e:
-        issues["schema"] = [f"генерация: {e}"]
-        return {"ok": False, "issues": issues, "revision": revision}
-    try:
-        from .materials import resolve_project_materials
-        project["material_refs"] = resolve_project_materials(project)
-    except Exception:
-        pass
-
-    from .consistency_check import check_consistency
-    from .geometry_check import check_placement_geometry
-    from .cfrn import check_cfrn_encoding, check_cfrn_holes
-    issues["consistency"] = [f"{i.panel}: {i.message}" for i in check_consistency(project)
-                             if i.severity == "error"]
-    g = check_placement_geometry(project)
-    if not g.get("ok", True):
-        issues["geometry"] = [str(x) for x in g.get("issues", [])][:20] or ["пересечения панелей"]
-    try:
-        issues["cfrn"] = check_cfrn_encoding(project)[:20]
-        issues["holes"] = check_cfrn_holes(project)[:20]
-    except Exception as e:
-        issues["cfrn"] = [f"кодирование: {e}"]
-    try:
-        from .drilling_check import check_drilling_geometry
-        issues["drilling"] = check_drilling_geometry(project)["errors"][:20]
-    except Exception as e:
-        issues["drilling"] = [f"валидатор сверловки: {e}"]
+    decision = evaluate_production_gate(spec)
+    stage_to_issue = {
+        "pydantic": "schema",
+        "json_schema": "schema",
+        "generate": "schema",
+        "consistency": "consistency",
+        "geometry": "geometry",
+        "cfrn_encoding": "cfrn",
+        "cfrn_holes_parity": "holes",
+        "drilling_geometry": "drilling",
+    }
+    for check in decision.report.checks:
+        target = stage_to_issue.get(check.name)
+        for problem in check.issues:
+            if problem.severity != "error":
+                continue
+            if check.name == "completeness_materials":
+                target = "materials" if problem.code.startswith("materials.") else "completeness"
+            if target:
+                issues[target].append(problem.detail)
+    project = decision.project
+    if project is None:
+        return {"ok": False, "issues": issues, "revision": revision,
+                "check_report": decision.report.to_dict()}
 
     from .webviewer import viewer_payload
     from .delivery import _hardware_bom, spec_summary
     s = spec_summary(project)
     payload = {
-        "ok": not any(issues.values()),
+        "ok": decision.report.ok,
         "revision": revision,
         "issues": issues,
+        "check_report": decision.report.to_dict(),
+        "warnings": [warning.to_dict() for warning in decision.report.warnings],
         "viewer": viewer_payload(project),      # панели+присадки+фурнитура+открывашки
         "stats": {"n_panels": s["n_panels"], "n_holes": s["n_holes"],
                   "dims": s["dims"], "decor": s["decor"]},

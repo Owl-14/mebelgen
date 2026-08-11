@@ -75,6 +75,52 @@ def test_provider_failure_is_machine_readable(monkeypatch):
     assert "offline" in r["error"]
 
 
+def test_red_production_candidate_is_rejected_before_studio_can_apply_it(monkeypatch):
+    import copy
+    import src.spec_chat as sc
+
+    candidate = copy.deepcopy(SPEC)
+    candidate.setdefault("overrides", []).append({
+        "action": "add", "panel": "AI floating", "type": "shelf",
+        "placement": {"x1": 100, "x2": 200, "y1": 100, "y2": 116,
+                      "z1": 100, "z2": 200},
+    })
+
+    class RedProvider:
+        def chat(self, *args, **kwargs):
+            return {"reply": "Добавил полку.", "spec": candidate}
+
+    before = copy.deepcopy(SPEC)
+    monkeypatch.setattr(sc, "get_chat_provider", lambda name=None: RedProvider())
+    result = sc.chat_edit(SPEC, "добавь полку")
+
+    assert result["spec"] is None
+    assert result["changes"] == []
+    assert result["code"] == "production_gate_rejected"
+    assert result["check_report"]["ok"] is False
+    assert any(issue["purpose"] and issue["repair_options"]
+               for issue in result["check_report"]["errors"])
+    assert SPEC == before
+
+
+def test_rejected_provider_cannot_mutate_current_revision_by_reference(monkeypatch):
+    import copy
+    import src.spec_chat as sc
+
+    class MutatingProvider:
+        def chat(self, supplied, *args, **kwargs):
+            supplied["dimensions"]["width"] = -1
+            return {"reply": "готово", "spec": supplied}
+
+    before = copy.deepcopy(SPEC)
+    monkeypatch.setattr(sc, "get_chat_provider", lambda name=None: MutatingProvider())
+    result = sc.chat_edit(SPEC, "сломай ширину")
+
+    assert result["spec"] is None
+    assert result["code"] == "production_gate_rejected"
+    assert SPEC == before
+
+
 def test_openai_compat_provider_has_bounded_timeout_without_hidden_retries(monkeypatch):
     import types
     import src.spec_chat as sc

@@ -68,10 +68,10 @@ ParamSpec, версии, preview, AI-историю и существующие 
 | GET `/` | страница редактора |
 | GET `/thumb/<spec>.json` | SVG-аксонометрия карточки (кэш) |
 | GET `/preview/<stem>.png` | канонический PNG-снимок общего 3D-движка |
-| `/api/generate` | ParamSpec → `{viewer, issues{6 чеков}, stats, bom, refs, estimate}` |
+| `/api/generate` | ParamSpec → `{viewer, issues, check_report, stats, bom, refs, estimate}`; `issues` сохраняет совместимую раскладку бейджей, `check_report` содержит полный контур |
 | `/api/techview` | чертёж SVG (+`panel` — деталировка одной детали) |
 | `/api/nesting` | раскрой-превью SVG |
-| `/api/chat` | ИИ-правка: `{spec,message,history,context,images,provider}` → `{reply,spec,changes,usage}`; в context — реальные кандидаты базы для нерешённых слотов и `panels` (геометрия всех деталей — для добавления/подгонки встык) |
+| `/api/chat` | ИИ-правка: `{spec,message,history,context,images,provider}` → `{reply,spec,changes,usage,check_report}`; кандидат проходит атомарный `production_gate` до выдачи браузеру, при красном отчёте `spec:null`; в context — реальные кандидаты базы для нерешённых слотов и `panels` (геометрия всех деталей — для добавления/подгонки встык) |
 | `/api/chat/cancel` | помечает AI-операцию отменённой; поздний ответ не пишется в историю |
 | `/api/chat-history` | Серверная история AI-команд текущего изделия. В auth-режиме браузерная `history` не считается источником истины: контекст читается из tenant-хранилища |
 | `/api/providers`, `/api/token-balance` | список нейросетей / лимиты выбранной |
@@ -96,6 +96,9 @@ ParamSpec, версии, preview, AI-историю и существующие 
 - случайная трата на облако невозможна: кнопка неактивна при красных чеках +
   серверный 409 + confirm с ценой;
 - каждая правка → полный прогон проверок (что на экране = что уйдёт в производство);
+- AI/reducer-кандидат не становится текущей ревизией при красном `CheckReport`;
+  ограниченный автоцикл ремонта принимает изменения только через переданный
+  typed-operation reducer и публикует лишь итоговый зелёный ParamSpec;
 - сохранённый ParamSpec совместим со всем конвейером (deliver/viewer/build-b3d);
 - пока AI считает, осмотр 3D, режимы просмотра, каталог и профиль доступны, а
   мутации ParamSpec/сохранение/экспорт временно заблокированы;

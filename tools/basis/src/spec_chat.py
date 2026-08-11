@@ -8,8 +8,9 @@ LLM меняет ТОЛЬКО ParamSpec (высокоуровневые пара
 Провайдер: env SPEC_CHAT_PROVIDER (fallback PARAMSPEC_PROVIDER): mock|openai.
 mock — rule-based разбор типовых русских команд, без сети (тесты/CI/офлайн).
 
-Безопасность применения (AKD-110): новая спека валидируется схемой ДО отдачи,
-schemaVersion/furniture_type не затираются, сводка изменений — spec_diff().
+Безопасность применения (AKD-110/MEB-146): новая спека проходит полный
+production gate ДО отдачи, schemaVersion не затирается, сводка изменений —
+spec_diff(). Красный кандидат никогда не становится текущей ревизией Studio.
 """
 
 from __future__ import annotations
@@ -593,15 +594,15 @@ def chat_edit(spec: dict[str, Any], message: str,
               provider: str | None = None) -> dict[str, Any]:
     """Команда словами → {reply, spec|None, changes[], created?}. Невалидное не отдаём.
 
-    Гарантии: PROTECTED_KEYS не меняются; новая спека проходит validate_paramspec,
-    иначе spec=None и причина в reply (AKD-110). created=True — изделие с нуля (D3).
+    Гарантии: PROTECTED_KEYS не меняются; новая спека проходит полный production
+    gate, иначе spec=None и структурированный check_report (MEB-146).
+    created=True — изделие с нуля (D3).
     images — фото/сканы ТЗ [{mime, data(base64)}] для vision-провайдера (AKD-203).
     provider — явный выбор нейросети из UI (AKD-210); None → из env.
     """
-    from .paramspec import validate_paramspec
-
     build_name = resolve_provider_name(provider)
     build = get_chat_provider(build_name)
+    provider_spec = copy.deepcopy(spec)              # untrusted provider never sees current revision
     # Конвейер «глаза+мозг» (AKD-211): если пришло фото, а сборщик — не тот
     # провайдер, что назначен на зрение (VISION_EXTRACT_PROVIDER, обычно GigaChat),
     # то этап 1 — GigaChat распознаёт факты с фото ТЗ текстом, этап 2 — сборщик
@@ -616,16 +617,16 @@ def chat_edit(spec: dict[str, Any], message: str,
                 aug = ((message or "Собери изделие по этому ТЗ.")
                        + "\n\nРаспознано с фото ТЗ (используй как факты, ничего не додумывай "
                          "сверх):\n" + desc)
-                res = build.chat(spec, aug, history, context)
+                res = build.chat(provider_spec, aug, history, context)
             else:                                     # распознать не вышло — фото напрямую
-                res = build.chat(spec, message, history, context, images=images)
+                res = build.chat(provider_spec, message, history, context, images=images)
         elif images:
-            res = build.chat(spec, message, history, context, images=images)
+            res = build.chat(provider_spec, message, history, context, images=images)
         else:
             try:
-                res = build.chat(spec, message, history, context)
+                res = build.chat(provider_spec, message, history, context)
             except TypeError:
-                res = build.chat(spec, message, history)
+                res = build.chat(provider_spec, message, history)
     except Exception as e:                            # сеть/ключ/парсинг — в чат, не 500
         message = f"Сервис AI не ответил: {e}"
         return {"reply": message, "error": message, "spec": None, "changes": []}
@@ -641,18 +642,32 @@ def chat_edit(spec: dict[str, Any], message: str,
     if not created:
         for k in PROTECTED_KEYS:                      # структуру не трогаем
             if k in spec:
-                new[k] = spec[k]
-    errors = validate_paramspec(new)
-    if errors:
-        return {"reply": "Правка отклонена — спека не прошла схему:\n"
-                         + "\n".join(errors[:5]), "spec": None, "changes": [], "usage": usage}
+                new[k] = copy.deepcopy(spec[k])
+    from .production_gate import evaluate_production_gate
+
+    decision = evaluate_production_gate(new)
+    if not decision.report.ok:
+        details = [problem.detail for problem in decision.report.errors[:5]]
+        return {
+            "reply": "Правка отклонена производственным гейтом:\n" + "\n".join(details),
+            "error": "Предложенная AI-правка не прошла производственный гейт.",
+            "code": "production_gate_rejected",
+            "spec": None,
+            "changes": [],
+            "usage": usage,
+            "check_report": decision.report.to_dict(),
+        }
+    accepted = decision.accepted_spec
+    assert accepted is not None
     if created:
-        return {"reply": res.get("reply", "Создано."), "spec": new,
-                "changes": ["новое изделие с нуля"], "created": True, "usage": usage}
-    changes = spec_diff(spec, new)
+        return {"reply": res.get("reply", "Создано."), "spec": accepted,
+                "changes": ["новое изделие с нуля"], "created": True, "usage": usage,
+                "check_report": decision.report.to_dict()}
+    changes = spec_diff(spec, accepted)
     if not changes:
         return {"reply": res.get("reply", "Изменений нет."), "spec": None, "changes": [], "usage": usage}
-    return {"reply": res.get("reply", "Готово."), "spec": new, "changes": changes, "usage": usage}
+    return {"reply": res.get("reply", "Готово."), "spec": accepted, "changes": changes,
+            "usage": usage, "check_report": decision.report.to_dict()}
 
 
 _PROVIDER_META = {          # id → (человекочитаемое имя, env-ключ наличия)
