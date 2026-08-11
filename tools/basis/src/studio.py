@@ -1033,6 +1033,18 @@ class _Studio:
         self.guard = _ChatGuard(self.out_dir)
         self._cancelled_chat_operations: dict[str, float] = {}
         self._cancelled_chat_lock = threading.RLock()
+        self.ai_graph = None
+        graph_enabled = (
+            _os.environ.get("STUDIO_LANGGRAPH_ORCHESTRATION", "").strip().lower()
+            in {"1", "true", "yes", "on"}
+        )
+        if graph_enabled:
+            from .studio_graph import StudioGraphOrchestrator
+
+            self.ai_graph = StudioGraphOrchestrator.durable(
+                self.out_dir / ".studio_graph",
+                cancellation_probe=self.is_chat_operation_cancelled,
+            )
         self.started = _time.time()               # /healthz, /version (AKD-264)
         # демо-режим: изделия, существовавшие на старте, защищены от перезаписи
         self.protected: set[str] = (
@@ -1098,6 +1110,13 @@ class _Studio:
             return False
         with self._cancelled_chat_lock:
             return self._cancelled_chat_operations.pop(operation_id, None) is not None
+
+    def is_chat_operation_cancelled(self, value: Any) -> bool:
+        operation_id = self._valid_chat_operation_id(value)
+        if not operation_id:
+            return False
+        with self._cancelled_chat_lock:
+            return operation_id in self._cancelled_chat_operations
 
 
 def _studio_login_page() -> str:
@@ -2024,7 +2043,6 @@ def make_handler(st: _Studio):
                         "history": st.workspaces.ai_messages(auth, spec_path),
                     })
                 elif path == "/api/chat":
-                    from .spec_chat import chat_edit
                     ctx = body.get("context") or None
                     # ИИ не знает содержимого производственной базы: для
                     # нерешённых слотов даём РЕАЛЬНЫХ кандидатов (иначе модель
@@ -2058,11 +2076,45 @@ def make_handler(st: _Studio):
                     provider = body.get("provider") or None
                     history = (st.workspaces.ai_messages(auth, spec_path)
                                if auth is not None else body.get("history") or [])
-                    res = chat_edit(spec, message,
-                                    history,
-                                    ctx,
-                                    body.get("images") or None,
-                                    provider)
+                    if st.ai_graph is not None:
+                        from .studio_graph import GraphConflict, GraphRevisionError
+
+                        operation_id = (
+                            st._valid_chat_operation_id(body.get("operation_id"))
+                            or secrets.token_hex(16)
+                        )
+                        try:
+                            res = st.ai_graph.run(
+                                project_key=str(spec_path.resolve()),
+                                spec=spec,
+                                message=message,
+                                history=history,
+                                context=ctx,
+                                images=body.get("images") or None,
+                                provider=provider,
+                                generation=operation_id,
+                                expected_revision=_spec_revision(spec),
+                            )
+                        except GraphConflict as error:
+                            self._json({
+                                "ok": False,
+                                "error": str(error),
+                                "code": "generation_conflict",
+                            }, 409)
+                            return
+                        except GraphRevisionError as error:
+                            self._json({
+                                "ok": False,
+                                "error": str(error),
+                                "code": "stale_revision",
+                            }, 409)
+                            return
+                    else:
+                        res = chat_edit(spec, message,
+                                        history,
+                                        ctx,
+                                        body.get("images") or None,
+                                        provider)
                     _trace_engineering_result(
                         res.get("spec") if isinstance(res, dict) else None
                     )

@@ -56,6 +56,7 @@ ParamSpec; координаты всегда считает детерминир
 | `studio.py` | Studio: HTTP-сервер, страница редактора, каталог изделий (+SVG-аксонометрия карточек `/thumb/`), версии, экспорт-центр (rules/studio.md) |
 | `spec_chat.py` | ИИ-чат: провайдеры (mock/gigachat/glm/kimi/deepseek/openai/gemini), конвейер фото-ТЗ vision→сборка, анти-инъекция; обычные правки принимаются только как типизированные операции |
 | `edit_operations.py` | Pydantic discriminated union AI-операций + атомарный reducer в ParamSpec v1; проверяет target/preconditions и не вычисляет геометрию |
+| `studio_graph.py` | feature-flagged LangGraph-оркестрация AI-команд; состояние, checkpoints, отмена/возобновление и Protocol-адаптеры к детерминированному движку |
 | `techview.py`, `sheet_layout.py` | чертёж SVG (фронт+бок+деталировка), аллокатор выносок |
 | `nesting.py` | bin-packing раскрой (KERF=4) |
 | `estimate.py` | смета материалов по ценам базы |
