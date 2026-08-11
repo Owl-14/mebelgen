@@ -181,7 +181,7 @@ def test_selected_part_is_a_static_dom_inspector_with_real_facts() -> None:
     assert ".innerHTML" not in render
 
 
-def test_hidden_legacy_part_chat_routes_to_the_global_composer() -> None:
+def test_selected_part_does_not_duplicate_the_global_composer() -> None:
     dom = _dom()
     _tag, row_attrs, row_ancestors = dom.by_id["partChatRow"]
     assert "partCard" in row_ancestors
@@ -193,12 +193,9 @@ def test_hidden_legacy_part_chat_routes_to_the_global_composer() -> None:
     _tag, send_attrs, _ancestors = dom.by_id["partChatSend"]
     assert "hidden" in send_attrs and send_attrs.get("tabindex") == "-1"
 
-    focus = _function("focusPartCommand")
-    assert "$('chatMsg').focus()" in focus
-    assert "$('chatMsg').scrollIntoView" in focus
-    assert "$(`partCommandFocus`)" not in PAGE  # не допускаем второй шаблонный binding
-    assert "$('partCommandFocus').onclick=focusPartCommand" in PAGE
-    assert "$('partChatSend').onclick=focusPartCommand" in PAGE
+    assert "partCommandFocus" not in PAGE
+    assert "focusPartCommand" not in PAGE
+    assert "Нижняя команда уже адресована выбранной детали" in PAGE
 
 
 def test_selection_updates_the_static_card_without_opening_right_inspector() -> None:

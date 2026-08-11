@@ -219,6 +219,25 @@ function MebelScene(container){
   renderer.setPixelRatio(devicePixelRatio); container.appendChild(renderer.domElement);
   const controls=new THREE.OrbitControls(camera,renderer.domElement);
   controls.enableDamping=true; controls.dampingFactor=0.08;
+  // Граница навигации зависит от габаритов реальной модели: можно свободно
+  // осматривать изделие, но нельзя случайно увести его за пределы рабочего поля.
+  const orbitCenter=new THREE.Vector3(); let orbitMaxPan=600;
+  function clampOrbitTarget(){
+    const delta=controls.target.clone().sub(orbitCenter),distance=delta.length();
+    if(distance<=orbitMaxPan)return;
+    const previous=controls.target.clone();
+    controls.target.copy(orbitCenter).add(delta.multiplyScalar(orbitMaxPan/distance));
+    controls.object.position.add(controls.target.clone().sub(previous));
+  }
+  function setOrbitBounds(center,sphere){
+    orbitCenter.copy(center);
+    controls.minDistance=Math.max(20,sphere*0.45);
+    controls.maxDistance=Math.max(160,sphere*7.5);
+    controls.minZoom=0.55;controls.maxZoom=2.4;
+    orbitMaxPan=Math.max(120,sphere*1.35);
+    clampOrbitTarget();
+  }
+  controls.addEventListener('change',clampOrbitTarget);
   scene.add(new THREE.AmbientLight(0xffffff,0.72));
   const L1=new THREE.DirectionalLight(0xffffff,0.55); L1.position.set(1,2,2); scene.add(L1);
   const L2=new THREE.DirectionalLight(0xffffff,0.30); L2.position.set(-2,1,-1); scene.add(L2);
@@ -260,7 +279,7 @@ function MebelScene(container){
     }
     camera.up.set(0,1,0);
     size();
-    controls.object=camera; controls.target.copy(c); controls.update();
+    controls.object=camera; controls.target.copy(c); setOrbitBounds(c,sphere); controls.update();
   }
 
   function edge(mesh,color,th){const e=new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry,th||1),
@@ -584,6 +603,7 @@ function MebelScene(container){
     api.setHw(hwVisible);
     MW=W; MH=H; MD=D;
     if(!fitted||opts.refit){ setView(curView); fitted=true; }
+    syncOpenablesState();
   }
 
   // клик по узлу — открыть/закрыть (отличаем от вращения по сдвигу мыши)
@@ -694,7 +714,7 @@ function MebelScene(container){
         o=o.parent;
       }
       if(pi!==undefined) selectPanel(pi===selectedPi?null:pi);   // повторный клик — снять
-      if(gi!==undefined){const g=groups[gi]; g.target=g.target>0.5?0:1;}
+      if(gi!==undefined){const g=groups[gi]; g.target=g.target>0.5?0:1;syncOpenablesState();}
       if(pi!==undefined||gi!==undefined) return;
       if(hit.object.type==='Mesh') return;   // клик по фурнитуре/прочему — ничего
     }
@@ -722,6 +742,12 @@ function MebelScene(container){
     controls.update(); renderer.render(scene,camera);
   })();
 
+  function syncOpenablesState(){
+    if(api.onOpenablesChange)api.onOpenablesChange({
+      hasOpen:groups.some(group=>group.target>0.5),
+      allOpen:groups.length>0&&groups.every(group=>group.target>0.5),
+    });
+  }
   const api={
     setPayload,
     setXray(on){panelMats.forEach(m=>{m.transparent=on;m.opacity=on?0.2:1;m.depthWrite=!on;m.needsUpdate=true;});},
@@ -738,12 +764,13 @@ function MebelScene(container){
     },
     setHw(on){hwVisible=on;
       world&&world.traverse(o=>{ if(o.userData&&o.userData.hwpart) o.visible=on; });},
-    openAll(){groups.forEach(g=>g.target=1);},
-    closeAll(){groups.forEach(g=>g.target=0);},
+    openAll(){groups.forEach(g=>g.target=1);syncOpenablesState();},
+    closeAll(){groups.forEach(g=>g.target=0);syncOpenablesState();},
     select:selectPanel,
     getSelected(){return selectedPi;},
     onSelect:null,                     // колбэк ({index,panel}|null)
     onTransform:null,                  // колбэк (name, [dx,dy,dz] в мире БАЗИС)
+    onOpenablesChange:null,            // колбэк ({hasOpen,allOpen}) для UI-переключателя
     setTextures(on){texOn=on; panelMeshes.forEach(m=>m&&applyTexture(m));},
     setDims(on){dimsOn=on; if(dimGroup) dimGroup.visible=on;},
     setExplode,
