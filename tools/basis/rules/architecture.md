@@ -37,6 +37,7 @@ ParamSpec; координаты всегда считает детерминир
 | `generators/helpers.py` | фасадная полоса, колонки, общие расчёты |
 | `generators/base.py` | общий каркас (корпус, задник, цоколь, опоры, штанга) |
 | `overrides.py` | точечные правки деталей поверх генератора (`spec.overrides[]`) |
+| `edit_engine.py` | чистый детерминированный резолвер semantic add/move полок и перегородок → legacy-compatible overrides + полный quality-gate; координаты от LLM отклоняет |
 | `materials_policy.py` | дозаполнение материалов/фурнитуры дефолтами из ТЗ (rules/materials.md) |
 | `materials.py` | производственная база (≈5000 позиций): `search_base`, `by_article`, `list_sheet_decors`, `resolve_project_materials` |
 | `decor_colors.py` | декор → цвет показа (палитра корпуса/фасадов) |
@@ -47,12 +48,15 @@ ParamSpec; координаты всегда считает детерминир
 | `geometry_check.py` | геометрия placement (нахлёсты, выход за габарит) |
 | `drilling_check.py` | сверловка: отверстие в теле панели, шаг 32, планки на уровне полок |
 | `completeness_check.py` | полнота: каждая деталь закреплена, заявленное (полки/штанги/опоры) построено |
+| `production_gate.py` | атомарный гейт AI/reducer-кандидата: Pydantic → JSON Schema → генерация → все производственные проверки → полнота/материалы; возвращает `CheckReport`, не применяя красную ревизию |
 | `cfrn.py` | project.json → `.cfrn` (родная ЛЕВОсторонняя конвенция БАЗИС, разворот фасадами к камере) + `check_cfrn_encoding` / `check_cfrn_holes` |
 | `b3d_format.py`, `b3d_verify.py` | чтение .b3d, паритет .b3d ↔ модель |
 | `build_b3d.py`, `cloud_api.py`, `cloud_cutting.py` | облако БАЗИС (ПЛАТНО, только по явной просьбе) |
 | `webviewer.py` | `viewer_payload` + `SCENE_JS` (общий three.js-движок: панели, присадки, метизы, анимация открывания, ракурсы `setView`, снапшоты) |
 | `studio.py` | Studio: HTTP-сервер, страница редактора, каталог изделий (+SVG-аксонометрия карточек `/thumb/`), версии, экспорт-центр (rules/studio.md) |
-| `spec_chat.py` | ИИ-чат: провайдеры (mock/gigachat/glm/kimi/deepseek/openai/gemini), конвейер фото-ТЗ vision→сборка, анти-инъекция |
+| `spec_chat.py` | ИИ-чат: провайдеры (mock/gigachat/glm/kimi/deepseek/openai/gemini), конвейер фото-ТЗ vision→сборка, анти-инъекция; обычные правки принимаются только как типизированные операции |
+| `edit_operations.py` | Pydantic discriminated union AI-операций + атомарный reducer в ParamSpec v1; проверяет target/preconditions и не вычисляет геометрию |
+| `studio_graph.py` | feature-flagged LangGraph-оркестрация AI-команд; состояние, checkpoints, отмена/возобновление и Protocol-адаптеры к детерминированному движку |
 | `techview.py`, `sheet_layout.py` | чертёж SVG (фронт+бок+деталировка), аллокатор выносок |
 | `nesting.py` | bin-packing раскрой (KERF=4) |
 | `estimate.py` | смета материалов по ценам базы |

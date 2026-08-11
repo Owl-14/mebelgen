@@ -80,9 +80,20 @@ ParamSpec — единственный вход конвейера (`paramspecs/
 системе 32). Конфликт оверрайда с новой геометрией — warning, не молчаливая
 поломка.
 
+Coordinate-overrides остаются частью ParamSpec v1 для ручных правок Studio и
+обратной совместимости. ИИ их не создаёт и не меняет: добавление/перемещение
+`shelf` и `vertical_partition` приходит как semantic operation с `section_id`,
+`panel_id`, `between`/`above`/`below`/`middle`, `align_front`/`align_back` и
+`delta_mm`. `src/edit_engine.py` на актуальной сгенерированной модели находит
+соседей и толщину, рассчитывает placement, проверяет ориентацию, стыки, границы,
+конфликты пользовательских overrides и все инженерные гейты. Только после этого
+он записывает совместимый coordinate-override; отказ возвращается структурированно.
+
 ## Как читать ТЗ (правила извлечения)
 
-Промпты: `prompts/spec_chat_prompt.txt` (чат/фото в Studio), `prompts/` (convert).
+Узловые промпты чата и фото зарегистрированы в `src/prompt_registry.py`, а их
+тексты лежат раздельно в `prompts/spec_chat/`; общие инженерные ограничения
+остаются в Python-контрактах и JSON Schema, а не копируются в инструкции.
 Конвейер фото: vision-модель выписывает ФАКТЫ текстом → сборщик строит ParamSpec
 (`spec_chat.chat_edit`, этапы разнесены по провайдерам env-ами
 `VISION_EXTRACT_PROVIDER` / `SPEC_CHAT_PROVIDER`).

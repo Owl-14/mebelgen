@@ -124,7 +124,7 @@ python qa/e2e_ai.py          # e2e ИИ-помощника (нужен живо�
 src/         весь конвейер: генераторы, валидаторы, Studio, чат, cfrn/b3d, смета,
              раскрой, чертёж, доставка — карта модулей в rules/architecture.md
 schema/      furniture.schema.json, paramspec.schema.json — контракты JSON
-prompts/     системные промпты (convert, чат Studio spec_chat_prompt.txt)
+prompts/     системные промпты (convert, узлы чата Studio в spec_chat/)
 paramspecs/  входные ParamSpec (в т.ч. tz_*); .previews/ — кэш миниатюр каталога
 projects/    сгенерированные проекты-примеры (.json)
 materials/   catalog.json (курируемый) + baza_materiala.json (база ≈5000) + source/
@@ -186,3 +186,31 @@ CfrnToB3d` → нативный `.b3d`. Команда `build-b3d`. Каждая
 | `LLM_API_KEY/BASE_URL/MODEL/VISION_MODEL/JSON_MODE` | переопределение любого OpenAI-совместимого провайдера |
 | `PARAMSPEC_PROVIDER` | провайдер извлечения ParamSpec для `convert`/`ingest` |
 | `BAZIS_VIEWER` | путь к БАЗИС-Просмотру (по умолчанию `D:\bazis\viewer.exe`) |
+| `AKEDA_TELEMETRY_BACKEND` | экспорт trace: `none` (по умолчанию), `console`, `file`, `otlp`, `langsmith`; можно перечислить через запятую |
+| `AKEDA_TELEMETRY_SAMPLE_RATE` | доля экспортируемых root trace `0..1` (по умолчанию `0.1`; trace_id создаётся и при отбраковке sampling) |
+| `AKEDA_TELEMETRY_FILE` | JSONL-файл локального backend (по умолчанию `out/traces.jsonl`) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_EXPORTER_OTLP_HEADERS` | стандартные endpoint и заголовки OTLP/HTTP; значения заголовков не попадают в spans |
+| `LANGSMITH_API_KEY` / `LANGSMITH_PROJECT` / `LANGSMITH_OTEL_ENDPOINT` | опциональный LangSmith OTLP backend; endpoint по умолчанию `https://api.smith.langchain.com/otel/v1/traces` |
+
+## OpenTelemetry
+
+Studio создаёт один `trace_id` на AI-запрос и показывает его в серверной истории
+команд. В trace входят только хэши проекта/ревизии, провайдер и модель, версия
+промпта, типы операций, token usage, количества панелей/присадок и итоги проверок.
+Полный текст ТЗ, сообщения, изображения, ParamSpec и секреты отбрасываются
+deny-by-default политикой `src/telemetry.py`; исключения записываются только кодом
+класса без текста и stack trace.
+
+Для локальной диагностики:
+
+```powershell
+$env:AKEDA_TELEMETRY_BACKEND='file'
+$env:AKEDA_TELEMETRY_SAMPLE_RATE='1'
+$env:AKEDA_TELEMETRY_FILE='D:\temp\akeda-traces.jsonl'
+python main.py studio paramspecs/wardrobe_demo.json --no-open
+```
+
+Для collector/совместимого backend задайте `AKEDA_TELEMETRY_BACKEND=otlp` и
+стандартные `OTEL_EXPORTER_OTLP_*`. Для LangSmith достаточно backend `langsmith`,
+`LANGSMITH_API_KEY` и, при необходимости, `LANGSMITH_PROJECT`; ключ хранится только
+в окружении и не сериализуется.

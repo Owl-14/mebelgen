@@ -26,6 +26,12 @@ def test_payload_ok_model():
     p = build_payload(SPEC)
     assert p["ok"], p["issues"]
     assert all(not v for v in p["issues"].values())
+    assert p["check_report"]["ok"] is True
+    assert [check["name"] for check in p["check_report"]["checks"]] == [
+        "pydantic", "json_schema", "generate", "consistency", "geometry",
+        "cfrn_encoding", "cfrn_holes_parity", "drilling_geometry",
+        "completeness_materials",
+    ]
     v = p["viewer"]
     assert len(v["panels"]) == 20
     assert len(v["holes"]) == 161                   # komi_72: производственные шаблоны (AKD-287)

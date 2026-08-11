@@ -78,53 +78,76 @@ SECTION_ARCHETYPES = ["cabinet", "wardrobe", "shelving", "drawer_unit", "door_un
 
 def build_payload(spec: dict[str, Any]) -> dict[str, Any]:
     """ParamSpec → всё для редактора: модель, проверки, BOM. Ошибки не бросают."""
-    from .paramspec import validate_paramspec
-
+    from .telemetry import hash_payload, span
     revision = _spec_revision(spec)
+    trace_attrs = {"revision.hash": hash_payload(spec)}
     issues: dict[str, list[str]] = {"schema": [], "consistency": [], "geometry": [],
-                                    "cfrn": [], "holes": [], "drilling": []}
-    issues["schema"] = list(validate_paramspec(spec) or [])
-    if issues["schema"]:
-        return {"ok": False, "issues": issues, "revision": revision}
+                                    "cfrn": [], "holes": [], "drilling": [],
+                                    "completeness": [], "materials": []}
+    from .production_gate import evaluate_production_gate
 
-    from .generators import generate_from_paramspec
-    try:
-        project = generate_from_paramspec(spec)
-    except Exception as e:
-        issues["schema"] = [f"генерация: {e}"]
-        return {"ok": False, "issues": issues, "revision": revision}
-    try:
-        from .materials import resolve_project_materials
-        project["material_refs"] = resolve_project_materials(project)
-    except Exception:
-        pass
-
-    from .consistency_check import check_consistency
-    from .geometry_check import check_placement_geometry
-    from .cfrn import check_cfrn_encoding, check_cfrn_holes
-    issues["consistency"] = [f"{i.panel}: {i.message}" for i in check_consistency(project)
-                             if i.severity == "error"]
-    g = check_placement_geometry(project)
-    if not g.get("ok", True):
-        issues["geometry"] = [str(x) for x in g.get("issues", [])][:20] or ["пересечения панелей"]
-    try:
-        issues["cfrn"] = check_cfrn_encoding(project)[:20]
-        issues["holes"] = check_cfrn_holes(project)[:20]
-    except Exception as e:
-        issues["cfrn"] = [f"кодирование: {e}"]
-    try:
-        from .drilling_check import check_drilling_geometry
-        issues["drilling"] = check_drilling_geometry(project)["errors"][:20]
-    except Exception as e:
-        issues["drilling"] = [f"валидатор сверловки: {e}"]
+    with span("quality-check.production-gate", {
+        **trace_attrs, "check.name": "production_gate",
+    }) as gate_span:
+        decision = evaluate_production_gate(spec)
+        gate_span.set_attributes({
+            "check.outcome": "pass" if decision.report.ok else "fail",
+            "error.codes": [problem.code for problem in decision.report.errors],
+        })
+    stage_to_issue = {
+        "pydantic": "schema",
+        "json_schema": "schema",
+        "generate": "schema",
+        "consistency": "consistency",
+        "geometry": "geometry",
+        "cfrn_encoding": "cfrn",
+        "cfrn_holes_parity": "holes",
+        "drilling_geometry": "drilling",
+    }
+    for check in decision.report.checks:
+        target = stage_to_issue.get(check.name)
+        for problem in check.issues:
+            if problem.severity != "error":
+                continue
+            if check.name == "completeness_materials":
+                target = "materials" if problem.code.startswith("materials.") else "completeness"
+            if target:
+                issues[target].append(problem.detail)
+    project = decision.project
+    exposed_checks = {
+        "schema": ("pydantic", "json_schema", "generate"),
+        "consistency": ("consistency",),
+        "geometry": ("geometry",),
+        "cfrn": ("cfrn_encoding",),
+        "holes": ("cfrn_holes_parity",),
+        "drilling": ("drilling_geometry",),
+    }
+    checks_by_name = {check.name: check for check in decision.report.checks}
+    for public_name, stage_names in exposed_checks.items():
+        errors = [problem.code for stage_name in stage_names
+                  for problem in (checks_by_name[stage_name].issues
+                                  if stage_name in checks_by_name else [])
+                  if problem.severity == "error"]
+        with span(f"quality-check.{public_name}", {
+            **trace_attrs,
+            "check.name": public_name,
+            "check.outcome": "fail" if errors else "pass",
+            "error.codes": errors,
+        }):
+            pass
+    if project is None:
+        return {"ok": False, "issues": issues, "revision": revision,
+                "check_report": decision.report.to_dict()}
 
     from .webviewer import viewer_payload
     from .delivery import _hardware_bom, spec_summary
     s = spec_summary(project)
     payload = {
-        "ok": not any(issues.values()),
+        "ok": decision.report.ok,
         "revision": revision,
         "issues": issues,
+        "check_report": decision.report.to_dict(),
+        "warnings": [warning.to_dict() for warning in decision.report.warnings],
         "viewer": viewer_payload(project),      # панели+присадки+фурнитура+открывашки
         "stats": {"n_panels": s["n_panels"], "n_holes": s["n_holes"],
                   "dims": s["dims"], "decor": s["decor"]},
@@ -138,6 +161,27 @@ def build_payload(spec: dict[str, Any]) -> dict[str, Any]:
         payload["estimate"] = {"rows": [], "total": 0, "currency": "₽",
                                "warnings": [f"смета: {e}"]}
     return payload
+
+
+def _trace_engineering_result(spec: dict[str, Any] | None) -> None:
+    """Run deterministic engineering inside the active AI trace without persisting data."""
+
+    if not isinstance(spec, dict):
+        return
+    from .telemetry import add_current_attributes
+
+    payload = build_payload(spec)
+    stats = payload.get("stats") if isinstance(payload, dict) else {}
+    issues = payload.get("issues") if isinstance(payload, dict) else {}
+    error_codes = [
+        f"{name}_failed" for name, values in dict(issues or {}).items() if values
+    ]
+    add_current_attributes({
+        "panel.count": dict(stats or {}).get("n_panels"),
+        "hole.count": dict(stats or {}).get("n_holes"),
+        "check.outcome": "pass" if payload.get("ok") else "fail",
+        "error.codes": error_codes,
+    })
 
 
 def techview_svg(spec: dict[str, Any], panel: str | None = None) -> dict[str, Any]:
@@ -989,6 +1033,18 @@ class _Studio:
         self.guard = _ChatGuard(self.out_dir)
         self._cancelled_chat_operations: dict[str, float] = {}
         self._cancelled_chat_lock = threading.RLock()
+        self.ai_graph = None
+        graph_enabled = (
+            _os.environ.get("STUDIO_LANGGRAPH_ORCHESTRATION", "").strip().lower()
+            in {"1", "true", "yes", "on"}
+        )
+        if graph_enabled:
+            from .studio_graph import StudioGraphOrchestrator
+
+            self.ai_graph = StudioGraphOrchestrator.durable(
+                self.out_dir / ".studio_graph",
+                cancellation_probe=self.is_chat_operation_cancelled,
+            )
         self.started = _time.time()               # /healthz, /version (AKD-264)
         # демо-режим: изделия, существовавшие на старте, защищены от перезаписи
         self.protected: set[str] = (
@@ -1054,6 +1110,13 @@ class _Studio:
             return False
         with self._cancelled_chat_lock:
             return self._cancelled_chat_operations.pop(operation_id, None) is not None
+
+    def is_chat_operation_cancelled(self, value: Any) -> bool:
+        operation_id = self._valid_chat_operation_id(value)
+        if not operation_id:
+            return False
+        with self._cancelled_chat_lock:
+            return operation_id in self._cancelled_chat_operations
 
 
 def _studio_login_page() -> str:
@@ -1177,6 +1240,17 @@ def make_handler(st: _Studio):
             *,
             headers: list[tuple[str, str]] | None = None,
         ):
+            from .telemetry import add_current_attributes, current_trace_id
+
+            trace_id = current_trace_id()
+            add_current_attributes({
+                "http.status_code": code,
+                "check.outcome": "pass" if code < 400 else "error",
+                "error.codes": [obj.get("code") or "http_error"]
+                if code >= 400 and isinstance(obj, dict) else [],
+            })
+            if trace_id and isinstance(obj, dict) and "trace_id" not in obj:
+                obj = {**obj, "trace_id": trace_id}
             self._send(
                 code,
                 json.dumps(obj, ensure_ascii=False).encode("utf-8"),
@@ -1750,6 +1824,11 @@ def make_handler(st: _Studio):
                                 ),
                             },
                         )
+                    from .telemetry import add_current_attributes
+                    add_current_attributes({
+                        "approval.outcome": str(record.get("status") or ""),
+                        "revision.hash": str(record.get("revision") or ""),
+                    })
                     self._json({
                         "ok": True,
                         "status": record["status"],
@@ -1866,6 +1945,15 @@ def make_handler(st: _Studio):
                 spec_path = st.workspaces.current_spec_path(auth)
                 current_spec = json.loads(spec_path.read_text(encoding="utf-8"))
                 spec = body.get("spec") or {}
+                from .telemetry import add_current_attributes, current_trace_id, hash_payload
+                add_current_attributes({
+                    "project.hash": hash_payload({
+                        "project_file": spec_path.name,
+                        "organization": workspace.organization_id,
+                    }),
+                    "revision.hash": hash_payload(spec),
+                    "image.count": len(body.get("images") or []),
+                })
                 if path in ("/api/export-cfrn", "/api/build-b3d", "/api/deliver"):
                     production_error = _production_gate_error(
                         spec, body.get("model_revision")
@@ -1955,7 +2043,6 @@ def make_handler(st: _Studio):
                         "history": st.workspaces.ai_messages(auth, spec_path),
                     })
                 elif path == "/api/chat":
-                    from .spec_chat import chat_edit
                     ctx = body.get("context") or None
                     # ИИ не знает содержимого производственной базы: для
                     # нерешённых слотов даём РЕАЛЬНЫХ кандидатов (иначе модель
@@ -1989,11 +2076,50 @@ def make_handler(st: _Studio):
                     provider = body.get("provider") or None
                     history = (st.workspaces.ai_messages(auth, spec_path)
                                if auth is not None else body.get("history") or [])
-                    res = chat_edit(spec, message,
-                                    history,
-                                    ctx,
-                                    body.get("images") or None,
-                                    provider)
+                    from .spec_chat import chat_edit
+
+                    if st.ai_graph is not None:
+                        from .studio_graph import GraphConflict, GraphRevisionError
+
+                        operation_id = (
+                            st._valid_chat_operation_id(body.get("operation_id"))
+                            or secrets.token_hex(16)
+                        )
+                        try:
+                            res = st.ai_graph.run(
+                                project_key=str(spec_path.resolve()),
+                                spec=spec,
+                                message=message,
+                                history=history,
+                                context=ctx,
+                                images=body.get("images") or None,
+                                provider=provider,
+                                generation=operation_id,
+                                expected_revision=_spec_revision(spec),
+                            )
+                        except GraphConflict as error:
+                            self._json({
+                                "ok": False,
+                                "error": str(error),
+                                "code": "generation_conflict",
+                            }, 409)
+                            return
+                        except GraphRevisionError as error:
+                            self._json({
+                                "ok": False,
+                                "error": str(error),
+                                "code": "stale_revision",
+                            }, 409)
+                            return
+                    else:
+                        res = chat_edit(spec, message,
+                                        history,
+                                        ctx,
+                                        body.get("images") or None,
+                                        provider)
+                    _trace_engineering_result(
+                        res.get("spec") if isinstance(res, dict) else None
+                    )
                     st.guard.add_tokens(int(((res.get("usage") or {}).get("total")) or 0))
                     if st.consume_chat_cancellation(body.get("operation_id")):
                         self._json({
@@ -2015,6 +2141,7 @@ def make_handler(st: _Studio):
                             usage=res.get("usage") if isinstance(res.get("usage"), dict) else {},
                             context=ctx if isinstance(ctx, dict) else {},
                             image_count=len(body.get("images") or []),
+                            trace_id=current_trace_id(),
                         )
                         res = dict(res)
                         res["history_entry"] = entry
@@ -2053,6 +2180,9 @@ def make_handler(st: _Studio):
                                         "изображению. НЕ бери ничего из других изделий. created=true.",
                                         images=[{"mime": mime, "data": str(body.get("data", ""))}],
                                         provider=body.get("provider") or None)
+                        _trace_engineering_result(
+                            res.get("spec") if isinstance(res, dict) else None
+                        )
                         st.guard.add_tokens(int(((res.get("usage") or {}).get("total")) or 0))
                         new_spec = res.get("spec")
                         if not new_spec:
@@ -2076,8 +2206,15 @@ def make_handler(st: _Studio):
                             while out.exists():
                                 out = workspace.spec_dir / f"{_slugify(title)}_{i}.json"
                                 i += 1
-                        out.write_text(json.dumps(new_spec, ensure_ascii=False, indent=2),
-                                       encoding="utf-8")
+                        from .telemetry import span
+                        with span("revision.persist", {
+                            "project.hash": hash_payload({"project_file": out.name}),
+                            "revision.hash": hash_payload(new_spec),
+                        }) as persist_span:
+                            out.write_text(json.dumps(new_spec, ensure_ascii=False, indent=2),
+                                           encoding="utf-8")
+                            persist_span.set_attributes({"revision.persisted": True,
+                                                         "check.outcome": "pass"})
                         st.workspaces.set_current(auth, out)
                         self._json({"ok": True, "spec": new_spec, "file": out.name,
                                     "usage": res.get("usage")})
@@ -2613,6 +2750,11 @@ def make_handler(st: _Studio):
                     )
                     spec_path.write_text(json.dumps(spec, ensure_ascii=False, indent=2),
                                          encoding="utf-8")
+                    add_current_attributes({
+                        "revision.hash": hash_payload(spec),
+                        "revision.persisted": True,
+                        "check.outcome": "pass",
+                    })
                     prev = body.get("preview")         # снапшот 3D для каталога (AKD-217)
                     if isinstance(prev, str) and prev.startswith("data:image/png;base64,"):
                         try:
@@ -2697,6 +2839,8 @@ def make_handler(st: _Studio):
             except Exception as e:
                 self._json({"ok": False, "error": str(e)[:300]}, 500)
 
+    from .telemetry import traced_http_request
+    Handler.do_POST = traced_http_request(Handler.do_POST)
     return Handler
 
 
@@ -6067,7 +6211,7 @@ function setOperationStatus(operation,state,label){
   operation.status.textContent=label;
 }
 function createOperation(command,{images=[],forceModel=false,kind='command',recordedAt='',
-  contextOverride=null,provider=''}={}){
+  contextOverride=null,provider='',traceId=''}={}){
   const id=`operation-${++operationSeq}`,
     context=contextOverride||operationContextSnapshot(forceModel);
   const attachmentMeta=(images||[]).map(im=>({name:im.name||'',mime:im.mime||''}));
@@ -6085,6 +6229,7 @@ function createOperation(command,{images=[],forceModel=false,kind='command',reco
   title.id=id+'-title';
   const contextLine=operationNode('div','operation-context',`Контекст: ${context.label}`+
     (attachmentMeta.length?` · ТЗ: ${attachmentMeta.length}`:''));
+  if(traceId)contextLine.append(document.createTextNode(` · trace_id: ${traceId}`));
   const summary=operationNode('div','operation-summary','Разбираю команду и контекст…');
   const changes=operationNode('div','operation-changes'); changes.hidden=true;
   const more=operationNode('div','operation-more'); more.hidden=true;
@@ -6099,8 +6244,9 @@ function createOperation(command,{images=[],forceModel=false,kind='command',reco
   actions.append(show,details,undo);
   const technical=operationNode('div','operation-technical'); technical.hidden=true;
   el.append(head,title,contextLine,summary,changes,more,check,actions,technical);
-  const operation={id,kind,el,status,summary,changes,more,check,actions,show,details,undo,technical,
+  const operation={id,kind,el,status,summary,changes,more,check,actions,show,details,undo,technical,contextLine,
     context,attachments:attachmentMeta,provider:provider||$('aiProvider').selectedOptions[0]?.textContent||CHAT_PROVIDER||'—',
+    traceId:traceId||'',
     startedAt:time.dateTime,command:title.textContent,beforeSpecJson:JSON.stringify(SPEC),
     beforeIssueCount:issueCount(),undoDepthBefore:UNDO.length,state:'pending',rawChanges:[]};
   show.onclick=()=>showOperationTarget(operation.id);
@@ -6339,7 +6485,7 @@ async function loadChatHistory(){
         partType:stored.part_type||'',placement:null}:{scope:'model',label:'Всё изделие',partName:null};
       const operation=createOperation(item.message||'Команда без текста',{
         forceModel:true,kind:'history',recordedAt:item.created_at||'',contextOverride:context,
-        provider:item.provider||'—'});
+        provider:item.provider||'—',traceId:item.trace_id||''});
       finishOperation(operation,{state:item.changed?'applied':'answer',reply:item.reply||'',
         changes:item.changes||[],usage:item.usage||null,canUndo:false,
         summary:item.changed?'':'Модель не изменялась.'});
@@ -6501,12 +6647,11 @@ function diagCtx(){
     n_holes:lastPayload.stats&&lastPayload.stats.n_holes,
     dims:lastPayload.stats&&lastPayload.stats.dims,
     estimate_total:lastPayload.estimate&&lastPayload.estimate.total}:{};
-  // реальная геометрия деталей — чтобы ИИ добавлял/двигал панели по фактическим
-  // координатам соседей, а не вслепую (перегородки, полки, примыкание встык)
+  // ИИ получает только идентификаторы и семантику. Геометрию и стыки считает
+  // серверный EditEngine; мировые координаты в LLM-контекст не передаём.
   if(lastPayload&&lastPayload.viewer&&lastPayload.viewer.panels)
-    ctx.panels=lastPayload.viewer.panels.slice(0,80).map(p=>({n:p.name,t:p.type,
-      x:[Math.round(p.x1),Math.round(p.x2)],y:[Math.round(p.y1),Math.round(p.y2)],
-      z:[Math.round(p.z1),Math.round(p.z2)]}));
+    ctx.panels=lastPayload.viewer.panels.slice(0,80).map(p=>({panel_id:p.name,
+      name:p.name,type:p.type,section_id:p.section_id||null}));
   if(lastPayload&&lastPayload.issues){
     const bad={};
     for(const k of Object.keys(lastPayload.issues)){
@@ -6545,12 +6690,15 @@ async function runChat(text){
   setChatBusy(true,'Разбираю команду и контекст…');
   try{
     const ctx=diagCtx();
-    if(operation.context.partName)ctx.selected_part={name:operation.context.partName,
-      type:operation.context.partType,placement:operation.context.placement};
+    if(operation.context.partName)ctx.selected_part={panel_id:operation.context.partName,
+      name:operation.context.partName,type:operation.context.partType,
+      section_id:(currentSelectedPart()||{}).section_id||null};
     const r=await requestChat({spec:JSON.parse(requestSpecJson),message:m,history:CHAT_HISTORY,
       context:ctx,images:imgs.length?imgs:null,provider:CHAT_PROVIDER},controller);
     let p={};
     try{p=await r.json();}catch(e){throw new Error(`Сервер вернул ответ ${r.status} без данных`);}
+    if(p.trace_id&&!operation.traceId){operation.traceId=String(p.trace_id);
+      operation.contextLine.append(document.createTextNode(` · trace_id: ${operation.traceId}`));}
     if(!r.ok) throw new Error(p.reply||p.error||`Ошибка запроса (${r.status})`);
     if(p.error&&!p.spec) throw new Error(String(p.error));
     if(controller.signal.aborted)throw new DOMException('Команда остановлена','AbortError');
@@ -6655,8 +6803,8 @@ async function fixAll(){
           message:'Почини все перечисленные проблемы: ошибки проверок и неподобранные '
                  +'позиции базы. Меняй только то, что нужно для починки. '
                  +'Детали, добавленные пользователем (overrides с action:"add"), '
-                 +'УДАЛЯТЬ ЗАПРЕЩЕНО — вместо удаления подгони их placement до '
-                 +'примыкания встык по координатам соседей из context.panels.',
+                 +'УДАЛЯТЬ ЗАПРЕЩЕНО. Для полок и перегородок верни move_panel '
+                 +'с семантическими привязками; placement и координаты не пиши.',
           history:[],context:diagCtx(),provider:CHAT_PROVIDER},controller);
       const p=await r.json();
       if(!r.ok) throw new Error(p.reply||p.error||`Ошибка запроса (${r.status})`);

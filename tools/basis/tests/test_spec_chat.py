@@ -75,11 +75,57 @@ def test_provider_failure_is_machine_readable(monkeypatch):
     assert "offline" in r["error"]
 
 
+def test_red_production_candidate_is_rejected_before_studio_can_apply_it(monkeypatch):
+    import copy
+    import src.spec_chat as sc
+
+    class RedProvider:
+        def chat(self, *args, **kwargs):
+            return {"reply": "Изменил плиту.", "operations": [{
+                "op": "SetMaterial",
+                "target_id": "materials.board_thickness",
+                "preconditions": [{"kind": "value_equals",
+                                   "path": "materials.board_thickness", "value": 25}],
+                "field": "board_thickness",
+                "value": 24,
+            }]}
+
+    before = copy.deepcopy(SPEC)
+    monkeypatch.setattr(sc, "get_chat_provider", lambda name=None: RedProvider())
+    result = sc.chat_edit(SPEC, "сделай плиту 24 мм")
+
+    assert result["spec"] is None
+    assert result["changes"] == []
+    assert result["code"] == "production_gate_rejected"
+    assert result["check_report"]["ok"] is False
+    assert any(issue["purpose"] and issue["repair_options"]
+               for issue in result["check_report"]["errors"])
+    assert SPEC == before
+
+
+def test_rejected_provider_cannot_mutate_current_revision_by_reference(monkeypatch):
+    import copy
+    import src.spec_chat as sc
+
+    class MutatingProvider:
+        def chat(self, supplied, *args, **kwargs):
+            supplied["dimensions"]["width"] = -1
+            return {"reply": "готово", "spec": supplied}
+
+    before = copy.deepcopy(SPEC)
+    monkeypatch.setattr(sc, "get_chat_provider", lambda name=None: MutatingProvider())
+    result = sc.chat_edit(SPEC, "сломай ширину")
+
+    assert result["spec"] is None
+    assert result["error"]
+    assert SPEC == before
+
+
 def test_openai_compat_provider_has_bounded_timeout_without_hidden_retries(monkeypatch):
     import types
     import src.spec_chat as sc
 
-    captured = {}
+    captured = {"payloads": []}
 
     class FakeOpenAI:
         def __init__(self, **kwargs):
@@ -133,7 +179,7 @@ def test_gemini_provider_parses_response(monkeypatch):
     """AKD-203: GeminiChatProvider формирует запрос (с фото) и парсит JSON-ответ."""
     import src.spec_chat as sc
 
-    captured = {}
+    captured = {"payloads": []}
 
     class _Resp:
         status_code = 200
@@ -145,7 +191,7 @@ def test_gemini_provider_parses_response(monkeypatch):
 
     def _post(url, params=None, json=None, timeout=None):
         captured["url"] = url; captured["key"] = (params or {}).get("key")
-        captured["payload"] = json
+        captured["payloads"].append(json)
         return _Resp()
 
     monkeypatch.setattr(sc, "get_chat_provider", lambda name=None: sc.GeminiChatProvider())
@@ -158,18 +204,103 @@ def test_gemini_provider_parses_response(monkeypatch):
     assert r["spec"] and r["spec"]["dimensions"]["depth"] == 600
     # фото ушло в inline_data, ключ — в query
     assert captured["key"] == "test-key"
-    parts = captured["payload"]["contents"][-1]["parts"]
-    assert any("inline_data" in p for p in parts)
+    assert any(
+        "inline_data" in part
+        for payload in captured["payloads"]
+        for part in payload["contents"][-1]["parts"]
+    )
+    assert [item["prompt_id"] for item in r["trace"]["prompts"]] == [
+        "furniture.vision-facts", "furniture.create-paramspec",
+    ]
 
 
 def test_prompt_keeps_geometry_rules():
-    """Инварианты промпта: ориентация добавляемых деталей (8а) и запрет
-    удалять пользовательские overrides при автопочинке (регресс на потерю)."""
-    text = (ROOT / "prompts" / "spec_chat_prompt.txt").read_text(encoding="utf-8")
-    for marker in ("vertical_partition", "тонкая по X", "ПРИМЫКАНИЕ ВСТЫК",
-                   "context.panels", "ДЕТАЛИ ПОЛЬЗОВАТЕЛЯ НЕ УДАЛЯТЬ",
-                   "ПОСТАВЬ РЯДОМ", '"composite" + blocks'):
+    """MEB-144: prompt emits semantic bindings and forbids LLM coordinates."""
+    text = "\n".join(
+        (ROOT / "prompts" / "spec_chat" / name).read_text(encoding="utf-8")
+        for name in ("edit_operations.txt", "part_edit.txt", "create_paramspec.txt")
+    )
+    for marker in ("vertical_partition", "section_id", "panel_id", "between",
+                   "above", "below", "middle", "align_front", "align_back",
+                   "delta_mm", "жёстко запрещены",
+                   "автоматически не удаляй"):
         assert marker in text, f"в промпте потеряно правило: {marker}"
+
+
+def test_mock_result_exposes_versioned_prompt_trace():
+    result = chat_edit(SPEC, "сделай глубину 600")
+    trace = result["trace"]
+    assert trace["router"] == {"kind": "deterministic", "node": "edit_operations"}
+    assert trace["prompts"][0]["prompt_id"] == "furniture.edit-operations"
+    assert trace["prompts"][0]["prompt_version"] == "1.0.0"
+
+
+def test_read_only_node_cannot_smuggle_a_spec_mutation(monkeypatch):
+    import src.spec_chat as sc
+
+    class MisbehavingProvider:
+        def chat(self, spec, message, history=None, context=None, images=None):
+            request = sc.build_chat_prompt_request(spec, message, history, context)
+            changed = {**spec, "dimensions": {**spec["dimensions"], "depth": 999}}
+            return {
+                "reply": "Ответ на вопрос.", "spec": changed,
+                "trace": {"prompts": [request.trace], "router": {
+                    "kind": "deterministic", "node": request.node,
+                }},
+            }
+
+    monkeypatch.setattr(sc, "get_chat_provider", lambda name=None: MisbehavingProvider())
+    result = sc.chat_edit(SPEC, "сколько стоит?", context={"estimate_total": 100})
+    assert result["spec"] is None and result["changes"] == []
+    assert result["trace"]["router"]["node"] == "answer_query"
+
+
+def test_provider_geometry_operations_are_resolved_without_llm_placement(monkeypatch):
+    import src.spec_chat as sc
+
+    spec = {
+        "schemaVersion": "paramspec-v1", "project_name": "Chat edit",
+        "archetype": "cabinet",
+        "dimensions": {"width": 800, "depth": 450, "height": 900},
+        "materials": {"board_thickness": 16, "back_thickness": 16,
+                      "board_material": "ЛДСП", "back_material": "ЛДСП",
+                      "edge_band_thickness": 0.4, "color": "по согласованию"},
+        "sections": [{"id": "main", "kind": "open"}],
+    }
+
+    class SemanticProvider:
+        def chat(self, *_args, **_kwargs):
+            return {"reply": "Добавил полку.", "spec": None, "operations": [{
+                "kind": "add_panel", "panel_type": "shelf", "panel_id": "AI shelf",
+                "section_id": "main", "middle": True,
+                "align_front": True, "align_back": True,
+            }]}
+
+    monkeypatch.setattr(sc, "get_chat_provider", lambda _name=None: SemanticProvider())
+    result = sc.chat_edit(spec, "добавь полку посередине")
+    assert result["spec"] is not None
+    assert result["resolved_operations"][0]["placement"]["y1"] == 442
+    assert any("overrides.0.placement" in change for change in result["changes"])
+
+
+def test_provider_coordinate_override_is_structurally_refused(monkeypatch):
+    import src.spec_chat as sc
+
+    class CoordinateProvider:
+        def chat(self, spec, *_args, **_kwargs):
+            changed = json.loads(json.dumps(spec))
+            changed["overrides"] = [{
+                "panel": "LLM shelf", "action": "add", "type": "shelf",
+                "placement": {"x1": 0, "x2": 1, "y1": 0, "y2": 1,
+                              "z1": 0, "z2": 1},
+            }]
+            return {"reply": "готово", "spec": changed}
+
+    monkeypatch.setattr(sc, "get_chat_provider", lambda _name=None: CoordinateProvider())
+    result = sc.chat_edit(SPEC, "добавь полку")
+    assert result["spec"] is None
+    assert result["code"] == "llm_coordinates_forbidden"
+    assert result["reason"]["code"] == "llm_coordinates_forbidden"
 
 
 def test_gigachat_provider(monkeypatch):
