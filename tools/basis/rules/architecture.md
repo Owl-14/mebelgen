@@ -37,6 +37,7 @@ ParamSpec; координаты всегда считает детерминир
 | `generators/helpers.py` | фасадная полоса, колонки, общие расчёты |
 | `generators/base.py` | общий каркас (корпус, задник, цоколь, опоры, штанга) |
 | `overrides.py` | точечные правки деталей поверх генератора (`spec.overrides[]`) |
+| `edit_engine.py` | чистый детерминированный резолвер semantic add/move полок и перегородок → legacy-compatible overrides + полный quality-gate; координаты от LLM отклоняет |
 | `materials_policy.py` | дозаполнение материалов/фурнитуры дефолтами из ТЗ (rules/materials.md) |
 | `materials.py` | производственная база (≈5000 позиций): `search_base`, `by_article`, `list_sheet_decors`, `resolve_project_materials` |
 | `decor_colors.py` | декор → цвет показа (палитра корпуса/фасадов) |

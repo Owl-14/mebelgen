@@ -6479,12 +6479,11 @@ function diagCtx(){
     n_holes:lastPayload.stats&&lastPayload.stats.n_holes,
     dims:lastPayload.stats&&lastPayload.stats.dims,
     estimate_total:lastPayload.estimate&&lastPayload.estimate.total}:{};
-  // реальная геометрия деталей — чтобы ИИ добавлял/двигал панели по фактическим
-  // координатам соседей, а не вслепую (перегородки, полки, примыкание встык)
+  // ИИ получает только идентификаторы и семантику. Геометрию и стыки считает
+  // серверный EditEngine; мировые координаты в LLM-контекст не передаём.
   if(lastPayload&&lastPayload.viewer&&lastPayload.viewer.panels)
-    ctx.panels=lastPayload.viewer.panels.slice(0,80).map(p=>({n:p.name,t:p.type,
-      x:[Math.round(p.x1),Math.round(p.x2)],y:[Math.round(p.y1),Math.round(p.y2)],
-      z:[Math.round(p.z1),Math.round(p.z2)]}));
+    ctx.panels=lastPayload.viewer.panels.slice(0,80).map(p=>({panel_id:p.name,
+      name:p.name,type:p.type,section_id:p.section_id||null}));
   if(lastPayload&&lastPayload.issues){
     const bad={};
     for(const k of Object.keys(lastPayload.issues)){
@@ -6523,8 +6522,9 @@ async function runChat(text){
   setChatBusy(true,'Разбираю команду и контекст…');
   try{
     const ctx=diagCtx();
-    if(operation.context.partName)ctx.selected_part={name:operation.context.partName,
-      type:operation.context.partType,placement:operation.context.placement};
+    if(operation.context.partName)ctx.selected_part={panel_id:operation.context.partName,
+      name:operation.context.partName,type:operation.context.partType,
+      section_id:(currentSelectedPart()||{}).section_id||null};
     const r=await requestChat({spec:JSON.parse(requestSpecJson),message:m,history:CHAT_HISTORY,
       context:ctx,images:imgs.length?imgs:null,provider:CHAT_PROVIDER},controller);
     let p={};
@@ -6633,8 +6633,8 @@ async function fixAll(){
           message:'Почини все перечисленные проблемы: ошибки проверок и неподобранные '
                  +'позиции базы. Меняй только то, что нужно для починки. '
                  +'Детали, добавленные пользователем (overrides с action:"add"), '
-                 +'УДАЛЯТЬ ЗАПРЕЩЕНО — вместо удаления подгони их placement до '
-                 +'примыкания встык по координатам соседей из context.panels.',
+                 +'УДАЛЯТЬ ЗАПРЕЩЕНО. Для полок и перегородок верни move_panel '
+                 +'с семантическими привязками; placement и координаты не пиши.',
           history:[],context:diagCtx(),provider:CHAT_PROVIDER},controller);
       const p=await r.json();
       if(!r.ok) throw new Error(p.reply||p.error||`Ошибка запроса (${r.status})`);

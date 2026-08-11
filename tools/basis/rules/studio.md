@@ -71,7 +71,7 @@ ParamSpec, версии, preview, AI-историю и существующие 
 | `/api/generate` | ParamSpec → `{viewer, issues{6 чеков}, stats, bom, refs, estimate}` |
 | `/api/techview` | чертёж SVG (+`panel` — деталировка одной детали) |
 | `/api/nesting` | раскрой-превью SVG |
-| `/api/chat` | ИИ-правка: `{spec,message,history,context,images,provider}` → `{reply,spec,changes,usage}`; в context — реальные кандидаты базы для нерешённых слотов и `panels` (геометрия всех деталей — для добавления/подгонки встык) |
+| `/api/chat` | ИИ-правка: `{spec,message,history,context,images,provider}` → `{reply,spec,changes,usage}`; для полок/перегородок LLM возвращает semantic `operations` без координат, EditEngine рассчитывает геометрию и либо отдаёт проверенную спеку, либо `{code,reason}` |
 | `/api/chat/cancel` | помечает AI-операцию отменённой; поздний ответ не пишется в историю |
 | `/api/chat-history` | Серверная история AI-команд текущего изделия. В auth-режиме браузерная `history` не считается источником истины: контекст читается из tenant-хранилища |
 | `/api/providers`, `/api/token-balance` | список нейросетей / лимиты выбранной |

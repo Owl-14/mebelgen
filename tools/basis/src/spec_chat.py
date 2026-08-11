@@ -60,6 +60,19 @@ def spec_diff(old: dict[str, Any], new: dict[str, Any]) -> list[str]:
     return lines
 
 
+def _coordinate_overrides(spec: dict[str, Any]) -> list[dict[str, Any]]:
+    """Geometry written by a provider is forbidden; unchanged legacy data is fine."""
+    out = []
+    for override in spec.get("overrides") or []:
+        if not isinstance(override, dict):
+            continue
+        if "placement" in override or "move" in override or override.get("action") == "add":
+            out.append({key: copy.deepcopy(override.get(key))
+                        for key in ("panel", "action", "placement", "move", "type")
+                        if key in override})
+    return out
+
+
 # ------------------------------------------------------------------ mock
 
 _NUM = r"(\d+(?:[.,]\d+)?)"
@@ -326,7 +339,8 @@ class OpenAICompatProvider:
         ctx = f"\nСостояние модели: {json.dumps(context, ensure_ascii=False)}\n" if context else ""
         text = (f"Текущий ParamSpec:\n```json\n{json.dumps(spec, ensure_ascii=False, indent=2)}\n```\n{ctx}\n"
                 f"Запрос пользователя: {message or '(см. приложенные изображения ТЗ)'}\n"
-                "Ответь строго JSON-объектом {\"reply\":..., \"spec\":...}.")
+                "Ответь строго JSON-объектом {\"reply\":..., \"spec\":...} "
+                "либо {\"reply\":..., \"spec\":null, \"operations\":[...]}.")
         if images:                                   # vision-формат OpenAI: content-массив
             content: list[dict[str, Any]] = [{"type": "text", "text": text}]
             for im in images:
@@ -348,6 +362,7 @@ class OpenAICompatProvider:
         usage = getattr(r, "usage", None)
         return {"reply": str(data.get("reply") or "Готово."),
                 "spec": data.get("spec") if isinstance(data.get("spec"), dict) else None,
+                "operations": data.get("operations") if isinstance(data.get("operations"), list) else None,
                 "created": bool(data.get("created")),
                 "usage": {"model": model,
                           "total": getattr(usage, "total_tokens", None),
@@ -412,6 +427,7 @@ class GeminiChatProvider:
         data = json.loads(text or "{}")
         return {"reply": str(data.get("reply") or "Готово."),
                 "spec": data.get("spec") if isinstance(data.get("spec"), dict) else None,
+                "operations": data.get("operations") if isinstance(data.get("operations"), list) else None,
                 "created": bool(data.get("created"))}
 
 
@@ -533,7 +549,8 @@ class GigaChatProvider:
         user_msg: dict[str, Any] = {"role": "user", "content":
             f"Текущий ParamSpec:\n```json\n{json.dumps(spec, ensure_ascii=False, indent=2)}\n```\n{ctx}\n"
             f"Запрос: {message or '(см. приложенные изображения ТЗ)'}\n"
-            "Ответь строго JSON-объектом {\"reply\":..., \"spec\":...}."}
+            "Ответь строго JSON-объектом {\"reply\":..., \"spec\":...} либо "
+            "{\"reply\":..., \"spec\":null, \"operations\":[...]}."}
         model = self.model
         if images:                                       # фото ТЗ — vision-модель
             user_msg["attachments"] = self._upload_images(images)
@@ -554,6 +571,7 @@ class GigaChatProvider:
         usage = body.get("usage") or {}
         return {"reply": str(data.get("reply") or "Готово."),
                 "spec": data.get("spec") if isinstance(data.get("spec"), dict) else None,
+                "operations": data.get("operations") if isinstance(data.get("operations"), list) else None,
                 "created": bool(data.get("created")),
                 "usage": {"model": model, "total": usage.get("total_tokens"),
                           "prompt": usage.get("prompt_tokens"),
@@ -634,25 +652,55 @@ def chat_edit(spec: dict[str, Any], message: str,
     if two_stage and isinstance(res, dict):           # пометка конвейера в ответе
         res["reply"] = "📷 GigaChat распознал фото → " + str(res.get("reply") or "готово")
     new = res.get("spec")
-    if not new:
+    operations = res.get("operations")
+    if not new and not operations:
         return {"reply": res.get("reply", ""), "spec": None, "changes": [], "usage": usage}
 
     created = bool(res.get("created"))
-    if not created:
-        for k in PROTECTED_KEYS:                      # структуру не трогаем
-            if k in spec:
-                new[k] = spec[k]
-    errors = validate_paramspec(new)
+    if new:
+        if not created:
+            for k in PROTECTED_KEYS:                  # структуру не трогаем
+                if k in spec:
+                    new[k] = spec[k]
+        expected_geometry = [] if created else _coordinate_overrides(spec)
+        if _coordinate_overrides(new) != expected_geometry:
+            message = ("Правка отклонена: LLM не может задавать placement/move деталей; "
+                       "используйте семантические operations.")
+            return {"reply": message, "error": message,
+                    "code": "llm_coordinates_forbidden",
+                    "reason": {"code": "llm_coordinates_forbidden",
+                               "message": message},
+                    "spec": None, "changes": [], "usage": usage}
+    base = new if isinstance(new, dict) else copy.deepcopy(spec)
+    errors = validate_paramspec(base)
     if errors:
         return {"reply": "Правка отклонена — спека не прошла схему:\n"
                          + "\n".join(errors[:5]), "spec": None, "changes": [], "usage": usage}
+    resolved_operations: list[dict[str, Any]] = []
+    if operations:
+        from .edit_engine import apply_geometry_operations
+
+        engine_result = apply_geometry_operations(base, operations)
+        if not engine_result.ok:
+            assert engine_result.failure is not None
+            reason = engine_result.failure.as_dict()
+            return {"reply": engine_result.failure.message,
+                    "error": engine_result.failure.message,
+                    "code": engine_result.failure.code,
+                    "reason": reason,
+                    "spec": None, "changes": [], "usage": usage}
+        new = engine_result.spec
+        resolved_operations = list(engine_result.resolved_overrides)
+    else:
+        new = base
     if created:
         return {"reply": res.get("reply", "Создано."), "spec": new,
                 "changes": ["новое изделие с нуля"], "created": True, "usage": usage}
     changes = spec_diff(spec, new)
     if not changes:
         return {"reply": res.get("reply", "Изменений нет."), "spec": None, "changes": [], "usage": usage}
-    return {"reply": res.get("reply", "Готово."), "spec": new, "changes": changes, "usage": usage}
+    return {"reply": res.get("reply", "Готово."), "spec": new, "changes": changes,
+            "resolved_operations": resolved_operations, "usage": usage}
 
 
 _PROVIDER_META = {          # id → (человекочитаемое имя, env-ключ наличия)

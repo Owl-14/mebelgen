@@ -60,12 +60,24 @@ def _palette(project: dict[str, Any]) -> dict[str, str]:
 
 def _panels(project: dict[str, Any]) -> list[dict[str, Any]]:
     out = []
+    sections = [section for section in project.get("sections", []) if isinstance(section, dict)]
+    columns = ((project.get("carcass_calculation") or {}).get("columns") or [])
     for p in project.get("panels", []):
         pl = p.get("placement")
         if not isinstance(pl, dict):
             continue
+        section_id = p.get("section_id")
+        if not section_id:
+            center = (float(pl["x1"]) + float(pl["x2"])) / 2
+            inferred = [sections[index].get("id") for index, column in enumerate(columns)
+                        if index < len(sections) and isinstance(column, dict)
+                        and isinstance(column.get("x"), (list, tuple)) and len(column["x"]) == 2
+                        and float(column["x"][0]) - 0.6 <= center <= float(column["x"][1]) + 0.6]
+            if len(inferred) == 1:
+                section_id = inferred[0]
         eb = p.get("edge_banding") or {}
         out.append({"name": p.get("name"), "type": p.get("type"),
+                    **({"section_id": section_id} if section_id else {}),
                     "x1": pl["x1"], "x2": pl["x2"], "y1": pl["y1"],
                     "y2": pl["y2"], "z1": pl["z1"], "z2": pl["z2"],
                     "thickness": p.get("thickness"), "material": p.get("material"),
