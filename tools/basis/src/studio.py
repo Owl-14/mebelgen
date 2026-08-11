@@ -80,18 +80,19 @@ def build_payload(spec: dict[str, Any]) -> dict[str, Any]:
     """ParamSpec → всё для редактора: модель, проверки, BOM. Ошибки не бросают."""
     from .paramspec import validate_paramspec
 
+    revision = _spec_revision(spec)
     issues: dict[str, list[str]] = {"schema": [], "consistency": [], "geometry": [],
                                     "cfrn": [], "holes": [], "drilling": []}
     issues["schema"] = list(validate_paramspec(spec) or [])
     if issues["schema"]:
-        return {"ok": False, "issues": issues}
+        return {"ok": False, "issues": issues, "revision": revision}
 
     from .generators import generate_from_paramspec
     try:
         project = generate_from_paramspec(spec)
     except Exception as e:
         issues["schema"] = [f"генерация: {e}"]
-        return {"ok": False, "issues": issues}
+        return {"ok": False, "issues": issues, "revision": revision}
     try:
         from .materials import resolve_project_materials
         project["material_refs"] = resolve_project_materials(project)
@@ -122,6 +123,7 @@ def build_payload(spec: dict[str, Any]) -> dict[str, Any]:
     s = spec_summary(project)
     payload = {
         "ok": not any(issues.values()),
+        "revision": revision,
         "issues": issues,
         "viewer": viewer_payload(project),      # панели+присадки+фурнитура+открывашки
         "stats": {"n_panels": s["n_panels"], "n_holes": s["n_holes"],
@@ -710,6 +712,70 @@ def _spec_revision(spec: dict[str, Any]) -> str:
         spec, ensure_ascii=False, sort_keys=True, separators=(",", ":")
     ).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
+
+
+def _production_gate_error(
+    spec: dict[str, Any], model_revision: str | None
+) -> dict[str, Any] | None:
+    """Explain why production artifacts must not be built for this browser state.
+
+    The browser sends the revision of the last successfully rendered 3D payload.
+    We still recompute all server-side checks: the revision is a freshness guard,
+    not a trusted assertion that the model is production-ready.
+    """
+
+    if not isinstance(spec, dict):
+        return {
+            "ok": False,
+            "code": "invalid_request",
+            "error": "Экспорт остановлен: изделие передано в некорректном формате.",
+            "object": "Текущее изделие",
+            "reason": "Ожидалось описание изделия в формате ParamSpec.",
+            "next_action": "Перезагрузите Studio и повторите действие.",
+        }
+    expected_revision = _spec_revision(spec)
+    supplied_revision = str(model_revision or "")
+    project_name = str(spec.get("project_name") or "Текущее изделие")
+    if not supplied_revision or not hmac.compare_digest(
+        supplied_revision, expected_revision
+    ):
+        return {
+            "ok": False,
+            "code": "stale_model",
+            "error": "Экспорт остановлен: текущая редакция ещё не подтверждена пересчётом.",
+            "object": project_name,
+            "reason": "В рабочем поле показана другая или предыдущая редакция модели.",
+            "next_action": "Дождитесь пересчёта текущей модели и повторите действие.",
+        }
+
+    payload = build_payload(spec)
+    issues = [
+        str(value)
+        for values in (payload.get("issues") or {}).values()
+        for value in (values or [])
+    ]
+    unresolved = [
+        str(slot)
+        for slot, value in (payload.get("refs") or {}).items()
+        if isinstance(value, dict) and not value.get("resolved")
+    ]
+    if issues or unresolved or not payload.get("viewer"):
+        reasons = issues[:3]
+        reasons.extend(f"Не выбрана позиция базы: {slot}" for slot in unresolved[:3])
+        if not reasons:
+            reasons.append("3D-модель для этой редакции не построена.")
+        return {
+            "ok": False,
+            "code": "production_blocked",
+            "error": "Производство и экспорт заблокированы для текущей редакции.",
+            "object": project_name,
+            "reason": reasons,
+            "next_action": (
+                "Исправьте блокирующие проверки и выберите все позиции базы, "
+                "затем дождитесь нового пересчёта."
+            ),
+        }
+    return None
 
 
 # ------------------------------------------------------------------ версии (D2)
@@ -1800,6 +1866,13 @@ def make_handler(st: _Studio):
                 spec_path = st.workspaces.current_spec_path(auth)
                 current_spec = json.loads(spec_path.read_text(encoding="utf-8"))
                 spec = body.get("spec") or {}
+                if path in ("/api/export-cfrn", "/api/build-b3d", "/api/deliver"):
+                    production_error = _production_gate_error(
+                        spec, body.get("model_revision")
+                    )
+                    if production_error is not None:
+                        self._json(production_error, 409)
+                        return
                 if path in ("/api/chat", "/api/import-tz"):
                     gate = self._chat_gate()
                     if gate:
@@ -3227,11 +3300,17 @@ PAGE = r"""<!DOCTYPE html>
   #viewportModelStatus{flex:0 0 auto;gap:6px;color:#3f4956;font-weight:600}
   #viewportModelMark{width:6px;height:6px;flex:0 0 6px;border-radius:50%;background:#7f8996}
   #viewportStatus[data-tone="ready"] #viewportModelMark{background:var(--ok)}
-  #viewportStatus[data-tone="pending"] #viewportModelMark,
-    #viewportStatus[data-tone="busy"] #viewportModelMark{background:var(--accent)}
-  #viewportStatus[data-tone="warning"] #viewportModelMark{background:#c78a2b}
-  #viewportStatus[data-tone="error"] #viewportModelMark{background:var(--bad)}
+  #viewportStatus[data-tone="changed"] #viewportModelMark,
+    #viewportStatus[data-tone="recalculating"] #viewportModelMark{background:var(--accent)}
+  #viewportStatus[data-tone="decision"] #viewportModelMark{background:#c78a2b}
+  #viewportStatus[data-tone="blocked"] #viewportModelMark,
+    #viewportStatus[data-tone="stale"] #viewportModelMark{background:var(--bad)}
   #viewportModelStateShort{display:none}
+  #viewportSaveStatus{flex:0 0 auto;gap:5px;color:#697381;font-weight:500}
+  #viewportSaveMark{width:5px;height:5px;flex:0 0 5px;border-radius:50%;background:var(--ok)}
+  #viewportStatus[data-save="changed"] #viewportSaveStatus{color:#365f9b}
+  #viewportStatus[data-save="changed"] #viewportSaveMark{background:var(--accent)}
+  #viewportSaveStateShort{display:none}
   #viewportSelection{flex:0 1 auto;gap:5px;max-width:38%;color:#596373}
   #viewportSelection[hidden]{display:none}
   #viewportSelection>span{color:#7a8390}
@@ -3243,15 +3322,23 @@ PAGE = r"""<!DOCTYPE html>
   @container (max-width:999px){
     #viewportModelStateLong{display:none}
     #viewportModelStateShort{display:inline}
+    #viewportSaveStateLong{display:none}
+    #viewportSaveStateShort{display:inline}
     #viewportSelection{max-width:42%}
     .viewport-status-segment{padding-inline:7px}
   }
   @container (max-width:700px){
     #viewportHint{display:none}
     #viewportSelection{flex:1 1 auto;max-width:none}
-    #viewportStatus[data-tone="error"] #viewportSelection,
-      #viewportStatus[data-tone="busy"] #viewportSelection{display:none}
+    #viewportStatus[data-tone="blocked"] #viewportSelection,
+      #viewportStatus[data-tone="stale"] #viewportSelection,
+      #viewportStatus[data-tone="recalculating"] #viewportSelection{display:none}
   }
+  .dependent-data-state{display:none;margin:0 0 9px;padding:7px 8px;border-left:2px solid #c78a2b;
+    background:#fff8ec;color:#62563f;font-size:10.5px;line-height:15px}
+  .dependent-data-state.is-visible{display:block}
+  .dependent-data-state[data-tone="blocked"],.dependent-data-state[data-tone="stale"]{
+    border-left-color:var(--bad);background:#fff3f2;color:#743d3d}
   #toast{position:absolute;left:50%;bottom:calc(44px + var(--chat-stack-height));
          transform:translateX(-50%);z-index:9;
          background:#1a1d21;color:#fff;padding:7px 14px;border-radius:8px;font-size:12.5px;
@@ -3761,6 +3848,7 @@ PAGE = r"""<!DOCTYPE html>
 
   <div id="rightViewComponents" class="right-panel-view" role="tabpanel"
     aria-labelledby="rightTabComponents" hidden inert>
+    <div id="componentsStateNotice" class="dependent-data-state"></div>
     <fieldset id="fs_hw"><legend>Фурнитура <span class="mini" id="hwBadge"></span></legend>
       <div id="hwSlots"></div>
       <div class="row"><label>Ручка: межцентр.</label><input type="number" id="f_hsize" step="32" min="0"></div>
@@ -3777,6 +3865,7 @@ PAGE = r"""<!DOCTYPE html>
 
   <div id="rightViewProduction" class="right-panel-view" role="tabpanel"
     aria-labelledby="rightTabProduction" hidden inert>
+    <div id="productionStateNotice" class="dependent-data-state"></div>
     <fieldset id="fs_export"><legend>Экспорт</legend>
       <div class="row" style="gap:6px">
         <button id="btnSave">Сохранить</button>
@@ -4087,6 +4176,11 @@ PAGE = r"""<!DOCTYPE html>
       <span id="viewportModelMark" aria-hidden="true"></span>
       <span id="viewportModelStateLong">Загружаю модель…</span>
       <span id="viewportModelStateShort">Загрузка…</span>
+    </div>
+    <div id="viewportSaveStatus" class="viewport-status-segment">
+      <span id="viewportSaveMark" aria-hidden="true"></span>
+      <span id="viewportSaveStateLong">Сохранено</span>
+      <span id="viewportSaveStateShort">Сохранено</span>
     </div>
     <div id="viewportSelection" class="viewport-status-segment" hidden>
       <span>Выбрано</span><b id="viewportSelectionName"></b>
@@ -4528,7 +4622,8 @@ $('applyRaw').onclick=()=>{try{SPEC=JSON.parse($('rawspec').value);fillForm();ap
   catch(err){toast('JSON: '+err.message,true);}};
 
 /* ---------- генерация ---------- */
-let timer=null,lastOk=false,generateRequestSeq=0,viewportModelPhase='loading',
+let timer=null,lastOk=false,generateRequestSeq=0,viewportModelState='recalculating',
+    generatedSpecJson=null,generatedRevision='',savedSpecJson=JSON.stringify(SPEC),
     viewportModelDiagnostics={checkErrors:0,unresolved:0,total:0};
 function checkErrorWord(count){
   const n=Math.abs(Number(count)||0)%100,d=n%10;
@@ -4559,42 +4654,80 @@ function diagnosticLongCaption(diagnostics){
   if(diagnostics.unresolved)parts.push(unresolvedPositionCaption(diagnostics.unresolved));
   return parts.join(' · ');
 }
-function setViewportModelPhase(phase,diagnostics=null){
-  viewportModelPhase=phase;
+function setViewportModelState(state,diagnostics=null){
+  viewportModelState=state;
   viewportModelDiagnostics=diagnostics&&typeof diagnostics==='object'
     ?Object.assign({checkErrors:0,unresolved:0,total:0},diagnostics)
     :{checkErrors:Number(diagnostics)||0,unresolved:0,total:Number(diagnostics)||0};
   syncViewportStatus();
 }
+function modelStateNotice(){
+  if(viewportModelState==='changed')return 'Показаны данные предыдущей модели. Текущие изменения ещё не пересчитаны.';
+  if(viewportModelState==='recalculating')return 'Показаны данные предыдущей модели. Новая редакция пересчитывается.';
+  if(viewportModelState==='stale')return 'Показана предыдущая модель. Пересчёт текущей редакции не завершён — повторите действие.';
+  if(viewportModelState==='blocked')return 'Данные текущей модели обновлены, но производство и экспорт заблокированы проверками.';
+  if(viewportModelState==='decision')return '3D актуальна, но перед производством нужно выбрать позиции базы.';
+  return '';
+}
+function productionBlockReason(){
+  if(viewportModelState==='changed')return 'Сначала дождитесь пересчёта изменений';
+  if(viewportModelState==='recalculating')return 'Модель пересчитывается';
+  if(viewportModelState==='stale')return 'Повторите пересчёт текущей модели';
+  if(viewportModelState==='blocked')return 'Исправьте блокирующие ошибки модели';
+  if(viewportModelState==='decision')return 'Выберите все позиции производственной базы';
+  if(viewportModelState==='draft')return 'Сначала создайте модель изделия';
+  return 'Экспорт станет доступен после проверки модели';
+}
+function syncProductionAvailability(){
+  const current=generatedSpecJson===JSON.stringify(SPEC),
+    ready=viewportModelState==='ready'&&current&&!!generatedRevision&&lastOk&&!modelMutationLocked(),
+    reason=ready?'Текущая редакция проверена и готова к производству':productionBlockReason();
+  ['btnCfrn','btnB3d','btnDeliver'].forEach(id=>{const button=$(id);if(!button)return;
+    button.disabled=!ready;button.title=reason;});
+}
+function syncDependentDataNotices(){
+  const text=modelStateNotice();
+  ['componentsStateNotice','productionStateNotice'].forEach(id=>{const notice=$(id);if(!notice)return;
+    notice.textContent=text;notice.dataset.tone=viewportModelState;
+    notice.classList.toggle('is-visible',!!text);});
+}
 function syncViewportStatus(){
   const status=$('viewportStatus');if(!status)return;
-  let tone='pending',longText='Загружаю модель…',shortText='Загрузка…';
-  if(viewportModelPhase==='pending'){
-    longText='Изменения ожидают пересчёта…';shortText='Ожидает пересчёта';
-  }else if(viewportModelPhase==='busy'){
-    tone='busy';longText='Пересчитываю модель и проверки…';shortText='Пересчёт…';
-  }else if(viewportModelPhase==='ready'){
-    tone='ready';longText='Модель актуальна';shortText='Актуальна';
-  }else if(viewportModelPhase==='warning'){
-    tone='warning';
+  let tone='recalculating',longText='Пересчитываю модель…',shortText='Пересчёт…';
+  if(viewportModelState==='changed'){
+    tone='changed';longText='Изменения ещё не пересчитаны · показана предыдущая модель';shortText='Есть изменения';
+  }else if(viewportModelState==='recalculating'){
+    tone='recalculating';longText='Пересчитываю изменения · показана предыдущая модель';shortText='Пересчёт…';
+  }else if(viewportModelState==='ready'){
+    tone='ready';longText='Модель актуальна · производство доступно';shortText='Готово';
+  }else if(viewportModelState==='decision'){
+    tone='decision';
     const diagnosticText=diagnosticLongCaption(viewportModelDiagnostics);
-    longText='3D обновлена'+(diagnosticText?` · ${diagnosticText}`:' · есть замечания');
+    longText='3D актуальна · требуется решение'+(diagnosticText?` · ${diagnosticText}`:'');
+    shortText=viewportModelDiagnostics.unresolved?`Выбрать базу: ${viewportModelDiagnostics.unresolved}`:'Требуется решение';
+  }else if(viewportModelState==='blocked'){
+    tone='blocked';
+    const diagnosticText=diagnosticLongCaption(viewportModelDiagnostics);
+    longText='3D актуальна · производство заблокировано'+(diagnosticText?` · ${diagnosticText}`:'');
     shortText=viewportModelDiagnostics.checkErrors
-      ?`${viewportModelDiagnostics.checkErrors} ${checkErrorWord(viewportModelDiagnostics.checkErrors)}`:
-      viewportModelDiagnostics.unresolved?`База: ${viewportModelDiagnostics.unresolved}`:'Есть замечания';
-  }else if(viewportModelPhase==='no-viewer'){
-    tone='error';
+      ?`Заблокировано: ${viewportModelDiagnostics.checkErrors}`:'Производство заблокировано';
+  }else if(viewportModelState==='stale'){
+    tone='stale';
     const diagnosticText=diagnosticLongCaption(viewportModelDiagnostics);
-    longText='Модель не обновлена'+(diagnosticText?` · ${diagnosticText}`:'');shortText='Не обновлена';
-  }else if(viewportModelPhase==='network'){
-    tone='error';longText='Не удалось пересчитать · показана предыдущая модель';
-    shortText='Ошибка пересчёта';
-  }else if(viewportModelPhase==='draft'){
+    longText='Текущая редакция не построена · показана предыдущая модель'+
+      (diagnosticText?` · ${diagnosticText}`:'');
+    shortText=viewportModelDiagnostics.checkErrors
+      ?`Не построена: ${viewportModelDiagnostics.checkErrors}`:'Модель устарела';
+  }else if(viewportModelState==='draft'){
     tone='neutral';longText='Черновик · модель ещё не построена';shortText='Черновик';
   }
   status.dataset.tone=tone;
+  const saved=JSON.stringify(SPEC)===savedSpecJson;
+  status.dataset.save=saved?'saved':'changed';
   $('viewportModelStateLong').textContent=longText;
   $('viewportModelStateShort').textContent=shortText;
+  $('viewportSaveStateLong').textContent=saved?'Сохранено':'Есть несохранённые изменения';
+  $('viewportSaveStateShort').textContent=saved?'Сохранено':'Не сохранено';
   const panel=currentSelectedPart(),selection=$('viewportSelection');
   selection.hidden=!panel;
   $('viewportSelectionName').textContent=panel&&panel.name||'';
@@ -4606,20 +4739,21 @@ function syncViewportStatus(){
     mode==='nest'?'Раскрой текущей модели':panel?
       'Shift + перетаскивание — переместить · Esc — снять выбор':
       'Клик — выбрать · перетаскивание — вращать · колесо — масштаб';
+  syncDependentDataNotices();syncProductionAvailability();
 }
 function schedule(){
   clearTimeout(timer);refreshUndoState();
   if(typeof renderedWorkspaceMode!=='undefined'){
     renderedWorkspaceMode=null;renderedWorkspaceSpecJson=null;syncWorkspacePrintState();
   }
-  setViewportModelPhase('pending');timer=setTimeout(()=>apply().catch(()=>{}),400);
+  setViewportModelState('changed');timer=setTimeout(()=>apply().catch(()=>{}),400);
 }
 async function apply(){
   const requestId=++generateRequestSeq;
-  if(SPEC&&SPEC.draft){showEmpty(true);setViewportModelPhase('draft');return;} // черновик не генерируем
+  if(SPEC&&SPEC.draft){showEmpty(true);setViewportModelState('draft');return;} // черновик не генерируем
   refreshUndoState();
   const requestSpecJson=JSON.stringify(SPEC);
-  setViewportModelPhase('busy');
+  setViewportModelState('recalculating');
   try{
     const r=await fetch('/api/generate',{method:'POST',
       headers:{'Content-Type':'application/json'},body:JSON.stringify({spec:SPEC})});
@@ -4630,7 +4764,9 @@ async function apply(){
       ?SELECTED_PART.name:null;
     paint(p);
     const diagnostics=modelDiagnosticCounts(p);
-    setViewportModelPhase(p.viewer?(p.ok&&!diagnostics.unresolved?'ready':'warning'):'no-viewer',diagnostics);
+    generatedSpecJson=p.viewer?requestSpecJson:null;
+    generatedRevision=p.viewer?String(p.revision||''):'';
+    setViewportModelState(!p.viewer?'stale':!p.ok?'blocked':diagnostics.unresolved?'decision':'ready',diagnostics);
     if(restorePartName&&p.viewer&&Array.isArray(p.viewer.panels)){
       const restoreIndex=p.viewer.panels.findIndex(panel=>panel.name===restorePartName);
       if(restoreIndex>=0)scene3d.select(restoreIndex);
@@ -4640,7 +4776,7 @@ async function apply(){
     if(nestOn) refreshNest();
     return p;
   }catch(error){
-    if(requestId===generateRequestSeq)setViewportModelPhase('network');
+    if(requestId===generateRequestSeq){generatedSpecJson=null;generatedRevision='';setViewportModelState('stale');}
     throw error;
   }
 }
@@ -4666,7 +4802,7 @@ function paint(p){
   }
   $('errors').textContent=errs.join('\n');
   $('btnFixAll').hidden=!hasFixableProblems;
-  lastOk=p.ok; $('btnB3d').disabled=!p.ok;
+  lastOk=p.ok;
   if(p.viewer){rebuild(p.viewer);
     const C=p.viewer.colors||{};
     $('swCarcass').style.background=C.side_left||'#c9a06a';
@@ -5119,6 +5255,7 @@ async function loadProjects(){
 }
 function adoptSpec(p){
   SPEC=p.spec;CAT_CURRENT_FILE=p.file||CAT_CURRENT_FILE;UNDO.length=0;$('btnUndo').disabled=true;
+  savedSpecJson=JSON.stringify(SPEC);generatedSpecJson=null;generatedRevision='';
   // другой объект — другой разговор: история чата, лог и вложения не должны
   // утекать между изделиями (иначе ИИ «помнит» чужие правки)
   CHAT_HISTORY.length=0; chatWorkspaceGeneration++; resetOperationLog();
@@ -5138,7 +5275,7 @@ function adoptSpec(p){
 let EMPTY=false;
 function showEmpty(on){
   EMPTY=on; $('emptyState').classList.toggle('on',on);
-  setViewportModelPhase(on?'draft':'loading');
+  setViewportModelState(on?'draft':'recalculating');
   if(on){                                          // чистый экран: 3D, бейджи, статистика
     if(scene3d.setPayload) scene3d.setPayload({panels:[]});
     ['badges','stats','errors'].forEach(id=>{const e=$(id); if(e) e.innerHTML='';});
@@ -5202,7 +5339,7 @@ $('projRen').onclick=async()=>{   // переименовать текущее �
   const r=await fetch('/api/save',{method:'POST',
     headers:{'Content-Type':'application/json'},body:JSON.stringify({spec:SPEC})});
   const p=await r.json();
-  if(p.ok){fillForm();loadProjects();schedule();toast('Переименовано: '+name);}
+  if(p.ok){savedSpecJson=JSON.stringify(SPEC);fillForm();loadProjects();schedule();toast('Переименовано: '+name);}
   else{SPEC.project_name=previousName;toast('Ошибка: '+(p.error||''),true);}
 };
 $('projShare').onclick=()=>{
@@ -6225,7 +6362,7 @@ function setModelMutationControlsLocked(locked){
   }
   MODEL_LOCK_DISABLED_STATE.forEach((wasDisabled,control)=>{control.disabled=wasDisabled;});
   MODEL_LOCK_DISABLED_STATE.clear();
-  if($('btnB3d'))$('btnB3d').disabled=!lastOk;
+  syncProductionAvailability();
   syncWorkspacePrintState();refreshUndoState();
 }
 function syncChatPrimaryAction(){
@@ -6647,8 +6784,13 @@ loadProviders();
 
 /* ---------- экспорт ---------- */
 async function post(url){const r=await fetch(url,{method:'POST',
-  headers:{'Content-Type':'application/json'},body:JSON.stringify({spec:SPEC})});
+  headers:{'Content-Type':'application/json'},
+  body:JSON.stringify({spec:SPEC,model_revision:generatedRevision})});
   return await r.json();}
+function productionErrorText(payload){
+  const reason=Array.isArray(payload&&payload.reason)?payload.reason[0]:payload&&payload.reason;
+  return [payload&&payload.error,reason,payload&&payload.next_action].filter(Boolean).join(' ');
+}
 // После сохранения каноническое превью пересобирается скрытой MebelScene.
 // Снимок текущей пользовательской камеры сюда не подходит: он может оказаться
 // повёрнутым или разобранным и снова исказить карточку каталога.
@@ -6657,6 +6799,7 @@ async function saveSpec(){
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({spec:SPEC})});
   const result=await r.json();
+  if(result.ok){savedSpecJson=JSON.stringify(SPEC);syncViewportStatus();}
   if(result.ok&&!SPEC.draft){
     const file=$('projSel').value,item=CAT_ITEMS.find(value=>value.file===file);
     if(item)item.preview_current=false;
@@ -6669,13 +6812,13 @@ $('btnSave').onclick=async()=>{const p=await saveSpec();
   toast(p.ok?('Сохранено: '+p.spec):('Ошибка: '+p.error),!p.ok);
   loadVersions();};
 $('btnCfrn').onclick=async()=>{const p=await post('/api/export-cfrn');
-  toast(p.ok?('.cfrn: '+p.cfrn):('Ошибка: '+p.error),!p.ok);};
+  toast(p.ok?('.cfrn: '+p.cfrn):productionErrorText(p),!p.ok);};
 $('btnB3d').onclick=async()=>{
   if(!lastOk){toast('Проверки не пройдены',true);return;}
   if(!confirm('Собрать .b3d через облако БАЗИС? Операция платная (~10₽).'))return;
   toast('Сборка в облаке…');
   const p=await post('/api/build-b3d');
-  toast(p.ok?('Готов .b3d: '+p.b3d):('Ошибка: '+(p.error||'')),!p.ok);
+  toast(p.ok?('Готов .b3d: '+p.b3d):productionErrorText(p),!p.ok);
   if(p.ok){loadBuilds();
     if(confirm('Открыть результат в БАЗИС-Просмотре?'))
       await fetch('/api/open-file',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -6706,7 +6849,8 @@ $('verRestore').onclick=async()=>{
   const r=await fetch('/api/restore',{method:'POST',
     headers:{'Content-Type':'application/json'},body:JSON.stringify({index:+idx})});
   const p=await r.json();
-  if(p.ok){pushUndo(); SPEC=p.spec; scene3d.select(null); fillForm(); apply();
+  if(p.ok){pushUndo(); SPEC=p.spec;savedSpecJson=JSON.stringify(SPEC);
+    generatedSpecJson=null;generatedRevision='';scene3d.select(null); fillForm(); apply();
     toast('Восстановлена версия '+p.ts);}
   else toast('Ошибка: '+(p.error||''),true);
 };
@@ -6717,7 +6861,7 @@ loadChatHistory();
 $('btnDeliver').onclick=async()=>{
   toast('Собираю лист согласования…');
   const p=await post('/api/deliver');
-  toast(p.ok?`Лист v${p.version} открыт в браузере`:('Ошибка: '+(p.error||'')),!p.ok);};
+  toast(p.ok?`Лист v${p.version} открыт в браузере`:productionErrorText(p),!p.ok);};
 async function loadBuilds(){
   const r=await fetch('/api/builds',{method:'POST',
     headers:{'Content-Type':'application/json'},body:'{}'});

@@ -12,7 +12,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from src.studio import build_payload, techview_svg     # noqa: E402
+from src.studio import (  # noqa: E402
+    _production_gate_error,
+    _spec_revision,
+    build_payload,
+    techview_svg,
+)
 
 SPEC = json.loads((ROOT / "paramspecs" / "komi_72_tumba_podkatnaya.json").read_text(encoding="utf-8"))
 
@@ -35,6 +40,21 @@ def test_payload_schema_error_keeps_shape():
     p = build_payload(bad)
     assert not p["ok"] and p["issues"]["schema"]
     assert "viewer" not in p                        # модель не строится на битой схеме
+
+
+def test_production_gate_requires_current_rendered_revision_and_clean_checks():
+    assert _production_gate_error(SPEC, _spec_revision(SPEC)) is None
+
+    stale = _production_gate_error(SPEC, "previous-revision")
+    assert stale and stale["code"] == "stale_model"
+    assert stale["object"] == SPEC["project_name"]
+    assert stale["reason"] and stale["next_action"]
+
+    invalid = json.loads(json.dumps(SPEC))
+    del invalid["dimensions"]
+    blocked = _production_gate_error(invalid, _spec_revision(invalid))
+    assert blocked and blocked["code"] == "production_blocked"
+    assert blocked["reason"] and blocked["next_action"]
 
 
 def test_payload_reacts_to_edit():

@@ -68,6 +68,10 @@ def test_status_bar_is_static_noninteractive_dom_with_one_live_region() -> None:
         "viewportModelMark": "span",
         "viewportModelStateLong": "span",
         "viewportModelStateShort": "span",
+        "viewportSaveStatus": "div",
+        "viewportSaveMark": "span",
+        "viewportSaveStateLong": "span",
+        "viewportSaveStateShort": "span",
         "viewportSelection": "div",
         "viewportSelectionName": "b",
         "viewportHint": "div",
@@ -106,19 +110,21 @@ def test_status_bar_is_flat_bottom_rail_and_composer_toast_clear_it() -> None:
     assert "var(--viewport-status-height)" in draw
 
 
-def test_model_phase_api_has_honest_pending_current_and_failure_states() -> None:
+def test_model_state_api_names_every_user_decision_state() -> None:
     status = _compact(_function("syncViewportStatus"))
-    for phase in ("pending", "busy", "ready", "warning", "no-viewer", "network", "draft"):
-        assert f"viewportModelPhase==='{phase}'" in status
+    for phase in ("changed", "recalculating", "ready", "decision", "blocked", "stale", "draft"):
+        assert f"viewportModelState==='{phase}'" in status
     for text in (
-        "Изменения ожидают пересчёта",
-        "Пересчитываю модель и проверки",
-        "Модель актуальна",
-        "3D обновлена",
-        "Модель не обновлена",
-        "показана предыдущая модель",
+        "Изменения ещё не пересчитаны",
+        "Пересчитываю изменения",
+        "производство доступно",
+        "требуется решение",
+        "производство заблокировано",
+        "Текущая редакция не построена",
     ):
         assert _compact(text) in status
+    assert "savedSpecJson" in status
+    assert "Естьнесохранённыеизменения" in status
     assert ".textContent=longText" in status
     assert ".textContent=shortText" in status
     assert "status.dataset.tone=tone" in status
@@ -128,18 +134,32 @@ def test_generation_token_prevents_stale_response_from_overwriting_status() -> N
     apply = _compact(_function("apply", length=3600))
     stale = apply.index("requestId!==generateRequestSeq")
     painted = apply.index("paint(p)")
-    terminal = apply.index("setViewportModelPhase(p.viewer?")
+    terminal = apply.index("setViewportModelState(!p.viewer?")
     assert stale < painted < terminal
-    assert "setViewportModelPhase('busy')" in apply
-    assert "p.ok&&!diagnostics.unresolved?'ready':'warning'" in apply
-    assert "if(requestId===generateRequestSeq)setViewportModelPhase('network')" in apply
+    assert "setViewportModelState('recalculating')" in apply
+    assert "!p.ok?'blocked':diagnostics.unresolved?'decision':'ready'" in apply
+    assert "setViewportModelState('stale')" in apply
+    assert "generatedRevision=p.viewer?String(p.revision||''):''" in apply
 
     schedule = _compact(_function("schedule", length=900))
-    assert "setViewportModelPhase('pending')" in schedule
+    assert "setViewportModelState('changed')" in schedule
     assert "renderedWorkspaceMode=null" in schedule
     assert "renderedWorkspaceSpecJson=null" in schedule
     assert "apply().catch(()=>{})" in schedule
     assert "fillForm(); resize(); apply().catch(()=>{});" in PAGE
+
+
+def test_production_controls_require_the_successfully_rendered_revision() -> None:
+    availability = _compact(_function("syncProductionAvailability", length=1700))
+    assert "generatedSpecJson===JSON.stringify(SPEC)" in availability
+    assert "viewportModelState==='ready'" in availability
+    assert "!!generatedRevision" in availability
+    for button in ("btnCfrn", "btnB3d", "btnDeliver"):
+        assert button in availability
+
+    post = _compact(_function("post", length=600))
+    assert "model_revision:generatedRevision" in post
+    assert "productionErrorText" in PAGE
 
 
 def test_selection_mode_and_print_revision_feed_the_status() -> None:
