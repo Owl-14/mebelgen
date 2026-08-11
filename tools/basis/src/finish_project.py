@@ -171,16 +171,21 @@ def finish_project(
 
     report = check_placement_geometry(data, min_volume=min_volume)
 
-    for _ in range(max_fix_rounds):
-        if report["ok"]:
+    from .telemetry import span
+
+    for iteration in range(max_fix_rounds):
+        if report["ok"] or not _can_auto_fix_horizontal(report["overlaps"]):
             break
-        if not _can_auto_fix_horizontal(report["overlaps"]):
-            break
-        data, round_fixes = resolve_horizontal_splits(data, min_volume=min_volume)
-        if not round_fixes:
-            break
-        fixes.extend(round_fixes)
-        report = check_placement_geometry(data, min_volume=min_volume)
+        with span("repair.iteration", {"repair.iteration": iteration + 1}) as trace_span:
+            data, round_fixes = resolve_horizontal_splits(data, min_volume=min_volume)
+            trace_span.set_attributes({
+                "repair.applied": bool(round_fixes),
+                "check.outcome": "pass" if round_fixes else "unchanged",
+            })
+            if not round_fixes:
+                break
+            fixes.extend(round_fixes)
+            report = check_placement_geometry(data, min_volume=min_volume)
 
     result.fixes_applied = fixes
     result.overlaps = report["overlaps"]

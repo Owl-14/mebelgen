@@ -812,9 +812,37 @@ def chat_edit(spec: dict[str, Any], message: str,
     images — фото/сканы ТЗ [{mime, data(base64)}] для vision-провайдера (AKD-203).
     provider — явный выбор нейросети из UI (AKD-210); None → из env.
     """
+    from .telemetry import span
+
+    def summarize(payload: dict[str, Any]) -> dict[str, Any]:
+        with span("response.summarize", {
+            "response.changed": isinstance(payload.get("spec"), dict),
+            "check.outcome": "error" if payload.get("error") else "pass",
+        }):
+            return payload
+
     build_name = resolve_provider_name(provider)
-    build = get_chat_provider(build_name)
+    routed_node = classify_intent(message, spec, context, has_images=bool(images))
+    prompt_meta = build_prompt_request(
+        routed_node, message=message, spec=spec, history=history, context=context
+    ).trace
+    with span("intent.classify", {
+        "provider": build_name,
+        "image.count": len(images or []),
+        "operation.types": [routed_node],
+        "prompt.version": prompt_meta["prompt_version"],
+    }):
+        build = get_chat_provider(build_name)
     provider_spec = copy.deepcopy(spec)
+    model_name = str(getattr(build, "model", "mock"))
+    base_trace = {
+        "provider": build_name,
+        "model": model_name,
+        "prompt.version": prompt_meta["prompt_version"],
+        "gen_ai.system": build_name,
+        "gen_ai.request.model": model_name,
+        "langsmith.span.kind": "llm",
+    }
     # Конвейер «глаза+мозг» (AKD-211): если пришло фото, а сборщик — не тот
     # провайдер, что назначен на зрение (VISION_EXTRACT_PROVIDER, обычно GigaChat),
     # то этап 1 — GigaChat распознаёт факты с фото ТЗ текстом, этап 2 — сборщик
@@ -823,33 +851,61 @@ def chat_edit(spec: dict[str, Any], message: str,
     vision_trace = build_prompt_request("vision_facts").trace if images else None
     two_stage = False
     try:
-        vis = get_chat_provider(extract_name) if images else None
-        two_stage = bool(images and hasattr(vis, "vision_extract"))
-        if two_stage:
-            desc = vis.vision_extract(images) if hasattr(vis, "vision_extract") else ""
-            if desc.strip():
-                aug = (("Создай новый ParamSpec по этому ТЗ. " + message).strip()
-                       + "\n\nРаспознано с фото ТЗ (используй как факты, ничего не додумывай "
-                         "сверх):\n" + desc)
-                res = build.chat(provider_spec, aug, history, context)
-            else:                                     # распознать не вышло — фото напрямую
+        with span("operations.plan", base_trace) as plan_span:
+            vis = get_chat_provider(extract_name) if images else None
+            two_stage = bool(images and hasattr(vis, "vision_extract"))
+            if two_stage:
+                with span("vision.extract", {
+                    "provider": extract_name,
+                    "model": str(getattr(vis, "vision_model", getattr(vis, "model", ""))),
+                    "image.count": len(images or []),
+                    "prompt.version": (vision_trace or {}).get("prompt_version"),
+                    "langsmith.span.kind": "llm",
+                }):
+                    desc = vis.vision_extract(images) if hasattr(vis, "vision_extract") else ""
+                if desc.strip():
+                    aug = (("Создай новый ParamSpec по этому ТЗ. " + message).strip()
+                           + "\n\nРаспознано с фото ТЗ (используй как факты, ничего не додумывай "
+                             "сверх):\n" + desc)
+                    res = build.chat(provider_spec, aug, history, context)
+                else:                                 # распознать не вышло — фото напрямую
+                    res = build.chat(provider_spec, message, history, context, images=images)
+            elif images:
                 res = build.chat(provider_spec, message, history, context, images=images)
-        elif images:
-            res = build.chat(provider_spec, message, history, context, images=images)
-        else:
-            try:
-                res = build.chat(provider_spec, message, history, context)
-            except TypeError:
-                res = build.chat(provider_spec, message, history)
+            else:
+                try:
+                    res = build.chat(provider_spec, message, history, context)
+                except TypeError:
+                    res = build.chat(provider_spec, message, history)
+            provider_usage = res.get("usage") if isinstance(res, dict) else None
+            if isinstance(provider_usage, dict):
+                plan_span.set_attributes({
+                    "model": provider_usage.get("model") or model_name,
+                    "gen_ai.request.model": provider_usage.get("model") or model_name,
+                    "gen_ai.usage.input_tokens": provider_usage.get("prompt"),
+                    "gen_ai.usage.output_tokens": provider_usage.get("completion"),
+                    "gen_ai.usage.total_tokens": provider_usage.get("total"),
+                })
     except Exception as e:                            # сеть/ключ/парсинг — в чат, не 500
         error_message = f"Сервис AI не ответил: {e}"
         node = classify_intent(message, spec, context, has_images=bool(images))
         request = build_prompt_request(node, message=message, spec=spec,
                                        history=history, context=context)
-        return {"reply": error_message, "error": error_message, "spec": None,
+        return summarize({"reply": error_message, "error": error_message, "spec": None,
                 "changes": [], "trace": {"prompts": [request.trace], "router": {
                     "kind": "deterministic", "node": node,
-                }}}
+                }}})
+
+    with span("operations.validate", {
+        **base_trace, "check.name": "provider_response",
+    }) as response_span:
+        if not isinstance(res, dict):
+            response_span.set_attributes({
+                "check.outcome": "fail", "error.codes": ["invalid_response"],
+            })
+            return summarize({"reply": "Сервис AI вернул некорректный ответ.",
+                              "error": "invalid_response", "spec": None, "changes": []})
+        response_span.set_attributes({"check.outcome": "pass"})
 
     usage = res.get("usage")                          # расход токенов (для счётчика)
     trace = res.get("trace") or {"prompts": []}
@@ -865,9 +921,9 @@ def chat_edit(spec: dict[str, Any], message: str,
     raw_operations = (list(res.get("operations"))
                       if isinstance(res.get("operations"), list) else [])
     if node in {"intent_routing", "vision_facts", "diagnosis", "answer_query"}:
-        return {"reply": res.get("reply", ""), "spec": None, "changes": [],
+        return summarize({"reply": res.get("reply", ""), "spec": None, "changes": [],
                 "operations": [], "resolved_operations": [], "usage": usage,
-                "trace": trace}
+                "trace": trace})
     if node == "part_edit":
         if legacy_spec is not None:
             reply = "Правка отклонена — узел детали принимает только типизированные операции."
@@ -919,8 +975,14 @@ def chat_edit(spec: dict[str, Any], message: str,
                     "usage": usage, "trace": trace}
 
         from .edit_operations import EditApplicationError, apply_edit_operations
-        applied = apply_edit_operations(spec, raw_operations, context)
-        new = _apply_compatibility_patches(applied["spec"], compatibility)
+        operation_names = [str(item.get("op") or item.get("kind") or "unknown")
+                           for item in raw_operations if isinstance(item, dict)]
+        with span("paramspec.apply", {
+            "operation.types": operation_names,
+            "response.changed": bool(raw_operations or compatibility),
+        }):
+            applied = apply_edit_operations(spec, raw_operations, context)
+            new = _apply_compatibility_patches(applied["spec"], compatibility)
     except Exception as error:
         reply = f"Правка отклонена — операции не применены: {error}"
         return {"reply": reply, "error": reply, "spec": None,
@@ -933,10 +995,10 @@ def chat_edit(spec: dict[str, Any], message: str,
     if operation_replies:
         reply = "\n".join(operation_replies if not reply or reply == "Готово." else [reply, *operation_replies])
     if not changes:
-        return {"reply": reply or "Изменений нет.", "spec": None, "changes": [],
+        return summarize({"reply": reply or "Изменений нет.", "spec": None, "changes": [],
                 "operations": applied["operations"],
                 "resolved_operations": applied.get("resolved_operations") or [],
-                "usage": usage, "trace": trace}
+                "usage": usage, "trace": trace})
     from .production_gate import evaluate_production_gate
 
     decision = evaluate_production_gate(new)
@@ -950,11 +1012,11 @@ def chat_edit(spec: dict[str, Any], message: str,
         )
     accepted = decision.accepted_spec
     assert accepted is not None
-    return {"reply": reply or "Готово.", "spec": accepted,
+    return summarize({"reply": reply or "Готово.", "spec": accepted,
             "changes": spec_diff(spec, accepted),
             "operations": applied["operations"],
             "resolved_operations": applied.get("resolved_operations") or [], "usage": usage,
-            "check_report": decision.report.to_dict(), "trace": trace}
+            "check_report": decision.report.to_dict(), "trace": trace})
 
 
 _PROVIDER_META = {          # id → (человекочитаемое имя, env-ключ наличия)
