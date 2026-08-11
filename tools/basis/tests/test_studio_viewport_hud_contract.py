@@ -75,14 +75,22 @@ def test_viewport_controls_keep_unique_dom_types_and_defaults() -> None:
         "btnPrint": "button",
         "views": "div",
         "hud": "div",
-        "btnOpenAll": "button",
-        "btnCloseAll": "button",
+        "viewportTools": "div",
+        "btnToggleOpenAll": "button",
         "explode": "input",
     }
     for node_id, expected_tag in required.items():
         tag, _attrs, _ancestors = dom.by_id[node_id]
         assert tag == expected_tag
         assert dom.id_counts[node_id] == 1
+
+    _tag, toggle_attrs, toggle_ancestors = dom.by_id["btnToggleOpenAll"]
+    assert "hud" in toggle_ancestors and toggle_attrs.get("aria-pressed") == "false"
+    assert "Открыть всё" in PAGE
+    assert "Открыть всё / Закрыть всё" not in PAGE
+    assert "viewportTools" in dom.by_id["views"][2]
+    assert "viewportTools" in dom.by_id["hud"][2]
+    assert "layerCount" not in dom.by_id
 
     assert [camera["data-view"] for camera in dom.cameras] == [
         "axon",
@@ -129,11 +137,14 @@ def test_hud_preserves_public_mebel_scene_handlers() -> None:
         "$('cbDims').onchange=e=>scene3d.setDims(e.target.checked)",
         "$('cbXray').onchange=e=>scene3d.setXray(e.target.checked)",
         "scene3d.setExplode(e.target.value/100)",
-        "$('btnOpenAll').onclick=()=>scene3d.openAll()",
-        "$('btnCloseAll').onclick=()=>scene3d.closeAll()",
+        "scene3d.onOpenablesChange=state=>syncOpenAllButton(!!(state&&state.hasOpen))",
+        "scene3d.closeAll()",
+        "scene3d.openAll()",
         "scene3d.setView(b.dataset.view)",
     ):
         assert _compact(mapping) in compact
+    assert "functionsyncOpenAllButton(hasOpen)" in compact
+    assert "button.dataset.open=String(!!hasOpen)" in compact
 
 
 def test_modes_hide_irrelevant_3d_controls_and_gate_current_print() -> None:
@@ -169,7 +180,18 @@ def test_viewport_shell_uses_container_width_and_preserves_canvas_hit_area() -> 
     assert "#main{--chat-stack-height:133px" in css
     assert "container-type:inline-size" in css
     assert "#viewportTopbar{" in css and "pointer-events:none" in css
-    assert "#tabs,#views{" in css and "pointer-events:auto" in css
+    assert "#tabs,#views,#hud.hud-section{" in css and "pointer-events:auto" in css
+    assert "grid-template-columns:max-contentmax-contentminmax(0,1fr)" in css
+    assert "grid-template-areas:\"modeslayersviews\"\"..model\"" in css
+    assert "#tabs{grid-area:modes}" in css
+    assert "#views{grid-area:views}" in css
+    assert "#views{justify-content:stretch;gap:1px}" in css
+    assert "#views.vw{flex:110;min-width:0" in css
+    assert "#hud.hud-layers{grid-area:layers}" in css
+    assert "#hud.hud-model{grid-area:model}" in css
+    assert "#hud.hud-model{gap:5px}" in css
+    assert "flex:11auto" in css
+    assert "#draw{position:absolute;inset:90px12px12px" in css
     assert "@container(max-width:1099px)" in css
     assert "@container(max-width:700px)" in css
     assert "@container(max-width:440px)" in css

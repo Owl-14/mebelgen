@@ -2849,8 +2849,8 @@ PAGE = r"""<!DOCTYPE html>
   .part-facts dt{color:var(--mut);font-size:10.5px;line-height:15px}
   .part-facts dd{margin:0;min-width:0;font-size:11px;line-height:15px;
     overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
-  .part-primary-actions{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px;margin-top:7px}
-  .part-primary-actions button{display:flex;align-items:center;justify-content:center;gap:5px}
+  .part-utility-actions{display:flex;justify-content:flex-start;margin-top:7px}
+  .part-utility-actions button{display:flex;align-items:center;justify-content:center;gap:5px}
   .part-context-note{margin:6px 0 0;color:#687180;font-size:10.5px;line-height:14px}
   .part-exact{margin-top:7px;border-top:1px solid #edf0f3}
   .part-exact>summary{padding:7px 0 5px;color:#46505e;font-size:11.5px;cursor:pointer}
@@ -3058,10 +3058,15 @@ PAGE = r"""<!DOCTYPE html>
   /* MEB-098: controls are grouped by the decision they change. The wrapper never
      blocks orbit/raycast outside the controls themselves. */
   #viewportTopbar{position:absolute;top:10px;left:12px;right:12px;z-index:7;
-    display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
+    display:grid;grid-template-columns:max-content max-content minmax(0,1fr);grid-template-areas:
+      "modes layers views"
+      ". . model";align-items:start;justify-content:start;gap:6px;
     pointer-events:none}
-  #tabs,#views{display:flex;align-items:center;min-height:36px;padding:3px;
+  #viewportTools,#hud{display:contents}
+  #tabs,#views,#hud .hud-section{display:flex;align-items:center;min-height:36px;padding:3px;
     border:1px solid #d9dee5;border-radius:4px;background:#fff;pointer-events:auto}
+  #tabs{grid-area:modes}#views{grid-area:views}
+  #hud .hud-layers{grid-area:layers}#hud .hud-model{grid-area:model}
   #tabs{gap:1px}
   #tabs button,#views .vw{display:flex;align-items:center;justify-content:center;gap:5px;
     height:28px;margin:0;padding:0 9px;border:0;border-radius:2px;background:transparent;
@@ -3077,12 +3082,12 @@ PAGE = r"""<!DOCTYPE html>
     stroke-linejoin:round}
   #tabs .toolbar-separator{width:1px;height:20px;margin:0 2px;background:#dfe3e8}
   #btnPrint{padding:0 7px!important}
-  #views{justify-content:flex-end;gap:1px}
+  #views{justify-content:stretch;gap:1px}
   #views .viewport-group-label{padding:0 6px 0 4px;color:#7a8390;font-size:10px;
     font-weight:600;letter-spacing:.04em;text-transform:uppercase}
-  #views .vw{padding:0 7px;font-size:11px}
+  #views .vw{flex:1 1 0;min-width:0;padding:0 7px;font-size:11px}
   #views[hidden],#hud[hidden]{display:none!important}
-  #draw{position:absolute;inset:48px 12px 12px;z-index:4;background:#fff;border:1px solid var(--line);
+  #draw{position:absolute;inset:90px 12px 12px;z-index:4;background:#fff;border:1px solid var(--line);
     border-radius:8px;overflow:auto;display:none;
     padding:8px 8px calc(var(--chat-stack-height) + var(--viewport-status-height) + 14px)}
   /* AKD-217: каталог изделий */
@@ -3215,28 +3220,23 @@ PAGE = r"""<!DOCTYPE html>
   #emptyState .es-hint{font-size:13px;color:var(--mut);margin-bottom:16px;line-height:1.7}
   #emptyState.drop .es-box{border-color:var(--accent);background:#eef4ff}
   #view3d{position:absolute;inset:0}
-  /* AKD-262 / MEB-098: compact opaque CAD HUD. Layers and model state are
-     intentionally separate because they have different semantics. */
-  #hud{position:absolute;right:12px;top:52px;z-index:6;width:212px;
-    border:1px solid #d9dee5;border-radius:4px;background:#fff;color:#303743;
-    font-size:11px;pointer-events:auto}
-  .hud-section{padding:7px 8px 8px}
-  .hud-section+.hud-section{border-top:1px solid #e4e7eb}
-  .hud-section-head{display:flex;align-items:center;gap:6px;min-height:18px;margin-bottom:4px}
-  .hud-section-head>span{flex:1;color:#5e6876;font-size:10px;font-weight:700;
-    letter-spacing:.045em;text-transform:uppercase}
-  .hud-section-head output{color:#7a8390;font-size:10px;font-variant-numeric:tabular-nums}
-  .hud-layer-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 8px}
-  #hud .hud-layer{display:flex;align-items:center;gap:5px;min-width:0;height:23px;
+  /* MEB-098: единый пульт модели. Режим, ракурс и отображение находятся в
+     одной верхней рабочей зоне, а не отдельной плавающей карточке. */
+  #hud{color:#303743;font-size:11px}
+  .hud-section{min-width:0;padding:0 5px}
+  .hud-section-head{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;
+    clip:rect(0,0,0,0);white-space:nowrap}
+  .hud-layer-grid{display:flex;align-items:center;gap:0 7px}
+  #hud .hud-layer{display:flex;align-items:center;gap:4px;min-width:0;height:28px;
     cursor:pointer;user-select:none;white-space:nowrap}
   #hud .hud-layer input{width:14px;height:14px;margin:0;accent-color:var(--accent)}
   #hud .hud-layer span{min-width:0;overflow:hidden;text-overflow:ellipsis}
-  #hud .hud-layer.is-wide{grid-column:1/-1}
-  .hud-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}
+  #hud .hud-model{gap:5px}
+  .hud-actions{display:flex;align-items:center;gap:5px}
   #hud .hud-actions button{display:flex;align-items:center;justify-content:center;gap:4px;
-    min-width:0;height:28px;padding:0 5px;border-radius:3px;font-size:10.5px;white-space:nowrap}
+    min-width:0;height:28px;padding:0 7px;border-radius:3px;font-size:10.5px;white-space:nowrap}
   .explode-control{display:grid;grid-template-columns:auto minmax(0,1fr) auto;
-    align-items:center;gap:6px;height:29px;margin-top:4px;color:#4f5967}
+    flex:1 1 auto;align-items:center;gap:6px;height:29px;margin:0;color:#4f5967}
   .explode-control>span{font-size:10.5px}
   .explode-control input{width:100%;min-width:0;margin:0;accent-color:var(--accent)}
   .explode-control output{min-width:27px;color:#66707d;font:10px/1 Consolas,monospace;
@@ -3250,21 +3250,21 @@ PAGE = r"""<!DOCTYPE html>
     #views .viewport-group-label{position:absolute;width:1px;height:1px;margin:-1px;
       overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
     #views .vw{padding:0 6px}
-    #hud{width:200px}
+    #hud .hud-layer span{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;
+      clip:rect(0,0,0,0);white-space:nowrap}
+    #viewportTopbar{gap:5px}
   }
   @container (max-width:700px){
     #viewportTopbar{gap:6px}
     #tabs button{padding:0 6px}
     #tabs .viewport-icon{display:none}
     #views .vw{padding:0 5px;font-size:10.5px}
-    #hud{width:188px}
     #hud .hud-actions button span{position:absolute;width:1px;height:1px;margin:-1px;
       overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
   }
   @container (max-width:440px){
-    #viewportTopbar{flex-wrap:wrap}
-    #views{margin-left:auto}
-    #hud{top:92px;width:176px}
+    #views .vw{padding:0 4px;font-size:10px}
+    #hud .hud-section{padding:0 3px}
   }
   /* узкие ноутбуки: левую панель уплотняем, инспектор по умолчанию задаёт JS */
   @media (max-width:1440px){
@@ -3688,16 +3688,10 @@ PAGE = r"""<!DOCTYPE html>
         <div><dt>Кромка</dt><dd id="partEdges"></dd></div>
         <div><dt>Присадки</dt><dd id="partHoles"></dd></div>
       </dl>
-      <div class="part-primary-actions">
-        <button id="partCommandFocus" type="button" class="primary">
-          <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M5 6h14v9H9l-4 4V6Z"/><path d="M9 10h6"/>
-          </svg>
-          Изменить словами
-        </button>
+      <div class="part-utility-actions">
         <button id="ovDetail" type="button" title="Чертёж детали с размерами и присадками">Чертёж</button>
       </div>
-      <p class="part-context-note">Нижняя команда уже адресована выбранной детали.</p>
+      <p class="part-context-note">Нижняя команда уже адресована выбранной детали — опишите правку там.</p>
       <details id="partExact" class="part-exact">
         <summary>Точные параметры</summary>
         <p class="part-exact-hint">Грани в координатах модели, мм</p>
@@ -3962,25 +3956,24 @@ PAGE = r"""<!DOCTYPE html>
         <span class="print-label">Печать</span>
       </button>
     </div>
-    <div id="views" role="toolbar" aria-label="Ракурс 3D-модели">
-      <span class="viewport-group-label">Вид</span>
-      <button class="vw" type="button" data-view="axon" aria-pressed="false"
-        title="Аксонометрия без перспективы">Аксон</button>
-      <button class="vw on" type="button" data-view="persp" aria-pressed="true"
-        title="Перспектива три четверти">Персп.</button>
-      <button class="vw" type="button" data-view="top" aria-pressed="false"
-        title="Вид сверху">Сверху</button>
-      <button class="vw" type="button" data-view="front" aria-pressed="false"
-        title="Вид спереди">Спереди</button>
-      <button class="vw" type="button" data-view="left" aria-pressed="false"
-        title="Вид слева">Слева</button>
-    </div>
-  </div>
-  <div id="hud" aria-label="Инструменты отображения 3D-модели">
-    <section class="hud-section" aria-labelledby="hudLayersTitle">
+    <div id="viewportTools">
+      <div id="views" role="toolbar" aria-label="Ракурс 3D-модели">
+        <span class="viewport-group-label">Вид</span>
+        <button class="vw" type="button" data-view="axon" aria-pressed="false"
+          title="Аксонометрия без перспективы">Аксон</button>
+        <button class="vw on" type="button" data-view="persp" aria-pressed="true"
+          title="Перспектива три четверти">Персп.</button>
+        <button class="vw" type="button" data-view="top" aria-pressed="false"
+          title="Вид сверху">Сверху</button>
+        <button class="vw" type="button" data-view="front" aria-pressed="false"
+          title="Вид спереди">Спереди</button>
+        <button class="vw" type="button" data-view="left" aria-pressed="false"
+          title="Вид слева">Слева</button>
+      </div>
+      <div id="hud" role="toolbar" aria-label="Отображение и состояние 3D-модели">
+        <section class="hud-section hud-layers" aria-labelledby="hudLayersTitle">
       <div class="hud-section-head">
         <span id="hudLayersTitle">Отображение</span>
-        <output id="layerCount" aria-live="polite">4 / 5</output>
       </div>
       <div class="hud-layer-grid">
         <label class="hud-layer"><input type="checkbox" id="cbHoles" checked><span>Присадки</span></label>
@@ -3990,29 +3983,27 @@ PAGE = r"""<!DOCTYPE html>
         <label class="hud-layer is-wide"><input type="checkbox" id="cbXray"><span>Прозрачность</span></label>
       </div>
     </section>
-    <section class="hud-section" aria-labelledby="hudModelTitle">
-      <div class="hud-section-head"><span id="hudModelTitle">Модель</span></div>
-      <div class="hud-actions" role="group" aria-label="Открытие фасадов и ящиков">
-        <button id="btnOpenAll" type="button" title="Открыть все фасады и ящики">
+        </section>
+        <section class="hud-section hud-model" aria-labelledby="hudModelTitle">
+          <div class="hud-section-head"><span id="hudModelTitle">Модель</span></div>
+          <div class="hud-actions" role="group" aria-label="Открытие фасадов и ящиков">
+            <button id="btnToggleOpenAll" type="button" aria-pressed="false"
+              title="Открыть все фасады и ящики">
           <svg class="viewport-icon" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M4 4h11v16H4V4Z"/><path d="m15 4 5 3v13l-5-2V4ZM17 11h.01"/>
           </svg>
-          <span>Открыть всё</span>
-        </button>
-        <button id="btnCloseAll" type="button" title="Закрыть все фасады и ящики">
-          <svg class="viewport-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M5 4h14v16H5V4ZM15 11h.01"/>
-          </svg>
-          <span>Закрыть всё</span>
-        </button>
+              <span id="btnToggleOpenAllText">Открыть всё</span>
+            </button>
+          </div>
+          <label class="explode-control" title="Разнесённый вид модели">
+            <span>Разбор</span>
+            <input type="range" id="explode" min="0" max="100" value="0"
+              aria-label="Степень разборки модели">
+            <output id="explodeValue" for="explode">0%</output>
+          </label>
+        </section>
       </div>
-      <label class="explode-control" title="Разнесённый вид модели">
-        <span>Разбор</span>
-        <input type="range" id="explode" min="0" max="100" value="0"
-          aria-label="Степень разборки модели">
-        <output id="explodeValue" for="explode">0%</output>
-      </label>
-    </section>
+    </div>
   </div>
   <div id="draw"></div>
   <div id="catalog" role="region" aria-labelledby="catalogTitle" aria-hidden="true">
@@ -4422,19 +4413,21 @@ $('cbHw').onchange=e=>scene3d.setHw(e.target.checked);
 $('cbTex').onchange=e=>scene3d.setTextures(e.target.checked);
 $('cbDims').onchange=e=>scene3d.setDims(e.target.checked);
 $('cbXray').onchange=e=>scene3d.setXray(e.target.checked);
-const viewportLayerInputs=[$('cbHoles'),$('cbHw'),$('cbTex'),$('cbDims'),$('cbXray')];
-function syncViewportLayerCount(){
-  const enabled=viewportLayerInputs.filter(input=>input.checked).length;
-  $('layerCount').textContent=`${enabled} / ${viewportLayerInputs.length}`;
+function syncOpenAllButton(hasOpen){
+  const button=$('btnToggleOpenAll'),label=$('btnToggleOpenAllText');
+  button.dataset.open=String(!!hasOpen);button.setAttribute('aria-pressed',String(!!hasOpen));
+  button.title=hasOpen?'Закрыть все открытые фасады и ящики':'Открыть все фасады и ящики';
+  label.textContent=hasOpen?'Закрыть всё':'Открыть всё';
 }
-viewportLayerInputs.forEach(input=>input.addEventListener('change',syncViewportLayerCount));
-syncViewportLayerCount();
+scene3d.onOpenablesChange=state=>syncOpenAllButton(!!(state&&state.hasOpen));
 $('explode').oninput=e=>{
   scene3d.setExplode(e.target.value/100);
   $('explodeValue').textContent=`${e.target.value}%`;
 };
-$('btnOpenAll').onclick=()=>scene3d.openAll();
-$('btnCloseAll').onclick=()=>scene3d.closeAll();
+$('btnToggleOpenAll').onclick=()=>{
+  if($('btnToggleOpenAll').dataset.open==='true')scene3d.closeAll();
+  else scene3d.openAll();
+};
 // ракурсы: аксонометрия/перспектива/сверху/спереди/слева
 document.querySelectorAll('#views .vw').forEach(b=>b.onclick=()=>{
   scene3d.setView(b.dataset.view);
@@ -4977,7 +4970,7 @@ function syncPartEditState(){
   $('partCard').querySelectorAll('input[data-ov]').forEach(input=>input.disabled=locked);
   $('ovApply').disabled=locked||!draft.dirty||!draft.valid;
   $('partEditCancel').disabled=locked||!draft.dirty;
-  [$('ovReset'),$('ovDelete'),$('partCommandFocus')]
+  [$('ovReset'),$('ovDelete')]
     .forEach(button=>{if(button)button.disabled=locked;});
   $('fs_part').setAttribute('aria-busy',String(partEditBusy));
   const status=$('partEditStatus'); status.className='';
@@ -5019,9 +5012,6 @@ function renderSelectedPart(panel){
   $('ovDetail').textContent='Чертёж';
   fillPartCoordinateInputs(panel); partEditMessage='';partEditMessageTone='';partEditMessageFor=null;
   fs.style.display=''; syncPartEditState();
-}
-function focusPartCommand(){
-  $('chatMsg').focus();$('chatMsg').scrollIntoView({block:'nearest'});
 }
 async function openSelectedPartDrawing(){
   const panel=currentSelectedPart(); if(!panel||partEditBusy||chatBusy)return;
@@ -5110,8 +5100,6 @@ function deleteSelectedPart(name){
   },'Деталь удалена.');
 }
 $('partClearSelection').onclick=()=>scene3d.select(null);
-$('partCommandFocus').onclick=focusPartCommand;
-$('partChatSend').onclick=focusPartCommand;
 $('partEditCancel').onclick=()=>{
   const panel=currentSelectedPart();if(!panel)return;
   fillPartCoordinateInputs(panel);partEditMessage='';partEditMessageTone='';partEditMessageFor=null;
@@ -6349,7 +6337,7 @@ function modelMutationControls(){
     '#rightViewComponents textarea','#rightViewComponents button',
     '#rightViewProduction input','#rightViewProduction select','#rightViewProduction textarea',
     '#rightViewProduction button','#fs_part input[data-ov]','#ovApply','#partEditCancel',
-    '#ovReset','#ovDelete','#partCommandFocus'
+    '#ovReset','#ovDelete'
   ].join(','))];
 }
 function setModelMutationControlsLocked(locked){

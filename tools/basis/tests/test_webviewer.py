@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from src.generators import generate_from_paramspec       # noqa: E402
-from src.webviewer import project_to_viewer_html, viewer_payload   # noqa: E402
+from src.webviewer import SCENE_JS, project_to_viewer_html, viewer_payload   # noqa: E402
 
 PARAMSPECS = sorted(f for f in (ROOT / "paramspecs").glob("*.json")
                     if not f.name.endswith((".project.json", ".versions.json")))
@@ -60,3 +60,17 @@ def test_openables_groups():
         assert len(o["hardware"]) == 7                  # 4 чашки + ручка (2 стойки + скоба)
         assert {v["hardware"][j]["kind"] for j in o["hardware"]} == {"hinge_cup", "handle"}
         assert o["holes"], "присадки двери едут с ней (AKD-189)"
+
+
+def test_orbit_navigation_is_bounded_relative_to_the_current_model():
+    """Пользователь не должен потерять модель бесконечным zoom/pan.
+
+    Границы зависят от bounding sphere, поэтому одинаково работают для тумбы и
+    большого шкафа, не меняя камеры, материалы или геометрию сцены.
+    """
+
+    assert "function setOrbitBounds(center,sphere)" in SCENE_JS
+    assert "controls.maxDistance=Math.max(160,sphere*7.5)" in SCENE_JS
+    assert "orbitMaxPan=Math.max(120,sphere*1.35)" in SCENE_JS
+    assert "controls.addEventListener('change',clampOrbitTarget)" in SCENE_JS
+    assert "setOrbitBounds(c,sphere)" in SCENE_JS
