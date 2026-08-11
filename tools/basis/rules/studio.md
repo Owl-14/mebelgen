@@ -71,7 +71,7 @@ ParamSpec, версии, preview, AI-историю и существующие 
 | `/api/generate` | ParamSpec → `{viewer, issues{6 чеков}, stats, bom, refs, estimate}` |
 | `/api/techview` | чертёж SVG (+`panel` — деталировка одной детали) |
 | `/api/nesting` | раскрой-превью SVG |
-| `/api/chat` | ИИ-правка: `{spec,message,history,context,images,provider}` → `{reply,spec,changes,usage}`; в context — реальные кандидаты базы для нерешённых слотов и `panels` (геометрия всех деталей — для добавления/подгонки встык) |
+| `/api/chat` | ИИ-правка: `{spec,message,history,context,images,provider}` → обратно совместимый `{reply,spec,changes,usage}` + применённые `operations`; LLM возвращает минимальный типизированный patch, сервер атомарно применяет его к ParamSpec v1. В context — реальные кандидаты базы и `panels` для target/preconditions |
 | `/api/chat/cancel` | помечает AI-операцию отменённой; поздний ответ не пишется в историю |
 | `/api/chat-history` | Серверная история AI-команд текущего изделия. В auth-режиме браузерная `history` не считается источником истины: контекст читается из tenant-хранилища |
 | `/api/providers`, `/api/token-balance` | список нейросетей / лимиты выбранной |
@@ -96,6 +96,9 @@ ParamSpec, версии, preview, AI-историю и существующие 
 - случайная трата на облако невозможна: кнопка неактивна при красных чеках +
   серверный 409 + confirm с ценой;
 - каждая правка → полный прогон проверок (что на экране = что уйдёт в производство);
+- AI не переписывает ParamSpec целиком: `SetDimension`, `SetMaterial`,
+  `ChangeArchetype`, операции секций/полок/деталей и read-only Query/Diagnose
+  проходят Pydantic validation и атомарный reducer; неназванные поля сохраняются;
 - сохранённый ParamSpec совместим со всем конвейером (deliver/viewer/build-b3d);
 - пока AI считает, осмотр 3D, режимы просмотра, каталог и профиль доступны, а
   мутации ParamSpec/сохранение/экспорт временно заблокированы;
