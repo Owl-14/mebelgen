@@ -1,436 +1,3673 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://bazis-converter.local/schema/paramspec.schema.json",
-  "title": "BasisParamSpec",
-  "description": "Высокоуровневое описание изделия параметрами (без координат). По нему генератор архетипа строит project.json с panels[].",
-  "type": "object",
-  "required": [
-    "schemaVersion",
-    "project_name",
-    "archetype",
-    "dimensions",
-    "materials"
-  ],
-  "additionalProperties": true,
-  "properties": {
-    "schemaVersion": {
-      "const": "paramspec-v1"
-    },
-    "project_name": {
-      "type": "string",
-      "minLength": 1
-    },
-    "furniture_type": {
-      "type": "string"
-    },
-    "archetype": {
-      "type": "string",
-      "enum": [
-        "corpus",
-        "shelving",
-        "drawer_unit",
-        "door_unit",
-        "cabinet",
-        "wardrobe",
-        "desk",
-        "table",
-        "round_table",
-        "composite"
-      ]
-    },
-    "dimensions": {
+  "$defs": {
+    "CabinetParamSpec": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/ParamSpecFields"
+        }
+      ],
+      "properties": {
+        "archetype": {
+          "enum": [
+            "cabinet",
+            "wardrobe"
+          ],
+          "title": "Archetype",
+          "type": "string"
+        }
+      },
+      "required": [
+        "archetype"
+      ],
+      "title": "CabinetParamSpec",
       "type": "object",
+      "unevaluatedProperties": false
+    },
+    "CompositeBlock": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "origin": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Origin"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "spec": {
+          "discriminator": {
+            "mapping": {
+              "cabinet": "#/$defs/CabinetParamSpec",
+              "corpus": "#/$defs/CorpusParamSpec",
+              "desk": "#/$defs/DeskParamSpec",
+              "door_unit": "#/$defs/DoorUnitParamSpec",
+              "drawer_unit": "#/$defs/DrawerUnitParamSpec",
+              "round_table": "#/$defs/RoundTableParamSpec",
+              "shelving": "#/$defs/ShelvingParamSpec",
+              "table": "#/$defs/DeskParamSpec",
+              "wardrobe": "#/$defs/CabinetParamSpec"
+            },
+            "propertyName": "archetype"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/CorpusParamSpec"
+            },
+            {
+              "$ref": "#/$defs/ShelvingParamSpec"
+            },
+            {
+              "$ref": "#/$defs/DrawerUnitParamSpec"
+            },
+            {
+              "$ref": "#/$defs/DoorUnitParamSpec"
+            },
+            {
+              "$ref": "#/$defs/CabinetParamSpec"
+            },
+            {
+              "$ref": "#/$defs/DeskParamSpec"
+            },
+            {
+              "$ref": "#/$defs/RoundTableParamSpec"
+            }
+          ],
+          "title": "Spec"
+        }
+      },
+      "required": [
+        "spec"
+      ],
+      "title": "CompositeBlock",
+      "type": "object"
+    },
+    "CompositeParamSpec": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/ParamSpecFields"
+        }
+      ],
+      "properties": {
+        "archetype": {
+          "const": "composite",
+          "title": "Archetype",
+          "type": "string"
+        },
+        "blocks": {
+          "items": {
+            "$ref": "#/$defs/CompositeBlock"
+          },
+          "title": "Blocks",
+          "type": "array"
+        }
+      },
+      "required": [
+        "archetype",
+        "blocks"
+      ],
+      "title": "CompositeParamSpec",
+      "type": "object",
+      "unevaluatedProperties": false
+    },
+    "CorpusParamSpec": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/ParamSpecFields"
+        }
+      ],
+      "properties": {
+        "archetype": {
+          "const": "corpus",
+          "title": "Archetype",
+          "type": "string"
+        }
+      },
+      "required": [
+        "archetype"
+      ],
+      "title": "CorpusParamSpec",
+      "type": "object",
+      "unevaluatedProperties": false
+    },
+    "DeskParamSpec": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/ParamSpecFields"
+        }
+      ],
+      "properties": {
+        "archetype": {
+          "enum": [
+            "desk",
+            "table"
+          ],
+          "title": "Archetype",
+          "type": "string"
+        }
+      },
+      "required": [
+        "archetype"
+      ],
+      "title": "DeskParamSpec",
+      "type": "object",
+      "unevaluatedProperties": false
+    },
+    "Dimensions": {
+      "additionalProperties": false,
+      "properties": {
+        "width": {
+          "maximum": 10000,
+          "minimum": 50,
+          "title": "Width",
+          "type": "number"
+        },
+        "depth": {
+          "maximum": 10000,
+          "minimum": 50,
+          "title": "Depth",
+          "type": "number"
+        },
+        "height": {
+          "maximum": 10000,
+          "minimum": 50,
+          "title": "Height",
+          "type": "number"
+        },
+        "depth_carcass": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Depth Carcass"
+        },
+        "tolerance": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tolerance"
+        }
+      },
       "required": [
         "width",
         "depth",
         "height"
       ],
-      "additionalProperties": false,
-      "properties": {
-        "width": {
-          "type": "number",
-          "exclusiveMinimum": 0,
-          "minimum": 50,
-          "maximum": 10000
-        },
-        "depth": {
-          "type": "number",
-          "exclusiveMinimum": 0,
-          "minimum": 50,
-          "maximum": 10000
-        },
-        "height": {
-          "type": "number",
-          "exclusiveMinimum": 0,
-          "minimum": 50,
-          "maximum": 10000
-        },
-        "depth_carcass": {
-          "type": "number",
-          "exclusiveMinimum": 0
-        },
-        "tolerance": {
-          "type": "number"
-        }
-      }
+      "title": "Dimensions",
+      "type": "object"
     },
-    "materials": {
-      "type": "object",
-      "required": [
-        "board_thickness"
-      ],
+    "DoorSection": {
       "additionalProperties": false,
       "properties": {
-        "board_thickness": {
-          "type": "number",
-          "exclusiveMinimum": 0
-        },
-        "back_thickness": {
-          "type": "number",
-          "exclusiveMinimum": 0
-        },
-        "board_material": {
-          "type": "string"
-        },
-        "back_material": {
-          "type": "string"
-        },
-        "edge_band_thickness": {
-          "type": "number",
-          "minimum": 0
-        },
-        "color": {
-          "type": "string"
-        },
-        "color_code": {
-          "type": "string"
-        },
-        "facade_color": {
-          "type": "string",
-          "description": "Декор фасадов, если отличается от корпуса"
-        },
-        "facade_color_code": {
-          "type": "string",
-          "description": "Код декора фасадов"
-        },
-        "board_article": {
-          "type": "string",
-          "description": "Артикул плиты корпуса из производственной базы"
-        },
-        "facade_article": {
-          "type": "string",
-          "description": "Артикул плиты фасадов из производственной базы"
-        },
-        "top_thickness": {
-          "type": "number",
-          "minimum": 3,
-          "maximum": 60,
-          "description": "Толщина крышки/столешницы, если отличается от плиты (AKD-218): «корпус 16, крышка МДФ 25»"
-        },
-        "texture_direction": {
-          "type": "string",
-          "enum": [
-            "along",
-            "across"
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
           ],
-          "description": "Направление текстуры: along — по длине (деф.), across — поперёк (textureOrientation в .cfrn)"
+          "default": null,
+          "title": "Id"
+        },
+        "width_share": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Width Share"
+        },
+        "shelves": {
+          "anyOf": [
+            {
+              "maximum": 20,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Shelves"
+        },
+        "shelf_levels": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Shelf Levels"
+        },
+        "shelf_label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Shelf Label"
+        },
+        "drawers": {
+          "anyOf": [
+            {
+              "maximum": 20,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Drawers"
+        },
+        "drawer_heights": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Drawer Heights"
+        },
+        "door": {
+          "anyOf": [
+            {
+              "maximum": 2,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Door"
+        },
+        "door_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Door Name"
+        },
+        "door_names": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Door Names"
+        },
+        "door_below_shelf": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Door Below Shelf"
+        },
+        "door_swing": {
+          "anyOf": [
+            {
+              "enum": [
+                "left",
+                "right",
+                "up",
+                "down"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Door Swing"
+        },
+        "door_inset": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Door Inset"
+        },
+        "door_z": {
+          "anyOf": [
+            {
+              "enum": [
+                "overlay",
+                "front",
+                "inset"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Door Z"
+        },
+        "rod": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/Rod"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rod"
+        },
+        "front_bottom": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Front Bottom"
+        },
+        "front_top": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Front Top"
+        },
+        "open_top": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Open Top"
+        },
+        "open_top_height": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Open Top Height"
+        },
+        "cover_top": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cover Top"
+        },
+        "prefix": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prefix"
+        },
+        "niche_z_front": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Niche Z Front"
+        },
+        "guide_gap": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Guide Gap"
+        },
+        "guide_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Guide Type"
+        },
+        "box_z1": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Z1"
+        },
+        "box_depth": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Depth"
+        },
+        "box_y_offset": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Y Offset"
+        },
+        "box_height": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Height"
+        },
+        "box_back_thickness": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Back Thickness"
+        },
+        "box_bottom_thickness": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Bottom Thickness"
+        },
+        "box_bottom_mode": {
+          "anyOf": [
+            {
+              "enum": [
+                "between",
+                "under"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Bottom Mode"
+        },
+        "box_back_mode": {
+          "anyOf": [
+            {
+              "enum": [
+                "beyond",
+                "inset"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Back Mode"
+        },
+        "box_sides_on_bottom": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Sides On Bottom"
+        },
+        "boxes": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Boxes"
+        },
+        "back_limit": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Back Limit"
+        },
+        "kind": {
+          "const": "door",
+          "title": "Kind",
+          "type": "string"
         }
-      }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "DoorSection",
+      "type": "object"
     },
-    "legs": {
+    "DoorUnitParamSpec": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/ParamSpecFields"
+        }
+      ],
+      "properties": {
+        "archetype": {
+          "const": "door_unit",
+          "title": "Archetype",
+          "type": "string"
+        }
+      },
+      "required": [
+        "archetype"
+      ],
+      "title": "DoorUnitParamSpec",
       "type": "object",
+      "unevaluatedProperties": false
+    },
+    "DrawerGuides": {
       "additionalProperties": false,
       "properties": {
         "type": {
-          "type": "string"
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Type"
         },
-        "height": {
-          "type": "number",
-          "minimum": 0
+        "length_mm": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Length Mm"
         },
-        "adjustable": {
-          "type": "boolean"
+        "soft_close": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Soft Close"
         },
-        "color": {
-          "type": "string"
+        "furniture_encoded": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Furniture Encoded"
         },
-        "count": {
-          "type": "integer",
-          "minimum": 0
+        "cabinet_left_panel": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cabinet Left Panel"
         },
-        "as_panel": {
-          "type": "boolean",
-          "description": "Моделировать цоколь отдельной панелью 0..height"
+        "cabinet_right_panel": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cabinet Right Panel"
         }
-      }
+      },
+      "title": "DrawerGuides",
+      "type": "object"
     },
-    "gaps": {
+    "DrawerUnitParamSpec": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/ParamSpecFields"
+        }
+      ],
+      "properties": {
+        "archetype": {
+          "const": "drawer_unit",
+          "title": "Archetype",
+          "type": "string"
+        }
+      },
+      "required": [
+        "archetype"
+      ],
+      "title": "DrawerUnitParamSpec",
       "type": "object",
+      "unevaluatedProperties": false
+    },
+    "DrawersSection": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "width_share": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Width Share"
+        },
+        "shelves": {
+          "anyOf": [
+            {
+              "maximum": 20,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Shelves"
+        },
+        "shelf_levels": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Shelf Levels"
+        },
+        "shelf_label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Shelf Label"
+        },
+        "drawers": {
+          "anyOf": [
+            {
+              "maximum": 20,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Drawers"
+        },
+        "drawer_heights": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Drawer Heights"
+        },
+        "door": {
+          "anyOf": [
+            {
+              "maximum": 2,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Door"
+        },
+        "door_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Door Name"
+        },
+        "door_names": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Door Names"
+        },
+        "door_below_shelf": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Door Below Shelf"
+        },
+        "door_swing": {
+          "anyOf": [
+            {
+              "enum": [
+                "left",
+                "right",
+                "up",
+                "down"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Door Swing"
+        },
+        "door_inset": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Door Inset"
+        },
+        "door_z": {
+          "anyOf": [
+            {
+              "enum": [
+                "overlay",
+                "front",
+                "inset"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Door Z"
+        },
+        "rod": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/Rod"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rod"
+        },
+        "front_bottom": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Front Bottom"
+        },
+        "front_top": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Front Top"
+        },
+        "open_top": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Open Top"
+        },
+        "open_top_height": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Open Top Height"
+        },
+        "cover_top": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cover Top"
+        },
+        "prefix": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prefix"
+        },
+        "niche_z_front": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Niche Z Front"
+        },
+        "guide_gap": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Guide Gap"
+        },
+        "guide_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Guide Type"
+        },
+        "box_z1": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Z1"
+        },
+        "box_depth": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Depth"
+        },
+        "box_y_offset": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Y Offset"
+        },
+        "box_height": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Height"
+        },
+        "box_back_thickness": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Back Thickness"
+        },
+        "box_bottom_thickness": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Bottom Thickness"
+        },
+        "box_bottom_mode": {
+          "anyOf": [
+            {
+              "enum": [
+                "between",
+                "under"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Bottom Mode"
+        },
+        "box_back_mode": {
+          "anyOf": [
+            {
+              "enum": [
+                "beyond",
+                "inset"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Back Mode"
+        },
+        "box_sides_on_bottom": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Sides On Bottom"
+        },
+        "boxes": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Boxes"
+        },
+        "back_limit": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Back Limit"
+        },
+        "kind": {
+          "const": "drawers",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "DrawersSection",
+      "type": "object"
+    },
+    "Gaps": {
       "additionalProperties": false,
       "properties": {
         "facade": {
-          "type": "number",
-          "minimum": 0
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Facade"
         },
         "default": {
-          "type": "number",
-          "minimum": 0
-        }
-      }
-    },
-    "sections": {
-      "type": "array",
-      "description": "Колонки по ширине (слева направо). Внутри — вертикальное содержимое.",
-      "items": {
-        "type": "object",
-        "required": [
-          "kind"
-        ],
-        "additionalProperties": true,
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "kind": {
-            "type": "string",
-            "enum": [
-              "shelves",
-              "drawers",
-              "open",
-              "door"
-            ]
-          },
-          "width_share": {
-            "type": "number",
-            "exclusiveMinimum": 0,
-            "description": "Доля ширины (по умолчанию делится поровну)"
-          },
-          "shelves": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 20
-          },
-          "shelf_levels": {
-            "type": "array",
-            "items": {
+          "anyOf": [
+            {
+              "minimum": 0,
               "type": "number"
             },
-            "description": "Явные уровни низа полок по Y (если заданы — важнее count)"
-          },
-          "drawers": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 20
-          },
-          "drawer_heights": {
-            "type": "array",
-            "items": {
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Default"
+        }
+      },
+      "title": "Gaps",
+      "type": "object"
+    },
+    "Handles": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Type"
+        },
+        "material": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Material"
+        },
+        "color": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Color"
+        },
+        "size": {
+          "anyOf": [
+            {
+              "minimum": 0,
               "type": "number"
             },
-            "description": "Явные высоты фасадов ящиков (иначе делятся поровну)"
-          },
-          "door": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 2
-          },
-          "rod": {
-            "description": "Штанга-вешало (AKD-177): true или объект. axis x — поперечная между боковинами; z — продольная выдвижная (малая глубина). height — ось по Y (иначе верх проёма − 80).",
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                  "axis": {
-                    "type": "string",
-                    "enum": [
-                      "x",
-                      "z"
-                    ]
-                  },
-                  "height": {
-                    "type": "number"
-                  },
-                  "diameter": {
-                    "type": "number"
-                  },
-                  "length": {
-                    "type": "number"
-                  }
-                }
-              }
-            ]
-          },
-          "door_swing": {
-            "type": "string",
-            "enum": [
-              "left",
-              "right",
-              "up",
-              "down"
-            ],
-            "description": "Направление открывания одиночной двери секции (AKD-224): left/right — сторона петель; up/down — откидная вверх/вниз"
-          },
-          "door_inset": {
-            "type": "boolean",
-            "description": "true — врезная дверь в проём (алиас door_z:'inset'); нет/false — накладная"
-          },
-          "door_z": {
-            "type": "string",
-            "enum": [
-              "overlay",
-              "front",
-              "inset"
-            ],
-            "description": "Z-позиция двери: overlay/front — накладная, inset — врезная в проём"
-          },
-          "front_bottom": {
-            "type": "number",
-            "description": "Y низа фасадной зоны (ниша снизу): фасады начинаются не от пола"
-          },
-          "front_top": {
-            "type": "number",
-            "description": "Y верха фасадной зоны (ниша сверху): фасады не до крышки"
-          },
-          "cover_top": {
-            "type": "boolean",
-            "description": "полка-перекрытие над стеком ящиков (по умолчанию true)"
-          }
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Size"
+        },
+        "count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Count"
+        },
+        "offset_from_top": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Offset From Top"
+        },
+        "furniture_encoded": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Furniture Encoded"
         }
-      }
+      },
+      "title": "Handles",
+      "type": "object"
     },
-    "hardware": {
-      "type": "object",
-      "additionalProperties": true,
+    "Hardware": {
+      "additionalProperties": false,
       "properties": {
         "handles": {
-          "type": "object"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Handles"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "drawer_guides": {
-          "type": "object"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DrawerGuides"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "hinges": {
-          "type": "object"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Hinges"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "locks": {
-          "type": "array"
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Lock"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Locks"
+        },
+        "selection": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Selection"
         }
-      }
+      },
+      "title": "Hardware",
+      "type": "object"
     },
-    "features": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
+    "Hinges": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Type"
+        },
+        "furniture_encoded": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Furniture Encoded"
+        }
+      },
+      "title": "Hinges",
+      "type": "object"
     },
-    "warnings": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "estimated_values": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "overrides": {
-      "type": "array",
-      "description": "Точечные правки деталей поверх генератора (AKD-121): transform/move/delete/rename/add",
-      "items": {
-        "type": "object",
-        "required": [
-          "panel"
-        ],
-        "properties": {
-          "panel": {
-            "type": "string"
-          },
-          "action": {
-            "enum": [
-              "transform",
-              "delete",
-              "rename",
-              "add"
-            ]
-          },
-          "placement": {
-            "type": "object"
-          },
-          "move": {
-            "type": "array",
-            "items": {
+    "Legs": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Type"
+        },
+        "height": {
+          "anyOf": [
+            {
+              "minimum": 0,
               "type": "number"
             },
-            "minItems": 3,
-            "maxItems": 3
-          },
-          "to": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
-          },
-          "orientation": {
-            "type": "string"
-          },
-          "thickness": {
-            "type": "number"
-          },
-          "material": {
-            "type": "string"
-          }
-        }
-      }
-    },
-    "back_mount": {
-      "enum": [
-        "inset",
-        "overlay"
-      ],
-      "description": "Конструкция задника: inset (врезной, по умолчанию) | overlay (накладной поверх торцов — гвозди по периметру)"
-    },
-    "sides_over_top": {
-      "type": "boolean",
-      "description": "Схема стыка верха (AKD-226): true — боковины идут до верха и перекрывают крышку (крышка в проём между ними); false/нет — крышка перекрывает боковины (по умолчанию)"
-    },
-    "blocks": {
-      "type": "array",
-      "description": "Только archetype=composite: блоки композиции; origin — смещение блока (мм), origin.y — вертикальная постановка (навесные над нижними)",
-      "items": {
-        "type": "object",
-        "required": [
-          "spec"
-        ],
-        "properties": {
-          "name": {
-            "type": "string",
-            "description": "префикс имён деталей блока"
-          },
-          "origin": {
-            "type": "object",
-            "properties": {
-              "x": {
-                "type": "number"
-              },
-              "y": {
-                "type": "number"
-              },
-              "z": {
-                "type": "number"
-              }
+            {
+              "type": "null"
             }
-          },
-          "spec": {
-            "type": "object",
-            "description": "полный вложенный ParamSpec блока (composite внутри composite запрещён)"
-          }
+          ],
+          "default": null,
+          "title": "Height"
+        },
+        "adjustable": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Adjustable"
+        },
+        "color": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Color"
+        },
+        "count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Count"
+        },
+        "as_panel": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "As Panel"
         }
-      }
+      },
+      "title": "Legs",
+      "type": "object"
+    },
+    "Lock": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Type"
+        },
+        "color": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Color"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target"
+        },
+        "furniture_encoded": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Furniture Encoded"
+        }
+      },
+      "title": "Lock",
+      "type": "object"
+    },
+    "Materials": {
+      "additionalProperties": false,
+      "properties": {
+        "board_thickness": {
+          "exclusiveMinimum": 0,
+          "title": "Board Thickness",
+          "type": "number"
+        },
+        "back_thickness": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Back Thickness"
+        },
+        "board_material": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Board Material"
+        },
+        "back_material": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Back Material"
+        },
+        "facade_material": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Facade Material"
+        },
+        "edge_band_thickness": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Edge Band Thickness"
+        },
+        "color": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Color"
+        },
+        "color_code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Color Code"
+        },
+        "facade_color": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Facade Color"
+        },
+        "facade_color_code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Facade Color Code"
+        },
+        "board_article": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Board Article"
+        },
+        "facade_article": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Facade Article"
+        },
+        "top_thickness": {
+          "anyOf": [
+            {
+              "maximum": 60,
+              "minimum": 3,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Top Thickness"
+        },
+        "texture_direction": {
+          "anyOf": [
+            {
+              "enum": [
+                "along",
+                "across"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Texture Direction"
+        }
+      },
+      "required": [
+        "board_thickness"
+      ],
+      "title": "Materials",
+      "type": "object"
+    },
+    "OpenSection": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "width_share": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Width Share"
+        },
+        "shelves": {
+          "anyOf": [
+            {
+              "maximum": 20,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Shelves"
+        },
+        "shelf_levels": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Shelf Levels"
+        },
+        "shelf_label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Shelf Label"
+        },
+        "drawers": {
+          "anyOf": [
+            {
+              "maximum": 20,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Drawers"
+        },
+        "drawer_heights": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Drawer Heights"
+        },
+        "door": {
+          "anyOf": [
+            {
+              "maximum": 2,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Door"
+        },
+        "door_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Door Name"
+        },
+        "door_names": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Door Names"
+        },
+        "door_below_shelf": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Door Below Shelf"
+        },
+        "door_swing": {
+          "anyOf": [
+            {
+              "enum": [
+                "left",
+                "right",
+                "up",
+                "down"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Door Swing"
+        },
+        "door_inset": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Door Inset"
+        },
+        "door_z": {
+          "anyOf": [
+            {
+              "enum": [
+                "overlay",
+                "front",
+                "inset"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Door Z"
+        },
+        "rod": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/Rod"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rod"
+        },
+        "front_bottom": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Front Bottom"
+        },
+        "front_top": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Front Top"
+        },
+        "open_top": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Open Top"
+        },
+        "open_top_height": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Open Top Height"
+        },
+        "cover_top": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cover Top"
+        },
+        "prefix": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prefix"
+        },
+        "niche_z_front": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Niche Z Front"
+        },
+        "guide_gap": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Guide Gap"
+        },
+        "guide_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Guide Type"
+        },
+        "box_z1": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Z1"
+        },
+        "box_depth": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Depth"
+        },
+        "box_y_offset": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Y Offset"
+        },
+        "box_height": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Height"
+        },
+        "box_back_thickness": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Back Thickness"
+        },
+        "box_bottom_thickness": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Bottom Thickness"
+        },
+        "box_bottom_mode": {
+          "anyOf": [
+            {
+              "enum": [
+                "between",
+                "under"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Bottom Mode"
+        },
+        "box_back_mode": {
+          "anyOf": [
+            {
+              "enum": [
+                "beyond",
+                "inset"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Back Mode"
+        },
+        "box_sides_on_bottom": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Sides On Bottom"
+        },
+        "boxes": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Boxes"
+        },
+        "back_limit": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Back Limit"
+        },
+        "kind": {
+          "const": "open",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "OpenSection",
+      "type": "object"
+    },
+    "Origin": {
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "default": 0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "default": 0,
+          "title": "Y",
+          "type": "number"
+        },
+        "z": {
+          "default": 0,
+          "title": "Z",
+          "type": "number"
+        }
+      },
+      "title": "Origin",
+      "type": "object"
+    },
+    "Override": {
+      "additionalProperties": false,
+      "properties": {
+        "panel": {
+          "title": "Panel",
+          "type": "string"
+        },
+        "action": {
+          "anyOf": [
+            {
+              "enum": [
+                "transform",
+                "delete",
+                "rename",
+                "add"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Action"
+        },
+        "placement": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Placement"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "move": {
+          "anyOf": [
+            {
+              "maxItems": 3,
+              "minItems": 3,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Move"
+        },
+        "to": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "To"
+        },
+        "type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Type"
+        },
+        "orientation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Orientation"
+        },
+        "thickness": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Thickness"
+        },
+        "material": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Material"
+        }
+      },
+      "required": [
+        "panel"
+      ],
+      "title": "Override",
+      "type": "object"
+    },
+    "Placement": {
+      "additionalProperties": false,
+      "properties": {
+        "x1": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "X1"
+        },
+        "x2": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "X2"
+        },
+        "y1": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Y1"
+        },
+        "y2": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Y2"
+        },
+        "z1": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Z1"
+        },
+        "z2": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Z2"
+        }
+      },
+      "title": "Placement",
+      "type": "object"
+    },
+    "Rod": {
+      "additionalProperties": false,
+      "properties": {
+        "axis": {
+          "anyOf": [
+            {
+              "enum": [
+                "x",
+                "z"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Axis"
+        },
+        "height": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Height"
+        },
+        "diameter": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Diameter"
+        },
+        "length": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Length"
+        }
+      },
+      "title": "Rod",
+      "type": "object"
+    },
+    "RoundTableParamSpec": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/ParamSpecFields"
+        }
+      ],
+      "properties": {
+        "archetype": {
+          "const": "round_table",
+          "title": "Archetype",
+          "type": "string"
+        }
+      },
+      "required": [
+        "archetype"
+      ],
+      "title": "RoundTableParamSpec",
+      "type": "object",
+      "unevaluatedProperties": false
+    },
+    "ShelvesSection": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "width_share": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Width Share"
+        },
+        "shelves": {
+          "anyOf": [
+            {
+              "maximum": 20,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Shelves"
+        },
+        "shelf_levels": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Shelf Levels"
+        },
+        "shelf_label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Shelf Label"
+        },
+        "drawers": {
+          "anyOf": [
+            {
+              "maximum": 20,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Drawers"
+        },
+        "drawer_heights": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Drawer Heights"
+        },
+        "door": {
+          "anyOf": [
+            {
+              "maximum": 2,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Door"
+        },
+        "door_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Door Name"
+        },
+        "door_names": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Door Names"
+        },
+        "door_below_shelf": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Door Below Shelf"
+        },
+        "door_swing": {
+          "anyOf": [
+            {
+              "enum": [
+                "left",
+                "right",
+                "up",
+                "down"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Door Swing"
+        },
+        "door_inset": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Door Inset"
+        },
+        "door_z": {
+          "anyOf": [
+            {
+              "enum": [
+                "overlay",
+                "front",
+                "inset"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Door Z"
+        },
+        "rod": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/Rod"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rod"
+        },
+        "front_bottom": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Front Bottom"
+        },
+        "front_top": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Front Top"
+        },
+        "open_top": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Open Top"
+        },
+        "open_top_height": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Open Top Height"
+        },
+        "cover_top": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cover Top"
+        },
+        "prefix": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prefix"
+        },
+        "niche_z_front": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Niche Z Front"
+        },
+        "guide_gap": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Guide Gap"
+        },
+        "guide_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Guide Type"
+        },
+        "box_z1": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Z1"
+        },
+        "box_depth": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Depth"
+        },
+        "box_y_offset": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Y Offset"
+        },
+        "box_height": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Height"
+        },
+        "box_back_thickness": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Back Thickness"
+        },
+        "box_bottom_thickness": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Bottom Thickness"
+        },
+        "box_bottom_mode": {
+          "anyOf": [
+            {
+              "enum": [
+                "between",
+                "under"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Bottom Mode"
+        },
+        "box_back_mode": {
+          "anyOf": [
+            {
+              "enum": [
+                "beyond",
+                "inset"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Back Mode"
+        },
+        "box_sides_on_bottom": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box Sides On Bottom"
+        },
+        "boxes": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Boxes"
+        },
+        "back_limit": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Back Limit"
+        },
+        "kind": {
+          "const": "shelves",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "ShelvesSection",
+      "type": "object"
+    },
+    "ShelvingParamSpec": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/ParamSpecFields"
+        }
+      ],
+      "properties": {
+        "archetype": {
+          "const": "shelving",
+          "title": "Archetype",
+          "type": "string"
+        }
+      },
+      "required": [
+        "archetype"
+      ],
+      "title": "ShelvingParamSpec",
+      "type": "object",
+      "unevaluatedProperties": false
+    },
+    "ParamSpecFields": {
+      "properties": {
+        "schemaVersion": {
+          "const": "paramspec-v1",
+          "title": "Schemaversion",
+          "type": "string"
+        },
+        "project_name": {
+          "minLength": 1,
+          "title": "Project Name",
+          "type": "string"
+        },
+        "furniture_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Furniture Type"
+        },
+        "dimensions": {
+          "$ref": "#/$defs/Dimensions"
+        },
+        "materials": {
+          "$ref": "#/$defs/Materials"
+        },
+        "legs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Legs"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "gaps": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Gaps"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "sections": {
+          "anyOf": [
+            {
+              "items": {
+                "discriminator": {
+                  "mapping": {
+                    "door": "#/$defs/DoorSection",
+                    "drawers": "#/$defs/DrawersSection",
+                    "open": "#/$defs/OpenSection",
+                    "shelves": "#/$defs/ShelvesSection"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/ShelvesSection"
+                  },
+                  {
+                    "$ref": "#/$defs/DrawersSection"
+                  },
+                  {
+                    "$ref": "#/$defs/DoorSection"
+                  },
+                  {
+                    "$ref": "#/$defs/OpenSection"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sections"
+        },
+        "hardware": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Hardware"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "features": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Features"
+        },
+        "warnings": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Warnings"
+        },
+        "estimated_values": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Estimated Values"
+        },
+        "overrides": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Override"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Overrides"
+        },
+        "draft": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Draft"
+        },
+        "back_mount": {
+          "anyOf": [
+            {
+              "enum": [
+                "inset",
+                "overlay"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Back Mount"
+        },
+        "sides_over_top": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sides Over Top"
+        },
+        "rod": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/Rod"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rod"
+        },
+        "interior_z_front": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Interior Z Front"
+        },
+        "carcass_z_front": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Carcass Z Front"
+        },
+        "top_overhang": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Top Overhang"
+        },
+        "socle_full": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Socle Full"
+        },
+        "socle_recess": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Socle Recess"
+        },
+        "facade_reveal": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Facade Reveal"
+        },
+        "apron": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Apron"
+        },
+        "apron_height": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Apron Height"
+        },
+        "frame": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frame"
+        },
+        "screen": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Screen"
+        },
+        "screen_height": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Screen Height"
+        },
+        "screen_thickness": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Screen Thickness"
+        },
+        "screen_margin": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Screen Margin"
+        },
+        "screen_z": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Screen Z"
+        },
+        "top_thickness": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Top Thickness"
+        },
+        "pedestal_diameter": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pedestal Diameter"
+        },
+        "base": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Base"
+        },
+        "base_thickness": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Base Thickness"
+        },
+        "base_diameter": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Base Diameter"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "project_name",
+        "dimensions",
+        "materials"
+      ],
+      "type": "object"
     }
-  }
+  },
+  "description": "Высокоуровневое описание изделия параметрами (без координат). Сгенерировано из Pydantic-моделей src.paramspec.",
+  "discriminator": {
+    "mapping": {
+      "cabinet": "#/$defs/CabinetParamSpec",
+      "composite": "#/$defs/CompositeParamSpec",
+      "corpus": "#/$defs/CorpusParamSpec",
+      "desk": "#/$defs/DeskParamSpec",
+      "door_unit": "#/$defs/DoorUnitParamSpec",
+      "drawer_unit": "#/$defs/DrawerUnitParamSpec",
+      "round_table": "#/$defs/RoundTableParamSpec",
+      "shelving": "#/$defs/ShelvingParamSpec",
+      "table": "#/$defs/DeskParamSpec",
+      "wardrobe": "#/$defs/CabinetParamSpec"
+    },
+    "propertyName": "archetype"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/CorpusParamSpec"
+    },
+    {
+      "$ref": "#/$defs/ShelvingParamSpec"
+    },
+    {
+      "$ref": "#/$defs/DrawerUnitParamSpec"
+    },
+    {
+      "$ref": "#/$defs/DoorUnitParamSpec"
+    },
+    {
+      "$ref": "#/$defs/CabinetParamSpec"
+    },
+    {
+      "$ref": "#/$defs/DeskParamSpec"
+    },
+    {
+      "$ref": "#/$defs/RoundTableParamSpec"
+    },
+    {
+      "$ref": "#/$defs/CompositeParamSpec"
+    }
+  ],
+  "title": "BasisParamSpec",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bazis-converter.local/schema/paramspec.schema.json"
 }
