@@ -1522,6 +1522,30 @@
           "default": null,
           "title": "Type"
         },
+        "color": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Color"
+        },
+        "adjustable": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Adjustable"
+        },
         "furniture_encoded": {
           "anyOf": [
             {
@@ -3351,6 +3375,18 @@
           ],
           "default": null,
           "title": "Draft"
+        },
+        "created": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created"
         },
         "back_mount": {
           "anyOf": [

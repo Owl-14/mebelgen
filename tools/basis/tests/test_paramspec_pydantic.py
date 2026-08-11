@@ -112,3 +112,20 @@ def test_missing_archetype_is_only_allowed_for_minimal_draft():
     }
 
     assert any("union_tag_not_found" in error for error in validate_paramspec(raw))
+
+
+def test_persisted_creation_marker_and_hinge_options_are_typed():
+    _, raw = next(_paramspecs())
+    raw = json.loads(json.dumps(raw))
+    raw["created"] = True
+    raw.setdefault("hardware", {})["hinges"] = {
+        "type": "накладные",
+        "color": "чёрный",
+        "adjustable": True,
+    }
+
+    typed = parse_paramspec(raw)
+
+    assert typed.to_generator_dict() == raw
+    assert not validate_paramspec(raw)
+    assert not list(Draft202012Validator(paramspec_json_schema()).iter_errors(raw))
