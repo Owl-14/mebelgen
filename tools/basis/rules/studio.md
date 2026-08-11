@@ -68,10 +68,10 @@ ParamSpec, версии, preview, AI-историю и существующие 
 | GET `/` | страница редактора |
 | GET `/thumb/<spec>.json` | SVG-аксонометрия карточки (кэш) |
 | GET `/preview/<stem>.png` | канонический PNG-снимок общего 3D-движка |
-| `/api/generate` | ParamSpec → `{viewer, issues{6 чеков}, stats, bom, refs, estimate}` |
+| `/api/generate` | ParamSpec → `{viewer, issues, check_report, stats, bom, refs, estimate}`; `issues` сохраняет совместимые бейджи, `check_report` содержит полный производственный контур |
 | `/api/techview` | чертёж SVG (+`panel` — деталировка одной детали) |
 | `/api/nesting` | раскрой-превью SVG |
-| `/api/chat` | ИИ-правка: `{spec,message,history,context,images,provider}` → обратно совместимый `{reply,spec,changes,usage}` + применённые `operations` и рассчитанные `resolved_operations`; LLM возвращает минимальный типизированный patch, сервер атомарно применяет его к ParamSpec v1. Позиционные правки идут как AddPanel/MovePanel без координат: placement, стыки и присадки рассчитывает EditEngine. В context — реальные кандидаты базы и `panels` для target/preconditions |
+| `/api/chat` | ИИ-правка: `{spec,message,history,context,images,provider}` → обратно совместимый `{reply,spec,changes,usage}` + `operations`, `resolved_operations`, `check_report`; LLM возвращает минимальный типизированный patch, сервер атомарно применяет его к ParamSpec v1 и допускает только зелёный production gate. Позиционные правки идут как AddPanel/MovePanel без координат: placement, стыки и присадки рассчитывает EditEngine. В context — реальные кандидаты базы и `panels` для target/preconditions |
 | `/api/chat/cancel` | помечает AI-операцию отменённой; поздний ответ не пишется в историю |
 | `/api/chat-history` | Серверная история AI-команд текущего изделия. В auth-режиме браузерная `history` не считается источником истины: контекст читается из tenant-хранилища |
 | `/api/providers`, `/api/token-balance` | список нейросетей / лимиты выбранной |
@@ -96,6 +96,7 @@ ParamSpec, версии, preview, AI-историю и существующие 
 - случайная трата на облако невозможна: кнопка неактивна при красных чеках +
   серверный 409 + confirm с ценой;
 - каждая правка → полный прогон проверок (что на экране = что уйдёт в производство);
+- AI/reducer-кандидат не становится текущей ревизией при красном `CheckReport`;
 - AI не переписывает ParamSpec целиком: `SetDimension`, `SetMaterial`,
   `ChangeArchetype`, операции секций/полок/деталей и read-only Query/Diagnose
   проходят Pydantic validation и атомарный reducer; неназванные поля сохраняются;

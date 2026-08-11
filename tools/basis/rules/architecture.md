@@ -48,6 +48,7 @@ ParamSpec; координаты всегда считает детерминир
 | `geometry_check.py` | геометрия placement (нахлёсты, выход за габарит) |
 | `drilling_check.py` | сверловка: отверстие в теле панели, шаг 32, планки на уровне полок |
 | `completeness_check.py` | полнота: каждая деталь закреплена, заявленное (полки/штанги/опоры) построено |
+| `production_gate.py` | атомарный гейт AI/reducer-кандидата: Pydantic → JSON Schema → генерация → все производственные проверки → полнота/материалы; возвращает `CheckReport`, не применяя красную ревизию |
 | `cfrn.py` | project.json → `.cfrn` (родная ЛЕВОсторонняя конвенция БАЗИС, разворот фасадами к камере) + `check_cfrn_encoding` / `check_cfrn_holes` |
 | `b3d_format.py`, `b3d_verify.py` | чтение .b3d, паритет .b3d ↔ модель |
 | `build_b3d.py`, `cloud_api.py`, `cloud_cutting.py` | облако БАЗИС (ПЛАТНО, только по явной просьбе) |

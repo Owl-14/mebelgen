@@ -110,6 +110,28 @@ def _coordinate_refusal(usage: Any) -> dict[str, Any]:
     }
 
 
+def _production_gate_refusal(
+    decision: Any,
+    usage: Any,
+    *,
+    operations: list[dict[str, Any]] | None = None,
+    resolved_operations: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    details = [problem.detail for problem in decision.report.errors[:5]]
+    reply = "Правка отклонена производственным гейтом:\n" + "\n".join(details)
+    return {
+        "reply": reply,
+        "error": "Предложенная AI-правка не прошла производственный гейт.",
+        "code": "production_gate_rejected",
+        "spec": None,
+        "changes": [],
+        "operations": operations or [],
+        "resolved_operations": resolved_operations or [],
+        "usage": usage,
+        "check_report": decision.report.to_dict(),
+    }
+
+
 # ------------------------------------------------------------------ mock
 
 _NUM = r"(\d+(?:[.,]\d+)?)"
@@ -772,6 +794,7 @@ def chat_edit(spec: dict[str, Any], message: str,
 
     build_name = resolve_provider_name(provider)
     build = get_chat_provider(build_name)
+    provider_spec = copy.deepcopy(spec)
     # Конвейер «глаза+мозг» (AKD-211): если пришло фото, а сборщик — не тот
     # провайдер, что назначен на зрение (VISION_EXTRACT_PROVIDER, обычно GigaChat),
     # то этап 1 — GigaChat распознаёт факты с фото ТЗ текстом, этап 2 — сборщик
@@ -786,16 +809,16 @@ def chat_edit(spec: dict[str, Any], message: str,
                 aug = ((message or "Собери изделие по этому ТЗ.")
                        + "\n\nРаспознано с фото ТЗ (используй как факты, ничего не додумывай "
                          "сверх):\n" + desc)
-                res = build.chat(spec, aug, history, context)
+                res = build.chat(provider_spec, aug, history, context)
             else:                                     # распознать не вышло — фото напрямую
-                res = build.chat(spec, message, history, context, images=images)
+                res = build.chat(provider_spec, message, history, context, images=images)
         elif images:
-            res = build.chat(spec, message, history, context, images=images)
+            res = build.chat(provider_spec, message, history, context, images=images)
         else:
             try:
-                res = build.chat(spec, message, history, context)
+                res = build.chat(provider_spec, message, history, context)
             except TypeError:
-                res = build.chat(spec, message, history)
+                res = build.chat(provider_spec, message, history)
     except Exception as e:                            # сеть/ключ/парсинг — в чат, не 500
         message = f"Сервис AI не ответил: {e}"
         return {"reply": message, "error": message, "spec": None, "changes": []}
@@ -806,13 +829,19 @@ def chat_edit(spec: dict[str, Any], message: str,
     created = bool(res.get("created"))
     legacy_spec = res.get("spec") if isinstance(res.get("spec"), dict) else None
     if created and legacy_spec is not None:
-        errors = validate_paramspec(legacy_spec)
-        if errors:
-            return {"reply": "Правка отклонена — спека не прошла схему:\n"
-                             + "\n".join(errors[:5]), "spec": None, "changes": [], "usage": usage}
-        return {"reply": res.get("reply", "Создано."), "spec": legacy_spec,
+        if _coordinate_overrides(legacy_spec):
+            return _coordinate_refusal(usage)
+        from .production_gate import evaluate_production_gate
+
+        decision = evaluate_production_gate(legacy_spec)
+        if not decision.report.ok:
+            return _production_gate_refusal(decision, usage)
+        accepted = decision.accepted_spec
+        assert accepted is not None
+        return {"reply": res.get("reply", "Создано."), "spec": accepted,
                 "changes": ["новое изделие с нуля"], "created": True,
-                "operations": [], "usage": usage}
+                "operations": [], "resolved_operations": [], "usage": usage,
+                "check_report": decision.report.to_dict()}
 
     raw_operations = (list(res.get("operations"))
                       if isinstance(res.get("operations"), list) else [])
@@ -838,9 +867,6 @@ def chat_edit(spec: dict[str, Any], message: str,
         from .edit_operations import EditApplicationError, apply_edit_operations
         applied = apply_edit_operations(spec, raw_operations, context)
         new = _apply_compatibility_patches(applied["spec"], compatibility)
-        errors = validate_paramspec(new)
-        if errors:
-            raise EditApplicationError("resulting ParamSpec is invalid: " + "; ".join(errors[:5]))
     except Exception as error:
         reply = f"Правка отклонена — операции не применены: {error}"
         return {"reply": reply, "error": reply, "spec": None,
@@ -855,9 +881,23 @@ def chat_edit(spec: dict[str, Any], message: str,
         return {"reply": reply or "Изменений нет.", "spec": None, "changes": [],
                 "operations": applied["operations"],
                 "resolved_operations": applied.get("resolved_operations") or [], "usage": usage}
-    return {"reply": reply or "Готово.", "spec": new, "changes": changes,
+    from .production_gate import evaluate_production_gate
+
+    decision = evaluate_production_gate(new)
+    if not decision.report.ok:
+        return _production_gate_refusal(
+            decision,
+            usage,
+            operations=applied["operations"],
+            resolved_operations=applied.get("resolved_operations") or [],
+        )
+    accepted = decision.accepted_spec
+    assert accepted is not None
+    return {"reply": reply or "Готово.", "spec": accepted,
+            "changes": spec_diff(spec, accepted),
             "operations": applied["operations"],
-            "resolved_operations": applied.get("resolved_operations") or [], "usage": usage}
+            "resolved_operations": applied.get("resolved_operations") or [], "usage": usage,
+            "check_report": decision.report.to_dict()}
 
 
 _PROVIDER_META = {          # id → (человекочитаемое имя, env-ключ наличия)
