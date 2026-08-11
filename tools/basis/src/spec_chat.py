@@ -66,6 +66,50 @@ def spec_diff(old: dict[str, Any], new: dict[str, Any]) -> list[str]:
     return lines
 
 
+def _coordinate_overrides(spec: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return provider-controlled geometry while tolerating unchanged legacy data."""
+    out = []
+    for override in spec.get("overrides") or []:
+        if not isinstance(override, dict):
+            continue
+        if "placement" in override or "move" in override or override.get("action") == "add":
+            out.append({key: copy.deepcopy(override.get(key))
+                        for key in ("panel", "action", "placement", "move", "type")
+                        if key in override})
+    return out
+
+
+_FORBIDDEN_LLM_GEOMETRY_KEYS = {
+    "placement", "move", "x", "y", "z", "x1", "x2", "y1", "y2", "z1", "z2",
+}
+
+
+def _contains_llm_coordinates(value: Any) -> bool:
+    if isinstance(value, dict):
+        if any(key in _FORBIDDEN_LLM_GEOMETRY_KEYS for key in value):
+            return True
+        return any(_contains_llm_coordinates(item) for item in value.values())
+    if isinstance(value, list):
+        return any(_contains_llm_coordinates(item) for item in value)
+    return False
+
+
+def _coordinate_refusal(usage: Any) -> dict[str, Any]:
+    message = ("Правка отклонена: LLM не может задавать placement/move/координаты "
+               "деталей; используйте семантические AddPanel/MovePanel.")
+    return {
+        "reply": message,
+        "error": message,
+        "code": "llm_coordinates_forbidden",
+        "reason": {"code": "llm_coordinates_forbidden", "message": message},
+        "spec": None,
+        "changes": [],
+        "operations": [],
+        "resolved_operations": [],
+        "usage": usage,
+    }
+
+
 # ------------------------------------------------------------------ mock
 
 _NUM = r"(\d+(?:[.,]\d+)?)"
@@ -653,6 +697,42 @@ def _legacy_response_patches(spec: dict[str, Any], new: dict[str, Any]) \
 _MISSING = object()
 
 
+def _normalize_provider_operations(operations: list[Any]) -> list[Any]:
+    """Translate the MEB-144 rolling format into the typed MEB-143 contract."""
+    normalized: list[Any] = []
+    aliases = {
+        "add_panel": "AddPanel",
+        "add": "AddPanel",
+        "move_panel": "MovePanel",
+        "move": "MovePanel",
+    }
+    semantic_fields = {
+        "panel_type", "section_id", "between", "above", "below", "middle",
+        "align_front", "align_back", "delta_mm",
+    }
+    for raw in operations:
+        if not isinstance(raw, dict) or "op" in raw:
+            normalized.append(raw)
+            continue
+        kind = str(raw.get("kind") or raw.get("operation") or raw.get("action") or "")
+        op = aliases.get(kind)
+        if op is None:
+            normalized.append(raw)
+            continue
+        panel_id = str(raw.get("panel_id") or raw.get("panel") or raw.get("name") or "")
+        target_id = panel_id if panel_id.startswith("part:") else f"part:{panel_id}"
+        condition = "target_missing" if op == "AddPanel" else "target_exists"
+        item = {
+            "op": op,
+            "target_id": target_id,
+            "preconditions": [{"kind": condition, "target_id": target_id}],
+            "panel_type": raw.get("panel_type") or raw.get("type"),
+        }
+        item.update({key: raw[key] for key in semantic_fields if key in raw})
+        normalized.append(item)
+    return normalized
+
+
 def _apply_compatibility_patches(spec: dict[str, Any],
                                  patches: list[dict[str, Any]]) -> dict[str, Any]:
     working = copy.deepcopy(spec)
@@ -740,14 +820,20 @@ def chat_edit(spec: dict[str, Any], message: str,
                      if isinstance(res.get("compatibility_patches"), list) else [])
     try:
         if legacy_spec is not None:
+            expected_geometry = [] if created else _coordinate_overrides(spec)
+            if _coordinate_overrides(legacy_spec) != expected_geometry:
+                return _coordinate_refusal(usage)
             for key in PROTECTED_KEYS:
                 if key in spec:
                     legacy_spec[key] = spec[key]
             legacy_operations, compatibility = _legacy_response_patches(spec, legacy_spec)
             raw_operations.extend(legacy_operations)
+        if _contains_llm_coordinates(raw_operations):
+            return _coordinate_refusal(usage)
+        raw_operations = _normalize_provider_operations(raw_operations)
         if not raw_operations and not compatibility:
             return {"reply": res.get("reply", ""), "spec": None,
-                    "changes": [], "operations": [], "usage": usage}
+                    "changes": [], "operations": [], "resolved_operations": [], "usage": usage}
 
         from .edit_operations import EditApplicationError, apply_edit_operations
         applied = apply_edit_operations(spec, raw_operations, context)
@@ -758,7 +844,7 @@ def chat_edit(spec: dict[str, Any], message: str,
     except Exception as error:
         reply = f"Правка отклонена — операции не применены: {error}"
         return {"reply": reply, "error": reply, "spec": None,
-                "changes": [], "operations": [], "usage": usage}
+                "changes": [], "operations": [], "resolved_operations": [], "usage": usage}
 
     changes = spec_diff(spec, new)
     operation_replies = applied.get("replies") or []
@@ -767,9 +853,11 @@ def chat_edit(spec: dict[str, Any], message: str,
         reply = "\n".join(operation_replies if not reply or reply == "Готово." else [reply, *operation_replies])
     if not changes:
         return {"reply": reply or "Изменений нет.", "spec": None, "changes": [],
-                "operations": applied["operations"], "usage": usage}
+                "operations": applied["operations"],
+                "resolved_operations": applied.get("resolved_operations") or [], "usage": usage}
     return {"reply": reply or "Готово.", "spec": new, "changes": changes,
-            "operations": applied["operations"], "usage": usage}
+            "operations": applied["operations"],
+            "resolved_operations": applied.get("resolved_operations") or [], "usage": usage}
 
 
 _PROVIDER_META = {          # id → (человекочитаемое имя, env-ключ наличия)

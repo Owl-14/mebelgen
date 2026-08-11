@@ -163,13 +163,61 @@ def test_gemini_provider_parses_response(monkeypatch):
 
 
 def test_prompt_keeps_geometry_rules():
-    """Инварианты промпта: ориентация добавляемых деталей (8а) и запрет
-    удалять пользовательские overrides при автопочинке (регресс на потерю)."""
+    """MEB-144: prompt emits semantic bindings and forbids LLM coordinates."""
     text = (ROOT / "prompts" / "spec_chat_prompt.txt").read_text(encoding="utf-8")
-    for marker in ("vertical_partition", "тонкая по X", "ПРИМЫКАНИЕ ВСТЫК",
-                   "context.panels", "ДЕТАЛИ ПОЛЬЗОВАТЕЛЯ НЕ УДАЛЯТЬ",
+    for marker in ("vertical_partition", "section_id", "panel_id", "between",
+                   "above", "below", "middle", "align_front", "align_back",
+                   "delta_mm", "ЖЁСТКИЙ ЗАПРЕТ КООРДИНАТ",
+                   "ДЕТАЛИ ПОЛЬЗОВАТЕЛЯ НЕ УДАЛЯТЬ",
                    "ПОСТАВЬ РЯДОМ", '"composite" + blocks'):
         assert marker in text, f"в промпте потеряно правило: {marker}"
+
+
+def test_provider_geometry_operations_are_resolved_without_llm_placement(monkeypatch):
+    import src.spec_chat as sc
+
+    spec = {
+        "schemaVersion": "paramspec-v1", "project_name": "Chat edit",
+        "archetype": "cabinet",
+        "dimensions": {"width": 800, "depth": 450, "height": 900},
+        "materials": {"board_thickness": 16, "back_thickness": 3,
+                      "board_material": "board", "back_material": "back"},
+        "sections": [{"id": "main", "kind": "open"}],
+    }
+
+    class SemanticProvider:
+        def chat(self, *_args, **_kwargs):
+            return {"reply": "Добавил полку.", "spec": None, "operations": [{
+                "kind": "add_panel", "panel_type": "shelf", "panel_id": "AI shelf",
+                "section_id": "main", "middle": True,
+                "align_front": True, "align_back": True,
+            }]}
+
+    monkeypatch.setattr(sc, "get_chat_provider", lambda _name=None: SemanticProvider())
+    result = sc.chat_edit(spec, "добавь полку посередине")
+    assert result["spec"] is not None
+    assert result["resolved_operations"][0]["placement"]["y1"] == 442
+    assert any("overrides.0.placement" in change for change in result["changes"])
+
+
+def test_provider_coordinate_override_is_structurally_refused(monkeypatch):
+    import src.spec_chat as sc
+
+    class CoordinateProvider:
+        def chat(self, spec, *_args, **_kwargs):
+            changed = json.loads(json.dumps(spec))
+            changed["overrides"] = [{
+                "panel": "LLM shelf", "action": "add", "type": "shelf",
+                "placement": {"x1": 0, "x2": 1, "y1": 0, "y2": 1,
+                              "z1": 0, "z2": 1},
+            }]
+            return {"reply": "готово", "spec": changed}
+
+    monkeypatch.setattr(sc, "get_chat_provider", lambda _name=None: CoordinateProvider())
+    result = sc.chat_edit(SPEC, "добавь полку")
+    assert result["spec"] is None
+    assert result["code"] == "llm_coordinates_forbidden"
+    assert result["reason"]["code"] == "llm_coordinates_forbidden"
 
 
 def test_gigachat_provider(monkeypatch):

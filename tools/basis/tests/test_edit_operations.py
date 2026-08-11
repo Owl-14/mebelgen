@@ -36,7 +36,7 @@ def test_edit_operation_is_discriminated_union_with_all_first_slice_variants():
     tags = set(item_schema["discriminator"]["mapping"])
     assert tags == {
         "SetDimension", "SetMaterial", "ChangeArchetype", "AddSection",
-        "UpdateSection", "DeleteSection", "AddShelf", "MovePart",
+        "UpdateSection", "DeleteSection", "AddShelf", "AddPanel", "MovePanel", "MovePart",
         "ResizePart", "DeletePart", "QueryModel", "DiagnoseModel",
     }
 

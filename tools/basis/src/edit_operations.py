@@ -171,6 +171,28 @@ class AddShelf(_EditOperation):
     count: int = Field(default=1, ge=1, le=20)
 
 
+class _SemanticPanelOperation(_EditOperation):
+    """Coordinate-free panel edit resolved by the deterministic EditEngine."""
+
+    panel_type: Literal["shelf", "vertical_partition"]
+    section_id: str | None = None
+    between: tuple[str, str] | None = None
+    above: str | None = None
+    below: str | None = None
+    middle: bool | None = None
+    align_front: bool | None = None
+    align_back: bool | None = None
+    delta_mm: float = 0
+
+
+class AddPanel(_SemanticPanelOperation):
+    op: Literal["AddPanel"]
+
+
+class MovePanel(_SemanticPanelOperation):
+    op: Literal["MovePanel"]
+
+
 class MovePart(_EditOperation):
     op: Literal["MovePart"]
     delta: tuple[float, float, float]
@@ -212,7 +234,8 @@ class DiagnoseModel(_EditOperation):
 
 EditOperation: TypeAlias = Annotated[
     SetDimension | SetMaterial | ChangeArchetype | AddSection | UpdateSection
-    | DeleteSection | AddShelf | MovePart | ResizePart | DeletePart
+    | DeleteSection | AddShelf | AddPanel | MovePanel
+    | MovePart | ResizePart | DeletePart
     | QueryModel | DiagnoseModel,
     Field(discriminator="op"),
 ]
@@ -370,6 +393,7 @@ def apply_edit_operations(spec: dict[str, Any], operations: Any,
     working = copy.deepcopy(spec)
     ctx = context or {}
     replies: list[str] = []
+    resolved_operations: list[dict[str, Any]] = []
 
     for index, operation in enumerate(parsed):
         try:
@@ -415,6 +439,25 @@ def apply_edit_operations(spec: dict[str, Any], operations: Any,
                         levels.extend([operation.level] * operation.count)
                         section["shelf_levels"] = sorted(levels)
                         section["shelves"] = len(levels)
+            elif isinstance(operation, (AddPanel, MovePanel)):
+                from .edit_engine import apply_geometry_operations
+
+                engine_operation = operation.model_dump(
+                    mode="json", exclude_none=True, exclude={"op", "target_id", "preconditions"}
+                )
+                engine_operation["kind"] = (
+                    "add_panel" if isinstance(operation, AddPanel) else "move_panel"
+                )
+                engine_operation["panel_id"] = operation.target_id.removeprefix("part:")
+                engine_result = apply_geometry_operations(working, [engine_operation])
+                if not engine_result.ok:
+                    assert engine_result.failure is not None
+                    raise EditApplicationError(
+                        f"{engine_result.failure.code}: {engine_result.failure.message}"
+                    )
+                assert engine_result.spec is not None
+                working = engine_result.spec
+                resolved_operations.extend(engine_result.resolved_overrides)
             elif isinstance(operation, (MovePart, ResizePart, DeletePart)):
                 if not _panel_exists(working, operation.target_id, ctx):
                     raise EditApplicationError(f"part target {operation.target_id!r} is missing")
@@ -443,4 +486,5 @@ def apply_edit_operations(spec: dict[str, Any], operations: Any,
         "changed": working != original,
         "replies": replies,
         "operations": [item.model_dump(mode="json") for item in parsed],
+        "resolved_operations": resolved_operations,
     }

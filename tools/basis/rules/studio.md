@@ -71,7 +71,7 @@ ParamSpec, версии, preview, AI-историю и существующие 
 | `/api/generate` | ParamSpec → `{viewer, issues{6 чеков}, stats, bom, refs, estimate}` |
 | `/api/techview` | чертёж SVG (+`panel` — деталировка одной детали) |
 | `/api/nesting` | раскрой-превью SVG |
-| `/api/chat` | ИИ-правка: `{spec,message,history,context,images,provider}` → обратно совместимый `{reply,spec,changes,usage}` + применённые `operations`; LLM возвращает минимальный типизированный patch, сервер атомарно применяет его к ParamSpec v1. В context — реальные кандидаты базы и `panels` для target/preconditions |
+| `/api/chat` | ИИ-правка: `{spec,message,history,context,images,provider}` → обратно совместимый `{reply,spec,changes,usage}` + применённые `operations` и рассчитанные `resolved_operations`; LLM возвращает минимальный типизированный patch, сервер атомарно применяет его к ParamSpec v1. Позиционные правки идут как AddPanel/MovePanel без координат: placement, стыки и присадки рассчитывает EditEngine. В context — реальные кандидаты базы и `panels` для target/preconditions |
 | `/api/chat/cancel` | помечает AI-операцию отменённой; поздний ответ не пишется в историю |
 | `/api/chat-history` | Серверная история AI-команд текущего изделия. В auth-режиме браузерная `history` не считается источником истины: контекст читается из tenant-хранилища |
 | `/api/providers`, `/api/token-balance` | список нейросетей / лимиты выбранной |
