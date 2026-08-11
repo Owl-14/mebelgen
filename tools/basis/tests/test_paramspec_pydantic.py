@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from jsonschema import Draft202012Validator
 
 from src.generators import generate_from_paramspec
+from src.generators.registry import _normalize_spec
 from src.paramspec import (
     SCHEMA_PATH,
     ParamSpec,
@@ -129,3 +130,36 @@ def test_persisted_creation_marker_and_hinge_options_are_typed():
     assert typed.to_generator_dict() == raw
     assert not validate_paramspec(raw)
     assert not list(Draft202012Validator(paramspec_json_schema()).iter_errors(raw))
+
+
+def test_catalog_identity_is_typed_but_unknown_catalog_fields_stay_forbidden():
+    _, raw = next(_paramspecs())
+    raw = json.loads(json.dumps(raw))
+    raw["catalog"] = {
+        "creator_user_id": "user-1",
+        "responsible_user_id": "user-2",
+        "author": "Автор",
+        "responsible": "Ответственный",
+    }
+
+    assert parse_paramspec(raw).to_generator_dict() == raw
+    assert not validate_paramspec(raw)
+
+    raw["catalog"]["unexpected"] = True
+    assert any("catalog.unexpected" in error for error in validate_paramspec(raw))
+
+
+def test_legacy_drawer_closer_is_accepted_and_normalized_without_mutating_input():
+    _, raw = next(_paramspecs())
+    raw = json.loads(json.dumps(raw))
+    guides = raw.setdefault("hardware", {}).setdefault("drawer_guides", {})
+    guides.pop("soft_close", None)
+    guides["with_closer"] = True
+    before = json.loads(json.dumps(raw))
+
+    assert not validate_paramspec(raw)
+    normalized = _normalize_spec(raw)
+
+    assert raw == before
+    assert "with_closer" not in normalized["hardware"]["drawer_guides"]
+    assert normalized["hardware"]["drawer_guides"]["soft_close"] is True

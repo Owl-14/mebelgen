@@ -96,6 +96,61 @@ def test_preview_source_and_revision_checked_cache(tmp_path: Path) -> None:
         thread.join(timeout=2)
 
 
+def test_open_validates_and_builds_before_switching_current_product(tmp_path: Path) -> None:
+    source_spec = json.loads(
+        (ROOT / "paramspecs" / "komi_72_tumba_podkatnaya.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    spec_dir = tmp_path / "paramspecs"
+    spec_dir.mkdir()
+    current_path = spec_dir / "current.json"
+    valid_path = spec_dir / "valid.json"
+    broken_path = spec_dir / "broken.json"
+    current_path.write_text(json.dumps(source_spec), encoding="utf-8")
+
+    valid = json.loads(json.dumps(source_spec))
+    valid["project_name"] = "Новое изделие"
+    valid["catalog"] = {
+        "creator_user_id": "user-1",
+        "responsible_user_id": "user-1",
+        "author": "Автор",
+        "responsible": "Автор",
+    }
+    valid.setdefault("hardware", {}).setdefault("drawer_guides", {})["with_closer"] = True
+    valid_path.write_text(json.dumps(valid, ensure_ascii=False), encoding="utf-8")
+    broken = json.loads(json.dumps(valid))
+    broken["catalog"]["unexpected"] = True
+    broken_path.write_text(json.dumps(broken, ensure_ascii=False), encoding="utf-8")
+
+    studio = _Studio(current_path, tmp_path / "out")
+    studio.workspaces.set_current(None, current_path)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(studio))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        status, raw = _request(
+            server.server_port, "POST", "/api/open", {"file": "broken.json"}
+        )
+        rejected = json.loads(raw)
+        assert status == 422
+        assert rejected["code"] == "invalid_paramspec"
+        assert studio.workspaces.current_spec_path(None).name == "current.json"
+
+        status, raw = _request(
+            server.server_port, "POST", "/api/open", {"file": "valid.json"}
+        )
+        opened = json.loads(raw)
+        assert status == 200, raw
+        assert opened["ok"] is True
+        assert opened["payload"]["viewer"]["panels"]
+        assert studio.workspaces.current_spec_path(None).name == "valid.json"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
 def test_chat_cancellation_ids_are_validated_and_consumed(tmp_path: Path) -> None:
     spec_path = tmp_path / "item.json"
     spec_path.write_text(

@@ -39,13 +39,20 @@ def _normalize_spec(spec: dict[str, Any]) -> dict[str, Any]:
     """
     import json as _json
     secs = spec.get("sections")
-    if not isinstance(secs, list) or not any(
-            isinstance(s, dict) and ("door_inset" in s or "open_top" in s
-                                     or "open_top_height" in s) for s in secs):
+    has_legacy_section = isinstance(secs, list) and any(
+        isinstance(s, dict) and (
+            "door_inset" in s or "open_top" in s or "open_top_height" in s
+        )
+        for s in secs
+    )
+    hardware = spec.get("hardware")
+    guides = hardware.get("drawer_guides") if isinstance(hardware, dict) else None
+    has_legacy_guides = isinstance(guides, dict) and "with_closer" in guides
+    if not has_legacy_section and not has_legacy_guides:
         return spec
     spec = _json.loads(_json.dumps(spec, ensure_ascii=False))   # не мутируем вход
     warns = spec.setdefault("warnings", [])
-    for i, s in enumerate(spec["sections"], start=1):
+    for i, s in enumerate(spec.get("sections") or [], start=1):
         if not isinstance(s, dict):
             continue
         if s.pop("door_inset", None):
@@ -57,6 +64,17 @@ def _normalize_spec(spec: dict[str, Any]) -> dict[str, Any]:
                      f"верх ниши задаётся front_top (Y от пола)")
                 if w not in warns:
                     warns.append(w)
+    normalized_hardware = spec.get("hardware")
+    normalized_guides = (
+        normalized_hardware.get("drawer_guides")
+        if isinstance(normalized_hardware, dict) else None
+    )
+    if isinstance(normalized_guides, dict) and "with_closer" in normalized_guides:
+        legacy_value = normalized_guides.pop("with_closer")
+        normalized_guides.setdefault("soft_close", legacy_value)
+        warning = "hardware.drawer_guides.with_closer устарело; использовано soft_close"
+        if warning not in warns:
+            warns.append(warning)
     return spec
 
 

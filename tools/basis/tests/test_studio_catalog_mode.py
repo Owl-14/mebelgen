@@ -147,6 +147,21 @@ def test_catalog_selection_does_not_open_model_context() -> None:
     assert "catalogOwnerMarkup(p)" in render
 
 
+def test_catalog_open_commits_only_a_prebuilt_candidate() -> None:
+    adopt = PAGE[PAGE.index("function adoptSpec") : PAGE.index("function showEmpty")]
+    open_item = PAGE[
+        PAGE.index("async function openCatalogItem") :
+        PAGE.index("function catalogCardKeydown")
+    ]
+    selector = PAGE[
+        PAGE.index("$('projSel').onchange") : PAGE.index("$('projNew').onclick")
+    ]
+    assert "p.payload&&p.payload.viewer" in adopt
+    assert "commitGeneratedPayload" in adopt
+    assert "if(r.ok&&p.ok)" in open_item
+    assert "e.target.value=previousFile" in selector
+
+
 def test_catalog_keyboard_contract_and_escape_priority() -> None:
     keyboard = PAGE[PAGE.index("function catalogCardKeydown") : PAGE.index("async function renameCatalogItem")]
     for key in ("ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Enter", "Escape"):
