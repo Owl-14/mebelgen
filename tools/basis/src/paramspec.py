@@ -88,6 +88,8 @@ class DrawerGuides(_ContractModel):
 
 class Hinges(_ContractModel):
     type: str | None = None
+    color: str | None = None
+    adjustable: bool | None = None
     furniture_encoded: str | None = None
 
 
@@ -209,6 +211,7 @@ class _ParamSpecFields(_ContractModel):
     estimated_values: list[str] | None = None
     overrides: list[Override] | None = None
     draft: bool | None = None
+    created: bool | None = None
     back_mount: Literal["inset", "overlay"] | None = None
     sides_over_top: bool | None = None
     rod: bool | Rod | None = None
