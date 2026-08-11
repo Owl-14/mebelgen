@@ -204,7 +204,7 @@ def leg_positions(project: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
-def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
+def _compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
     panels = project.get("panels", [])
     hw = project.get("hardware", {}) or {}
     holes: list[dict[str, Any]] = []
@@ -870,6 +870,23 @@ def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
                 holes.append(_hole(q["name"], "направляющая (саморез)", outer, guide_y,
                                    box_front + off, 3, 2, "x", b_inx))
     return holes
+
+
+def compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
+    """Compute deterministic drilling and expose only aggregate trace metadata."""
+
+    from .telemetry import hash_payload, span
+
+    with span("drilling.compute", {
+        "project.hash": hash_payload({
+            "project_name": project.get("project_name"),
+            "panels": [panel.get("name") for panel in (project.get("panels") or [])],
+        }),
+        "panel.count": len(project.get("panels") or []),
+    }) as trace_span:
+        holes = _compute_drilling(project)
+        trace_span.set_attributes({"hole.count": len(holes), "check.outcome": "pass"})
+        return holes
 
 
 # Присадка → позиция крепежа (имя для BOM, запрос в базу, шт на отверстие).

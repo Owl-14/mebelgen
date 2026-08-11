@@ -83,6 +83,22 @@ def _manager(tmp_path: Path) -> tuple[TenantWorkspaceManager, dict, Path]:
     return manager, auth, product
 
 
+def test_ai_history_persists_trace_id_for_studio_comparison(tmp_path: Path) -> None:
+    manager, auth, product = _manager(tmp_path)
+    trace_id = "0123456789abcdef0123456789abcdef"
+    entry = manager.append_ai_history(
+        auth,
+        product,
+        message="Измени ширину",
+        reply="Готово",
+        before_spec={"schemaVersion": "paramspec-v1"},
+        after_spec={"schemaVersion": "paramspec-v1", "draft": True},
+        trace_id=trace_id,
+    )
+    assert entry["trace_id"] == trace_id
+    assert manager.read_ai_history(auth, product)[-1]["trace_id"] == trace_id
+
+
 def test_archive_round_trip_preserves_model_history_preview_and_outputs(
     tmp_path: Path,
 ) -> None:

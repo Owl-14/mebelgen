@@ -599,60 +599,116 @@ def chat_edit(spec: dict[str, Any], message: str,
     provider — явный выбор нейросети из UI (AKD-210); None → из env.
     """
     from .paramspec import validate_paramspec
+    from .telemetry import operation_types, prompt_version, span
+
+    def summarize(payload: dict[str, Any]) -> dict[str, Any]:
+        with span("response.summarize", {
+            "response.changed": isinstance(payload.get("spec"), dict),
+            "check.outcome": "error" if payload.get("error") else "pass",
+        }):
+            return payload
 
     build_name = resolve_provider_name(provider)
-    build = get_chat_provider(build_name)
-    # Конвейер «глаза+мозг» (AKD-211): если пришло фото, а сборщик — не тот
-    # провайдер, что назначен на зрение (VISION_EXTRACT_PROVIDER, обычно GigaChat),
-    # то этап 1 — GigaChat распознаёт факты с фото ТЗ текстом, этап 2 — сборщик
-    # (GLM) собирает изделие уже по этим фактам, без картинки.
+    with span("intent.classify", {
+        "provider": build_name,
+        "image.count": len(images or []),
+        "operation.types": ["vision" if images else "create" if not spec else "edit"],
+    }):
+        build = get_chat_provider(build_name)
+    model_name = str(getattr(build, "model", "mock"))
+    base_trace = {
+        "provider": build_name,
+        "model": model_name,
+        "prompt.version": prompt_version(CHAT_PROMPT_PATH),
+        "gen_ai.system": build_name,
+        "gen_ai.request.model": model_name,
+        "langsmith.span.kind": "llm",
+    }
+    # Конвейер «глаза+мозг» (AKD-211): vision выписывает только факты,
+    # а сборщик меняет ParamSpec. Сами фото и распознанный текст в trace не идут.
     extract_name = (os.environ.get("VISION_EXTRACT_PROVIDER") or "").lower()
     two_stage = bool(images and extract_name and extract_name != build_name)
     try:
-        if two_stage:
-            vis = get_chat_provider(extract_name)
-            desc = vis.vision_extract(images) if hasattr(vis, "vision_extract") else ""
-            if desc.strip():
-                aug = ((message or "Собери изделие по этому ТЗ.")
-                       + "\n\nРаспознано с фото ТЗ (используй как факты, ничего не додумывай "
-                         "сверх):\n" + desc)
-                res = build.chat(spec, aug, history, context)
-            else:                                     # распознать не вышло — фото напрямую
-                res = build.chat(spec, message, history, context, images=images)
-        elif images:
-            res = build.chat(spec, message, history, context, images=images)
-        else:
-            try:
-                res = build.chat(spec, message, history, context)
-            except TypeError:
-                res = build.chat(spec, message, history)
-    except Exception as e:                            # сеть/ключ/парсинг — в чат, не 500
-        message = f"Сервис AI не ответил: {e}"
-        return {"reply": message, "error": message, "spec": None, "changes": []}
+        with span("operations.plan", base_trace) as plan_span:
+            if two_stage:
+                vis = get_chat_provider(extract_name)
+                with span("vision.extract", {
+                    "provider": extract_name,
+                    "model": str(getattr(vis, "vision_model", getattr(vis, "model", ""))),
+                    "image.count": len(images or []),
+                    "prompt.version": prompt_version(CHAT_PROMPT_PATH),
+                    "langsmith.span.kind": "llm",
+                }):
+                    desc = vis.vision_extract(images) if hasattr(vis, "vision_extract") else ""
+                if desc.strip():
+                    aug = ((message or "Собери изделие по этому ТЗ.")
+                           + "\n\nРаспознано с фото ТЗ (используй как факты, ничего не додумывай "
+                             "сверх):\n" + desc)
+                    res = build.chat(spec, aug, history, context)
+                else:
+                    with span("vision.extract", {**base_trace, "image.count": len(images or [])}):
+                        res = build.chat(spec, message, history, context, images=images)
+            elif images:
+                with span("vision.extract", {**base_trace, "image.count": len(images or [])}):
+                    res = build.chat(spec, message, history, context, images=images)
+            else:
+                try:
+                    res = build.chat(spec, message, history, context)
+                except TypeError:
+                    res = build.chat(spec, message, history)
+            usage = res.get("usage") if isinstance(res, dict) else None
+            if isinstance(usage, dict):
+                plan_span.set_attributes({
+                    "model": usage.get("model") or model_name,
+                    "gen_ai.request.model": usage.get("model") or model_name,
+                    "gen_ai.usage.input_tokens": usage.get("prompt"),
+                    "gen_ai.usage.output_tokens": usage.get("completion"),
+                    "gen_ai.usage.total_tokens": usage.get("total"),
+                })
+    except Exception as error:                        # сеть/ключ/парсинг — в чат, не 500
+        reply = f"Сервис AI не ответил: {error}"
+        return summarize({"reply": reply, "error": reply, "spec": None, "changes": []})
 
-    usage = res.get("usage")                          # расход токенов (для счётчика)
-    if two_stage and isinstance(res, dict):           # пометка конвейера в ответе
-        res["reply"] = "📷 GigaChat распознал фото → " + str(res.get("reply") or "готово")
+    with span("operations.validate", {**base_trace, "check.name": "provider_response"}) as operation_span:
+        if not isinstance(res, dict):
+            operation_span.set_attributes({"check.outcome": "fail", "error.codes": ["invalid_response"]})
+            return summarize({"reply": "Сервис AI вернул некорректный ответ.",
+                              "error": "invalid_response", "spec": None, "changes": []})
+        operation_span.set_attributes({"check.outcome": "pass"})
+
+    usage = res.get("usage")
+    if two_stage:
+        res["reply"] = "📷 Фото распознано → " + str(res.get("reply") or "готово")
     new = res.get("spec")
-    if not new:
-        return {"reply": res.get("reply", ""), "spec": None, "changes": [], "usage": usage}
+    if not isinstance(new, dict):
+        return summarize({"reply": res.get("reply", ""), "spec": None,
+                          "changes": [], "usage": usage})
 
     created = bool(res.get("created"))
-    if not created:
-        for k in PROTECTED_KEYS:                      # структуру не трогаем
-            if k in spec:
-                new[k] = spec[k]
+    with span("paramspec.apply", {
+        "operation.types": operation_types(spec, new),
+        "response.changed": True,
+    }):
+        if not created:
+            new = copy.deepcopy(new)
+            for key in PROTECTED_KEYS:
+                if key in spec:
+                    new[key] = spec[key]
+
     errors = validate_paramspec(new)
     if errors:
-        return {"reply": "Правка отклонена — спека не прошла схему:\n"
-                         + "\n".join(errors[:5]), "spec": None, "changes": [], "usage": usage}
+        return summarize({"reply": "Правка отклонена — спека не прошла схему:\n"
+                         + "\n".join(errors[:5]), "spec": None, "changes": [], "usage": usage})
     if created:
-        return {"reply": res.get("reply", "Создано."), "spec": new,
-                "changes": ["новое изделие с нуля"], "created": True, "usage": usage}
+        return summarize({"reply": res.get("reply", "Создано."), "spec": new,
+                          "changes": ["новое изделие с нуля"], "created": True,
+                          "usage": usage})
     changes = spec_diff(spec, new)
     if not changes:
-        return {"reply": res.get("reply", "Изменений нет."), "spec": None, "changes": [], "usage": usage}
-    return {"reply": res.get("reply", "Готово."), "spec": new, "changes": changes, "usage": usage}
+        return summarize({"reply": res.get("reply", "Изменений нет."), "spec": None,
+                          "changes": [], "usage": usage})
+    return summarize({"reply": res.get("reply", "Готово."), "spec": new,
+                      "changes": changes, "usage": usage})
 
 
 _PROVIDER_META = {          # id → (человекочитаемое имя, env-ключ наличия)

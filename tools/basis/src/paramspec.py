@@ -391,20 +391,29 @@ def validate_paramspec(data: Any, schema_path: Path | None = None) -> list[str]:
     ``schema_path`` remains supported for callers/tests that explicitly supply
     an alternate JSON Schema.  Normal validation always uses the typed model.
     """
-    if schema_path is not None:
-        from jsonschema import Draft202012Validator
+    from .telemetry import hash_payload, span
 
-        validator = Draft202012Validator(load_schema(schema_path))
-        errors: list[str] = []
-        for err in sorted(validator.iter_errors(data), key=lambda item: list(item.path)):
-            path = ".".join(str(part) for part in err.path) or "(root)"
-            errors.append(f"{path}: {err.message}")
+    with span("paramspec.validate", {"revision.hash": hash_payload(data)}) as trace_span:
+        if schema_path is not None:
+            from jsonschema import Draft202012Validator
+
+            validator = Draft202012Validator(load_schema(schema_path))
+            errors: list[str] = []
+            for err in sorted(validator.iter_errors(data), key=lambda item: list(item.path)):
+                path = ".".join(str(part) for part in err.path) or "(root)"
+                errors.append(f"{path}: {err.message}")
+        else:
+            try:
+                parse_paramspec(data)
+            except ValidationError as exc:
+                errors = _format_errors(exc)
+            else:
+                errors = []
+        trace_span.set_attributes({
+            "check.outcome": "pass" if not errors else "fail",
+            "error.codes": ["paramspec_invalid"] if errors else [],
+        })
         return errors
-    try:
-        parse_paramspec(data)
-    except ValidationError as exc:
-        return _format_errors(exc)
-    return []
 
 
 def validate_paramspec_file(path: str | Path, schema_path: Path | None = None) -> list[str]:

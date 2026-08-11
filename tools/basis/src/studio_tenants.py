@@ -601,6 +601,7 @@ class TenantWorkspaceManager:
         usage: Mapping[str, Any] | None = None,
         context: Mapping[str, Any] | None = None,
         image_count: int = 0,
+        trace_id: str | None = None,
         keep: int = 200,
     ) -> dict[str, Any]:
         """Persist a compact AI operation without trusting a browser tenant id."""
@@ -626,6 +627,9 @@ class TenantWorkspaceManager:
                 value = 0
             if value > 0:
                 clean_usage[key] = value
+        clean_trace_id = str(trace_id or "").lower()
+        if len(clean_trace_id) != 32 or any(char not in "0123456789abcdef" for char in clean_trace_id):
+            clean_trace_id = ""
         entry = {
             "id": str(uuid.uuid4()),
             "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -641,6 +645,7 @@ class TenantWorkspaceManager:
             "usage": clean_usage,
             "context": clean_context,
             "image_count": max(0, min(int(image_count or 0), 20)),
+            "trace_id": clean_trace_id,
             "changed": bool(after_spec),
         }
         history_file = self._history_file(auth, spec_path)

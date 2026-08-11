@@ -66,14 +66,28 @@ def generate_from_paramspec(spec: dict[str, Any]) -> dict[str, Any]:
     from ..materials_policy import apply_material_policy
     from ..overrides import apply_back_mount, apply_overrides
 
-    spec = apply_material_policy(_normalize_spec(spec))
-    project = get_generator(spec["archetype"])(spec)
-    # конструкция задника (AKD-137): overlay = накладной поверх торцов.
-    # Для composite задник накладывается поблочно (внутри generate каждого
-    # блока); повторный вызов на собранном проекте раздул бы один задник на
-    # габарит всей композиции (перекрытие с соседними модулями) — пропускаем.
-    if spec["archetype"] != "composite":
-        project = apply_back_mount(project, spec.get("back_mount"))
-    # точечные правки деталей поверх генератора (AKD-121) — до валидаторов,
-    # чтобы чертёж/присадки/смета/cfrn считались по итоговой геометрии
-    return apply_overrides(project, spec.get("overrides"))
+    from ..telemetry import hash_payload, span
+
+    with span("geometry.generate", {
+        "project.hash": hash_payload({
+            "project_name": spec.get("project_name"),
+            "archetype": spec.get("archetype"),
+        }),
+        "revision.hash": hash_payload(spec),
+    }) as trace_span:
+        spec = apply_material_policy(_normalize_spec(spec))
+        project = get_generator(spec["archetype"])(spec)
+        # конструкция задника (AKD-137): overlay = накладной поверх торцов.
+        # Для composite задник накладывается поблочно (внутри generate каждого
+        # блока); повторный вызов на собранном проекте раздул бы один задник на
+        # габарит всей композиции (перекрытие с соседними модулями) — пропускаем.
+        if spec["archetype"] != "composite":
+            project = apply_back_mount(project, spec.get("back_mount"))
+        # точечные правки деталей поверх генератора (AKD-121) — до валидаторов,
+        # чтобы чертёж/присадки/смета/cfrn считались по итоговой геометрии
+        project = apply_overrides(project, spec.get("overrides"))
+        trace_span.set_attributes({
+            "panel.count": len(project.get("panels") or []),
+            "check.outcome": "pass",
+        })
+        return project
