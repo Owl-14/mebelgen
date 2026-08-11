@@ -1,15 +1,16 @@
-"""Чат-правка ParamSpec словами (AKD-107/109/110).
+"""Чат-правка ParamSpec словами (AKD-107/109/110, MEB-143).
 
-Пользователь пишет в Studio «сделай глубину 600», «замени цвет на дуб вотан»,
-«добавь ножки 100 мм» — провайдер правит ParamSpec, конвейер пересобирает модель.
-LLM меняет ТОЛЬКО ParamSpec (высокоуровневые параметры); координаты по-прежнему
-считает детерминированный генератор (rules/core.md).
+Пользователь пишет в Studio «сделай глубину 600», «замени цвет на дуб вотан» —
+провайдер возвращает минимальные типизированные операции, reducer атомарно
+применяет их к ParamSpec, а конвейер пересобирает модель. Координаты по-прежнему
+считает детерминированный генератор (rules/core.md), не LLM.
 
 Провайдер: env SPEC_CHAT_PROVIDER (fallback PARAMSPEC_PROVIDER): mock|openai.
 mock — rule-based разбор типовых русских команд, без сети (тесты/CI/офлайн).
 
-Безопасность применения (AKD-110): новая спека валидируется схемой ДО отдачи,
-schemaVersion/furniture_type не затираются, сводка изменений — spec_diff().
+Безопасность применения: preconditions проверяются перед каждой операцией,
+пакет применяется copy-on-write, итог валидируется как ParamSpec v1, а сводка
+изменений строится только по фактически затронутым полям.
 """
 
 from __future__ import annotations
@@ -27,6 +28,11 @@ PARAMSPEC_SCHEMA_PATH = ROOT / "schema" / "paramspec.schema.json"
 
 # Поля, которые чату менять нельзя (структура/происхождение спеки)
 PROTECTED_KEYS = ("schemaVersion",)
+
+
+def _operation_schema_text() -> str:
+    from .edit_operations import edit_operation_json_schema
+    return json.dumps(edit_operation_json_schema(), ensure_ascii=False)
 
 
 # ------------------------------------------------------------------ diff
@@ -227,7 +233,13 @@ class MockChatProvider:
                              "цвет, толщину плиты, ножки, царгу, металлокаркас). "
                              "Для свободных формулировок нужен SPEC_CHAT_PROVIDER=openai.",
                     "spec": None}
-        return {"reply": "Применил: " + "; ".join(done), "spec": new}
+        # Офлайн-провайдер тоже говорит с ядром патчами.  Узкий compatibility
+        # patch нужен только старым mock-командам (ножки/царга/frame), для
+        # которых в первом срезе EditOperation пока нет публичного варианта.
+        operations, compatibility = _legacy_response_patches(spec, new)
+        return {"reply": "Применил: " + "; ".join(done),
+                "operations": operations,
+                "compatibility_patches": compatibility}
 
 
 # ------------------------------------------------------------------ openai-совместимые
@@ -319,14 +331,17 @@ class OpenAICompatProvider:
              context: dict[str, Any] | None = None,
              images: list[dict[str, str]] | None = None) -> dict[str, Any]:
         system = CHAT_PROMPT_PATH.read_text(encoding="utf-8").replace(
-            "__SCHEMA__", PARAMSPEC_SCHEMA_PATH.read_text(encoding="utf-8"))
+            "__EDIT_OPERATION_SCHEMA__", _operation_schema_text()).replace(
+            "__PARAMSPEC_SCHEMA__", PARAMSPEC_SCHEMA_PATH.read_text(encoding="utf-8"))
         msgs: list[dict[str, Any]] = [{"role": "system", "content": system}]
         for h in (history or [])[-8:]:               # короткая память диалога
             msgs.append({"role": h.get("role", "user"), "content": h.get("text", "")})
         ctx = f"\nСостояние модели: {json.dumps(context, ensure_ascii=False)}\n" if context else ""
         text = (f"Текущий ParamSpec:\n```json\n{json.dumps(spec, ensure_ascii=False, indent=2)}\n```\n{ctx}\n"
                 f"Запрос пользователя: {message or '(см. приложенные изображения ТЗ)'}\n"
-                "Ответь строго JSON-объектом {\"reply\":..., \"spec\":...}.")
+                "Ответь строго JSON-объектом {\"reply\":..., \"operations\":[...]}; "
+                "только для нового изделия с нуля допустим "
+                "{\"reply\":...,\"created\":true,\"spec\":...}.")
         if images:                                   # vision-формат OpenAI: content-массив
             content: list[dict[str, Any]] = [{"type": "text", "text": text}]
             for im in images:
@@ -347,6 +362,8 @@ class OpenAICompatProvider:
         data = json.loads(out[c1:c2 + 1]) if c1 >= 0 else {}
         usage = getattr(r, "usage", None)
         return {"reply": str(data.get("reply") or "Готово."),
+                "operations": data.get("operations") if isinstance(data.get("operations"), list) else None,
+                # Совместимость со старыми провайдерами во время rolling update.
                 "spec": data.get("spec") if isinstance(data.get("spec"), dict) else None,
                 "created": bool(data.get("created")),
                 "usage": {"model": model,
@@ -381,7 +398,8 @@ class GeminiChatProvider:
              images: list[dict[str, str]] | None = None) -> dict[str, Any]:
         import requests
         system = CHAT_PROMPT_PATH.read_text(encoding="utf-8").replace(
-            "__SCHEMA__", PARAMSPEC_SCHEMA_PATH.read_text(encoding="utf-8"))
+            "__EDIT_OPERATION_SCHEMA__", _operation_schema_text()).replace(
+            "__PARAMSPEC_SCHEMA__", PARAMSPEC_SCHEMA_PATH.read_text(encoding="utf-8"))
         contents: list[dict[str, Any]] = []
         for h in (history or [])[-8:]:
             role = "model" if h.get("role") == "assistant" else "user"
@@ -411,6 +429,7 @@ class GeminiChatProvider:
                        (cand.get("content") or {}).get("parts") or [])
         data = json.loads(text or "{}")
         return {"reply": str(data.get("reply") or "Готово."),
+                "operations": data.get("operations") if isinstance(data.get("operations"), list) else None,
                 "spec": data.get("spec") if isinstance(data.get("spec"), dict) else None,
                 "created": bool(data.get("created"))}
 
@@ -525,7 +544,8 @@ class GigaChatProvider:
              images: list[dict[str, str]] | None = None) -> dict[str, Any]:
         import requests
         system = CHAT_PROMPT_PATH.read_text(encoding="utf-8").replace(
-            "__SCHEMA__", PARAMSPEC_SCHEMA_PATH.read_text(encoding="utf-8"))
+            "__EDIT_OPERATION_SCHEMA__", _operation_schema_text()).replace(
+            "__PARAMSPEC_SCHEMA__", PARAMSPEC_SCHEMA_PATH.read_text(encoding="utf-8"))
         msgs: list[dict[str, Any]] = [{"role": "system", "content": system}]
         for h in (history or [])[-8:]:
             msgs.append({"role": h.get("role", "user"), "content": h.get("text", "")})
@@ -533,7 +553,9 @@ class GigaChatProvider:
         user_msg: dict[str, Any] = {"role": "user", "content":
             f"Текущий ParamSpec:\n```json\n{json.dumps(spec, ensure_ascii=False, indent=2)}\n```\n{ctx}\n"
             f"Запрос: {message or '(см. приложенные изображения ТЗ)'}\n"
-            "Ответь строго JSON-объектом {\"reply\":..., \"spec\":...}."}
+            "Ответь строго JSON-объектом {\"reply\":..., \"operations\":[...]}; "
+            "только для нового изделия с нуля допустим "
+            "{\"reply\":...,\"created\":true,\"spec\":...}."}
         model = self.model
         if images:                                       # фото ТЗ — vision-модель
             user_msg["attachments"] = self._upload_images(images)
@@ -553,6 +575,7 @@ class GigaChatProvider:
         data = json.loads(text[c1:c2 + 1]) if c1 >= 0 else {}
         usage = body.get("usage") or {}
         return {"reply": str(data.get("reply") or "Готово."),
+                "operations": data.get("operations") if isinstance(data.get("operations"), list) else None,
                 "spec": data.get("spec") if isinstance(data.get("spec"), dict) else None,
                 "created": bool(data.get("created")),
                 "usage": {"model": model, "total": usage.get("total_tokens"),
@@ -586,15 +609,82 @@ def get_chat_provider(name: str | None = None) -> Any:
 
 # ------------------------------------------------------------------ вход
 
+def _legacy_response_patches(spec: dict[str, Any], new: dict[str, Any]) \
+        -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Translate rolling-update full-spec responses into narrow patches.
+
+    Only the old mock provider's established non-operation fields remain on the
+    compatibility path.  Any other full-spec rewrite is rejected instead of
+    silently accepting collateral changes.
+    """
+    old_flat, new_flat = _flatten(spec), _flatten(new)
+    changed = sorted(path for path in set(old_flat) | set(new_flat)
+                     if old_flat.get(path, _MISSING) != new_flat.get(path, _MISSING))
+    operations: list[dict[str, Any]] = []
+    compatibility: list[dict[str, Any]] = []
+    compatible_paths = {"legs.height", "apron", "apron_height", "frame"}
+
+    for path in changed:
+        old_value = old_flat.get(path, _MISSING)
+        new_value = new_flat.get(path, _MISSING)
+        precondition = ([{"kind": "value_equals", "path": path, "value": old_value}]
+                        if old_value is not _MISSING else
+                        [{"kind": "target_exists", "target_id": path.split(".")[0]}])
+        if path.startswith("dimensions.") and path.count(".") == 1 and new_value is not _MISSING:
+            operations.append({"op": "SetDimension", "target_id": path,
+                               "preconditions": precondition,
+                               "dimension": path.split(".")[1], "value": new_value})
+        elif path.startswith("materials.") and path.count(".") == 1:
+            operations.append({"op": "SetMaterial", "target_id": path,
+                               "preconditions": precondition,
+                               "field": path.split(".")[1],
+                               "value": None if new_value is _MISSING else new_value})
+        elif path == "archetype" and new_value is not _MISSING:
+            operations.append({"op": "ChangeArchetype", "target_id": "archetype",
+                               "preconditions": precondition, "archetype": new_value})
+        elif path in compatible_paths:
+            compatibility.append({"path": path, "old": old_value,
+                                  "value": new_value})
+        else:
+            raise ValueError(f"legacy full-spec response changed unsupported field {path!r}")
+    return operations, compatibility
+
+
+_MISSING = object()
+
+
+def _apply_compatibility_patches(spec: dict[str, Any],
+                                 patches: list[dict[str, Any]]) -> dict[str, Any]:
+    working = copy.deepcopy(spec)
+    for patch in patches:
+        path = str(patch["path"])
+        actual = _flatten(working).get(path, _MISSING)
+        expected = patch["old"]
+        if expected is _MISSING:
+            if actual is not _MISSING:
+                raise ValueError(f"precondition failed for compatibility patch {path!r}")
+        elif actual is _MISSING or actual != expected:
+            raise ValueError(f"precondition failed for compatibility patch {path!r}")
+        parts = path.split(".")
+        current = working
+        for part in parts[:-1]:
+            current = current.setdefault(part, {})
+        if patch["value"] is _MISSING:
+            current.pop(parts[-1], None)
+        else:
+            current[parts[-1]] = patch["value"]
+    return working
+
 def chat_edit(spec: dict[str, Any], message: str,
               history: list[dict[str, str]] | None = None,
               context: dict[str, Any] | None = None,
               images: list[dict[str, str]] | None = None,
               provider: str | None = None) -> dict[str, Any]:
-    """Команда словами → {reply, spec|None, changes[], created?}. Невалидное не отдаём.
+    """Команда словами → атомарный operation patch + совместимый Studio-ответ.
 
-    Гарантии: PROTECTED_KEYS не меняются; новая спека проходит validate_paramspec,
-    иначе spec=None и причина в reply (AKD-110). created=True — изделие с нуля (D3).
+    Гарантии: LLM-операции типизированы, имеют target/preconditions и применяются
+    copy-on-write; новая спека проходит validate_paramspec, иначе spec=None.
+    created=True остаётся совместимым путём импорта нового изделия с нуля (D3).
     images — фото/сканы ТЗ [{mime, data(base64)}] для vision-провайдера (AKD-203).
     provider — явный выбор нейросети из UI (AKD-210); None → из env.
     """
@@ -633,26 +723,53 @@ def chat_edit(spec: dict[str, Any], message: str,
     usage = res.get("usage")                          # расход токенов (для счётчика)
     if two_stage and isinstance(res, dict):           # пометка конвейера в ответе
         res["reply"] = "📷 GigaChat распознал фото → " + str(res.get("reply") or "готово")
-    new = res.get("spec")
-    if not new:
-        return {"reply": res.get("reply", ""), "spec": None, "changes": [], "usage": usage}
-
     created = bool(res.get("created"))
-    if not created:
-        for k in PROTECTED_KEYS:                      # структуру не трогаем
-            if k in spec:
-                new[k] = spec[k]
-    errors = validate_paramspec(new)
-    if errors:
-        return {"reply": "Правка отклонена — спека не прошла схему:\n"
-                         + "\n".join(errors[:5]), "spec": None, "changes": [], "usage": usage}
-    if created:
-        return {"reply": res.get("reply", "Создано."), "spec": new,
-                "changes": ["новое изделие с нуля"], "created": True, "usage": usage}
+    legacy_spec = res.get("spec") if isinstance(res.get("spec"), dict) else None
+    if created and legacy_spec is not None:
+        errors = validate_paramspec(legacy_spec)
+        if errors:
+            return {"reply": "Правка отклонена — спека не прошла схему:\n"
+                             + "\n".join(errors[:5]), "spec": None, "changes": [], "usage": usage}
+        return {"reply": res.get("reply", "Создано."), "spec": legacy_spec,
+                "changes": ["новое изделие с нуля"], "created": True,
+                "operations": [], "usage": usage}
+
+    raw_operations = (list(res.get("operations"))
+                      if isinstance(res.get("operations"), list) else [])
+    compatibility = (res.get("compatibility_patches")
+                     if isinstance(res.get("compatibility_patches"), list) else [])
+    try:
+        if legacy_spec is not None:
+            for key in PROTECTED_KEYS:
+                if key in spec:
+                    legacy_spec[key] = spec[key]
+            legacy_operations, compatibility = _legacy_response_patches(spec, legacy_spec)
+            raw_operations.extend(legacy_operations)
+        if not raw_operations and not compatibility:
+            return {"reply": res.get("reply", ""), "spec": None,
+                    "changes": [], "operations": [], "usage": usage}
+
+        from .edit_operations import EditApplicationError, apply_edit_operations
+        applied = apply_edit_operations(spec, raw_operations, context)
+        new = _apply_compatibility_patches(applied["spec"], compatibility)
+        errors = validate_paramspec(new)
+        if errors:
+            raise EditApplicationError("resulting ParamSpec is invalid: " + "; ".join(errors[:5]))
+    except Exception as error:
+        reply = f"Правка отклонена — операции не применены: {error}"
+        return {"reply": reply, "error": reply, "spec": None,
+                "changes": [], "operations": [], "usage": usage}
+
     changes = spec_diff(spec, new)
+    operation_replies = applied.get("replies") or []
+    reply = str(res.get("reply") or "")
+    if operation_replies:
+        reply = "\n".join(operation_replies if not reply or reply == "Готово." else [reply, *operation_replies])
     if not changes:
-        return {"reply": res.get("reply", "Изменений нет."), "spec": None, "changes": [], "usage": usage}
-    return {"reply": res.get("reply", "Готово."), "spec": new, "changes": changes, "usage": usage}
+        return {"reply": reply or "Изменений нет.", "spec": None, "changes": [],
+                "operations": applied["operations"], "usage": usage}
+    return {"reply": reply or "Готово.", "spec": new, "changes": changes,
+            "operations": applied["operations"], "usage": usage}
 
 
 _PROVIDER_META = {          # id → (человекочитаемое имя, env-ключ наличия)
