@@ -82,7 +82,9 @@ ParamSpec — единственный вход конвейера (`paramspecs/
 
 ## Как читать ТЗ (правила извлечения)
 
-Промпты: `prompts/spec_chat_prompt.txt` (чат/фото в Studio), `prompts/` (convert).
+Узловые промпты чата и фото зарегистрированы в `src/prompt_registry.py`, а их
+тексты лежат раздельно в `prompts/spec_chat/`; общие инженерные ограничения
+остаются в Python-контрактах и JSON Schema, а не копируются в инструкции.
 Конвейер фото: vision-модель выписывает ФАКТЫ текстом → сборщик строит ParamSpec
 (`spec_chat.chat_edit`, этапы разнесены по провайдерам env-ами
 `VISION_EXTRACT_PROVIDER` / `SPEC_CHAT_PROVIDER`).

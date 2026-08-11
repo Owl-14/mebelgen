@@ -124,7 +124,7 @@ python qa/e2e_ai.py          # e2e ИИ-помощника (нужен живо�
 src/         весь конвейер: генераторы, валидаторы, Studio, чат, cfrn/b3d, смета,
              раскрой, чертёж, доставка — карта модулей в rules/architecture.md
 schema/      furniture.schema.json, paramspec.schema.json — контракты JSON
-prompts/     системные промпты (convert, чат Studio spec_chat_prompt.txt)
+prompts/     системные промпты (convert, узлы чата Studio в spec_chat/)
 paramspecs/  входные ParamSpec (в т.ч. tz_*); .previews/ — кэш миниатюр каталога
 projects/    сгенерированные проекты-примеры (.json)
 materials/   catalog.json (курируемый) + baza_materiala.json (база ≈5000) + source/

@@ -21,9 +21,14 @@ import re
 from pathlib import Path
 from typing import Any
 
+from .prompt_registry import (
+    apply_prompt_operations,
+    build_chat_prompt_request,
+    build_prompt_request,
+    classify_intent,
+)
+
 ROOT = Path(__file__).resolve().parent.parent
-CHAT_PROMPT_PATH = ROOT / "prompts" / "spec_chat_prompt.txt"
-PARAMSPEC_SCHEMA_PATH = ROOT / "schema" / "paramspec.schema.json"
 
 # Поля, которые чату менять нельзя (структура/происхождение спеки)
 PROTECTED_KEYS = ("schemaVersion",)
@@ -159,18 +164,24 @@ class MockChatProvider:
              history: list[dict[str, str]] | None = None,
              context: dict[str, Any] | None = None,
              images: list[dict[str, str]] | None = None) -> dict[str, Any]:
+        request = build_chat_prompt_request(
+            spec, message, history, context, has_images=bool(images)
+        )
+        trace = {"prompts": [request.trace], "router": {
+            "kind": "deterministic", "node": request.node,
+        }}
         if images:                                    # rule-based не видит картинок
             return {"reply": "Распознавание фото ТЗ требует нейросети — задайте "
                              "GEMINI_API_KEY в tools/basis/.env (бесплатно, "
-                             "aistudio.google.com).", "spec": None}
+                             "aistudio.google.com).", "spec": None, "trace": trace}
         msg = message.lower()
         created = _try_create(msg)
         if created is not None:
             return {"reply": "Создал новое изделие по описанию — уточняй параметры.",
-                    "spec": created, "created": True}
+                    "spec": created, "created": True, "trace": trace}
         q = _try_question(msg, context)
         if q is not None:
-            return {"reply": q, "spec": None}
+            return {"reply": q, "spec": None, "trace": trace}
         new = copy.deepcopy(spec)
         done: list[str] = []
 
@@ -226,8 +237,8 @@ class MockChatProvider:
             return {"reply": "Не понял команду (mock-провайдер понимает: габариты, "
                              "цвет, толщину плиты, ножки, царгу, металлокаркас). "
                              "Для свободных формулировок нужен SPEC_CHAT_PROVIDER=openai.",
-                    "spec": None}
-        return {"reply": "Применил: " + "; ".join(done), "spec": new}
+                    "spec": None, "trace": trace}
+        return {"reply": "Применил: " + "; ".join(done), "spec": new, "trace": trace}
 
 
 # ------------------------------------------------------------------ openai-совместимые
@@ -249,6 +260,35 @@ _OAI_PRESETS = {
     "deepseek": {"base": "https://api.deepseek.com", "key": "DEEPSEEK_API_KEY",
                  "model": "deepseek-chat", "vision": "deepseek-chat", "json_mode": True},
 }
+
+
+def _json_object(text: str) -> dict[str, Any]:
+    start, end = text.find("{"), text.rfind("}")
+    if start < 0 or end < start:
+        return {}
+    value = json.loads(text[start:end + 1])
+    return value if isinstance(value, dict) else {}
+
+
+def _provider_result(data: dict[str, Any], request: Any, *, usage: Any = None,
+                     model: str | None = None) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "reply": str(data.get("reply") or "Готово."),
+        "spec": data.get("spec") if isinstance(data.get("spec"), dict) else None,
+        "operations": data.get("operations") if isinstance(data.get("operations"), list) else None,
+        "created": bool(data.get("created")),
+        "trace": {"prompts": [request.trace], "router": {
+            "kind": "deterministic", "node": request.node,
+        }},
+    }
+    if usage is not None:
+        result["usage"] = {
+            "model": model,
+            "total": getattr(usage, "total_tokens", None),
+            "prompt": getattr(usage, "prompt_tokens", None),
+            "completion": getattr(usage, "completion_tokens", None),
+        }
+    return result
 
 
 class OpenAICompatProvider:
@@ -298,35 +338,28 @@ class OpenAICompatProvider:
 
     def vision_extract(self, images: list[dict[str, str]]) -> str:
         """Этап 1 конвейера (AKD-211): факты с фото ТЗ простым текстом."""
-        prompt = (
-            "На изображении — ТЗ или чертёж корпусной мебели. Выпиши ПРОСТЫМ ТЕКСТОМ "
-            "(не JSON, по пунктам) все факты: тип изделия; габариты Ш×Г×В (мм); число и тип "
-            "секций (ящики/полки/двери), их ПОРЯДОК СЛЕВА НАПРАВО по чертежу и все привязки "
-            "сторон из текста («замок на правой двери», «ящики слева»); материал и толщину "
-            "плиты; цвет; фурнитуру, штангу, опоры. Только то, что реально на изображении, "
-            "ничего не выдумывай.")
-        content: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
+        request = build_prompt_request("vision_facts")
+        content: list[dict[str, Any]] = [{"type": "text", "text": request.system}]
         for im in images:
             content.append({"type": "image_url", "image_url":
                             {"url": f"data:{im.get('mime','image/png')};base64,{im.get('data','')}"}})
         r = self.client.chat.completions.create(
             model=self.vision_model, temperature=0.1,
             messages=[{"role": "user", "content": content}])
-        return r.choices[0].message.content or ""
+        text = r.choices[0].message.content or ""
+        return str(_json_object(text).get("reply") or text)
 
     def chat(self, spec: dict[str, Any], message: str,
              history: list[dict[str, str]] | None = None,
              context: dict[str, Any] | None = None,
              images: list[dict[str, str]] | None = None) -> dict[str, Any]:
-        system = CHAT_PROMPT_PATH.read_text(encoding="utf-8").replace(
-            "__SCHEMA__", PARAMSPEC_SCHEMA_PATH.read_text(encoding="utf-8"))
-        msgs: list[dict[str, Any]] = [{"role": "system", "content": system}]
-        for h in (history or [])[-8:]:               # короткая память диалога
+        request = build_chat_prompt_request(
+            spec, message, history, context, has_images=bool(images)
+        )
+        msgs: list[dict[str, Any]] = [{"role": "system", "content": request.system}]
+        for h in request.history:
             msgs.append({"role": h.get("role", "user"), "content": h.get("text", "")})
-        ctx = f"\nСостояние модели: {json.dumps(context, ensure_ascii=False)}\n" if context else ""
-        text = (f"Текущий ParamSpec:\n```json\n{json.dumps(spec, ensure_ascii=False, indent=2)}\n```\n{ctx}\n"
-                f"Запрос пользователя: {message or '(см. приложенные изображения ТЗ)'}\n"
-                "Ответь строго JSON-объектом {\"reply\":..., \"spec\":...}.")
+        text = request.user
         if images:                                   # vision-формат OpenAI: content-массив
             content: list[dict[str, Any]] = [{"type": "text", "text": text}]
             for im in images:
@@ -346,13 +379,7 @@ class OpenAICompatProvider:
         c1, c2 = out.find("{"), out.rfind("}")
         data = json.loads(out[c1:c2 + 1]) if c1 >= 0 else {}
         usage = getattr(r, "usage", None)
-        return {"reply": str(data.get("reply") or "Готово."),
-                "spec": data.get("spec") if isinstance(data.get("spec"), dict) else None,
-                "created": bool(data.get("created")),
-                "usage": {"model": model,
-                          "total": getattr(usage, "total_tokens", None),
-                          "prompt": getattr(usage, "prompt_tokens", None),
-                          "completion": getattr(usage, "completion_tokens", None)} if usage else None}
+        return _provider_result(data, request, usage=usage, model=model)
 
 
 # обратная совместимость: SPEC_CHAT_PROVIDER=openai
@@ -364,8 +391,8 @@ class GeminiChatProvider:
     """Google Gemini (AKD-203): бесплатный tier, понимает фото/сканы ТЗ.
 
     Ключ — env GEMINI_API_KEY (aistudio.google.com), модель — GEMINI_MODEL
-    (по умолчанию gemini-2.0-flash). REST без SDK; ответ — строго JSON
-    {reply, spec} (response_mime_type). Изображения — inline_data base64."""
+    (по умолчанию gemini-2.0-flash). REST без SDK; ответ следует capability
+    schema выбранного узла (response_mime_type). Изображения — inline_data base64."""
 
     URL = "https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent"
 
@@ -380,22 +407,20 @@ class GeminiChatProvider:
              context: dict[str, Any] | None = None,
              images: list[dict[str, str]] | None = None) -> dict[str, Any]:
         import requests
-        system = CHAT_PROMPT_PATH.read_text(encoding="utf-8").replace(
-            "__SCHEMA__", PARAMSPEC_SCHEMA_PATH.read_text(encoding="utf-8"))
+        request = build_chat_prompt_request(
+            spec, message, history, context, has_images=bool(images)
+        )
         contents: list[dict[str, Any]] = []
-        for h in (history or [])[-8:]:
+        for h in request.history:
             role = "model" if h.get("role") == "assistant" else "user"
             contents.append({"role": role, "parts": [{"text": h.get("text", "")}]})
-        ctx = f"\nСостояние модели: {json.dumps(context, ensure_ascii=False)}\n" if context else ""
-        parts: list[dict[str, Any]] = [{"text":
-            f"Текущий ParamSpec:\n```json\n{json.dumps(spec, ensure_ascii=False, indent=2)}\n```\n{ctx}\n"
-            f"Запрос пользователя: {message or '(см. приложенные изображения ТЗ)'}"}]
+        parts: list[dict[str, Any]] = [{"text": request.user}]
         for img in images or []:                     # фото/скан ТЗ
             parts.append({"inline_data": {"mime_type": img.get("mime", "image/png"),
                                           "data": img.get("data", "")}})
         contents.append({"role": "user", "parts": parts})
         payload = {
-            "system_instruction": {"parts": [{"text": system}]},
+            "system_instruction": {"parts": [{"text": request.system}]},
             "contents": contents,
             "generationConfig": {"temperature": 0.1,
                                  "response_mime_type": "application/json"},
@@ -410,9 +435,32 @@ class GeminiChatProvider:
         text = "".join(p.get("text", "") for p in
                        (cand.get("content") or {}).get("parts") or [])
         data = json.loads(text or "{}")
-        return {"reply": str(data.get("reply") or "Готово."),
-                "spec": data.get("spec") if isinstance(data.get("spec"), dict) else None,
-                "created": bool(data.get("created"))}
+        return _provider_result(data, request)
+
+    def vision_extract(self, images: list[dict[str, str]]) -> str:
+        import requests
+        request = build_prompt_request("vision_facts")
+        parts: list[dict[str, Any]] = [{"text": request.user}]
+        for image in images:
+            parts.append({"inline_data": {
+                "mime_type": image.get("mime", "image/png"),
+                "data": image.get("data", ""),
+            }})
+        payload = {
+            "system_instruction": {"parts": [{"text": request.system}]},
+            "contents": [{"role": "user", "parts": parts}],
+            "generationConfig": {"temperature": 0.1,
+                                 "response_mime_type": "application/json"},
+        }
+        response = requests.post(
+            self.URL.format(m=self.model), params={"key": self.api_key},
+            json=payload, timeout=120,
+        )
+        response.raise_for_status()
+        candidate = (response.json().get("candidates") or [{}])[0]
+        text = "".join(part.get("text", "") for part in
+                       (candidate.get("content") or {}).get("parts") or [])
+        return str(_json_object(text).get("reply") or text)
 
 
 class GigaChatProvider:
@@ -498,42 +546,31 @@ class GigaChatProvider:
         ПРОСТЫМ ТЕКСТОМ (не JSON). Дальше по этим фактам собирает другая модель."""
         import requests
         att = self._upload_images(images)
-        prompt = (
-            "На изображении — ТЗ или чертёж корпусной мебели. Внимательно прочитай "
-            "ТЕКСТ (таблицу) и выпиши ПРОСТЫМ ТЕКСТОМ (не JSON, по пунктам) все факты: "
-            "тип изделия; габариты Ширина×Глубина×Высота (мм); ТОЧНОЕ ЧИСЛО полок, "
-            "ящиков и дверей ЦИФРОЙ (как написано в тексте: «одна полка» = полок: 1); "
-            "ПОРЯДОК секций СЛЕВА НАПРАВО по чертежу и все привязки сторон из текста "
-            "(«замок на правой двери», «ящики слева» — выписать дословно); "
-            "материал и толщину плиты (и отдельно толщину крышки/столешницы, если отличается); "
-            "цвет/декор; ручки (тип, цвет, межцентровое L в мм), замки (на какой двери), "
-            "петли; штангу; опоры/цоколь; особые требования. Числа из текста важнее "
-            "картинки-превью: превью — только иллюстрация. Ничего не выдумывай.")
+        request = build_prompt_request("vision_facts")
         r = requests.post(f"{self.BASE}/chat/completions",
                           headers={"Authorization": f"Bearer {self._access_token()}",
                                    "Content-Type": "application/json"},
                           json={"model": self.vision_model, "temperature": 0.1,
-                                "messages": [{"role": "user", "content": prompt,
+                                "messages": [{"role": "user", "content": request.system,
                                               "attachments": att}]},
                           timeout=120, verify=self.verify)
         r.raise_for_status()
-        return r.json()["choices"][0]["message"]["content"]
+        text = r.json()["choices"][0]["message"]["content"]
+        return str(_json_object(text).get("reply") or text)
 
     def chat(self, spec: dict[str, Any], message: str,
              history: list[dict[str, str]] | None = None,
              context: dict[str, Any] | None = None,
              images: list[dict[str, str]] | None = None) -> dict[str, Any]:
         import requests
-        system = CHAT_PROMPT_PATH.read_text(encoding="utf-8").replace(
-            "__SCHEMA__", PARAMSPEC_SCHEMA_PATH.read_text(encoding="utf-8"))
-        msgs: list[dict[str, Any]] = [{"role": "system", "content": system}]
-        for h in (history or [])[-8:]:
+        request = build_chat_prompt_request(
+            spec, message, history, context, has_images=bool(images)
+        )
+        msgs: list[dict[str, Any]] = [{"role": "system", "content": request.system}]
+        for h in request.history:
             msgs.append({"role": h.get("role", "user"), "content": h.get("text", "")})
-        ctx = f"\nСостояние модели: {json.dumps(context, ensure_ascii=False)}\n" if context else ""
         user_msg: dict[str, Any] = {"role": "user", "content":
-            f"Текущий ParamSpec:\n```json\n{json.dumps(spec, ensure_ascii=False, indent=2)}\n```\n{ctx}\n"
-            f"Запрос: {message or '(см. приложенные изображения ТЗ)'}\n"
-            "Ответь строго JSON-объектом {\"reply\":..., \"spec\":...}."}
+            request.user}
         model = self.model
         if images:                                       # фото ТЗ — vision-модель
             user_msg["attachments"] = self._upload_images(images)
@@ -552,12 +589,11 @@ class GigaChatProvider:
         c1, c2 = text.find("{"), text.rfind("}")        # вычленить JSON из ответа
         data = json.loads(text[c1:c2 + 1]) if c1 >= 0 else {}
         usage = body.get("usage") or {}
-        return {"reply": str(data.get("reply") or "Готово."),
-                "spec": data.get("spec") if isinstance(data.get("spec"), dict) else None,
-                "created": bool(data.get("created")),
-                "usage": {"model": model, "total": usage.get("total_tokens"),
-                          "prompt": usage.get("prompt_tokens"),
-                          "completion": usage.get("completion_tokens")}}
+        result = _provider_result(data, request)
+        result["usage"] = {"model": model, "total": usage.get("total_tokens"),
+                           "prompt": usage.get("prompt_tokens"),
+                           "completion": usage.get("completion_tokens")}
+        return result
 
 
 def resolve_provider_name(name: str | None = None) -> str:
@@ -606,14 +642,16 @@ def chat_edit(spec: dict[str, Any], message: str,
     # провайдер, что назначен на зрение (VISION_EXTRACT_PROVIDER, обычно GigaChat),
     # то этап 1 — GigaChat распознаёт факты с фото ТЗ текстом, этап 2 — сборщик
     # (GLM) собирает изделие уже по этим фактам, без картинки.
-    extract_name = (os.environ.get("VISION_EXTRACT_PROVIDER") or "").lower()
-    two_stage = bool(images and extract_name and extract_name != build_name)
+    extract_name = (os.environ.get("VISION_EXTRACT_PROVIDER") or build_name).lower()
+    vision_trace = build_prompt_request("vision_facts").trace if images else None
+    two_stage = False
     try:
+        vis = get_chat_provider(extract_name) if images else None
+        two_stage = bool(images and hasattr(vis, "vision_extract"))
         if two_stage:
-            vis = get_chat_provider(extract_name)
             desc = vis.vision_extract(images) if hasattr(vis, "vision_extract") else ""
             if desc.strip():
-                aug = ((message or "Собери изделие по этому ТЗ.")
+                aug = (("Создай новый ParamSpec по этому ТЗ. " + message).strip()
                        + "\n\nРаспознано с фото ТЗ (используй как факты, ничего не додумывай "
                          "сверх):\n" + desc)
                 res = build.chat(spec, aug, history, context)
@@ -628,14 +666,46 @@ def chat_edit(spec: dict[str, Any], message: str,
                 res = build.chat(spec, message, history)
     except Exception as e:                            # сеть/ключ/парсинг — в чат, не 500
         message = f"Сервис AI не ответил: {e}"
-        return {"reply": message, "error": message, "spec": None, "changes": []}
+        node = classify_intent(message, spec, context, has_images=bool(images))
+        request = build_prompt_request(node, message=message, spec=spec,
+                                       history=history, context=context)
+        return {"reply": message, "error": message, "spec": None, "changes": [],
+                "trace": {"prompts": [request.trace], "router": {
+                    "kind": "deterministic", "node": node,
+                }}}
 
     usage = res.get("usage")                          # расход токенов (для счётчика)
+    trace = res.get("trace") or {"prompts": []}
+    if two_stage and vision_trace:
+        trace = dict(trace)
+        trace["prompts"] = [vision_trace, *(trace.get("prompts") or [])]
     if two_stage and isinstance(res, dict):           # пометка конвейера в ответе
-        res["reply"] = "📷 GigaChat распознал фото → " + str(res.get("reply") or "готово")
+        res["reply"] = "📷 Фото распознано → " + str(res.get("reply") or "готово")
+    node = str((trace.get("router") or {}).get("node") or "edit_operations")
     new = res.get("spec")
+    operations = res.get("operations")
+    if node in {"intent_routing", "vision_facts", "diagnosis", "answer_query"}:
+        # Capability enforcement is server-side: a model cannot smuggle a
+        # mutation through a read-only node even if it ignores its prompt.
+        new = None
+        operations = None
+    if node == "part_edit" and isinstance(new, dict):
+        old_scope = {key: value for key, value in spec.items() if key != "overrides"}
+        new_scope = {key: value for key, value in new.items() if key != "overrides"}
+        if old_scope != new_scope:
+            reply = "Правка отклонена — узел детали может менять только overrides."
+            return {"reply": reply, "error": reply, "spec": None, "changes": [],
+                    "usage": usage, "trace": trace}
+    if new is None and isinstance(operations, list):
+        try:
+            new = apply_prompt_operations(spec, operations, node=node)
+        except (TypeError, ValueError, KeyError, IndexError) as error:
+            reply = f"Правка отклонена — недопустимая операция: {error}"
+            return {"reply": reply, "error": reply, "spec": None, "changes": [],
+                    "usage": usage, "trace": trace}
     if not new:
-        return {"reply": res.get("reply", ""), "spec": None, "changes": [], "usage": usage}
+        return {"reply": res.get("reply", ""), "spec": None, "changes": [],
+                "usage": usage, "trace": trace}
 
     created = bool(res.get("created"))
     if not created:
@@ -645,14 +715,18 @@ def chat_edit(spec: dict[str, Any], message: str,
     errors = validate_paramspec(new)
     if errors:
         return {"reply": "Правка отклонена — спека не прошла схему:\n"
-                         + "\n".join(errors[:5]), "spec": None, "changes": [], "usage": usage}
+                         + "\n".join(errors[:5]), "spec": None, "changes": [],
+                "usage": usage, "trace": trace}
     if created:
         return {"reply": res.get("reply", "Создано."), "spec": new,
-                "changes": ["новое изделие с нуля"], "created": True, "usage": usage}
+                "changes": ["новое изделие с нуля"], "created": True,
+                "usage": usage, "trace": trace}
     changes = spec_diff(spec, new)
     if not changes:
-        return {"reply": res.get("reply", "Изменений нет."), "spec": None, "changes": [], "usage": usage}
-    return {"reply": res.get("reply", "Готово."), "spec": new, "changes": changes, "usage": usage}
+        return {"reply": res.get("reply", "Изменений нет."), "spec": None,
+                "changes": [], "usage": usage, "trace": trace}
+    return {"reply": res.get("reply", "Готово."), "spec": new,
+            "changes": changes, "usage": usage, "trace": trace}
 
 
 _PROVIDER_META = {          # id → (человекочитаемое имя, env-ключ наличия)
