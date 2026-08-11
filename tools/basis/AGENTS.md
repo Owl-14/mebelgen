@@ -15,6 +15,9 @@ Python-код; координаты деталей ВСЕГДА считает �
 | Присадки, система 32, фурнитура | [rules/hardware.md](rules/hardware.md) |
 | Материалы: дефолты, база, резолвер | [rules/materials.md](rules/materials.md) |
 | Studio: UI, API, каталог, чат | [rules/studio.md](rules/studio.md) |
+| Визуальные правки Studio без потери функций | [rules/studio-ui.md](rules/studio-ui.md) |
+| Логин, компании, роли, сотрудники, просмотр компании, demo-сессии | [rules/identity-access.md](rules/identity-access.md) |
+| Продуктовая логика, UX-этапы и принятые решения | [ux/README.md](ux/README.md) |
 | Лист согласования, чертёж | [rules/delivery.md](rules/delivery.md) |
 | Команды CLI, установка, env | [README.md](README.md) |
 
@@ -49,6 +52,9 @@ PR в GitHub `Owl-14/mebelgen` → merge после зелёного регре�
   drilling/completeness должны его знать, иначе красный регресс.
 - **Goldens обновлять заменой блока `panels`** из свежей генерации, осознанно.
 - **Studio не перечитывает Python** — после правок кода перезапустить сервер.
+- **UI Studio не заменяет движок** — визуальные задачи выполняются поверх
+  существующих `PAGE` и `MebelScene`; обязательный parity-чек описан в
+  [rules/studio-ui.md](rules/studio-ui.md).
 - **Система 32**: присадка Ø8 (шкант + эксцентрик), шаг 32, пропил 4.
   Конфирматы Ø7/«пары 64» — снятый реверс, не использовать.
 - **ИИ и база материалов**: не выдумывать артикулы — резолвер/чат работают только

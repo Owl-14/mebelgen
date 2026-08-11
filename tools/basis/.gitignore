@@ -6,5 +6,8 @@ venv/
 output/
 *.log
 
+# Локальный cache SVG-миниатюр каталога Studio
+paramspecs/.previews/
+
 # Накапливаемые обучающие пары (AKD-35)
 dataset/

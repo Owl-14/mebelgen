@@ -265,7 +265,14 @@ class OpenAICompatProvider:
             raise ValueError(f"Нет {p['key']} (или LLM_API_KEY) для SPEC_CHAT_PROVIDER={preset}")
         base = os.environ.get("LLM_BASE_URL", p["base"])
         from openai import OpenAI
-        self.client = OpenAI(api_key=api_key, **({"base_url": base} if base else {}))
+        try:
+            timeout = max(1.0, float(os.environ.get("SPEC_CHAT_TIMEOUT_S", "120")))
+        except ValueError:
+            timeout = 120.0
+        # Не оставляем интерфейс ждать SDK-дефолт (до 10 минут плюс повторы).
+        # Повтор команды остаётся явным решением пользователя в Studio.
+        self.client = OpenAI(api_key=api_key, timeout=timeout, max_retries=0,
+                             **({"base_url": base} if base else {}))
         self.model = os.environ.get("LLM_MODEL", p["model"])
         self.vision_model = os.environ.get("LLM_VISION_MODEL", p["vision"])
         self.json_mode = os.environ.get("LLM_JSON_MODE",
@@ -620,7 +627,8 @@ def chat_edit(spec: dict[str, Any], message: str,
             except TypeError:
                 res = build.chat(spec, message, history)
     except Exception as e:                            # сеть/ключ/парсинг — в чат, не 500
-        return {"reply": f"Ошибка провайдера: {e}", "spec": None, "changes": []}
+        message = f"Сервис AI не ответил: {e}"
+        return {"reply": message, "error": message, "spec": None, "changes": []}
 
     usage = res.get("usage")                          # расход токенов (для счётчика)
     if two_stage and isinstance(res, dict):           # пометка конвейера в ответе

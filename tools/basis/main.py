@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -290,8 +291,23 @@ def cmd_viewer(args: argparse.Namespace) -> int:
 def cmd_studio(args: argparse.Namespace) -> int:
     from src.studio import run_studio
 
+    auth_env = os.environ.get("STUDIO_REQUIRE_AUTH", "").strip().lower()
     run_studio(args.input, port=args.port, out_dir=args.out,
-               open_browser=not args.no_open)
+               open_browser=not args.no_open,
+               identity_db=args.identity_db or os.environ.get("AKEDA_IDENTITY_DB"),
+               tenant_root=args.tenant_root or os.environ.get("STUDIO_TENANT_ROOT"),
+               require_auth=args.require_auth or auth_env in {"1", "true", "yes", "on"})
+    return 0
+
+
+def cmd_admin(args: argparse.Namespace) -> int:
+    """Локальный identity/admin-контур; Studio подключается после tenant-миграции."""
+    from src.admin import run_admin
+
+    run_admin(db_path=args.db, port=args.port,
+              open_browser=not args.no_open,
+              bootstrap_email=args.bootstrap_email,
+              bootstrap_name=args.bootstrap_name)
     return 0
 
 
@@ -567,8 +583,30 @@ def main() -> int:
     p_st.add_argument("input", help="ParamSpec (.json)")
     p_st.add_argument("--port", type=int, default=8765)
     p_st.add_argument("--out", help="Каталог для сохранений (по умолчанию рядом со спекой)")
+    p_st.add_argument("--identity-db", help="SQLite с аккаунтами и компаниями")
+    p_st.add_argument("--tenant-root", help="Корень каталогов компаний")
+    p_st.add_argument("--require-auth", action="store_true", help="Включить вход и tenant-изоляцию")
     p_st.add_argument("--no-open", action="store_true", help="Не открывать браузер")
     p_st.set_defaults(func=cmd_studio)
+
+    p_ad = sub.add_parser(
+        "admin",
+        help="Локальная админ-панель: вход, компании, сотрудники, роли и аудит",
+    )
+    p_ad.add_argument("--port", type=int, default=8766)
+    p_ad.add_argument(
+        "--db",
+        default=".akeda-data/identity.sqlite3",
+        help="SQLite identity DB (по умолчанию .akeda-data/identity.sqlite3)",
+    )
+    p_ad.add_argument(
+        "--bootstrap-email",
+        default=None,
+        help="Email первого platform admin; пароль только через AKEDA_BOOTSTRAP_PASSWORD",
+    )
+    p_ad.add_argument("--bootstrap-name", default="Администратор Akeda")
+    p_ad.add_argument("--no-open", action="store_true", help="Не открывать браузер")
+    p_ad.set_defaults(func=cmd_admin)
 
     p_tv = sub.add_parser("techview", help="ParamSpec/project → чертёж SVG (фронт+бок, размерки/выноски без пересечений)")
     p_tv.add_argument("input", help="ParamSpec или project.json")
