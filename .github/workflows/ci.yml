@@ -3,8 +3,9 @@ on:
   push:
     branches: [master]
     paths: ["tools/basis/**", ".github/workflows/ci.yml"]
+  # The `test` job is a required master check. It must exist for every PR,
+  # including documentation-only and workflow/governance changes.
   pull_request:
-    paths: ["tools/basis/**", ".github/workflows/ci.yml"]
 
 jobs:
   test:
