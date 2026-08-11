@@ -22,3 +22,14 @@ docs/           аналитика и заметки по БАЗИС-API
 
 Подробности — в README каждого инструмента. Правила построения модели для БАЗИС —
 в [tools/basis/RULES.md](tools/basis/RULES.md).
+
+## Работа над проектом
+
+Перед любой задачей прочитайте корневой [AGENTS.md](AGENTS.md). Он задаёт
+обязательные правила для людей и агентов: отдельные ветки/worktree, защита
+чужих изменений, проверки, PR и безопасный deploy.
+
+- [Командный workflow и handoff](docs/TEAM_WORKFLOW.md)
+- [Проверки по типам задач](docs/TASK_PLAYBOOKS.md)
+- [Предметные правила tools/basis](tools/basis/AGENTS.md)
+- [Production runbook](tools/basis/ops/runbook.md)
