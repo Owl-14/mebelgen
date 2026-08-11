@@ -125,7 +125,7 @@ def test_openai_compat_provider_has_bounded_timeout_without_hidden_retries(monke
     import types
     import src.spec_chat as sc
 
-    captured = {}
+    captured = {"payloads": []}
 
     class FakeOpenAI:
         def __init__(self, **kwargs):
@@ -179,7 +179,7 @@ def test_gemini_provider_parses_response(monkeypatch):
     """AKD-203: GeminiChatProvider формирует запрос (с фото) и парсит JSON-ответ."""
     import src.spec_chat as sc
 
-    captured = {}
+    captured = {"payloads": []}
 
     class _Resp:
         status_code = 200
@@ -191,7 +191,7 @@ def test_gemini_provider_parses_response(monkeypatch):
 
     def _post(url, params=None, json=None, timeout=None):
         captured["url"] = url; captured["key"] = (params or {}).get("key")
-        captured["payload"] = json
+        captured["payloads"].append(json)
         return _Resp()
 
     monkeypatch.setattr(sc, "get_chat_provider", lambda name=None: sc.GeminiChatProvider())
@@ -204,19 +204,55 @@ def test_gemini_provider_parses_response(monkeypatch):
     assert r["spec"] and r["spec"]["dimensions"]["depth"] == 600
     # фото ушло в inline_data, ключ — в query
     assert captured["key"] == "test-key"
-    parts = captured["payload"]["contents"][-1]["parts"]
-    assert any("inline_data" in p for p in parts)
+    assert any(
+        "inline_data" in part
+        for payload in captured["payloads"]
+        for part in payload["contents"][-1]["parts"]
+    )
+    assert [item["prompt_id"] for item in r["trace"]["prompts"]] == [
+        "furniture.vision-facts", "furniture.create-paramspec",
+    ]
 
 
 def test_prompt_keeps_geometry_rules():
     """MEB-144: prompt emits semantic bindings and forbids LLM coordinates."""
-    text = (ROOT / "prompts" / "spec_chat_prompt.txt").read_text(encoding="utf-8")
+    text = "\n".join(
+        (ROOT / "prompts" / "spec_chat" / name).read_text(encoding="utf-8")
+        for name in ("edit_operations.txt", "part_edit.txt", "create_paramspec.txt")
+    )
     for marker in ("vertical_partition", "section_id", "panel_id", "between",
                    "above", "below", "middle", "align_front", "align_back",
-                   "delta_mm", "ЖЁСТКИЙ ЗАПРЕТ КООРДИНАТ",
-                   "ДЕТАЛИ ПОЛЬЗОВАТЕЛЯ НЕ УДАЛЯТЬ",
-                   "ПОСТАВЬ РЯДОМ", '"composite" + blocks'):
+                   "delta_mm", "жёстко запрещены",
+                   "автоматически не удаляй"):
         assert marker in text, f"в промпте потеряно правило: {marker}"
+
+
+def test_mock_result_exposes_versioned_prompt_trace():
+    result = chat_edit(SPEC, "сделай глубину 600")
+    trace = result["trace"]
+    assert trace["router"] == {"kind": "deterministic", "node": "edit_operations"}
+    assert trace["prompts"][0]["prompt_id"] == "furniture.edit-operations"
+    assert trace["prompts"][0]["prompt_version"] == "1.0.0"
+
+
+def test_read_only_node_cannot_smuggle_a_spec_mutation(monkeypatch):
+    import src.spec_chat as sc
+
+    class MisbehavingProvider:
+        def chat(self, spec, message, history=None, context=None, images=None):
+            request = sc.build_chat_prompt_request(spec, message, history, context)
+            changed = {**spec, "dimensions": {**spec["dimensions"], "depth": 999}}
+            return {
+                "reply": "Ответ на вопрос.", "spec": changed,
+                "trace": {"prompts": [request.trace], "router": {
+                    "kind": "deterministic", "node": request.node,
+                }},
+            }
+
+    monkeypatch.setattr(sc, "get_chat_provider", lambda name=None: MisbehavingProvider())
+    result = sc.chat_edit(SPEC, "сколько стоит?", context={"estimate_total": 100})
+    assert result["spec"] is None and result["changes"] == []
+    assert result["trace"]["router"]["node"] == "answer_query"
 
 
 def test_provider_geometry_operations_are_resolved_without_llm_placement(monkeypatch):
