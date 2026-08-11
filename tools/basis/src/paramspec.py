@@ -11,7 +11,15 @@ import json
 from pathlib import Path
 from typing import Annotated, Any, Literal, TypeAlias
 
-from pydantic import BaseModel, ConfigDict, Field, RootModel, ValidationError
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Discriminator,
+    Field,
+    RootModel,
+    Tag,
+    ValidationError,
+)
 
 SCHEMA_PATH = Path(__file__).resolve().parent.parent / "schema" / "paramspec.schema.json"
 
@@ -253,6 +261,19 @@ class RoundTableParamSpec(_ParamSpecFields):
     archetype: Literal["round_table"]
 
 
+class LegacyDraftParamSpec(_ContractModel):
+    """Persisted placeholder created before archetype selection.
+
+    Studio saves this exact minimal shape for a newly created product.  It is a
+    lifecycle placeholder rather than a generatable furniture specification,
+    so dimensions, materials and an archetype are intentionally absent.
+    """
+
+    schema_version: Literal["paramspec-v1"] = Field(alias="schemaVersion")
+    project_name: str = Field(min_length=1)
+    draft: Literal[True]
+
+
 NonCompositeParamSpec: TypeAlias = Annotated[
     CorpusParamSpec
     | ShelvingParamSpec
@@ -282,9 +303,35 @@ class CompositeParamSpec(_ParamSpecFields):
     blocks: list[CompositeBlock]
 
 
+_LEGACY_DRAFT_TAG = "__legacy_draft__"
+
+
+def _paramspec_tag(value: Any) -> str | None:
+    """Choose a union branch without inventing fields in persisted drafts."""
+    if isinstance(value, dict):
+        archetype = value.get("archetype")
+        if archetype is None and value.get("draft") is True:
+            return _LEGACY_DRAFT_TAG
+        return archetype if isinstance(archetype, str) else None
+    if isinstance(value, LegacyDraftParamSpec):
+        return _LEGACY_DRAFT_TAG
+    archetype = getattr(value, "archetype", None)
+    return archetype if isinstance(archetype, str) else None
+
+
 ParamSpecValue: TypeAlias = Annotated[
-    NonCompositeParamSpec | CompositeParamSpec,
-    Field(discriminator="archetype"),
+    Annotated[CorpusParamSpec, Tag("corpus")]
+    | Annotated[ShelvingParamSpec, Tag("shelving")]
+    | Annotated[DrawerUnitParamSpec, Tag("drawer_unit")]
+    | Annotated[DoorUnitParamSpec, Tag("door_unit")]
+    | Annotated[CabinetParamSpec, Tag("cabinet")]
+    | Annotated[CabinetParamSpec, Tag("wardrobe")]
+    | Annotated[DeskParamSpec, Tag("desk")]
+    | Annotated[DeskParamSpec, Tag("table")]
+    | Annotated[RoundTableParamSpec, Tag("round_table")]
+    | Annotated[CompositeParamSpec, Tag("composite")]
+    | Annotated[LegacyDraftParamSpec, Tag(_LEGACY_DRAFT_TAG)],
+    Discriminator(_paramspec_tag),
 ]
 
 
@@ -407,6 +454,10 @@ def paramspec_json_schema() -> dict[str, Any]:
             "Высокоуровневое описание изделия параметрами (без координат). "
             "Сгенерировано из Pydantic-моделей src.paramspec."
         ),
+        # Callable discriminators let Pydantic accept the historical draft
+        # placeholder without injecting an archetype into persisted JSON.  Keep
+        # the standard discriminator hint for LLM/API consumers of the schema.
+        "discriminator": {"propertyName": "archetype"},
     })
     return schema
 
