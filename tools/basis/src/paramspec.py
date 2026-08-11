@@ -77,10 +77,24 @@ class Handles(_ContractModel):
     furniture_encoded: str | None = None
 
 
+class CatalogMetadata(_ContractModel):
+    """Strict server-owned catalog identity stored with a ParamSpec."""
+
+    creator_user_id: str | None = None
+    responsible_user_id: str | None = None
+    author: str | None = None
+    responsible: str | None = None
+
+
 class DrawerGuides(_ContractModel):
     type: str | None = None
     length_mm: float | None = Field(default=None, gt=0)
     soft_close: bool | None = None
+    with_closer: bool | None = Field(
+        default=None,
+        json_schema_extra={"deprecated": True},
+        description="Legacy alias for soft_close; normalized before generation.",
+    )
     furniture_encoded: str | None = None
     cabinet_left_panel: str | None = None
     cabinet_right_panel: str | None = None
@@ -209,6 +223,7 @@ class _ParamSpecFields(_ContractModel):
     features: list[str] | None = None
     warnings: list[str] | None = None
     estimated_values: list[str] | None = None
+    catalog: CatalogMetadata | None = None
     overrides: list[Override] | None = None
     draft: bool | None = None
     created: bool | None = None
@@ -275,6 +290,7 @@ class LegacyDraftParamSpec(_ContractModel):
     schema_version: Literal["paramspec-v1"] = Field(alias="schemaVersion")
     project_name: str = Field(min_length=1)
     draft: Literal[True]
+    catalog: CatalogMetadata | None = None
 
 
 NonCompositeParamSpec: TypeAlias = Annotated[

@@ -14,8 +14,19 @@ COPYFILE_DISABLE=1 tar czf /tmp/basis_update.tgz \
     main.py requirements.txt README.md AGENTS.md RULES.md STUDIO.md \
     src schema prompts rules materials scripts tests qa landing vendor assets ops
 scp -i "$KEY" /tmp/basis_update.tgz "$HOST":/tmp/
-ssh -i "$KEY" "$HOST" 'cd /opt/bazis/basis && tar xzf /tmp/basis_update.tgz \
-  && chown -R bazis:bazis . && systemctl restart bazis && sleep 3 \
-  && systemctl is-active bazis && curl -s http://127.0.0.1:8765/version'
+ssh -i "$KEY" "$HOST" 'set -eu
+  release_dir=$(mktemp -d /tmp/basis-release.XXXXXX)
+  trap '\''rm -rf -- "$release_dir"'\'' EXIT
+  tar xzf /tmp/basis_update.tgz -C "$release_dir"
+  /opt/bazis/venv/bin/python "$release_dir/scripts/validate_catalogs.py" \
+    --legacy-root /opt/bazis/basis/paramspecs \
+    --tenant-root /opt/bazis/tenants --build
+  cd /opt/bazis/basis
+  tar xzf /tmp/basis_update.tgz
+  chown -R bazis:bazis .
+  systemctl restart bazis
+  sleep 3
+  systemctl is-active bazis
+  curl -s http://127.0.0.1:8765/version'
 echo
 echo "deployed $SHA"

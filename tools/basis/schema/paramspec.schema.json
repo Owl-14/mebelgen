@@ -23,6 +23,62 @@
       "type": "object",
       "unevaluatedProperties": false
     },
+    "CatalogMetadata": {
+      "additionalProperties": false,
+      "description": "Strict server-owned catalog identity stored with a ParamSpec.",
+      "properties": {
+        "creator_user_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Creator User Id"
+        },
+        "responsible_user_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Responsible User Id"
+        },
+        "author": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Author"
+        },
+        "responsible": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Responsible"
+        }
+      },
+      "title": "CatalogMetadata",
+      "type": "object"
+    },
     "CompositeBlock": {
       "additionalProperties": false,
       "properties": {
@@ -765,6 +821,20 @@
           ],
           "default": null,
           "title": "Soft Close"
+        },
+        "with_closer": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "deprecated": true,
+          "description": "Legacy alias for soft_close; normalized before generation.",
+          "title": "With Closer"
         },
         "furniture_encoded": {
           "anyOf": [
@@ -1580,6 +1650,17 @@
           "const": true,
           "title": "Draft",
           "type": "boolean"
+        },
+        "catalog": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CatalogMetadata"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -3348,6 +3429,17 @@
           ],
           "default": null,
           "title": "Estimated Values"
+        },
+        "catalog": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CatalogMetadata"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "overrides": {
           "anyOf": [

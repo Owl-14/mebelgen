@@ -2149,8 +2149,33 @@ def make_handler(st: _Studio):
                 elif path == "/api/open":        # открыть другую спеку (D1)
                     p = _safe_spec_file(workspace.spec_dir, str(body.get("file", "")))
                     opened = json.loads(p.read_text(encoding="utf-8"))
+                    if not isinstance(opened, dict):
+                        self._json({
+                            "ok": False,
+                            "code": "invalid_paramspec",
+                            "error": "Изделие не открыто: ParamSpec должен быть объектом",
+                        }, 422)
+                        return
+                    payload = None
+                    if not opened.get("draft"):
+                        payload = build_payload(opened)
+                        if not isinstance(payload.get("viewer"), dict):
+                            schema_errors = list(payload.get("issues", {}).get("schema") or [])
+                            self._json({
+                                "ok": False,
+                                "code": "invalid_paramspec",
+                                "error": "Изделие не открыто: ParamSpec не прошёл проверку схемы",
+                                "issues": payload.get("issues", {}),
+                                "details": schema_errors[:8],
+                            }, 422)
+                            return
                     st.workspaces.set_current(auth, p)
-                    self._json({"ok": True, "spec": opened, "file": p.name})
+                    self._json({
+                        "ok": True,
+                        "spec": opened,
+                        "file": p.name,
+                        "payload": payload,
+                    })
                 elif path == "/api/rename":      # переименовать из каталога без открытия
                     p = _safe_spec_file(workspace.spec_dir, str(body.get("file", "")))
                     if workspace.mode == "demo" or (
@@ -4753,25 +4778,28 @@ async function apply(){
     const p=await r.json();
     if(requestId!==generateRequestSeq||JSON.stringify(SPEC)!==requestSpecJson)
       return Object.assign({},p,{ok:false,viewer:null,stale:true});
-    const restorePartName=(typeof SELECTED_PART!=='undefined'&&SELECTED_PART)
-      ?SELECTED_PART.name:null;
-    paint(p);
-    const diagnostics=modelDiagnosticCounts(p);
-    generatedSpecJson=p.viewer?requestSpecJson:null;
-    generatedRevision=p.viewer?String(p.revision||''):'';
-    setViewportModelState(!p.viewer?'stale':!p.ok?'blocked':diagnostics.unresolved?'decision':'ready',diagnostics);
-    if(restorePartName&&p.viewer&&Array.isArray(p.viewer.panels)){
-      const restoreIndex=p.viewer.panels.findIndex(panel=>panel.name===restorePartName);
-      if(restoreIndex>=0)scene3d.select(restoreIndex);
-    }
-    refreshOperationTargets();
-    if(drawOn) refreshDraw();
-    if(nestOn) refreshNest();
-    return p;
+    return commitGeneratedPayload(p,requestSpecJson);
   }catch(error){
     if(requestId===generateRequestSeq){generatedSpecJson=null;generatedRevision='';setViewportModelState('stale');}
     throw error;
   }
+}
+function commitGeneratedPayload(p,requestSpecJson){
+  const restorePartName=(typeof SELECTED_PART!=='undefined'&&SELECTED_PART)
+    ?SELECTED_PART.name:null;
+  paint(p);
+  const diagnostics=modelDiagnosticCounts(p);
+  generatedSpecJson=p.viewer?requestSpecJson:null;
+  generatedRevision=p.viewer?String(p.revision||''):'';
+  setViewportModelState(!p.viewer?'stale':!p.ok?'blocked':diagnostics.unresolved?'decision':'ready',diagnostics);
+  if(restorePartName&&p.viewer&&Array.isArray(p.viewer.panels)){
+    const restoreIndex=p.viewer.panels.findIndex(panel=>panel.name===restorePartName);
+    if(restoreIndex>=0)scene3d.select(restoreIndex);
+  }
+  refreshOperationTargets();
+  if(drawOn) refreshDraw();
+  if(nestOn) refreshNest();
+  return p;
 }
 function paint(p){
   lastPayload=p;
@@ -5255,7 +5283,10 @@ function adoptSpec(p){
   const dr=!!(SPEC&&SPEC.draft);                   // черновик — пустой экран без модели
   showEmpty(dr);
   scene3d.select(null); fillForm();
-  if(!dr) apply();
+  if(!dr){
+    if(p.payload&&p.payload.viewer)commitGeneratedPayload(p.payload,JSON.stringify(SPEC));
+    else apply();
+  }
   loadProjects(); loadBuilds(); loadChatHistory();
   toast('Открыто: '+p.file);
 }
@@ -5304,11 +5335,14 @@ $('projSel').onchange=async e=>{
   if(!await prepareWorkspaceChange('открыть другое изделие')){
     e.target.value=previousFile;return;
   }
-  const r=await fetch('/api/open',{method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({file:nextFile})});
-  const p=await r.json();
-  if(p.ok) adoptSpec(p); else toast('Ошибка: '+(p.error||''),true);
+  try{
+    const r=await fetch('/api/open',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({file:nextFile})});
+    const p=await r.json();
+    if(r.ok&&p.ok) adoptSpec(p);
+    else{e.target.value=previousFile;toast('Ошибка: '+(p.error||'изделие не открылось'),true);}
+  }catch(error){e.target.value=previousFile;toast('Изделие не открылось: '+error.message,true);}
 };
 $('projNew').onclick=async()=>{   // черновик: запись в каталоге + пустой воркспейс (AKD-214)
   if(!await prepareWorkspaceChange('создать новое изделие'))return;
@@ -5706,7 +5740,7 @@ async function openCatalogItem(file=CAT_SELECTED_FILE){
     const r=await fetch('/api/open',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({file})});
     const p=await r.json();
-    if(p.ok){leaveCatalogForEditor();adoptSpec(p);}
+    if(r.ok&&p.ok){leaveCatalogForEditor();adoptSpec(p);}
     else toast('Ошибка: '+(p.error||''),true);
   }catch(error){toast('Изделие не открылось: '+error.message,true);}
   finally{button.disabled=false;}
