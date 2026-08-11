@@ -2076,6 +2076,8 @@ def make_handler(st: _Studio):
                     provider = body.get("provider") or None
                     history = (st.workspaces.ai_messages(auth, spec_path)
                                if auth is not None else body.get("history") or [])
+                    from .spec_chat import chat_edit
+
                     if st.ai_graph is not None:
                         from .studio_graph import GraphConflict, GraphRevisionError
 
