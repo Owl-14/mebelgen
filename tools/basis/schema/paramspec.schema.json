@@ -1538,6 +1538,34 @@
       "title": "Hinges",
       "type": "object"
     },
+    "LegacyDraftParamSpec": {
+      "additionalProperties": false,
+      "description": "Persisted placeholder created before archetype selection.\n\nStudio saves this exact minimal shape for a newly created product.  It is a\nlifecycle placeholder rather than a generatable furniture specification,\nso dimensions, materials and an archetype are intentionally absent.",
+      "properties": {
+        "schemaVersion": {
+          "const": "paramspec-v1",
+          "title": "Schemaversion",
+          "type": "string"
+        },
+        "project_name": {
+          "minLength": 1,
+          "title": "Project Name",
+          "type": "string"
+        },
+        "draft": {
+          "const": true,
+          "title": "Draft",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "project_name",
+        "draft"
+      ],
+      "title": "LegacyDraftParamSpec",
+      "type": "object"
+    },
     "Legs": {
       "additionalProperties": false,
       "properties": {
@@ -3626,21 +3654,6 @@
     }
   },
   "description": "Высокоуровневое описание изделия параметрами (без координат). Сгенерировано из Pydantic-моделей src.paramspec.",
-  "discriminator": {
-    "mapping": {
-      "cabinet": "#/$defs/CabinetParamSpec",
-      "composite": "#/$defs/CompositeParamSpec",
-      "corpus": "#/$defs/CorpusParamSpec",
-      "desk": "#/$defs/DeskParamSpec",
-      "door_unit": "#/$defs/DoorUnitParamSpec",
-      "drawer_unit": "#/$defs/DrawerUnitParamSpec",
-      "round_table": "#/$defs/RoundTableParamSpec",
-      "shelving": "#/$defs/ShelvingParamSpec",
-      "table": "#/$defs/DeskParamSpec",
-      "wardrobe": "#/$defs/CabinetParamSpec"
-    },
-    "propertyName": "archetype"
-  },
   "oneOf": [
     {
       "$ref": "#/$defs/CorpusParamSpec"
@@ -3665,9 +3678,15 @@
     },
     {
       "$ref": "#/$defs/CompositeParamSpec"
+    },
+    {
+      "$ref": "#/$defs/LegacyDraftParamSpec"
     }
   ],
   "title": "BasisParamSpec",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://bazis-converter.local/schema/paramspec.schema.json"
+  "$id": "https://bazis-converter.local/schema/paramspec.schema.json",
+  "discriminator": {
+    "propertyName": "archetype"
+  }
 }

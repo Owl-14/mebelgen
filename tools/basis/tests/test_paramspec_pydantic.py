@@ -88,3 +88,27 @@ def test_wrong_section_discriminator_is_localized():
     with pytest.raises(ValidationError):
         parse_paramspec(raw)
     assert any("sections.0" in error and "union_tag_invalid" in error for error in validate_paramspec(raw))
+
+
+def test_legacy_minimal_draft_round_trips_without_inventing_archetype():
+    raw = {
+        "schemaVersion": "paramspec-v1",
+        "project_name": "Новое изделие",
+        "draft": True,
+    }
+
+    typed = parse_paramspec(raw)
+
+    assert typed.to_generator_dict() == raw
+    assert not validate_paramspec(raw)
+    assert not list(Draft202012Validator(paramspec_json_schema()).iter_errors(raw))
+
+
+def test_missing_archetype_is_only_allowed_for_minimal_draft():
+    raw = {
+        "schemaVersion": "paramspec-v1",
+        "project_name": "Не черновик",
+        "draft": False,
+    }
+
+    assert any("union_tag_not_found" in error for error in validate_paramspec(raw))
