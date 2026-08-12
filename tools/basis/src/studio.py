@@ -3509,9 +3509,30 @@ PAGE = r"""<!DOCTYPE html>
   .dependent-data-state[data-tone="blocked"],.dependent-data-state[data-tone="stale"]{
     border-left-color:var(--bad);background:#fff3f2;color:#743d3d}
   #toast{position:absolute;left:50%;bottom:calc(44px + var(--chat-stack-height));
-         transform:translateX(-50%);z-index:9;
-         background:#1a1d21;color:#fff;padding:7px 14px;border-radius:8px;font-size:12.5px;
-         opacity:0;transition:opacity .25s;pointer-events:none;max-width:80%}
+         transform:translateX(-50%);z-index:9;width:min(440px,calc(100% - 32px));
+         color:#fff;font-size:12.5px;opacity:0;transition:opacity .2s;pointer-events:none}
+  #toast.is-visible{opacity:1;pointer-events:auto}
+  #toast.has-history:not(.is-visible){width:auto;opacity:1;pointer-events:auto}
+  #toast.has-history:not(.is-visible) #toastCurrent{min-height:0;padding:0;background:transparent;box-shadow:none}
+  #toast.has-history:not(.is-visible) #toastMessage{display:none}
+  #toast.has-history.is-history-open{width:min(440px,calc(100% - 32px))}
+  #toastCurrent{display:flex;align-items:center;gap:8px;min-height:32px;padding:7px 8px 7px 12px;
+         border-radius:8px;background:#1a1d21;box-shadow:0 8px 22px rgba(22,29,38,.18)}
+  #toast[data-tone="error"] #toastCurrent{background:#9f2924}
+  #toastMessage{min-width:0;flex:1 1 auto;line-height:17px}
+  #toastHistoryToggle{flex:0 0 auto;min-height:24px;padding:0 7px;border:1px solid rgba(255,255,255,.32);
+         border-radius:4px;background:rgba(255,255,255,.08);color:inherit;font-size:10.5px;font-weight:650}
+  #toastHistoryToggle:hover{background:rgba(255,255,255,.16)}
+  #toast.has-history:not(.is-visible) #toastHistoryToggle{border-color:#d0d6df;background:#fff;color:#586574;
+         box-shadow:0 4px 14px rgba(22,29,38,.12)}
+  #toast.has-history:not(.is-visible) #toastHistoryToggle:hover{background:#f5f7fa}
+  #toastHistory{position:absolute;left:0;right:0;bottom:calc(100% + 6px);max-height:154px;margin:0;
+         padding:5px;overflow:auto;border:1px solid #ccd2da;border-radius:7px;background:#fff;color:#35404d;
+         box-shadow:0 10px 26px rgba(22,29,38,.18);list-style:none}
+  #toastHistory li{padding:6px 7px;border-radius:4px;font-size:11px;line-height:15px}
+  #toastHistory li+li{border-top:1px solid #e7eaf0}
+  #toastHistory li[data-tone="error"]{color:#8b302c;background:#fff7f6}
+  @media (prefers-reduced-motion:reduce){#toast{transition:none}}
   #shareDialog,#catArchiveDialog{width:min(470px,calc(100vw - 32px));padding:0;border:1px solid #cfd5dd;
     border-radius:8px;background:#fff;color:var(--ink);box-shadow:0 24px 70px rgba(20,31,44,.24)}
   #shareDialog::backdrop,#catArchiveDialog::backdrop{background:rgba(30,39,50,.42)}
@@ -4400,7 +4421,13 @@ PAGE = r"""<!DOCTYPE html>
       </div>
     </form>
   </dialog>
-  <div id="toast"></div>
+  <div id="toast">
+    <div id="toastCurrent" role="status" aria-live="polite" aria-atomic="true">
+      <span id="toastMessage"></span>
+      <button id="toastHistoryToggle" type="button" aria-expanded="false" aria-controls="toastHistory" hidden>Уведомления</button>
+    </div>
+    <ol id="toastHistory" hidden aria-label="Последние уведомления"></ol>
+  </div>
 </div>
 </div>
 
@@ -4433,9 +4460,56 @@ let SPEC = __SPEC__;
 const FIELDS = __FIELDS__;                 // archetype -> [{key,label,type,...}]
 const SECTION_ARCHS = __SECTION_ARCHS__;   // архетипы с секциями
 const $ = id => document.getElementById(id);
-const toast = (m,bad,sticky)=>{const t=$('toast');t.textContent=m;t.style.background=bad?'#b3261e':'#1a1d21';
-  t.style.opacity=1;clearTimeout(t._h);
-  if(!sticky) t._h=setTimeout(()=>t.style.opacity=0,bad?5000:2600);};
+/* Значимые системные сообщения не должны перетирать друг друга. Текущее
+   показываем по одному, а последние остаются доступными в компактной истории. */
+const NOTICE_HISTORY_LIMIT=8,NOTICE_QUEUE_LIMIT=6;
+let activeNotice=null,noticeTimer=null;
+const noticeQueue=[],noticeHistory=[];
+function renderNoticeHistory(){
+  const list=$('toastHistory'),toggle=$('toastHistoryToggle');
+  list.replaceChildren();
+  noticeHistory.slice().reverse().forEach(notice=>{
+    const item=document.createElement('li');item.dataset.tone=notice.bad?'error':'info';
+    item.textContent=notice.message;list.append(item);
+  });
+  const hasHistory=noticeHistory.length>0;
+  const toastBox=$('toast');toastBox.classList.toggle('has-history',hasHistory);
+  toggle.hidden=!hasHistory;
+  toggle.textContent=`Уведомления · ${noticeHistory.length}`;
+  if(!hasHistory){list.hidden=true;toggle.setAttribute('aria-expanded','false');}
+}
+function hideCurrentNotice({showNext=true}={}){
+  clearTimeout(noticeTimer);noticeTimer=null;activeNotice=null;
+  const toastBox=$('toast');toastBox.classList.remove('is-visible');
+  if(showNext)showNextNotice();
+}
+function showNextNotice(){
+  if(activeNotice||!noticeQueue.length)return;
+  activeNotice=noticeQueue.shift();
+  const toastBox=$('toast');toastBox.dataset.tone=activeNotice.bad?'error':'info';
+  toastBox.classList.remove('is-history-open');
+  $('toastMessage').textContent=activeNotice.message;
+  toastBox.classList.add('is-visible');
+  if(!activeNotice.sticky){
+    noticeTimer=setTimeout(()=>hideCurrentNotice(),activeNotice.bad?5000:2800);
+  }
+}
+function toast(message,bad=false,sticky=false){
+  const text=String(message||'').trim();if(!text)return;
+  const notice={message:text,bad:!!bad,sticky:!!sticky};
+  noticeHistory.push(notice);if(noticeHistory.length>NOTICE_HISTORY_LIMIT)noticeHistory.shift();
+  renderNoticeHistory();
+  // Промежуточный статус (например, распознавание ТЗ) заменяется его итогом,
+  // а не задерживает его в очереди.
+  if(activeNotice&&activeNotice.sticky)hideCurrentNotice({showNext:false});
+  if(noticeQueue.length>=NOTICE_QUEUE_LIMIT)noticeQueue.shift();
+  noticeQueue.push(notice);showNextNotice();
+}
+$('toastHistoryToggle').onclick=()=>{
+  const list=$('toastHistory'),opened=list.hidden,toastBox=$('toast');
+  list.hidden=!opened;toastBox.classList.toggle('is-history-open',opened);
+  $('toastHistoryToggle').setAttribute('aria-expanded',String(opened));
+};
 
 /* ---------- текущий сотрудник и компания ---------- */
 function setupProfile(){
