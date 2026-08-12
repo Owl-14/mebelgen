@@ -9,5 +9,10 @@ output/
 # Локальный cache SVG-миниатюр каталога Studio
 paramspecs/.previews/
 
+# Mutable-состояние Studio: версии, промежуточные проекты и история AI-команд.
+paramspecs/*.versions.json
+paramspecs/*.project.json
+paramspecs/.history/
+
 # Накапливаемые обучающие пары (AKD-35)
 dataset/

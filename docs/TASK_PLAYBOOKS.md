@@ -141,25 +141,7 @@ python -m tests.regression
 
 Проверить mock, schema validation, обработку timeout/error и полный basis-гейт.
 
-## 6. Референс-листы
-
-Область: `tools/refsheets/*`.
-
-Сначала читать `README.md`, `DEVNOTES.md`, `PLAN.md`.
-
-Проверки:
-
-```bash
-python -m pytest tools/refsheets/tests -q
-cd tools
-python -m refsheets ../input_specs/<case>.docx --out <temp-out> --no-3d
-```
-
-Если меняется Blender-путь — дополнительно проверить реальный рендер. Визуально
-проверить SVG/PNG: размеры, обрезание, подписи, штамп, материалы и 3D.
-Не коммитить весь output из локального прогона.
-
-## 7. Документация и исследования
+## 6. Документация и исследования
 
 - Сверять команды с текущим кодом.
 - Помечать гипотезы и результаты экспериментов.
@@ -169,7 +151,7 @@ python -m refsheets ../input_specs/<case>.docx --out <temp-out> --no-3d
 
 Минимум: `git diff --check` и ручная проверка ссылок/команд.
 
-## 8. Зависимости и CI
+## 7. Зависимости и CI
 
 Область: requirements, lock-файлы, `.github/workflows/*`.
 
@@ -179,7 +161,7 @@ python -m refsheets ../input_specs/<case>.docx --out <temp-out> --no-3d
 - Проверять чистую установку и оба basis-гейта.
 - Изменение CI требует review владельца репозитория.
 
-## 9. Инфраструктура и deploy
+## 8. Инфраструктура и deploy
 
 Область: `tools/basis/ops/*`, nginx/systemd, сертификаты, сервер.
 
@@ -198,7 +180,7 @@ python -m refsheets ../input_specs/<case>.docx --out <temp-out> --no-3d
 - записать, что изменено на сервере;
 - убедиться, что изменение отражено в Git, а не осталось ручным.
 
-## 10. Срочная production-ошибка
+## 9. Срочная production-ошибка
 
 Диагностика не равна разрешению на исправление.
 

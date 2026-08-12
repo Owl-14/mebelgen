@@ -1,27 +1,29 @@
-# mebelgen
+# mebelgen / Akeda Studio
 
-Два инструмента для перевода мебельного ТЗ в готовые артефакты.
+Единственный актуальный продукт репозитория — **Akeda Studio** в
+[`tools/basis`](tools/basis). Текущий поток данных:
 
-| Инструмент | Что делает | Запуск |
-|---|---|---|
-| **[tools/basis](tools/basis)** | ТЗ → строгий JSON → модель в **БАЗИС-Мебельщик** (панели + фурнитура) | `cd tools/basis && python main.py …` |
-| **[tools/refsheets](tools/refsheets)** | Word-ТЗ → референс-листы A4 (2D-чертежи, 3D-рендер) | `cd tools && python -m refsheets …` |
-
-```
-tools/
-  basis/        ТЗ → JSON → БАЗИС     (src/, generators/, schema/, projects/, paramspecs/,
-                                       materials/ ≈5000 позиций, scripts/, RULES.md)
-  refsheets/    Word → листы 2D/3D    (Python-пакет, output/)
-input_specs/    общие исходные ТЗ  (+ komi_rf/ — заказ Россельхозбанк: текст ТЗ и 23 чертежа)
-docs/           аналитика и заметки по БАЗИС-API
+```text
+ТЗ → ParamSpec → детерминированный генератор → проверки → Studio → .cfrn/.b3d
 ```
 
-Сборка модели — двумя путями: импортёр в БАЗИС-Мебельщике (надёжно, нужна лицензия)
-или облако `.cfrn→.b3d` без десктопа (device-independent). База материалов производства —
-`tools/basis/materials/baza_materiala.json`, поиск `python main.py materials --search …`.
+LLM извлекает намерение и параметры, но не рассчитывает координаты деталей.
+Геометрию строит только код генераторов из `tools/basis/src/generators/`.
 
-Подробности — в README каждого инструмента. Правила построения модели для БАЗИС —
-в [tools/basis/RULES.md](tools/basis/RULES.md).
+```text
+tools/basis/    продукт, Studio, генераторы, схемы, тесты и production-интеграции
+input_specs/    исходные ТЗ и эталонные входные материалы
+docs/           командный процесс и технические исследования
+```
+
+Старый отдельный конвейер референс-листов с Blender удалён из актуального
+дерева. Он не является частью Studio, 3D-движка или производственного контура;
+при необходимости его исходники доступны только в истории Git.
+
+Быстрый старт и команды: [tools/basis/README.md](tools/basis/README.md).
+Актуальные предметные правила: [tools/basis/AGENTS.md](tools/basis/AGENTS.md) и
+[tools/basis/rules/](tools/basis/rules/). Карта документации:
+[docs/README.md](docs/README.md).
 
 ## Работа над проектом
 
