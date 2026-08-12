@@ -8,6 +8,9 @@ node_modules/
 .env.*
 *.log
 
+# Удалённый legacy-конвейер референс-листов/Blender не является частью продукта.
+tools/refsheets/
+
 # кэш медиа при повторном парсинге docx (исходники в input_specs/)
 **/media_rows/
 

@@ -1,3 +1,6 @@
+> **Статус:** исследовательский снимок внешнего API. Не является текущим
+> контрактом Akeda Studio; при расхождении действуют `tools/basis/rules/` и код.
+
 # BASIS Apilist research
 
 Дата проверки: 2026-06-29.
@@ -355,4 +358,3 @@ node basis/apilist/check_tasks_api.mjs --list
 - если script endpoint найден и работает, уходим в cloud-runner;
 - если нет, оставляем cloud для post-processing, а построение `.b3d` делаем локальным
   БАЗИСом или Windows-runner.
-
