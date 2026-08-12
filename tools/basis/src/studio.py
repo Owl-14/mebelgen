@@ -2882,9 +2882,13 @@ PAGE = r"""<!DOCTYPE html>
 <html lang="ru"><head><meta charset="utf-8"><title>Akeda Studio — предпросмотр и правки</title>
 <style>
   :root{--ink:#1a1d21;--mut:#6b7280;--line:#dfe3e8;--bg:#f4f6f8;--card:#fff;
-        --ok:#2fa84f;--bad:#e5484d;--accent:#3b82f6}
+        --ok:#2fa84f;--warn:#c78a2b;--bad:#e5484d;--accent:#3b82f6}
   *{box-sizing:border-box} html,body{margin:0;height:100%;font-family:Segoe UI,Arial,sans-serif;
     background:var(--bg);color:var(--ink);font-size:13px;overflow:hidden}
+  button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,
+    a:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  @media (prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;
+    animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
   /* AKD-207 / MEB-093: рабочая область 3D приоритетна. На обычных ноутбуках
      инспектор справа свёрнут в рейл, на широких экранах обе панели открыты. */
   #app{--side-width:340px;--inspector-width:360px;--rail-width:48px;
@@ -2915,6 +2919,9 @@ PAGE = r"""<!DOCTYPE html>
   #side .project-share:hover{background:#eaf1ff;border-color:#91addb}
   #side svg.ui-icon,#fs_chat svg.ui-icon{width:16px;height:16px;flex:0 0 16px;fill:none;stroke:currentColor;
     stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  #rightside svg.ui-icon{width:16px;height:16px;flex:0 0 16px;fill:none;stroke:currentColor;
+    stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  #rightside #verRestore{display:grid;place-items:center;flex:0 0 32px;width:32px;height:32px;padding:0}
   #side .icon-button{display:grid;place-items:center;flex:0 0 32px;width:32px;height:32px;padding:0}
   #side h1.studio-brand{display:grid;gap:1px;margin:0 0 13px;font-size:13px;
     line-height:1;letter-spacing:0}
@@ -4090,7 +4097,12 @@ PAGE = r"""<!DOCTYPE html>
       <div class="mini">Платная сборка доступна только при зелёных проверках.</div>
       <div class="row" style="gap:6px;margin-top:6px">
         <select id="verSel" style="flex:1"><option value="">— версии (при сохранении) —</option></select>
-        <button id="verRestore" title="восстановить выбранную версию">⤺</button>
+        <button id="verRestore" type="button" aria-label="Восстановить выбранную версию"
+          title="Восстановить выбранную версию">
+          <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M8 7 4.5 10.5 8 14"/><path d="M5 10.5h8a6.5 6.5 0 1 1-5.1 10.5"/>
+          </svg>
+        </button>
       </div>
       <div id="builds" style="margin-top:6px"></div>
     </fieldset>
