@@ -3066,16 +3066,14 @@ PAGE = r"""<!DOCTYPE html>
   #rightside{grid-column:3;grid-row:1;min-width:0;width:100%;background:var(--card);
     border-left:1px solid var(--line);overflow-y:auto;padding:0 12px 12px;
     opacity:1;visibility:visible;transition:opacity .12s ease}
-  #rightPanelHead{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:8px;
-    min-height:48px;margin:0 -12px;padding:0 8px 0 14px;background:var(--card)}
-  #rightPanelHead b{flex:1;font-size:12.5px}
-  #rightPanelClose{display:grid;place-items:center;width:32px;height:32px;padding:0;border-color:transparent}
-  #rightPanelTabs{position:sticky;top:48px;z-index:3;display:grid;
-    grid-template-columns:repeat(4,minmax(0,1fr));margin:0 -12px 6px;padding:0 8px;
+  #rightPanelClose{position:absolute;top:20px;right:7px;z-index:4;display:grid;place-items:center;
+    width:28px;height:28px;padding:0;border-color:transparent;background:var(--card)}
+  #rightPanelTabs{position:sticky;top:0;z-index:3;display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));margin:0 -12px 8px;padding:8px 42px 0 8px;
     background:var(--card);border-bottom:1px solid var(--line)}
-  #rightPanelTabs button{min-width:0;height:36px;padding:0 5px;border:0;border-bottom:2px solid transparent;
+  #rightPanelTabs button{min-width:0;height:34px;padding:0 6px;border:0;border-bottom:2px solid transparent;
     border-radius:0;background:transparent;color:#66707e;font-size:11px;white-space:nowrap;
-    overflow:hidden;text-overflow:ellipsis}
+    overflow:visible;text-overflow:clip}
   #rightPanelTabs button:hover{background:#f5f7f9;color:#303947}
   #rightPanelTabs button[aria-selected="true"]{border-bottom-color:var(--accent);color:#245eae;
     background:transparent;font-weight:600}
@@ -3164,6 +3162,41 @@ PAGE = r"""<!DOCTYPE html>
   #rightViewProperties .parameter-section input:focus-visible,
     #rightViewProperties .parameter-section select:focus-visible{
     outline:2px solid var(--accent);outline-offset:1px}
+  /* MEB-096: section controls are contextual, not one repeated web-form. */
+  #rightViewProperties #fs_sections{padding-bottom:10px}
+  #rightViewProperties #sections{display:grid;margin:0 -2px 8px}
+  #rightViewProperties .section-inspector{margin:0;border:0;border-top:1px solid #e6e9ed}
+  #rightViewProperties .section-inspector:last-child{border-bottom:1px solid #e6e9ed}
+  #rightViewProperties .section-inspector>summary{display:flex;align-items:center;gap:6px;
+    min-height:34px;padding:0 2px;color:#303947;font-size:11.5px;font-weight:600;cursor:pointer;
+    list-style:none}
+  #rightViewProperties .section-inspector>summary::-webkit-details-marker{display:none}
+  #rightViewProperties .section-inspector>summary::before{content:"›";width:10px;color:#6e7885;
+    font-size:16px;line-height:1;transition:transform .12s ease}
+  #rightViewProperties .section-inspector[open]>summary::before{transform:rotate(90deg)}
+  #rightViewProperties .section-summary-kind{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #rightViewProperties .section-summary-share{margin-left:auto;color:#737d89;font-size:10.5px;
+    font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap}
+  #rightViewProperties .section-inspector-body{display:grid;gap:7px;padding:1px 2px 11px 18px}
+  #rightViewProperties .section-inspector-row{display:grid;grid-template-columns:92px minmax(0,1fr);
+    align-items:center;gap:8px;min-width:0}
+  #rightViewProperties .section-inspector-row>label{min-width:0;color:#687180;font-size:10.5px;line-height:14px}
+  #rightViewProperties .section-inspector-row input,#rightViewProperties .section-inspector-row select{
+    min-width:0;max-width:none}
+  #rightViewProperties .section-inspector-actions{display:flex;justify-content:flex-end;margin-top:1px}
+  #rightViewProperties .section-inspector-actions button{height:27px;padding:0 8px;color:#8d3035;
+    border-color:#e2c8ca;background:#fff;font-size:10.5px}
+  #rightViewProperties .section-inspector-actions button:hover{background:#fff4f4;border-color:#d69b9e}
+  #rightViewProperties .section-inspector-note{margin:0;color:#697381;font-size:10px;line-height:14px}
+  #rightViewProperties .section-inspector-state{margin:0;padding:8px 0 2px;color:#697381;
+    font-size:10.5px;line-height:15px}
+  #rightViewProperties #fs_sections.is-unsupported #sections{display:none}
+  #rightViewProperties #fs_sections.is-unsupported #addSec{display:none}
+  #rightViewProperties #fs_sections.is-busy .section-inspector-state{color:#8a5a13}
+  #rightViewProperties #addSec{height:29px;padding:0 9px;font-size:10.5px}
+  @media (prefers-reduced-motion:reduce){
+    #rightViewProperties .section-inspector>summary::before{transition:none}
+  }
   #rightPanelClose svg,#rightRail svg{width:18px;height:18px;fill:none;stroke:currentColor;
     stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
   #rightRail{grid-column:3;grid-row:1;z-index:4;display:flex;flex-direction:column;
@@ -3188,7 +3221,7 @@ PAGE = r"""<!DOCTYPE html>
   #app.catalog-mode #fs_part{display:none!important}
   #app.catalog-mode #catalogContext{display:block}
   #app.catalog-mode #rightside,#app.catalog-mode #rightRail{display:none!important}
-  #rightside fieldset{scroll-margin-top:94px}
+  #rightside fieldset{scroll-margin-top:82px}
   .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
     clip:rect(0,0,0,0);white-space:nowrap;border:0}
   #chatImgs{display:flex;gap:5px;flex-wrap:wrap;margin:4px 0}
@@ -3209,8 +3242,6 @@ PAGE = r"""<!DOCTYPE html>
   input[type=number],input[type=text],select{width:100%;padding:4px 6px;border:1px solid var(--line);
     border-radius:6px;font-size:13px}
   input[type=number]{max-width:86px}
-  .sec{border:1px dashed var(--line);border-radius:6px;padding:6px;margin:6px 0}
-  .sec .row label{flex-basis:70px}
   .mini{font-size:11px;color:var(--mut)}
   button{cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:6px;
          padding:6px 10px;font-size:12.5px}
@@ -3912,14 +3943,6 @@ PAGE = r"""<!DOCTYPE html>
 </div>
 
 <div id="rightside" data-mode="properties">
-  <div id="rightPanelHead">
-    <b id="rightPanelTitle">Параметры изделия</b>
-    <button id="rightPanelClose" type="button" aria-label="Свернуть правую панель"
-      aria-controls="rightside" aria-expanded="true" title="Свернуть панель">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg>
-    </button>
-  </div>
-
   <nav id="rightPanelTabs" role="tablist" aria-label="Разделы правой панели">
     <button id="rightTabProperties" type="button" role="tab" aria-selected="true"
       aria-controls="rightViewProperties" data-mode="properties">Параметры</button>
@@ -3931,6 +3954,10 @@ PAGE = r"""<!DOCTYPE html>
       aria-controls="rightViewReviews" data-mode="reviews" tabindex="-1"
       aria-label="Ссылки и согласования">Ссылки</button>
   </nav>
+  <button id="rightPanelClose" type="button" aria-label="Свернуть правую панель"
+    aria-controls="rightside" aria-expanded="true" title="Свернуть панель">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg>
+  </button>
 
   <div id="rightViewProperties" class="right-panel-view" role="tabpanel"
     aria-labelledby="rightTabProperties">
@@ -4000,6 +4027,7 @@ PAGE = r"""<!DOCTYPE html>
 
     <fieldset id="fs_sections"><legend>Секции</legend>
       <div id="sections"></div>
+      <p id="sectionsState" class="section-inspector-state" aria-live="polite" hidden></p>
       <button id="addSec">+ секция</button>
     </fieldset>
 
@@ -4512,7 +4540,6 @@ function setRightPanelMode(mode){
     item.rail.classList.toggle('is-active',active);
   });
   const current=rightPanelModes[mode];
-  $('rightPanelTitle').textContent=current.title;
   $('rightPanelClose').setAttribute('aria-label',`Свернуть панель «${current.title}»`);
   lastRightRailControl=current.rail;
   if(mode==='reviews')loadReviews();
@@ -4678,38 +4705,93 @@ $('archSel').addEventListener('change',()=>{
     SPEC.sections=[{kind:'shelves',shelves:2}];
   fillForm(); apply();
 });
+const SECTION_KIND_LABELS={drawers:'Ящики',shelves:'Полки',door:'Дверь',open:'Открытая'};
+let sectionInspectorStateKnown=false;
+const openSectionInspectors=new Set();
+function sectionShareLabel(section){
+  const share=Number(section.width_share);
+  return Number.isFinite(share)&&share>0?`${Math.round(share*100)}% ширины`:'Ширина по расчёту';
+}
+function sectionInputRow(index,key,label,{type='number',min='',max='',step='',placeholder='',title='',value=''}={}){
+  const attrs=[`type="${type}"`,`data-i="${index}"`,`data-k="${key}"`,`value="${value}"`];
+  if(min!=='')attrs.push(`min="${min}"`);if(max!=='')attrs.push(`max="${max}"`);
+  if(step!=='')attrs.push(`step="${step}"`);if(placeholder)attrs.push(`placeholder="${placeholder}"`);
+  return `<div class="section-inspector-row"><label title="${title}">${label}</label><input ${attrs.join(' ')}></div>`;
+}
+function sectionContextFields(section,index){
+  const kind=section.kind||'open',value=key=>section[key]??'';
+  if(kind==='drawers')return [
+    sectionInputRow(index,'drawers','Количество ящиков',{min:'0',value:value('drawers')}),
+    sectionInputRow(index,'drawer_heights','Высоты ящиков',{type:'text',placeholder:'например: 180, 180, 240',
+      title:'Высоты фасадов ящиков сверху вниз, через запятую',value:(section.drawer_heights||[]).join(', ')}),
+    sectionInputRow(index,'front_bottom','Низ фасадной зоны',{title:'Y: ниша снизу до фасадной зоны',value:value('front_bottom')}),
+    sectionInputRow(index,'front_top','Верх фасадной зоны',{title:'Y: ниша сверху от фасадной зоны',value:value('front_top')})
+  ].join('');
+  if(kind==='shelves')return [
+    sectionInputRow(index,'shelves','Количество полок',{min:'0',value:value('shelves')}),
+    sectionInputRow(index,'shelf_levels','Уровни полок',{type:'text',placeholder:'например: 400, 800, 1200',
+      title:'Уровни полок по Y от пола, через запятую',value:(section.shelf_levels||[]).join(', ')})
+  ].join('');
+  if(kind==='door')return [
+    sectionInputRow(index,'door','Количество дверей',{min:'0',max:'2',value:value('door')}),
+    sectionInputRow(index,'front_bottom','Низ фасадной зоны',{title:'Y: ниша снизу до фасадной зоны',value:value('front_bottom')}),
+    sectionInputRow(index,'front_top','Верх фасадной зоны',{title:'Y: ниша сверху от фасадной зоны',value:value('front_top')})
+  ].join('');
+  return '<p class="section-inspector-note">Открытая секция не требует дополнительных параметров.</p>';
+}
+function syncSectionInspectorState(){
+  const fieldset=$('fs_sections'),state=$('sectionsState'),supported=SECTION_ARCHS.includes(SPEC.archetype),
+    hasSections=Array.isArray(SPEC.sections)&&SPEC.sections.length>0,locked=modelMutationLocked();
+  fieldset.classList.toggle('is-unsupported',!supported);
+  fieldset.classList.toggle('is-empty',supported&&!hasSections);
+  fieldset.classList.toggle('is-busy',supported&&locked);
+  if(!supported){
+    state.hidden=false;
+    state.textContent='Для этого типа изделия секции не используются.';
+    return;
+  }
+  if(!hasSections){
+    state.hidden=false;
+    state.textContent='В изделии пока нет секций. Добавьте первую секцию.';
+    return;
+  }
+  if(locked){
+    state.hidden=false;
+    state.textContent='Пересчёт идёт — значения пока нельзя менять.';
+    return;
+  }
+  state.hidden=true;state.textContent='';
+}
 function renderSections(){
-  const box=$('sections'); box.innerHTML='';
+  const box=$('sections');box.innerHTML='';
   const supported=SECTION_ARCHS.includes(SPEC.archetype);
-  if(!supported){$('fs_sections').style.display='none';return;}
+  if(!supported){syncSectionInspectorState();return;}
   $('fs_sections').style.display='';
   const secs=SPEC.sections||[];
-  secs.forEach((s,i)=>{
-    const div=document.createElement('div'); div.className='sec';
-    div.innerHTML=`
-      <div class="row"><label>Тип</label>
-        <select data-i="${i}" data-k="kind">
-          ${['drawers','shelves','door','open'].map(k=>`<option ${s.kind===k?'selected':''}>${k}</option>`).join('')}
-        </select>
-        <button data-del="${i}" title="удалить">✕</button></div>
-      <div class="row"><label>Ящиков</label><input type="number" min="0" data-i="${i}" data-k="drawers" value="${s.drawers??''}"></div>
-      <div class="row"><label>Полок</label><input type="number" min="0" data-i="${i}" data-k="shelves" value="${s.shelves??''}"></div>
-      <div class="row"><label>Дверей</label><input type="number" min="0" max="2" data-i="${i}" data-k="door" value="${s.door??''}"></div>
-      <div class="row"><label>Доля шир.</label><input type="number" step="0.1" data-i="${i}" data-k="width_share" value="${s.width_share??''}"></div>
-      <div class="row"><label title="высоты фасадов ящиков сверху вниз, через запятую">Высоты ящ.</label>
-        <input type="text" data-i="${i}" data-k="drawer_heights" placeholder="напр. 180,180,240"
-          value="${(s.drawer_heights||[]).join(',')}"></div>
-      <div class="row"><label title="уровни полок (Y от пола), через запятую">Уровни полок</label>
-        <input type="text" data-i="${i}" data-k="shelf_levels" placeholder="напр. 400,800,1200"
-          value="${(s.shelf_levels||[]).join(',')}"></div>
-      <div class="row"><label title="низ фасадной зоны (Y) — ниша снизу">Ниша снизу до</label>
-        <input type="number" data-i="${i}" data-k="front_bottom" value="${s.front_bottom??''}"></div>
-      <div class="row"><label title="верх фасадной зоны (Y) — ниша сверху">Ниша сверху от</label>
-        <input type="number" data-i="${i}" data-k="front_top" value="${s.front_top??''}"></div>
-      <div class="mini" data-sum="${i}"></div>`;
-    box.appendChild(div);
+  secs.forEach((section,index)=>{
+    const kind=section.kind||'open',details=document.createElement('details');
+    details.className='section-inspector';details.dataset.sectionIndex=String(index);
+    details.open=sectionInspectorStateKnown?openSectionInspectors.has(index):index===0;
+    details.innerHTML=`<summary><span class="section-summary-kind">Секция ${index+1} · ${SECTION_KIND_LABELS[kind]||'Секция'}</span>
+      <span class="section-summary-share" data-section-share="${index}">${sectionShareLabel(section)}</span></summary>
+      <div class="section-inspector-body">
+        <div class="section-inspector-row"><label>Тип секции</label><select data-i="${index}" data-k="kind">
+          ${Object.entries(SECTION_KIND_LABELS).map(([key,label])=>`<option value="${key}" ${kind===key?'selected':''}>${label}</option>`).join('')}
+        </select></div>
+        ${sectionInputRow(index,'width_share','Доля ширины',{step:'0.1',title:'Доля ширины изделия для этой секции',value:section.width_share??''})}
+        <div data-section-context="${index}">${sectionContextFields(section,index)}</div>
+        <div class="section-inspector-note" data-sum="${index}"></div>
+        <div class="section-inspector-actions"><button type="button" data-del="${index}">Удалить секцию</button></div>
+      </div>`;
+    details.addEventListener('toggle',()=>{
+      sectionInspectorStateKnown=true;
+      if(details.open)openSectionInspectors.add(index);else openSectionInspectors.delete(index);
+    });
+    details.querySelector('select[data-k="kind"]').addEventListener('change',()=>requestAnimationFrame(renderSections));
+    box.appendChild(details);
   });
   updateSectionSums();
+  syncSectionInspectorState();
 }
 function updateSectionSums(){
   (SPEC.sections||[]).forEach((s,i)=>{
@@ -4722,6 +4804,8 @@ function updateSectionSums(){
       el.textContent=`Σ высот ящиков: ${sum} мм из ~${H}`;
       el.style.color=sum>H?'var(--bad)':'var(--mut)';
     } else el.textContent='';
+    const share=document.querySelector(`[data-section-share="${i}"]`);
+    if(share)share.textContent=sectionShareLabel(s);
   });
 }
 $('addSec').onclick=()=>{(SPEC.sections=SPEC.sections||[]).push({kind:'shelves',shelves:2});
@@ -6553,6 +6637,7 @@ function syncModelEditLock(){
     .filter(Boolean).forEach(el=>el.disabled=locked);
   $('btnFixAll').disabled=locked;
   syncChatPrimaryAction();
+  syncSectionInspectorState();
   syncViewportStatus();
 }
 function setChatBusy(busy,stateText){

@@ -141,6 +141,18 @@ def test_right_panel_modes_partition_every_existing_section() -> None:
         assert "hidden" in attrs and "inert" in attrs
 
 
+def test_right_panel_tabs_are_the_only_mode_labels_and_are_not_clipped() -> None:
+    css = _style()
+    tabs = _css_rule(css, r"#rightPanelTabs")
+    tab_buttons = _css_rule(css, r"#rightPanelTabs button")
+
+    assert "rightPanelHead" not in PAGE
+    assert "rightPanelTitle" not in PAGE
+    assert re.search(r"grid-template-columns\s*:\s*repeat\(2", tabs)
+    assert re.search(r"text-overflow\s*:\s*clip", tab_buttons)
+    assert re.search(r"overflow\s*:\s*visible", tab_buttons)
+
+
 def test_set_right_panel_is_single_state_api_for_class_and_aria():
     declaration = re.search(
         r"function\s+setRightPanel\s*\(\s*open\s*,\s*mode\s*=\s*rightPanelMode"
@@ -169,7 +181,8 @@ def test_set_right_panel_is_single_state_api_for_class_and_aria():
     assert "aria-selected" in mode_slice
     assert "item.tab.tabIndex=active?0:-1" in mode_slice
     assert "item.rail.classList.toggle('is-active',active)" in mode_slice
-    assert "rightPanelTitle" in mode_slice
+    assert "rightPanelTitle" not in PAGE
+    assert "rightPanelClose" in mode_slice
 
     assert "item.rail.onclick=()=>setRightPanel(true,mode,true)" in PAGE
     assert "item.tab.onclick=()=>setRightPanel(true,mode,true)" in PAGE
