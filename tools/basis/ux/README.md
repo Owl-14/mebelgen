@@ -74,6 +74,8 @@ Read-only просмотр реализуется отдельным этапо�
   существующей правой панели и её parity-контракт.
 - [PARAMETERS_PANEL_SPEC.md](PARAMETERS_PANEL_SPEC.md) — габариты, материал,
   конструкция и установка в верхней части режима `Параметры`.
+- [VISUAL_SYSTEM_SPEC.md](VISUAL_SYSTEM_SPEC.md) — токены, плотность, состояния
+  компонентов, motion и единый язык локальных SVG Studio.
 - [../assets/studio/README.md](../assets/studio/README.md) — происхождение и
   правила использования утверждённой марки Studio.
 - [../rules/studio-ui.md](../rules/studio-ui.md) — техническая граница редизайна
