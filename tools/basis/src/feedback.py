@@ -3,7 +3,8 @@
 Каждая принятая/исправленная модель → legacy-пара (ParamSpec → принятый
 project.json) в `dataset/`. Такая запись сама по себе не является чистой парой
 ТЗ→ParamSpec для fine-tune: gate MEB-141 дополнительно требует split, review,
-provenance/usage rights и leakage group.
+allowlisted provenance source type, структурированный rights record и leakage
+group.
 
 Экспорт исправленной модели из БАЗИС (через импортёр-отчёт или Cutting API,
 см. AKD-18/AKD-14) пока выполняется вручную — здесь только приём готового

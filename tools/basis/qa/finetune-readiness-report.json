@@ -1,6 +1,6 @@
 {
   "ab_decision_rule": {
-    "adopt_when": "cases_per_arm >= 100 AND primary_delta_ci95.lower >= 0.02 AND production_gate_pass_rate_delta_ci95.lower >= 0.0 AND invalid_output_rate_delta_ci95.upper <= 0.0",
+    "adopt_when": "rule_version=paramspec-ab-v1 AND paired frozen holdout excluded from training/RAG AND confidence_level=0.95 AND cases_per_arm >= 100 AND all intervals are finite and ordered AND primary_delta_ci95.lower >= 0.02 AND production_gate_pass_rate_delta_ci95.lower >= 0.0 AND invalid_output_rate_delta_ci95.upper <= 0.0",
     "confidence_level": 0.95,
     "design": "paired_frozen_holdout",
     "min_cases_per_arm": 100,
@@ -69,6 +69,30 @@
     "same_frozen_benchmark": false,
     "step_deltas": [],
     "window": []
+  },
+  "provenance_policy": {
+    "allowed_rights_bases": [
+      "customer_contract",
+      "dataset_license",
+      "explicit_consent",
+      "internal_ownership"
+    ],
+    "allowed_source_types": [
+      "customer_tz",
+      "internal_production_tz",
+      "licensed_external_tz"
+    ],
+    "prohibited_source_types": [
+      "demo",
+      "fixture",
+      "generated",
+      "mock",
+      "synthetic",
+      "test"
+    ],
+    "required_scope": "paramspec-model-development",
+    "requires_structured_rights_record": true,
+    "trust_limit": "metadata_consistency_only; legal authenticity and reviewer authority require independent governance audit"
   },
   "ready_for_finetune_experiment": false,
   "schema_version": "finetune-data-readiness-v1",

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass
@@ -28,6 +29,26 @@ SPLIT_RATIO_LIMITS = {
 PLATEAU_MIN_RUNS = 3
 PLATEAU_MIN_CASES = 50
 PLATEAU_MAX_STEP_DELTA = 0.01
+ALLOWED_SOURCE_TYPES = frozenset({
+    "customer_tz",
+    "internal_production_tz",
+    "licensed_external_tz",
+})
+PROHIBITED_SOURCE_TYPES = frozenset({
+    "synthetic",
+    "fixture",
+    "generated",
+    "test",
+    "mock",
+    "demo",
+})
+ALLOWED_RIGHTS_BASES = frozenset({
+    "customer_contract",
+    "explicit_consent",
+    "internal_ownership",
+    "dataset_license",
+})
+TRAINING_RIGHTS_SCOPE = "paramspec-model-development"
 
 AB_DECISION_RULE = {
     "rule_version": "paramspec-ab-v1",
@@ -41,7 +62,9 @@ AB_DECISION_RULE = {
         "invalid_output_rate_max_delta": 0.0,
     },
     "adopt_when": (
-        "cases_per_arm >= 100 AND primary_delta_ci95.lower >= 0.02 AND "
+        "rule_version=paramspec-ab-v1 AND paired frozen holdout excluded from "
+        "training/RAG AND confidence_level=0.95 AND cases_per_arm >= 100 AND "
+        "all intervals are finite and ordered AND primary_delta_ci95.lower >= 0.02 AND "
         "production_gate_pass_rate_delta_ci95.lower >= 0.0 AND "
         "invalid_output_rate_delta_ci95.upper <= 0.0"
     ),
@@ -54,6 +77,7 @@ class PairInspection:
     pair_id: str
     split: str
     leakage_group: str
+    source_id: str
     source_hash: str
     paramspec_hash: str
     pair_hash: str
@@ -104,6 +128,7 @@ def _inspect_pair(
             pair_id="",
             split="",
             leakage_group="",
+            source_id="",
             source_hash="",
             paramspec_hash="",
             pair_hash="",
@@ -160,15 +185,40 @@ def _inspect_pair(
             errors.append("pair.reviewed_at_missing")
 
     provenance = payload.get("provenance")
+    source_id = ""
     if not isinstance(provenance, dict):
         errors.append("pair.provenance_missing")
     else:
-        if not str(provenance.get("source_id") or "").strip():
+        source_id = str(provenance.get("source_id") or "").strip().casefold()
+        if not source_id:
             errors.append("pair.source_id_missing")
-        if provenance.get("usage_rights") != "training-approved":
-            errors.append("pair.training_rights_missing")
-        if not str(provenance.get("rights_record_id") or "").strip():
-            errors.append("pair.rights_record_id_missing")
+        source_type = str(provenance.get("source_type") or "").strip().casefold()
+        if source_type in PROHIBITED_SOURCE_TYPES:
+            errors.append("pair.source_type_prohibited")
+        elif source_type not in ALLOWED_SOURCE_TYPES:
+            errors.append("pair.source_type_not_allowed")
+
+        rights_record = provenance.get("rights_record")
+        if not isinstance(rights_record, dict):
+            errors.append("pair.rights_record_missing")
+        else:
+            if not str(rights_record.get("record_id") or "").strip():
+                errors.append("pair.rights_record_id_missing")
+            if str(rights_record.get("source_id") or "").strip().casefold() != source_id:
+                errors.append("pair.rights_source_id_mismatch")
+            if str(rights_record.get("source_type") or "").strip().casefold() != source_type:
+                errors.append("pair.rights_source_type_mismatch")
+            if rights_record.get("basis") not in ALLOWED_RIGHTS_BASES:
+                errors.append("pair.rights_basis_not_allowed")
+            if rights_record.get("scope") != TRAINING_RIGHTS_SCOPE:
+                errors.append("pair.rights_scope_not_allowed")
+            if not str(rights_record.get("verified_by") or "").strip():
+                errors.append("pair.rights_verifier_missing")
+            if not str(rights_record.get("verified_at") or "").strip():
+                errors.append("pair.rights_verified_at_missing")
+            document_sha256 = str(rights_record.get("document_sha256") or "")
+            if re.fullmatch(r"[0-9a-f]{64}", document_sha256.casefold()) is None:
+                errors.append("pair.rights_document_hash_invalid")
 
     source_hash = _hash_bytes(source_normalised.encode("utf-8")) if source_normalised else ""
     paramspec_hash = _hash_json(paramspec) if paramspec else ""
@@ -178,6 +228,7 @@ def _inspect_pair(
         pair_id=pair_id,
         split=split,
         leakage_group=leakage_group,
+        source_id=source_id,
         source_hash=source_hash,
         paramspec_hash=paramspec_hash,
         pair_hash=pair_hash,
@@ -223,7 +274,9 @@ def _duplicate_member_keys(
 
 def _split_leakage(inspections: Iterable[PairInspection]) -> list[dict[str, Any]]:
     leaks: list[dict[str, Any]] = []
-    for attribute in ("source_hash", "paramspec_hash", "pair_hash", "leakage_group"):
+    for attribute in (
+        "source_id", "source_hash", "paramspec_hash", "pair_hash", "leakage_group"
+    ):
         groups: dict[str, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
         for item in inspections:
             value = getattr(item, attribute)
@@ -233,7 +286,10 @@ def _split_leakage(inspections: Iterable[PairInspection]) -> list[dict[str, Any]
             if len(by_split) > 1:
                 leaks.append({
                     "kind": attribute,
-                    "fingerprint": value,
+                    "fingerprint": (
+                        _hash_bytes(value.encode("utf-8"))
+                        if attribute == "source_id" else value
+                    ),
                     "splits": {
                         split: {
                             "count": len(members),
@@ -328,25 +384,53 @@ def evaluate_ab_result(result: Mapping[str, Any] | None) -> dict[str, Any]:
         value = result.get(name)
         if not isinstance(value, list) or len(value) != 2:
             return None
-        try:
-            return float(value[0]), float(value[1])
-        except (TypeError, ValueError):
+        if any(
+            isinstance(item, bool) or not isinstance(item, (int, float))
+            for item in value
+        ):
             return None
+        lower, upper = float(value[0]), float(value[1])
+        if not math.isfinite(lower) or not math.isfinite(upper) or lower > upper:
+            return None
+        return lower, upper
 
-    try:
-        cases = int(result.get("cases_per_arm", 0))
-    except (TypeError, ValueError):
-        cases = 0
+    cases_value = result.get("cases_per_arm")
+    cases = cases_value if isinstance(cases_value, int) and not isinstance(cases_value, bool) else 0
     primary = interval("primary_delta_ci95")
     production = interval("production_gate_pass_rate_delta_ci95")
     invalid = interval("invalid_output_rate_delta_ci95")
+    if result.get("rule_version") != AB_DECISION_RULE["rule_version"]:
+        reasons.append("ab.rule_version_mismatch")
+    if result.get("design") != AB_DECISION_RULE["design"] or result.get("paired") is not True:
+        reasons.append("ab.design_not_paired_frozen")
+    if result.get("holdout_frozen") is not True:
+        reasons.append("ab.holdout_not_frozen")
+    if result.get("holdout_excluded_from_training_and_rag") is not True:
+        reasons.append("ab.holdout_leakage_not_excluded")
+    confidence = result.get("confidence_level")
+    if (
+        isinstance(confidence, bool)
+        or not isinstance(confidence, (int, float))
+        or not math.isfinite(float(confidence))
+        or float(confidence) != AB_DECISION_RULE["confidence_level"]
+    ):
+        reasons.append("ab.confidence_policy_mismatch")
+    holdout_sha256 = str(result.get("holdout_sha256") or "")
+    if re.fullmatch(r"[0-9a-f]{64}", holdout_sha256.casefold()) is None:
+        reasons.append("ab.holdout_hash_invalid")
     if cases < AB_DECISION_RULE["min_cases_per_arm"]:
         reasons.append("ab.insufficient_cases")
-    if primary is None or primary[0] < AB_DECISION_RULE["min_primary_delta"]:
+    if primary is None:
+        reasons.append("ab.primary_interval_invalid")
+    elif primary[0] < AB_DECISION_RULE["min_primary_delta"]:
         reasons.append("ab.primary_gain_not_significant")
-    if production is None or production[0] < 0.0:
+    if production is None:
+        reasons.append("ab.production_interval_invalid")
+    elif production[0] < 0.0:
         reasons.append("ab.production_gate_regression")
-    if invalid is None or invalid[1] > 0.0:
+    if invalid is None:
+        reasons.append("ab.invalid_output_interval_invalid")
+    elif invalid[1] > 0.0:
         reasons.append("ab.invalid_output_regression")
     return {
         "decision": "adopt" if not reasons else "reject",
@@ -443,6 +527,17 @@ def evaluate_readiness(
             "clean_unique_pairs": len(clean_unique),
             "minimum_clean_pairs": MIN_CLEAN_PAIRS,
             "quality_error_counts": dict(sorted(error_counts.items())),
+        },
+        "provenance_policy": {
+            "allowed_source_types": sorted(ALLOWED_SOURCE_TYPES),
+            "prohibited_source_types": sorted(PROHIBITED_SOURCE_TYPES),
+            "allowed_rights_bases": sorted(ALLOWED_RIGHTS_BASES),
+            "required_scope": TRAINING_RIGHTS_SCOPE,
+            "requires_structured_rights_record": True,
+            "trust_limit": (
+                "metadata_consistency_only; legal authenticity and reviewer authority "
+                "require independent governance audit"
+            ),
         },
         "dedup": {
             "ok": not (duplicate_pair_ids or duplicate_sources or duplicate_paramspecs or duplicate_pairs),
