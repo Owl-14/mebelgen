@@ -652,7 +652,16 @@ function MebelScene(container){
     sh.rotation.x=-Math.PI/2; sh.position.set(W/2,0.5,D/2); world.add(sh);
     api.setHw(hwVisible);
     MW=W; MH=H; MD=D;
-    if(!fitted||opts.refit){ setView(curView); fitted=true; }
+    // Новое изделие всегда получает собственную камеру: не наследуем orbit,
+    // zoom и target от ранее открытой модели. Обычный пересчёт того же изделия
+    // сохраняет пользовательский ракурс, но обновляет безопасные границы под
+    // актуальные габариты (важно, если ширина/высота изменились через команду).
+    const modelCenter=new THREE.Vector3(W/2,H/2,D/2);
+    const modelSphere=0.5*Math.sqrt(W*W+H*H+D*D)||600;
+    if(!fitted||opts.resetView||opts.refit){
+      if(opts.resetView)curView=opts.view||'persp';
+      setView(curView); fitted=true;
+    }else setOrbitBounds(modelCenter,modelSphere);
     syncOpenablesState();
   }
 
