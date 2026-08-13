@@ -96,6 +96,20 @@ cd tools/basis
 python -m qa.rollout_drill
 ```
 
+The CI drill uses real offline HTTP routing, login/session/CSRF and SQLite/JSON
+storage adapters. It independently executes the legacy primary and LangGraph
+shadow, then forces a checkpoint budget failure. The gate requires measured
+`provider_calls=0`, `production_writes=0`, a persistent scoped stop and an
+observed `rollout.primary=legacy` fallback; it never deploys.
+
+Reviewer invariants: SLO events/stops are scoped by the complete
+`mode + tenant_hash + cohort` key, and dashboard red state is sourced from
+persistent `state.stops`, not only the rolling window. Shadow usage, result
+code, success and false rejection are candidate metrics; ParamSpec, geometry
+and drilling parity are separate. Retention enumerates checkpoint/write tables
+to remove crash orphans. Retention, budget, checkpoint write and atomic
+revision-flush failures latch degraded plus the scoped stop.
+
 Drill использует только rule-based mock path: доказывает отсутствие shadow
 revision writes, создаёт намеренное нарушение latency SLO, проверяет переход
 `graph → legacy`, затем имитирует недоступный checkpoint root и проверяет

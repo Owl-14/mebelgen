@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "title": "Akeda AI rollout SLO",
   "source": "<studio-out>/.rollout/dashboard.json",
   "refresh_seconds": 30,
@@ -8,9 +8,9 @@
     {"id": "latency", "title": "Latency p50 / p95", "metrics": ["latency_p50_ms", "latency_p95_ms"], "budget_keys": ["latency_p50_ms", "latency_p95_ms"]},
     {"id": "usage", "title": "Token and reported cost p95", "metrics": ["tokens_p95", "cost_usd_p95"], "budget_keys": ["tokens_p95", "cost_usd_p95"]},
     {"id": "quality", "title": "Invalid ops / false rejection / edit success", "metrics": ["invalid_op_rate", "false_rejection_rate", "edit_success_rate"], "budget_keys": ["invalid_op_rate", "false_rejection_rate", "edit_success_rate"]},
-    {"id": "shadow", "title": "Shadow parity", "metrics": ["shadow_match_rate"], "dimensions": ["ParamSpec", "geometry", "drilling"]},
+    {"id": "shadow", "title": "Shadow parity", "metrics": ["paramspec_match_rate", "geometry_match_rate", "drilling_match_rate"], "dimensions": ["mode", "tenant_hash", "cohort"]},
     {"id": "checkpoints", "title": "Checkpoint storage", "metrics": ["checkpoint_bytes_max"], "budget_keys": ["checkpoint_bytes", "checkpoint_retention_days"]},
-    {"id": "stop", "title": "Automatic stop / rollback", "metrics": ["stopped", "reasons"], "severity": "critical"}
+    {"id": "stop", "title": "Persistent automatic stop / rollback", "metrics": ["stopped", "reasons"], "dimensions": ["mode", "tenant_hash", "cohort"], "source_of_truth": "state.stops[scope]", "severity": "critical"}
   ],
   "evidence_links": {
     "MEB-149": "python -m qa.engine_checks",

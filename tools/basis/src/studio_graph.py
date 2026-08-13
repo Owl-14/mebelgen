@@ -16,7 +16,7 @@ import sqlite3
 import threading
 import time
 import uuid
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterator, Mapping, Protocol, TypedDict
@@ -172,26 +172,42 @@ class JsonRevisionStore:
         self._lock = threading.RLock()
 
     def persist(self, project_key: str, revision: Mapping[str, Any]) -> None:
+        self.persist_many([(project_key, revision)])
+
+    def persist_many(
+        self, rows_to_add: list[tuple[str, Mapping[str, Any]]]
+    ) -> None:
         with self._lock:
             try:
                 data = json.loads(self.path.read_text(encoding="utf-8"))
-            except (OSError, ValueError, TypeError):
+            except FileNotFoundError:
                 data = {}
-            rows = list(data.get(project_key) or [])
-            rows.append(dict(revision))
-            data[project_key] = rows[-100:]
-            self.path.parent.mkdir(parents=True, exist_ok=True)
+            except (OSError, ValueError, TypeError) as error:
+                raise CheckpointStorageError(
+                    f"revision_storage:{type(error).__name__}"
+                ) from error
+            if not isinstance(data, dict):
+                raise CheckpointStorageError("revision_storage:invalid_root")
+            for project_key, revision in rows_to_add:
+                rows = list(data.get(project_key) or [])
+                rows.append(dict(revision))
+                data[project_key] = rows[-100:]
             temporary = self.path.with_name(
                 f".{self.path.name}.{uuid.uuid4().hex[:10]}.tmp"
             )
             try:
+                self.path.parent.mkdir(parents=True, exist_ok=True)
                 temporary.write_text(
                     json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
                 )
                 temporary.replace(self.path)
+            except (OSError, ValueError, TypeError) as error:
+                raise CheckpointStorageError(
+                    f"revision_storage:{type(error).__name__}"
+                ) from error
             finally:
-                if temporary.exists():
-                    temporary.unlink()
+                with suppress(OSError):
+                    temporary.unlink(missing_ok=True)
 
 
 class MemoryRevisionStore:
@@ -214,7 +230,7 @@ class NullRevisionStore:
 class BufferedRevisionStore:
     """Commit revision audit only after the matching checkpoint is durable."""
 
-    def __init__(self, backing: RevisionStore) -> None:
+    def __init__(self, backing: JsonRevisionStore) -> None:
         self.backing = backing
         self._pending: list[tuple[str, dict[str, Any]]] = []
         self._lock = threading.RLock()
@@ -229,9 +245,18 @@ class BufferedRevisionStore:
                 row for row in self._pending
                 if str(row[1].get("generation") or "") == generation
             ]
+            if not selected:
+                return
+            try:
+                self.backing.persist_many(selected)
+            except (CheckpointStorageError, OSError, ValueError) as error:
+                self._pending = [row for row in self._pending if row not in selected]
+                if isinstance(error, CheckpointStorageError):
+                    raise
+                raise CheckpointStorageError(
+                    f"revision_storage:{type(error).__name__}"
+                ) from error
             self._pending = [row for row in self._pending if row not in selected]
-        for project_key, revision in selected:
-            self.backing.persist(project_key, revision)
 
     def discard(self, generation: str) -> None:
         with self._lock:
@@ -301,6 +326,26 @@ class CheckpointRetention:
     def prune(self) -> dict[str, Any]:
         with self._lock:
             deleted = 0
+            registered = {
+                row[0]
+                for row in self.connection.execute(
+                    "SELECT thread_id FROM akeda_checkpoint_threads"
+                )
+            }
+            checkpoint_threads = {
+                row[0]
+                for row in self.connection.execute(
+                    "SELECT DISTINCT thread_id FROM checkpoints"
+                )
+            }
+            write_threads = {
+                row[0]
+                for row in self.connection.execute(
+                    "SELECT DISTINCT thread_id FROM writes"
+                )
+            }
+            orphan_threads = sorted((checkpoint_threads | write_threads) - registered)
+            deleted += self._delete_threads(orphan_threads)
             cutoff = int(time.time()) - self.retention_days * 86400
             stale = [
                 row[0]
@@ -351,6 +396,7 @@ class CheckpointRetention:
                 "bytes": size,
                 "threads": len(thread_ids),
                 "deleted": deleted,
+                "orphan_threads_deleted": len(orphan_threads),
                 "retention_days": self.retention_days,
                 "max_threads": self.max_threads,
                 "max_per_thread": self.max_per_thread,
@@ -616,6 +662,35 @@ class StudioGraphOrchestrator:
         self.checkpoint_retention: CheckpointRetention | None = None
         self.buffered_revisions: BufferedRevisionStore | None = None
         self.graph = self._build().compile(checkpointer=self.checkpointer)
+
+    def _latch_storage_failure(self, error: BaseException) -> CheckpointStorageError:
+        if isinstance(error, CheckpointStorageError):
+            reason = str(error) or "checkpoint_storage:CheckpointStorageError"
+        else:
+            reason = f"checkpoint_storage:{type(error).__name__}"
+        self.storage_degraded = True
+        self.storage_error = reason
+        return CheckpointStorageError(reason)
+
+    def _finalize_storage(
+        self,
+        response: dict[str, Any],
+        *,
+        thread_id: str,
+        generation: str,
+    ) -> dict[str, Any]:
+        try:
+            if self.checkpoint_retention is not None:
+                response["checkpoint"] = self.checkpoint_retention.touch(
+                    thread_id, completed=not bool(response.get("paused"))
+                )
+            if self.buffered_revisions is not None:
+                self.buffered_revisions.flush(generation)
+        except (CheckpointStorageError, sqlite3.Error, OSError, ValueError) as error:
+            if self.buffered_revisions is not None:
+                self.buffered_revisions.discard(generation)
+            raise self._latch_storage_failure(error) from error
+        return response
 
     @classmethod
     def durable(
@@ -1001,23 +1076,12 @@ class StudioGraphOrchestrator:
                 return self._response(existing)
             try:
                 result = self.graph.invoke(initial, config=config)
-            except sqlite3.Error as error:
-                self.storage_degraded = True
-                self.storage_error = f"checkpoint_storage:{type(error).__name__}"
-                raise CheckpointStorageError(self.storage_error) from error
+            except (sqlite3.Error, OSError) as error:
+                raise self._latch_storage_failure(error) from error
         response = self._response(result)
-        if self.checkpoint_retention is not None:
-            try:
-                response["checkpoint"] = self.checkpoint_retention.touch(
-                    thread_id, completed=not bool(response.get("paused"))
-                )
-            except CheckpointStorageError:
-                if self.buffered_revisions is not None:
-                    self.buffered_revisions.discard(generation)
-                raise
-        if self.buffered_revisions is not None:
-            self.buffered_revisions.flush(generation)
-        return response
+        return self._finalize_storage(
+            response, thread_id=thread_id, generation=generation
+        )
 
     def resume(self, thread_id: str, *, approved: bool) -> dict[str, Any]:
         config = {"configurable": {"thread_id": thread_id}}
@@ -1035,23 +1099,12 @@ class StudioGraphOrchestrator:
                 result = self.graph.invoke(
                     Command(resume={"approved": bool(approved)}), config=config
                 )
-            except sqlite3.Error as error:
-                self.storage_degraded = True
-                self.storage_error = f"checkpoint_storage:{type(error).__name__}"
-                raise CheckpointStorageError(self.storage_error) from error
+            except (sqlite3.Error, OSError) as error:
+                raise self._latch_storage_failure(error) from error
         response = self._response(result)
-        if self.checkpoint_retention is not None:
-            try:
-                response["checkpoint"] = self.checkpoint_retention.touch(
-                    thread_id, completed=not bool(response.get("paused"))
-                )
-            except CheckpointStorageError:
-                if self.buffered_revisions is not None:
-                    self.buffered_revisions.discard(generation)
-                raise
-        if self.buffered_revisions is not None:
-            self.buffered_revisions.flush(generation)
-        return response
+        return self._finalize_storage(
+            response, thread_id=thread_id, generation=generation
+        )
 
     @staticmethod
     def _response(state: Mapping[str, Any]) -> dict[str, Any]:

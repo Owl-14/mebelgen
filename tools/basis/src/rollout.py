@@ -15,7 +15,7 @@ import os
 import threading
 import time
 import uuid
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
@@ -64,6 +64,11 @@ def _hash_identity(value: str | None) -> str:
     if not value:
         return "anonymous"
     return hashlib.sha256(value.encode("utf-8")).hexdigest()[:20]
+
+
+def _scope_key(mode: str, tenant_hash: str, cohort: str) -> str:
+    raw = f"{mode}|{tenant_hash}|{cohort}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
 
 
 @dataclass(frozen=True)
@@ -146,30 +151,60 @@ class RolloutConfig:
             ),
         )
 
-    def canary_selected(self, tenant_id: str | None, user_id: str | None) -> bool:
+    def canary_assignment(
+        self, tenant_id: str | None, user_id: str | None
+    ) -> tuple[bool, str]:
         if tenant_id and tenant_id in self.canary_tenants:
-            return True
+            return True, "tenant_allowlist"
         if user_id and user_id in self.canary_users:
-            return True
+            return True, "user_allowlist"
         if self.canary_percent <= 0:
-            return False
+            return False, "not_selected"
         identity = f"{tenant_id or 'local'}:{user_id or 'anonymous'}"
         bucket = int(hashlib.sha256(identity.encode("utf-8")).hexdigest()[:8], 16)
-        return bucket % 10_000 < int(self.canary_percent * 100)
+        bucket_number = bucket % 10_000
+        threshold = int(self.canary_percent * 100)
+        selected = bucket_number < threshold
+        cohort = f"percent_{threshold:04d}"
+        return selected, cohort if selected else f"excluded_{cohort}"
+
+    def canary_selected(self, tenant_id: str | None, user_id: str | None) -> bool:
+        return self.canary_assignment(tenant_id, user_id)[0]
 
 
 @dataclass(frozen=True)
 class RolloutPlan:
     component_modes: dict[str, str]
+    requested_mode: str
+    scope_key: str
+    tenant_hash: str
+    cohort: str
     primary: str
     shadow: bool
     canary: bool
     stopped: bool = False
     reasons: tuple[str, ...] = ()
 
+    def fallback(self, reason: str) -> "RolloutPlan":
+        modes = dict(self.component_modes)
+        for component in _CANDIDATE_COMPONENTS:
+            modes[component] = "off"
+        return replace(
+            self,
+            component_modes=modes,
+            primary="legacy",
+            shadow=False,
+            canary=False,
+            stopped=True,
+            reasons=tuple(sorted({*self.reasons, str(reason)})),
+        )
+
     def public_dict(self) -> dict[str, Any]:
         return {
             "primary": self.primary,
+            "requested_mode": self.requested_mode,
+            "scope": self.scope_key,
+            "cohort": self.cohort,
             "shadow": self.shadow,
             "canary": self.canary,
             "stopped": self.stopped,
@@ -188,7 +223,10 @@ class RolloutMetric:
     edit_attempted: bool = True
     edit_success: bool = False
     checkpoint_bytes: int = 0
-    shadow_equal: bool | None = None
+    paramspec_equal: bool | None = None
+    geometry_equal: bool | None = None
+    drilling_equal: bool | None = None
+    result_code: str = ""
     source: str = "studio"
 
 
@@ -205,7 +243,7 @@ class RolloutStateStore:
 
     @staticmethod
     def _empty() -> dict[str, Any]:
-        return {"version": 1, "events": [], "stops": {}, "updated_at": 0}
+        return {"version": 2, "events": [], "stops": {}, "updated_at": 0}
 
     def read(self) -> dict[str, Any]:
         with self._lock:
@@ -215,8 +253,17 @@ class RolloutStateStore:
                 return self._empty()
             try:
                 payload = json.loads(self.path.read_text(encoding="utf-8"))
-                if not isinstance(payload, dict) or payload.get("version") != 1:
+                if not isinstance(payload, dict) or payload.get("version") not in {1, 2}:
                     raise ValueError("unsupported rollout state")
+                if payload.get("version") == 1:
+                    # PR #118 was never deployed; keep old metrics as history but
+                    # do not let unscoped v1 stops poison a tenant/cohort.
+                    payload = {
+                        "version": 2,
+                        "events": list(payload.get("events") or []),
+                        "stops": {},
+                        "updated_at": int(payload.get("updated_at") or 0),
+                    }
                 payload.setdefault("events", [])
                 payload.setdefault("stops", {})
                 return payload
@@ -256,23 +303,41 @@ class RolloutStateStore:
             self.write(payload)
             return payload
 
-    def stop(self, components: Iterable[str], reasons: Iterable[str]) -> dict[str, Any]:
+    def stop(
+        self,
+        *,
+        scope_key: str,
+        mode: str,
+        tenant_hash: str,
+        cohort: str,
+        components: Iterable[str],
+        reasons: Iterable[str],
+    ) -> dict[str, Any]:
         with self._lock:
             payload = self.read()
             now = int(time.time())
             clean_reasons = sorted({str(reason)[:160] for reason in reasons if reason})
+            scope = payload.setdefault("stops", {}).setdefault(scope_key, {
+                "mode": mode,
+                "tenant_hash": tenant_hash,
+                "cohort": cohort,
+                "components": {},
+            })
             for component in components:
-                payload.setdefault("stops", {})[component] = {
+                scope.setdefault("components", {})[component] = {
                     "at": now, "reasons": clean_reasons
                 }
             payload["updated_at"] = now
             self.write(payload)
             return payload
 
-    def clear_stops(self) -> None:
+    def clear_stops(self, scope_key: str | None = None) -> None:
         with self._lock:
             payload = self.read()
-            payload["stops"] = {}
+            if scope_key is None:
+                payload["stops"] = {}
+            else:
+                payload.setdefault("stops", {}).pop(scope_key, None)
             payload["updated_at"] = int(time.time())
             self.write(payload)
 
@@ -289,48 +354,85 @@ class RolloutController:
         self.config = config or RolloutConfig.from_env()
         self.budgets = budgets or SloBudgets.from_env()
         self.store = store or RolloutStateStore(root)
+        self._degraded_reason = ""
 
     def _state_or_degraded(self) -> tuple[dict[str, Any], str]:
+        if self._degraded_reason:
+            return RolloutStateStore._empty(), self._degraded_reason
         try:
             return self.store.read(), ""
         except RuntimeError as error:
             return RolloutStateStore._empty(), str(error)
 
+    @staticmethod
+    def _mode(component_modes: Mapping[str, str]) -> str:
+        candidate_modes = [component_modes[name] for name in _CANDIDATE_COMPONENTS]
+        if all(mode in {"shadow", "on", "canary"} for mode in candidate_modes):
+            if any(mode == "shadow" for mode in candidate_modes):
+                return "shadow"
+            if any(mode == "canary" for mode in candidate_modes):
+                return "canary"
+            return "on"
+        return "legacy"
+
     def plan(self, tenant_id: str | None, user_id: str | None) -> RolloutPlan:
         state, degraded = self._state_or_degraded()
-        stopped = set((state.get("stops") or {}).keys())
-        selected = self.config.canary_selected(tenant_id, user_id)
+        selected, cohort = self.config.canary_assignment(tenant_id, user_id)
+        tenant_hash = _hash_identity(tenant_id or "local")
         component_modes: dict[str, str] = {}
-        reasons: list[str] = []
         for component in COMPONENTS:
             mode = self.config.modes.get(component, "off")
-            if component in self.config.killed:
-                mode = "off"
-                reasons.append(f"kill_switch:{component}")
-            if component in stopped:
-                mode = "off"
-                reasons.append(f"slo_stop:{component}")
             if mode == "canary" and not selected:
                 mode = "off"
             component_modes[component] = mode
+
+        requested_mode = self._mode(component_modes)
+        if requested_mode != "canary" and cohort == "not_selected":
+            cohort = "all" if requested_mode in {"on", "shadow"} else "legacy"
+        scope_key = _scope_key(requested_mode, tenant_hash, cohort)
+        scope_stop = (state.get("stops") or {}).get(scope_key) or {}
+        stopped_components = set((scope_stop.get("components") or {}).keys())
+        reasons: list[str] = []
+        for component in COMPONENTS:
+            if component in self.config.killed:
+                component_modes[component] = "off"
+                reasons.append(f"kill_switch:{component}")
+            if component in stopped_components:
+                component_modes[component] = "off"
+                reasons.append(f"slo_stop:{component}")
         if degraded:
             reasons.append(degraded)
             for component in _CANDIDATE_COMPONENTS:
                 component_modes[component] = "off"
 
-        candidate_modes = [component_modes[name] for name in _CANDIDATE_COMPONENTS]
-        shadow = all(mode in {"shadow", "on", "canary"} for mode in candidate_modes) and any(
-            mode == "shadow" for mode in candidate_modes
-        )
-        graph_primary = all(mode in {"on", "canary"} for mode in candidate_modes)
+        effective_mode = self._mode(component_modes)
         return RolloutPlan(
             component_modes=component_modes,
-            primary="graph" if graph_primary else "legacy",
-            shadow=shadow and not graph_primary,
-            canary=selected and any(mode == "canary" for mode in candidate_modes),
-            stopped=bool(stopped or degraded or self.config.killed),
+            requested_mode=requested_mode,
+            scope_key=scope_key,
+            tenant_hash=tenant_hash,
+            cohort=cohort,
+            primary="graph" if effective_mode in {"on", "canary"} else "legacy",
+            shadow=effective_mode == "shadow",
+            canary=selected and requested_mode == "canary",
+            stopped=bool(stopped_components or degraded or self.config.killed),
             reasons=tuple(sorted(set(reasons))),
         )
+
+    def latch(self, plan: RolloutPlan, reason: str) -> RolloutPlan:
+        try:
+            self.store.stop(
+                scope_key=plan.scope_key,
+                mode=plan.requested_mode,
+                tenant_hash=plan.tenant_hash,
+                cohort=plan.cohort,
+                components=_CANDIDATE_COMPONENTS,
+                reasons=[reason],
+            )
+        except RuntimeError as error:
+            self._degraded_reason = str(error)
+            return plan.fallback(str(error))
+        return plan.fallback(reason)
 
     def exporter_enabled(self) -> bool:
         plan = self.plan(None, None)
@@ -346,7 +448,10 @@ class RolloutController:
     ) -> dict[str, Any]:
         event = {
             "at": int(time.time()),
-            "tenant_hash": _hash_identity(tenant_id),
+            "scope_key": plan.scope_key,
+            "mode": plan.requested_mode,
+            "tenant_hash": plan.tenant_hash,
+            "cohort": plan.cohort,
             "user_hash": _hash_identity(user_id),
             "primary": plan.primary,
             "shadow": plan.shadow,
@@ -356,21 +461,51 @@ class RolloutController:
         try:
             state = self.store.append(event)
         except RuntimeError as error:
+            self._degraded_reason = str(error)
             return {"stopped": True, "reasons": [str(error)], "samples": 0}
-        summary = self.summarize(state.get("events") or [])
+        scoped_events = [
+            row for row in (state.get("events") or [])
+            if row.get("scope_key") == plan.scope_key
+            and row.get("mode") == plan.requested_mode
+            and row.get("tenant_hash") == plan.tenant_hash
+            and row.get("cohort") == plan.cohort
+        ]
+        summary = self.summarize(scoped_events)
         reasons = self._violations(summary)
         if reasons and (plan.canary or plan.shadow or plan.primary == "graph"):
             try:
-                self.store.stop(_CANDIDATE_COMPONENTS, reasons)
+                state = self.store.stop(
+                    scope_key=plan.scope_key,
+                    mode=plan.requested_mode,
+                    tenant_hash=plan.tenant_hash,
+                    cohort=plan.cohort,
+                    components=_CANDIDATE_COMPONENTS,
+                    reasons=reasons,
+                )
             except RuntimeError as error:
+                self._degraded_reason = str(error)
                 reasons.append(str(error))
+        persistent = ((state.get("stops") or {}).get(plan.scope_key) or {}).get(
+            "components"
+        ) or {}
+        persistent_reasons = sorted({
+            str(reason)
+            for item in persistent.values()
+            for reason in (item.get("reasons") or [])
+        })
         dashboard = {
-            "version": 1,
+            "version": 2,
             "generated_at": int(time.time()),
+            "scope": {
+                "key": plan.scope_key,
+                "mode": plan.requested_mode,
+                "tenant_hash": plan.tenant_hash,
+                "cohort": plan.cohort,
+            },
             "budgets": asdict(self.budgets),
             "summary": summary,
-            "stopped": bool(reasons),
-            "reasons": reasons,
+            "stopped": bool(persistent or self._degraded_reason),
+            "reasons": sorted(set(persistent_reasons + reasons)),
             "links": {
                 "engine_matrix": "python -m qa.engine_checks",
                 "trace_eval": "python main.py trace-eval",
@@ -401,6 +536,11 @@ class RolloutController:
         rate = lambda key: sum(bool(row.get(key)) for row in edit_rows) / max(
             1, len(edit_rows)
         )
+        match_rate = lambda key: round(
+            sum(row.get(key) is True for row in rows)
+            / max(1, sum(row.get(key) is not None for row in rows)),
+            6,
+        )
         return {
             "samples": count,
             "latency_p50_ms": round(_percentile((row.get("latency_ms", 0) for row in rows), 0.50), 3),
@@ -412,11 +552,9 @@ class RolloutController:
             "edit_success_rate": round(rate("edit_success"), 6),
             "edit_samples": len(edit_rows),
             "checkpoint_bytes_max": max(int(row.get("checkpoint_bytes", 0)) for row in rows),
-            "shadow_match_rate": round(
-                sum(row.get("shadow_equal") is True for row in rows)
-                / max(1, sum(row.get("shadow_equal") is not None for row in rows)),
-                6,
-            ),
+            "paramspec_match_rate": match_rate("paramspec_equal"),
+            "geometry_match_rate": match_rate("geometry_equal"),
+            "drilling_match_rate": match_rate("drilling_equal"),
         }
 
     def _violations(self, summary: Mapping[str, Any]) -> list[str]:
@@ -464,7 +602,10 @@ def compare_shadow_results(
     report: dict[str, Any] = {
         "accepted_equal": (left is None) == (right is None),
         "outcome_equal": str(primary.get("code") or "") == str(candidate.get("code") or ""),
-        "spec_equal": bool(left is not None and right is not None and spec_revision(left) == spec_revision(right)),
+        "paramspec_equal": bool(
+            left is not None and right is not None
+            and spec_revision(left) == spec_revision(right)
+        ),
         "geometry_equal": False,
         "drilling_equal": False,
     }
@@ -490,7 +631,7 @@ def compare_shadow_results(
     report["equal"] = all(
         report[key]
         for key in (
-            "accepted_equal", "outcome_equal", "spec_equal", "geometry_equal",
+            "accepted_equal", "outcome_equal", "paramspec_equal", "geometry_equal",
             "drilling_equal",
         )
     )

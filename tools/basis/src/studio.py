@@ -2152,16 +2152,23 @@ def make_handler(st: _Studio):
                     rollout_plan = st.rollout.plan(tenant_id, user_id)
                     from .telemetry import set_rollout_context
 
+                    checkpoint_degraded = bool(
+                        st.ai_graph is not None and st.ai_graph.storage_degraded
+                    )
+                    if checkpoint_degraded and rollout_plan.primary == "graph":
+                        rollout_plan = st.rollout.latch(
+                            rollout_plan,
+                            st.ai_graph.storage_error or "checkpoint_storage_degraded",
+                        )
                     set_rollout_context(
                         primary=rollout_plan.primary,
                         shadow=rollout_plan.shadow,
                         canary=rollout_plan.canary,
                     )
-                    rollout_started = _time.perf_counter()
                     shadow_report = None
-                    checkpoint_degraded = bool(
-                        st.ai_graph is not None and st.ai_graph.storage_degraded
-                    )
+                    candidate_result = None
+                    candidate_latency_ms = 0.0
+                    execution_started = _time.perf_counter()
                     use_graph = (
                         rollout_plan.primary == "graph"
                         and st.ai_graph is not None
@@ -2179,6 +2186,7 @@ def make_handler(st: _Studio):
                             st._valid_chat_operation_id(body.get("operation_id"))
                             or secrets.token_hex(16)
                         )
+                        candidate_started = _time.perf_counter()
                         try:
                             res = st.ai_graph.run(
                                 project_key=str(spec_path.resolve()),
@@ -2191,8 +2199,21 @@ def make_handler(st: _Studio):
                                 generation=operation_id,
                                 expected_revision=_spec_revision(spec),
                             )
-                        except CheckpointStorageError:
+                            candidate_result = res
+                        except CheckpointStorageError as error:
                             checkpoint_degraded = True
+                            candidate_result = {
+                                "spec": None,
+                                "usage": {},
+                                "code": "checkpoint_storage_failed",
+                                "error": type(error).__name__,
+                            }
+                            rollout_plan = st.rollout.latch(
+                                rollout_plan, str(error) or "checkpoint_storage_failed"
+                            )
+                            set_rollout_context(
+                                primary="legacy", shadow=False, canary=False
+                            )
                             res = chat_edit(
                                 spec, message, history, ctx,
                                 body.get("images") or None, provider,
@@ -2211,6 +2232,10 @@ def make_handler(st: _Studio):
                                 "code": "stale_revision",
                             }, 409)
                             return
+                        finally:
+                            candidate_latency_ms = (
+                                _time.perf_counter() - candidate_started
+                            ) * 1000
                     else:
                         res = chat_edit(spec, message,
                                         history,
@@ -2220,6 +2245,7 @@ def make_handler(st: _Studio):
                         if rollout_plan.shadow and st.ai_shadow_graph is not None:
                             from .rollout import compare_shadow_results
 
+                            candidate_started = _time.perf_counter()
                             try:
                                 candidate = st.ai_shadow_graph.run(
                                     project_key=str(spec_path.resolve()),
@@ -2233,27 +2259,51 @@ def make_handler(st: _Studio):
                                     expected_revision=_spec_revision(spec),
                                     shadow=True,
                                 )
+                                candidate_result = candidate
                                 shadow_report = compare_shadow_results(res, candidate)
                             except Exception as error:
+                                candidate_result = {
+                                    "spec": None,
+                                    "usage": {},
+                                    "code": "shadow_candidate_failed",
+                                    "error": type(error).__name__,
+                                }
                                 shadow_report = {
                                     "equal": False,
                                     "comparison_error": type(error).__name__,
                                 }
+                            finally:
+                                candidate_latency_ms = (
+                                    _time.perf_counter() - candidate_started
+                                ) * 1000
                     _trace_engineering_result(
                         res.get("spec") if isinstance(res, dict) else None
                     )
                     from .rollout import RolloutMetric
 
-                    usage = res.get("usage") if isinstance(res.get("usage"), dict) else {}
-                    checkpoint = res.get("checkpoint") if isinstance(res.get("checkpoint"), dict) else {}
-                    code = str(res.get("code") or "")
-                    trace = res.get("trace") if isinstance(res.get("trace"), dict) else {}
+                    metric_result = candidate_result or res
+                    usage = (
+                        metric_result.get("usage")
+                        if isinstance(metric_result.get("usage"), dict) else {}
+                    )
+                    checkpoint = (
+                        metric_result.get("checkpoint")
+                        if isinstance(metric_result.get("checkpoint"), dict) else {}
+                    )
+                    code = str(metric_result.get("code") or "")
+                    trace = (
+                        metric_result.get("trace")
+                        if isinstance(metric_result.get("trace"), dict) else {}
+                    )
                     router = trace.get("router") if isinstance(trace.get("router"), dict) else {}
                     routed_node = str(router.get("node") or "")
-                    graph_meta = res.get("graph") if isinstance(res.get("graph"), dict) else {}
+                    graph_meta = (
+                        metric_result.get("graph")
+                        if isinstance(metric_result.get("graph"), dict) else {}
+                    )
                     edit_attempted = (
                         routed_node in {"create_paramspec", "edit_operations", "part_edit"}
-                        or isinstance(res.get("spec"), dict)
+                        or isinstance(metric_result.get("spec"), dict)
                         or bool(graph_meta.get("operations"))
                         or code in {
                             "invalid_operation", "operation_validation_failed",
@@ -2262,20 +2312,42 @@ def make_handler(st: _Studio):
                     )
                     rollout_dashboard = st.rollout.record(
                         RolloutMetric(
-                            latency_ms=(_time.perf_counter() - rollout_started) * 1000,
+                            latency_ms=(
+                                candidate_latency_ms
+                                if candidate_result is not None
+                                else (_time.perf_counter() - execution_started) * 1000
+                            ),
                             total_tokens=int(usage.get("total") or 0),
                             cost_usd=float(usage.get("cost_usd") or usage.get("cost") or 0),
                             invalid_operation=code in {
                                 "invalid_operation", "operation_validation_failed",
                                 "part_edit_contract_violation",
                             },
-                            false_rejection=False,
+                            false_rejection=(
+                                candidate_result is not None
+                                and not isinstance(candidate_result.get("spec"), dict)
+                                and isinstance(res.get("spec"), dict)
+                            ),
                             edit_attempted=edit_attempted,
-                            edit_success=isinstance(res.get("spec"), dict),
+                            edit_success=isinstance(metric_result.get("spec"), dict),
                             checkpoint_bytes=int(checkpoint.get("bytes") or 0),
-                            shadow_equal=(
-                                bool(shadow_report.get("equal"))
+                            paramspec_equal=(
+                                shadow_report.get("paramspec_equal")
                                 if isinstance(shadow_report, dict) else None
+                            ),
+                            geometry_equal=(
+                                shadow_report.get("geometry_equal")
+                                if isinstance(shadow_report, dict) else None
+                            ),
+                            drilling_equal=(
+                                shadow_report.get("drilling_equal")
+                                if isinstance(shadow_report, dict) else None
+                            ),
+                            result_code=code,
+                            source=(
+                                "shadow_candidate" if shadow_report is not None
+                                else "graph_candidate" if candidate_result is not None
+                                else "legacy"
                             ),
                         ),
                         tenant_id=tenant_id,
@@ -2291,8 +2363,8 @@ def make_handler(st: _Studio):
                             shadow_report.get("equal")
                             if isinstance(shadow_report, dict) else None
                         ),
-                        "shadow.spec_equal": (
-                            shadow_report.get("spec_equal")
+                        "shadow.paramspec_equal": (
+                            shadow_report.get("paramspec_equal")
                             if isinstance(shadow_report, dict) else None
                         ),
                         "shadow.geometry_equal": (

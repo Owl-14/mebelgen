@@ -30,7 +30,7 @@ _SAFE_KEYS = frozenset({
     "gen_ai.usage.output_tokens", "gen_ai.usage.total_tokens",
     "langsmith.span.kind", "langsmith.trace.name",
     "rollout.primary", "rollout.shadow", "rollout.canary", "rollout.stopped",
-    "shadow.equal", "shadow.spec_equal", "shadow.geometry_equal",
+    "shadow.equal", "shadow.paramspec_equal", "shadow.geometry_equal",
     "shadow.drilling_equal", "checkpoint.bytes", "checkpoint.degraded",
     "gen_ai.usage.cost_usd",
 })

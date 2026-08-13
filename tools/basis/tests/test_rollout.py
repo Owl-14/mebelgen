@@ -25,11 +25,29 @@ from src.rollout import (  # noqa: E402
     compare_shadow_results,
 )
 from src.studio_graph import (  # noqa: E402
+    BufferedRevisionStore,
     CheckpointStorageError,
     GraphAdapters,
+    JsonRevisionStore,
     MemoryRevisionStore,
     StudioGraphOrchestrator,
 )
+
+
+def _strict_budgets(*, minimum_samples: int = 2) -> SloBudgets:
+    return SloBudgets(
+        latency_p50_ms=10,
+        latency_p95_ms=10,
+        tokens_p95=100,
+        cost_usd_p95=1,
+        invalid_op_rate=0.2,
+        false_rejection_rate=0.2,
+        edit_success_rate=0.8,
+        checkpoint_bytes=1_000_000,
+        checkpoint_retention_days=7,
+        minimum_samples=minimum_samples,
+        window_samples=10,
+    )
 
 
 def _config(**modes: str) -> RolloutConfig:
@@ -174,20 +192,121 @@ def test_shadow_http_returns_legacy_result_without_durable_candidate_state(
         thread.join(timeout=2)
 
 
+def test_reviewer_counterexample_shadow_slo_uses_candidate_metrics(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    from src.studio import _Studio, make_handler
+    import src.spec_chat as spec_chat
+
+    for component in COMPONENTS:
+        monkeypatch.setenv(f"AKEDA_ROLLOUT_{component.upper()}", "on")
+    monkeypatch.setenv("AKEDA_ROLLOUT_LANGGRAPH", "shadow")
+    spec_path = tmp_path / "product.json"
+    source = _spec()
+    spec_path.write_text(json.dumps(source, ensure_ascii=False), encoding="utf-8")
+    studio = _Studio(spec_path, tmp_path / "out")
+    candidate_spec = json.loads(json.dumps(source))
+    candidate_spec["dimensions"]["width"] = 410
+    candidate = {
+        "spec": candidate_spec,
+        "usage": {"total": 987, "cost_usd": 0.123},
+        "code": "candidate_code",
+        "graph": {"operations": [{"op": "set"}]},
+    }
+    legacy = {
+        "spec": candidate_spec,
+        "usage": {"total": 11, "cost_usd": 0.001},
+        "code": "legacy_code",
+    }
+    monkeypatch.setattr(spec_chat, "chat_edit", lambda *_a, **_k: legacy)
+    monkeypatch.setattr(studio.ai_shadow_graph, "run", lambda **_kwargs: candidate)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(studio))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        connection = http.client.HTTPConnection(
+            "127.0.0.1", server.server_port, timeout=20
+        )
+        connection.request(
+            "POST", "/api/chat",
+            body=json.dumps({"spec": source, "message": "сделай ширину 410"}),
+            headers={"Content-Type": "application/json"},
+        )
+        response = connection.getresponse()
+        response.read()
+        connection.close()
+        assert response.status == 200
+        event = json.loads(
+            (tmp_path / "out" / ".rollout" / "state.json").read_text(
+                encoding="utf-8"
+            )
+        )["events"][-1]
+        assert event["source"] == "shadow_candidate"
+        assert event["total_tokens"] == 987
+        assert event["cost_usd"] == pytest.approx(0.123)
+        assert event["result_code"] == "candidate_code"
+        assert event["edit_success"] is True
+        assert event["paramspec_equal"] is True
+        assert event["geometry_equal"] is True
+        assert event["drilling_equal"] is True
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_reviewer_counterexample_storage_failure_reports_legacy_everywhere(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    from src.studio import _Studio, make_handler
+    import src.telemetry as telemetry
+
+    for component in COMPONENTS:
+        monkeypatch.setenv(f"AKEDA_ROLLOUT_{component.upper()}", "on")
+    spec_path = tmp_path / "product.json"
+    source = _spec()
+    spec_path.write_text(json.dumps(source, ensure_ascii=False), encoding="utf-8")
+    studio = _Studio(spec_path, tmp_path / "out")
+    assert studio.ai_graph is not None
+    studio.ai_graph.checkpoint_retention.max_bytes = 1
+    attributes: list[dict] = []
+    monkeypatch.setattr(telemetry, "add_current_attributes", attributes.append)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(studio))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        connection = http.client.HTTPConnection(
+            "127.0.0.1", server.server_port, timeout=20
+        )
+        connection.request(
+            "POST", "/api/chat",
+            body=json.dumps({"spec": source, "message": "сделай ширину 410"}),
+            headers={"Content-Type": "application/json"},
+        )
+        response = connection.getresponse()
+        payload = json.loads(response.read())
+        connection.close()
+        assert response.status == 200
+        assert payload["rollout"]["primary"] == "legacy"
+        assert payload["rollout"]["shadow"] is False
+        assert payload["rollout"]["canary"] is False
+        assert payload["rollout"]["checkpoint_degraded"] is True
+        assert studio.ai_graph.storage_degraded is True
+        assert any(
+            item.get("rollout.primary") == "legacy"
+            and item.get("checkpoint.degraded") is True
+            for item in attributes
+        )
+        assert studio.rollout.plan(None, None).primary == "legacy"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+        studio.ai_graph._sqlite_connection.close()
+
+
 def test_slo_violation_stops_canary_and_rolls_future_requests_back(tmp_path: Path) -> None:
-    budgets = SloBudgets(
-        latency_p50_ms=10,
-        latency_p95_ms=10,
-        tokens_p95=100,
-        cost_usd_p95=1,
-        invalid_op_rate=0.2,
-        false_rejection_rate=0.2,
-        edit_success_rate=0.8,
-        checkpoint_bytes=1_000_000,
-        checkpoint_retention_days=7,
-        minimum_samples=2,
-        window_samples=10,
-    )
+    budgets = _strict_budgets()
     controller = RolloutController(tmp_path, config=_config(), budgets=budgets)
     plan = controller.plan(None, None)
     assert plan.primary == "graph"
@@ -207,6 +326,66 @@ def test_slo_violation_stops_canary_and_rolls_future_requests_back(tmp_path: Pat
     persisted = (tmp_path / "state.json").read_text(encoding="utf-8")
     assert "tenant-secret" not in persisted
     assert "user-secret" not in persisted
+
+
+def test_reviewer_counterexample_slo_isolated_by_mode_tenant_and_cohort(
+    tmp_path: Path,
+) -> None:
+    store = RolloutStateStore(tmp_path)
+    canary = RolloutController(
+        tmp_path,
+        config=RolloutConfig(
+            modes={name: "canary" for name in COMPONENTS},
+            killed=frozenset(),
+            canary_tenants=frozenset({"tenant-a", "tenant-b"}),
+            canary_users=frozenset(),
+            canary_percent=0,
+        ),
+        budgets=_strict_budgets(),
+        store=store,
+    )
+    plan_a = canary.plan("tenant-a", "user-a")
+    plan_b = canary.plan("tenant-b", "user-b")
+    for _ in range(2):
+        canary.record(
+            RolloutMetric(latency_ms=50, edit_success=True),
+            tenant_id="tenant-a", user_id="user-a", plan=plan_a,
+        )
+    assert canary.plan("tenant-a", "user-a").primary == "legacy"
+    assert canary.plan("tenant-b", "user-b").primary == "graph"
+
+    shadow = RolloutController(
+        tmp_path,
+        config=_config(langgraph="shadow"),
+        budgets=_strict_budgets(),
+        store=store,
+    )
+    shadow_plan = shadow.plan("tenant-a", "user-a")
+    assert shadow_plan.scope_key != plan_a.scope_key
+    assert shadow_plan.shadow is True
+
+
+def test_reviewer_counterexample_persistent_stop_survives_healthy_window(
+    tmp_path: Path,
+) -> None:
+    controller = RolloutController(
+        tmp_path, config=_config(), budgets=_strict_budgets()
+    )
+    plan = controller.plan("tenant", "user")
+    for _ in range(2):
+        dashboard = controller.record(
+            RolloutMetric(latency_ms=50, edit_success=True),
+            tenant_id="tenant", user_id="user", plan=plan,
+        )
+    assert dashboard["stopped"] is True
+    for _ in range(10):
+        dashboard = controller.record(
+            RolloutMetric(latency_ms=1, edit_success=True),
+            tenant_id="tenant", user_id="user", plan=plan,
+        )
+    assert dashboard["summary"]["latency_p95_ms"] == 1
+    assert dashboard["stopped"] is True
+    assert "latency_p95" in dashboard["reasons"]
 
 
 def test_read_only_queries_do_not_reduce_edit_success_slo(tmp_path: Path) -> None:
@@ -315,3 +494,75 @@ def test_checkpoint_budget_failure_does_not_commit_revision(tmp_path: Path) -> N
         assert not (tmp_path / "revisions.json").exists()
     finally:
         durable._sqlite_connection.close()
+
+
+def test_reviewer_counterexample_revision_flush_is_atomic_and_latches_degraded(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    durable = StudioGraphOrchestrator.durable(tmp_path)
+    assert isinstance(durable.buffered_revisions, BufferedRevisionStore)
+    monkeypatch.setattr(
+        durable.buffered_revisions.backing,
+        "persist_many",
+        lambda _rows: (_ for _ in ()).throw(OSError("disk unavailable")),
+    )
+    try:
+        with pytest.raises(CheckpointStorageError, match="revision_storage:OSError"):
+            durable.run(
+                project_key="atomic-flush",
+                spec=_spec(),
+                message="сделай ширину 410",
+                generation="flush-failure",
+            )
+        assert durable.storage_degraded is True
+        assert durable.storage_error == "revision_storage:OSError"
+        assert not (tmp_path / "revisions.json").exists()
+    finally:
+        durable._sqlite_connection.close()
+
+
+def test_reviewer_counterexample_revision_read_error_fails_closed(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "revisions.json"
+    path.write_text("not-json", encoding="utf-8")
+    store = JsonRevisionStore(path)
+    with pytest.raises(CheckpointStorageError, match="revision_storage:JSONDecodeError"):
+        store.persist("project", {"generation": "must-not-overwrite"})
+    assert path.read_text(encoding="utf-8") == "not-json"
+
+
+def test_reviewer_counterexample_orphan_checkpoint_is_cleaned_after_crash(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    durable = StudioGraphOrchestrator.durable(tmp_path)
+    assert durable.checkpoint_retention is not None
+
+    def crash_before_touch(*_args: object, **_kwargs: object) -> dict:
+        raise CheckpointStorageError("checkpoint_storage:simulated_crash")
+
+    monkeypatch.setattr(durable.checkpoint_retention, "touch", crash_before_touch)
+    with pytest.raises(CheckpointStorageError, match="simulated_crash"):
+        durable.run(
+            project_key="orphan",
+            spec=_spec(),
+            message="сделай ширину 410",
+            generation="crash-before-touch",
+        )
+    orphan_count = durable._sqlite_connection.execute(
+        "SELECT COUNT(*) FROM checkpoints"
+    ).fetchone()[0]
+    assert orphan_count > 0
+    durable._sqlite_connection.close()
+
+    recovered = StudioGraphOrchestrator.durable(tmp_path)
+    try:
+        assert recovered.storage_degraded is False
+        assert recovered._sqlite_connection.execute(
+            "SELECT COUNT(*) FROM checkpoints"
+        ).fetchone()[0] == 0
+        assert recovered._sqlite_connection.execute(
+            "SELECT COUNT(*) FROM writes"
+        ).fetchone()[0] == 0
+    finally:
+        recovered._sqlite_connection.close()
