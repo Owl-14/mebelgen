@@ -349,6 +349,10 @@ def test_created_flag_cannot_bypass_edit_contract(monkeypatch):
 
     assert result["spec"] is None
     assert result["code"] == "operation_validation_failed"
+    assert result["trace"]["router"] == {
+        "kind": "deterministic",
+        "node": "edit_operations",
+    }
     assert SPEC["project_name"] != "Несогласованная замена"
 
 

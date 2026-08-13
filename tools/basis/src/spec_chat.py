@@ -1052,7 +1052,14 @@ def chat_edit(spec: dict[str, Any], message: str,
         response_span.set_attributes({"check.outcome": "pass"})
 
     usage = res.get("usage")                          # расход токенов (для счётчика)
-    trace = res.get("trace") or {"prompts": []}
+    node = routed_node
+    provider_trace = res.get("trace")
+    trace = copy.deepcopy(provider_trace) if isinstance(provider_trace, dict) else {}
+    if not isinstance(trace.get("prompts"), list):
+        trace["prompts"] = []
+    # Provider metadata is evidence, not authority.  Keep the router trace in
+    # sync with the deterministic capability that is actually enforced below.
+    trace["router"] = {"kind": "deterministic", "node": node}
     if two_stage and vision_trace:
         trace = dict(trace)
         trace["prompts"] = [vision_trace, *(trace.get("prompts") or [])]
@@ -1062,7 +1069,6 @@ def chat_edit(spec: dict[str, Any], message: str,
     # capability.  Only the deterministic route computed before the call is
     # authoritative; otherwise a crafted response could escalate an edit into
     # unrestricted create_paramspec.
-    node = routed_node
     legacy_spec = res.get("spec") if isinstance(res.get("spec"), dict) else None
     raw_operations = (list(res.get("operations"))
                       if isinstance(res.get("operations"), list) else [])
