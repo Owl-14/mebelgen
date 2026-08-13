@@ -5071,7 +5071,12 @@ wideStudioLayout.addEventListener('change',syncRightPanelToViewport);
 if(window.ResizeObserver) new ResizeObserver(()=>scene3d.resize()).observe(view);
 syncRightPanelToViewport();
 
-function rebuild(v){scene3d.setPayload(v);
+function syncCameraPreset(viewName){document.querySelectorAll('#views .vw').forEach(button=>{
+  const active=button.dataset.view===viewName;
+  button.classList.toggle('on',active);button.setAttribute('aria-pressed',String(active));
+});}
+function rebuild(v,options){const opts=options||{};scene3d.setPayload(v,opts);
+  if(opts.resetView)syncCameraPreset(opts.view||'persp');
   scene3d.setHoles($('cbHoles').checked);
   scene3d.setHw($('cbHw').checked);
   if($('cbXray').checked) scene3d.setXray(true);
@@ -5101,11 +5106,7 @@ $('btnToggleOpenAll').onclick=()=>{
 // ракурсы: аксонометрия/перспектива/сверху/спереди/слева
 document.querySelectorAll('#views .vw').forEach(b=>b.onclick=()=>{
   scene3d.setView(b.dataset.view);
-  document.querySelectorAll('#views .vw').forEach(x=>{
-    const active=x===b;
-    x.classList.toggle('on',active);
-    x.setAttribute('aria-pressed',String(active));
-  });
+  syncCameraPreset(b.dataset.view);
 });
 // Простой клик выбирает деталь/открывает фасад и не меняет камеру. Снимаем preset
 // только после реального orbit/pan-жеста либо zoom, не вмешиваясь в MebelScene.
@@ -5468,7 +5469,8 @@ function schedule(){
   }
   setViewportModelState('changed');timer=setTimeout(()=>apply().catch(()=>{}),400);
 }
-async function apply(){
+async function apply(options){
+  const opts=options||{};
   const requestId=++generateRequestSeq;
   if(SPEC&&SPEC.draft){showEmpty(true);setViewportModelState('draft');return;} // черновик не генерируем
   refreshUndoState();
@@ -5480,16 +5482,17 @@ async function apply(){
     const p=await r.json();
     if(requestId!==generateRequestSeq||JSON.stringify(SPEC)!==requestSpecJson)
       return Object.assign({},p,{ok:false,viewer:null,stale:true});
-    return commitGeneratedPayload(p,requestSpecJson);
+    return commitGeneratedPayload(p,requestSpecJson,opts);
   }catch(error){
     if(requestId===generateRequestSeq){generatedSpecJson=null;generatedRevision='';setViewportModelState('stale');}
     throw error;
   }
 }
-function commitGeneratedPayload(p,requestSpecJson){
+function commitGeneratedPayload(p,requestSpecJson,options){
+  const opts=options||{};
   const restorePartName=(typeof SELECTED_PART!=='undefined'&&SELECTED_PART)
     ?SELECTED_PART.name:null;
-  paint(p);
+  paint(p,opts);
   const diagnostics=modelDiagnosticCounts(p);
   generatedSpecJson=p.viewer?requestSpecJson:null;
   generatedRevision=p.viewer?String(p.revision||''):'';
@@ -5503,7 +5506,8 @@ function commitGeneratedPayload(p,requestSpecJson){
   if(nestOn) refreshNest();
   return p;
 }
-function paint(p){
+function paint(p,options){
+  const opts=options||{};
   lastPayload=p;
   const B=$('badges'); B.innerHTML='';
   const names={schema:'схема',consistency:'встык',geometry:'геометрия',cfrn:'.cfrn',
@@ -5526,7 +5530,7 @@ function paint(p){
   $('errors').textContent=errs.join('\n');
   $('btnFixAll').hidden=!hasFixableProblems;
   lastOk=p.ok;
-  if(p.viewer){rebuild(p.viewer);
+  if(p.viewer){rebuild(p.viewer,opts);
     const C=p.viewer.colors||{};
     $('swCarcass').style.background=C.side_left||'#c9a06a';
     $('swFacade').style.background=C.door_front||C.side_left||'#c9a06a';
@@ -5986,8 +5990,9 @@ function adoptSpec(p){
   showEmpty(dr);
   scene3d.select(null); fillForm();
   if(!dr){
-    if(p.payload&&p.payload.viewer)commitGeneratedPayload(p.payload,JSON.stringify(SPEC));
-    else apply();
+    const cameraReset={resetView:true,view:'persp'};
+    if(p.payload&&p.payload.viewer)commitGeneratedPayload(p.payload,JSON.stringify(SPEC),cameraReset);
+    else apply(cameraReset);
   }
   loadProjects(); loadBuilds(); loadChatHistory();
   toast('Открыто: '+p.file);
