@@ -70,7 +70,9 @@ ParamSpec; координаты всегда считает детерминир
 Прочее: `schema/` — JSON-контракты; `prompts/` — системные промпты (чат, convert);
 `paramspecs/` — входные спеки (+`.previews/` — кэш миниатюр каталога);
 `projects/` — сгенерированные project.json; `materials/` — каталоги;
-`qa/e2e_ai.py` — e2e-матрица ИИ (нужен живой провайдер); `landing/` — обложка демо.
+`qa/e2e_ai.py` — e2e-матрица ИИ (нужен живой провайдер);
+`qa/trace_eval/` — версионируемые offline traces и ожидаемые результаты без
+вызова LLM; `landing/` — обложка демо.
 
 ## Проверки (бейджи Studio) и что они значат
 
@@ -122,6 +124,7 @@ offline, не обновляет goldens и возвращает ненулев�
 - e2e ИИ: `python qa/e2e_ai.py` против живого Studio (нужны ключи провайдера).
 - offline rollout drill: `python -m qa.rollout_drill`; dashboard contract —
   `ops/dashboards/ai-rollout.json`, процедура — `ops/ai-rollout-runbook.md`.
+- offline trace/eval: `python main.py trace-eval` (ключи и сеть не нужны).
 
 ## Координатные конвенции (краткая шпаргалка)
 

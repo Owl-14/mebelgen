@@ -415,6 +415,85 @@ def test_read_only_queries_do_not_reduce_edit_success_slo(tmp_path: Path) -> Non
     assert dashboard["stopped"] is False
 
 
+def test_reviewer_counterexample_missing_costs_are_not_zero_samples(
+    tmp_path: Path,
+) -> None:
+    controller = RolloutController(
+        tmp_path, config=_config(), budgets=_strict_budgets(minimum_samples=20)
+    )
+    plan = controller.plan("tenant", "user")
+    for _ in range(19):
+        dashboard = controller.record(
+            RolloutMetric(latency_ms=1, cost_usd=None, edit_success=True),
+            tenant_id="tenant", user_id="user", plan=plan,
+        )
+    dashboard = controller.record(
+        RolloutMetric(latency_ms=1, cost_usd=0.50, edit_success=True),
+        tenant_id="tenant", user_id="user", plan=plan,
+    )
+    assert dashboard["summary"]["cost_samples"] == 1
+    assert dashboard["summary"]["cost_usd_p95"] == pytest.approx(0.50)
+    assert dashboard["summary"]["cost_sample_status"] == "insufficient_samples"
+    assert dashboard["stopped"] is False
+
+    immediate = RolloutController(
+        tmp_path / "immediate",
+        config=_config(),
+        budgets=_strict_budgets(minimum_samples=1),
+    )
+    immediate_plan = immediate.plan("tenant", "user")
+    stopped = immediate.record(
+        RolloutMetric(latency_ms=1, cost_usd=1.50, edit_success=True),
+        tenant_id="tenant", user_id="user", plan=immediate_plan,
+    )
+    assert stopped["summary"]["cost_samples"] == 1
+    assert "cost_p95" in stopped["reasons"]
+
+
+def test_false_rejection_requires_meb151_label_and_live_divergence_is_separate(
+    tmp_path: Path,
+) -> None:
+    controller = RolloutController(
+        tmp_path, config=_config(), budgets=_strict_budgets(minimum_samples=1)
+    )
+    plan = controller.plan("tenant", "user")
+    with pytest.raises(ValueError, match="MEB-151"):
+        controller.record(
+            RolloutMetric(latency_ms=1, false_rejection=True),
+            tenant_id="tenant", user_id="user", plan=plan,
+        )
+    dashboard = controller.record(
+        RolloutMetric(latency_ms=1, live_divergence=True, edit_success=True),
+        tenant_id="tenant", user_id="user", plan=plan,
+    )
+    assert dashboard["summary"]["live_divergence_rate"] == 1
+    assert dashboard["summary"]["false_rejection_samples"] == 0
+    assert dashboard["summary"]["false_rejection_rate"] is None
+
+
+def test_meb151_security_refusal_is_not_a_false_rejection(tmp_path: Path) -> None:
+    from src.trace_replay import run_dataset
+
+    report = run_dataset()
+    refusal = next(case for case in report["cases"] if case["id"] == "prompt-injection-refusal")
+    assert refusal["evaluation_label"] == {
+        "source": "MEB-151",
+        "expected_status": "rejected",
+        "candidate_status": "rejected",
+        "false_rejection": False,
+    }
+    controller = RolloutController(
+        tmp_path, config=_config(), budgets=_strict_budgets(minimum_samples=1)
+    )
+    plan = controller.plan(None, None)
+    dashboard = controller.record_eval_case(
+        refusal, tenant_id=None, user_id=None, plan=plan
+    )
+    assert dashboard["summary"]["false_rejection_samples"] == 1
+    assert dashboard["summary"]["false_rejection_rate"] == 0
+    assert dashboard["stopped"] is False
+
+
 def test_rollout_store_is_bounded_and_corruption_fails_closed(tmp_path: Path) -> None:
     store = RolloutStateStore(tmp_path, max_events=50)
     for index in range(75):
@@ -535,12 +614,14 @@ def test_reviewer_counterexample_revision_read_error_fails_closed(
 def test_reviewer_counterexample_orphan_checkpoint_is_cleaned_after_crash(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
 ) -> None:
+    monkeypatch.setenv("AKEDA_CHECKPOINT_ORPHAN_GRACE_SECONDS", "0")
     durable = StudioGraphOrchestrator.durable(tmp_path)
     assert durable.checkpoint_retention is not None
 
     def crash_before_touch(*_args: object, **_kwargs: object) -> dict:
         raise CheckpointStorageError("checkpoint_storage:simulated_crash")
 
+    monkeypatch.setattr(durable.checkpoint_retention, "acquire", lambda *_args: None)
     monkeypatch.setattr(durable.checkpoint_retention, "touch", crash_before_touch)
     with pytest.raises(CheckpointStorageError, match="simulated_crash"):
         durable.run(
@@ -566,3 +647,65 @@ def test_reviewer_counterexample_orphan_checkpoint_is_cleaned_after_crash(
         ).fetchone()[0] == 0
     finally:
         recovered._sqlite_connection.close()
+
+
+def test_two_request_checkpoint_race_preserves_actively_leased_thread(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("AKEDA_CHECKPOINT_MAX_THREADS", "1")
+    durable = StudioGraphOrchestrator.durable(tmp_path)
+    assert durable.checkpoint_retention is not None
+    first_thread = durable._thread_id("first-project", "first-generation")
+    first_written = threading.Event()
+    allow_first_to_finish = threading.Event()
+    original_invoke = durable.graph.invoke
+
+    def invoke_with_race(payload: object, *, config: dict) -> dict:
+        result = original_invoke(payload, config=config)
+        if config["configurable"]["thread_id"] == first_thread:
+            first_written.set()
+            assert allow_first_to_finish.wait(timeout=20)
+        return result
+
+    monkeypatch.setattr(durable.graph, "invoke", invoke_with_race)
+    first_result: dict[str, object] = {}
+    first_error: list[BaseException] = []
+
+    def run_first() -> None:
+        try:
+            first_result.update(durable.run(
+                project_key="first-project",
+                spec=_spec(),
+                message="сделай ширину 410",
+                generation="first-generation",
+            ))
+        except BaseException as error:  # pragma: no cover - asserted below
+            first_error.append(error)
+
+    worker = threading.Thread(target=run_first)
+    worker.start()
+    try:
+        assert first_written.wait(timeout=20)
+        assert durable._sqlite_connection.execute(
+            "SELECT lease_until FROM akeda_checkpoint_threads WHERE thread_id=?",
+            (first_thread,),
+        ).fetchone()[0] > int(__import__("time").time())
+        before = durable._sqlite_connection.execute(
+            "SELECT COUNT(*) FROM checkpoints WHERE thread_id=?", (first_thread,)
+        ).fetchone()[0]
+        assert before > 0
+        durable.run(
+            project_key="second-project",
+            spec=_spec(),
+            message="сделай ширину 420",
+            generation="second-generation",
+        )
+        assert durable._sqlite_connection.execute(
+            "SELECT COUNT(*) FROM checkpoints WHERE thread_id=?", (first_thread,)
+        ).fetchone()[0] == before
+    finally:
+        allow_first_to_finish.set()
+        worker.join(timeout=20)
+        durable._sqlite_connection.close()
+    assert not first_error
+    assert first_result["spec"]["dimensions"]["width"] == 410

@@ -217,9 +217,11 @@ class RolloutPlan:
 class RolloutMetric:
     latency_ms: float
     total_tokens: int = 0
-    cost_usd: float = 0.0
+    cost_usd: float | None = None
     invalid_operation: bool = False
-    false_rejection: bool = False
+    false_rejection: bool | None = None
+    false_rejection_label_source: str | None = None
+    live_divergence: bool | None = None
     edit_attempted: bool = True
     edit_success: bool = False
     checkpoint_bytes: int = 0
@@ -228,6 +230,7 @@ class RolloutMetric:
     drilling_equal: bool | None = None
     result_code: str = ""
     source: str = "studio"
+    metric_kind: str = "live"
 
 
 class RolloutStateStore:
@@ -446,6 +449,14 @@ class RolloutController:
         user_id: str | None,
         plan: RolloutPlan,
     ) -> dict[str, Any]:
+        if metric.false_rejection is not None and not (
+            metric.metric_kind == "eval"
+            and metric.source == "meb151_eval"
+            and metric.false_rejection_label_source == "MEB-151"
+        ):
+            raise ValueError(
+                "false_rejection requires independent MEB-151 eval-labelled evidence"
+            )
         event = {
             "at": int(time.time()),
             "scope_key": plan.scope_key,
@@ -515,6 +526,41 @@ class RolloutController:
         self._write_dashboard(dashboard)
         return dashboard
 
+    def record_eval_case(
+        self,
+        case: Mapping[str, Any],
+        *,
+        tenant_id: str | None,
+        user_id: str | None,
+        plan: RolloutPlan,
+    ) -> dict[str, Any]:
+        """Ingest only the privacy-safe label emitted by MEB-151 trace replay."""
+
+        label = case.get("evaluation_label")
+        if not isinstance(label, Mapping) or label.get("source") != "MEB-151":
+            raise ValueError("missing independent MEB-151 evaluation label")
+        expected_status = str(label.get("expected_status") or "")
+        candidate_status = str(label.get("candidate_status") or "")
+        if expected_status not in {"accepted", "replied", "rejected"}:
+            raise ValueError("MEB-151 expected status is not labelled")
+        value = expected_status in {"accepted", "replied"} and candidate_status == "rejected"
+        if label.get("false_rejection") is not value:
+            raise ValueError("MEB-151 false_rejection label must be boolean")
+        return self.record(
+            RolloutMetric(
+                latency_ms=0,
+                false_rejection=value,
+                false_rejection_label_source="MEB-151",
+                edit_attempted=False,
+                source="meb151_eval",
+                metric_kind="eval",
+                result_code=candidate_status[:80],
+            ),
+            tenant_id=tenant_id,
+            user_id=user_id,
+            plan=plan,
+        )
+
     def _write_dashboard(self, payload: Mapping[str, Any]) -> None:
         try:
             self.store.root.mkdir(parents=True, exist_ok=True)
@@ -528,52 +574,90 @@ class RolloutController:
             return
 
     def summarize(self, events: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
-        rows = list(events)[-self.budgets.window_samples :]
-        count = len(rows)
-        if not count:
+        rows = list(events)
+        if not rows:
             return {"samples": 0}
-        edit_rows = [row for row in rows if bool(row.get("edit_attempted", True))]
+        live_rows = [
+            row for row in rows if row.get("metric_kind", "live") == "live"
+        ][-self.budgets.window_samples :]
+        eval_rows = [
+            row for row in rows
+            if row.get("metric_kind") == "eval"
+            and row.get("source") == "meb151_eval"
+            and row.get("false_rejection_label_source") == "MEB-151"
+            and isinstance(row.get("false_rejection"), bool)
+        ][-self.budgets.window_samples :]
+        count = len(live_rows)
+        edit_rows = [row for row in live_rows if bool(row.get("edit_attempted", True))]
         rate = lambda key: sum(bool(row.get(key)) for row in edit_rows) / max(
             1, len(edit_rows)
         )
-        match_rate = lambda key: round(
-            sum(row.get(key) is True for row in rows)
-            / max(1, sum(row.get(key) is not None for row in rows)),
-            6,
-        )
+        def sampled_rate(sample_rows: list[Mapping[str, Any]], key: str) -> float | None:
+            return (
+                round(sum(row.get(key) is True for row in sample_rows) / len(sample_rows), 6)
+                if sample_rows else None
+            )
+
+        cost_values = [
+            float(row["cost_usd"])
+            for row in live_rows
+            if isinstance(row.get("cost_usd"), (int, float))
+            and not isinstance(row.get("cost_usd"), bool)
+            and math.isfinite(float(row["cost_usd"]))
+            and float(row["cost_usd"]) >= 0
+        ]
+        divergence_rows = [row for row in live_rows if isinstance(row.get("live_divergence"), bool)]
+        match_rows = {
+            key: [row for row in live_rows if isinstance(row.get(key), bool)]
+            for key in ("paramspec_equal", "geometry_equal", "drilling_equal")
+        }
         return {
             "samples": count,
-            "latency_p50_ms": round(_percentile((row.get("latency_ms", 0) for row in rows), 0.50), 3),
-            "latency_p95_ms": round(_percentile((row.get("latency_ms", 0) for row in rows), 0.95), 3),
-            "tokens_p95": round(_percentile((row.get("total_tokens", 0) for row in rows), 0.95), 3),
-            "cost_usd_p95": round(_percentile((row.get("cost_usd", 0) for row in rows), 0.95), 6),
+            "eval_samples": len(eval_rows),
+            "latency_p50_ms": round(_percentile((row.get("latency_ms", 0) for row in live_rows), 0.50), 3),
+            "latency_p95_ms": round(_percentile((row.get("latency_ms", 0) for row in live_rows), 0.95), 3),
+            "tokens_p95": round(_percentile((row.get("total_tokens", 0) for row in live_rows), 0.95), 3),
+            "cost_samples": len(cost_values),
+            "cost_sample_status": "ready" if len(cost_values) >= self.budgets.minimum_samples else "insufficient_samples",
+            "cost_usd_p95": round(_percentile(cost_values, 0.95), 6) if cost_values else None,
             "invalid_op_rate": round(rate("invalid_operation"), 6),
-            "false_rejection_rate": round(rate("false_rejection"), 6),
+            "false_rejection_samples": len(eval_rows),
+            "false_rejection_sample_status": "ready" if len(eval_rows) >= self.budgets.minimum_samples else "insufficient_samples",
+            "false_rejection_rate": sampled_rate(eval_rows, "false_rejection"),
+            "live_divergence_samples": len(divergence_rows),
+            "live_divergence_rate": sampled_rate(divergence_rows, "live_divergence"),
             "edit_success_rate": round(rate("edit_success"), 6),
             "edit_samples": len(edit_rows),
-            "checkpoint_bytes_max": max(int(row.get("checkpoint_bytes", 0)) for row in rows),
-            "paramspec_match_rate": match_rate("paramspec_equal"),
-            "geometry_match_rate": match_rate("geometry_equal"),
-            "drilling_match_rate": match_rate("drilling_equal"),
+            "checkpoint_bytes_max": max((int(row.get("checkpoint_bytes", 0)) for row in live_rows), default=0),
+            "paramspec_samples": len(match_rows["paramspec_equal"]),
+            "paramspec_match_rate": sampled_rate(match_rows["paramspec_equal"], "paramspec_equal"),
+            "geometry_samples": len(match_rows["geometry_equal"]),
+            "geometry_match_rate": sampled_rate(match_rows["geometry_equal"], "geometry_equal"),
+            "drilling_samples": len(match_rows["drilling_equal"]),
+            "drilling_match_rate": sampled_rate(match_rows["drilling_equal"], "drilling_equal"),
         }
 
     def _violations(self, summary: Mapping[str, Any]) -> list[str]:
-        if int(summary.get("samples", 0)) < self.budgets.minimum_samples:
-            return []
+        enough_live = int(summary.get("samples", 0)) >= self.budgets.minimum_samples
         enough_edits = int(summary.get("edit_samples", 0)) >= self.budgets.minimum_samples
+        enough_costs = int(summary.get("cost_samples", 0)) >= self.budgets.minimum_samples
+        enough_false_rejections = (
+            int(summary.get("false_rejection_samples", 0)) >= self.budgets.minimum_samples
+        )
         checks = (
-            (summary.get("latency_p50_ms", 0) > self.budgets.latency_p50_ms, "latency_p50"),
-            (summary.get("latency_p95_ms", 0) > self.budgets.latency_p95_ms, "latency_p95"),
-            (summary.get("tokens_p95", 0) > self.budgets.tokens_p95, "tokens_p95"),
-            (summary.get("cost_usd_p95", 0) > self.budgets.cost_usd_p95, "cost_p95"),
+            (enough_live and summary.get("latency_p50_ms", 0) > self.budgets.latency_p50_ms, "latency_p50"),
+            (enough_live and summary.get("latency_p95_ms", 0) > self.budgets.latency_p95_ms, "latency_p95"),
+            (enough_live and summary.get("tokens_p95", 0) > self.budgets.tokens_p95, "tokens_p95"),
+            (enough_costs and summary.get("cost_usd_p95") is not None and summary["cost_usd_p95"] > self.budgets.cost_usd_p95, "cost_p95"),
             (
                 enough_edits
                 and summary.get("invalid_op_rate", 0) > self.budgets.invalid_op_rate,
                 "invalid_op_rate",
             ),
             (
-                enough_edits
-                and summary.get("false_rejection_rate", 0)
+                enough_false_rejections
+                and summary.get("false_rejection_rate") is not None
+                and summary["false_rejection_rate"]
                 > self.budgets.false_rejection_rate,
                 "false_rejection_rate",
             ),
@@ -583,7 +667,7 @@ class RolloutController:
                 "edit_success_rate",
             ),
             (
-                summary.get("checkpoint_bytes_max", 0) > self.budgets.checkpoint_bytes,
+                enough_live and summary.get("checkpoint_bytes_max", 0) > self.budgets.checkpoint_bytes,
                 "checkpoint_bytes",
             ),
         )

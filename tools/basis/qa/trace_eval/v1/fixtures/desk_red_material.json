@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "paramspec-v1",
+  "project_name": "Eval: стол с неразрешённым материалом",
+  "furniture_type": "стол",
+  "archetype": "desk",
+  "dimensions": {
+    "width": 1500,
+    "depth": 700,
+    "height": 750,
+    "tolerance": 5
+  },
+  "materials": {
+    "board_thickness": 25,
+    "back_thickness": 25,
+    "board_material": "ЛДСП",
+    "board_article": "EVAL-NOT-IN-BASE",
+    "edge_band_thickness": 2,
+    "color": "Ольха",
+    "color_code": ""
+  },
+  "legs": {
+    "type": "боковины",
+    "height": 0
+  },
+  "apron": true,
+  "apron_height": 350,
+  "warnings": [
+    "Неперсональный отрицательный offline fixture для trace-replay."
+  ],
+  "estimated_values": []
+}

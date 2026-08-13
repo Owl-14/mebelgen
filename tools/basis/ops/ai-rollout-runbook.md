@@ -61,14 +61,21 @@ State ограничен 2,000 events и пишется атомарно в
 `<out>/.rollout/state.json`; dashboard — `<out>/.rollout/dashboard.json`.
 
 False rejection нельзя честно вывести из обычного production запроса. Этот
-label поступает из MEB-151 trace-replay/eval dataset. Стоимость учитывается
-только если provider её сообщил; отсутствие цены не превращается в выдуманную
-оценку.
+label поступает из MEB-151 trace-replay/eval dataset. Корректный security refusal
+имеет label `false`, а live candidate/legacy disagreement публикуется отдельно
+как `live_divergence_rate`. Стоимость учитывается только если provider её
+сообщил; отсутствие цены остаётся `null`, не входит в percentile и не увеличивает
+`cost_samples`. Cost/false-rejection budgets включаются только после собственного
+`AKEDA_SLO_MINIMUM_SAMPLES`, а не по общему числу live запросов.
 
 ## Checkpoints и деградация хранилища
 
-SQLite хранит максимум `AKEDA_CHECKPOINT_MAX_PER_THREAD=64` checkpoints на
-thread и `AKEDA_CHECKPOINT_MAX_THREADS=100` threads. Завершённые threads старше
+До `graph.invoke` SQLite атомарно регистрирует active lease. Prune не удаляет
+leased thread, а незарегистрированные checkpoint/write threads сначала ждут
+`AKEDA_CHECKPOINT_ORPHAN_GRACE_SECONDS=300`, чтобы concurrent request не был
+принят за crash orphan. SQLite хранит максимум
+`AKEDA_CHECKPOINT_MAX_PER_THREAD=64` checkpoints на thread и
+`AKEDA_CHECKPOINT_MAX_THREADS=100` threads. Завершённые threads старше
 retention удаляются вместе с pending writes. После очистки контролируется
 фактический размер файла. Ошибка открытия, записи, integrity/budget failure
 помечает storage degraded и возвращает запрос на legacy path; новая ревизия из
@@ -105,9 +112,10 @@ observed `rollout.primary=legacy` fallback; it never deploys.
 Reviewer invariants: SLO events/stops are scoped by the complete
 `mode + tenant_hash + cohort` key, and dashboard red state is sourced from
 persistent `state.stops`, not only the rolling window. Shadow usage, result
-code, success and false rejection are candidate metrics; ParamSpec, geometry
-and drilling parity are separate. Retention enumerates checkpoint/write tables
-to remove crash orphans. Retention, budget, checkpoint write and atomic
+code and success are candidate metrics; live divergence is separate from
+MEB-151-labelled false rejection. ParamSpec, geometry and drilling parity use
+separate samples. Retention enumerates checkpoint/write tables and applies
+active lease plus orphan grace before deletion. Retention, budget, checkpoint write and atomic
 revision-flush failures latch degraded plus the scoped stop.
 
 Drill использует только rule-based mock path: доказывает отсутствие shadow

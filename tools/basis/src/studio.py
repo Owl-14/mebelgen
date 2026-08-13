@@ -2318,15 +2318,24 @@ def make_handler(st: _Studio):
                                 else (_time.perf_counter() - execution_started) * 1000
                             ),
                             total_tokens=int(usage.get("total") or 0),
-                            cost_usd=float(usage.get("cost_usd") or usage.get("cost") or 0),
+                            cost_usd=(
+                                float(usage["cost_usd"])
+                                if usage.get("cost_usd") is not None
+                                else float(usage["cost"])
+                                if usage.get("cost") is not None
+                                else None
+                            ),
                             invalid_operation=code in {
                                 "invalid_operation", "operation_validation_failed",
                                 "part_edit_contract_violation",
                             },
-                            false_rejection=(
-                                candidate_result is not None
-                                and not isinstance(candidate_result.get("spec"), dict)
-                                and isinstance(res.get("spec"), dict)
+                            live_divergence=(
+                                shadow_report is not None
+                                and candidate_result is not None
+                                and (
+                                    isinstance(candidate_result.get("spec"), dict)
+                                    != isinstance(res.get("spec"), dict)
+                                )
                             ),
                             edit_attempted=edit_attempted,
                             edit_success=isinstance(metric_result.get("spec"), dict),
