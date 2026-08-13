@@ -16,6 +16,13 @@ from typing import Any
 
 
 WORKFLOW_VERSION = "local-b3d-v1"
+MANIFEST_SCHEMA = "akeda.local-b3d-manifest"
+MANIFEST_VERSION = 1
+REQUIRED_ARTIFACTS = frozenset({
+    "project.json",
+    "ImportFurnitureFromJSON.js",
+    "README.txt",
+})
 PACKAGE_FILES = (
     "project.json",
     "ImportFurnitureFromJSON.js",
@@ -35,6 +42,46 @@ def _canonical_json(value: Any) -> bytes:
 
 def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def _is_sha256(value: Any) -> bool:
+    return isinstance(value, str) and len(value) == 64 and all(char in "0123456789abcdef" for char in value)
+
+
+def _validate_manifest(manifest: Any) -> dict[str, str]:
+    """Validate the complete manifest contract before trusting any path/hash."""
+    if not isinstance(manifest, dict):
+        raise LocalB3dError("manifest должен быть JSON-объектом")
+    if manifest.get("schema") != MANIFEST_SCHEMA or manifest.get("version") != MANIFEST_VERSION:
+        raise LocalB3dError("Неподдерживаемая schema/version manifest")
+    if manifest.get("workflow") != WORKFLOW_VERSION:
+        raise LocalB3dError(f"Неподдерживаемый workflow: {manifest.get('workflow')}")
+    if manifest.get("status") != "requires_licensed_basis_desktop_save":
+        raise LocalB3dError("Некорректный status manifest")
+    source = manifest.get("source")
+    if not isinstance(source, dict) or not isinstance(source.get("kind"), str) or not _is_sha256(source.get("sha256")):
+        raise LocalB3dError("Manifest source.kind/source.sha256 обязательны")
+
+    artifacts = manifest.get("artifacts")
+    if not isinstance(artifacts, dict) or set(artifacts) != REQUIRED_ARTIFACTS:
+        raise LocalB3dError("Manifest должен содержать точный обязательный набор artifacts")
+    if not all(_is_sha256(value) for value in artifacts.values()):
+        raise LocalB3dError("Artifact hash должен быть lowercase SHA-256")
+
+    project = manifest.get("project")
+    if not isinstance(project, dict) or project.get("path") != "project.json":
+        raise LocalB3dError("Manifest должен содержать project.path=project.json")
+    if not _is_sha256(project.get("sha256")) or project["sha256"] != artifacts["project.json"]:
+        raise LocalB3dError("Manifest project hash отсутствует или не совпадает с artifact")
+    if not isinstance(project.get("panel_count"), int) or project["panel_count"] <= 0:
+        raise LocalB3dError("Manifest project.panel_count должен быть положительным")
+    if not isinstance(project.get("drilling_count"), int) or project["drilling_count"] < 0:
+        raise LocalB3dError("Manifest project.drilling_count должен быть неотрицательным")
+    if manifest.get("native_status") != "unverified":
+        raise LocalB3dError("Manifest native_status должен оставаться unverified")
+    if not isinstance(manifest.get("preflight"), dict) or manifest["preflight"].get("ok") is not True:
+        raise LocalB3dError("Manifest preflight.ok должен быть true")
+    return artifacts
 
 
 def _project_preflight(project: dict[str, Any]) -> dict[str, Any]:
@@ -139,6 +186,8 @@ def prepare_local_b3d(input_path: str | Path, package_dir: str | Path) -> dict[s
     readme = _instructions(expected_name).encode("utf-8")
 
     manifest = {
+        "schema": MANIFEST_SCHEMA,
+        "version": MANIFEST_VERSION,
         "workflow": WORKFLOW_VERSION,
         "status": "requires_licensed_basis_desktop_save",
         "source": {"kind": source_kind, "sha256": _sha256(source.read_bytes())},
@@ -147,7 +196,14 @@ def prepare_local_b3d(input_path: str | Path, package_dir: str | Path) -> dict[s
             "ImportFurnitureFromJSON.js": _sha256(importer),
             "README.txt": _sha256(readme),
         },
+        "project": {
+            "path": "project.json",
+            "sha256": _sha256(project_bytes),
+            "panel_count": len(project.get("panels", [])),
+            "drilling_count": _project_drilling_count(project),
+        },
         "expected_b3d_name": expected_name,
+        "native_status": "unverified",
         "preflight": preflight,
         "claims": {
             "offline_package_reproducible": True,
@@ -204,6 +260,12 @@ def inspect_b3d_structure(path: str | Path) -> dict[str, Any]:
     }
 
 
+def _project_drilling_count(project: dict[str, Any]) -> int:
+    from .hardware import compute_drilling
+
+    return len(compute_drilling(project))
+
+
 def verify_local_b3d(
     package_dir: str | Path,
     b3d_path: str | Path,
@@ -212,15 +274,18 @@ def verify_local_b3d(
     """Verify package integrity plus structural/basic semantic B3D parity."""
     package = Path(package_dir)
     manifest = json.loads((package / "manifest.json").read_text(encoding="utf-8"))
-    if manifest.get("workflow") != WORKFLOW_VERSION:
-        raise LocalB3dError(f"Неподдерживаемый workflow: {manifest.get('workflow')}")
+    artifacts = _validate_manifest(manifest)
     integrity: dict[str, bool] = {}
-    for name, expected in manifest["artifacts"].items():
+    for name, expected in artifacts.items():
         integrity[name] = _sha256((package / name).read_bytes()) == expected
-    if not all(integrity.values()):
+    if set(integrity) != REQUIRED_ARTIFACTS or not all(integrity.values()):
         raise LocalB3dError("Нарушена целостность import-пакета")
 
     project = json.loads((package / "project.json").read_text(encoding="utf-8"))
+    if len(project.get("panels", [])) != manifest["project"]["panel_count"]:
+        raise LocalB3dError("Фактический panel_count project.json не совпадает с manifest")
+    if _project_drilling_count(project) != manifest["project"]["drilling_count"]:
+        raise LocalB3dError("Фактический drilling_count project.json не совпадает с manifest")
     structural = inspect_b3d_structure(b3d_path)
     from .b3d_verify import verify_b3d_parity
 
@@ -232,6 +297,7 @@ def verify_local_b3d(
         "structure": structural,
         "semantic_parity": semantic,
         "native_basis": {
+            "status": "unverified",
             "confirmed": False,
             "reason": "Нужен фактический open/save/reopen или b3d→cfrn round-trip в лицензированном БАЗИС.",
         },

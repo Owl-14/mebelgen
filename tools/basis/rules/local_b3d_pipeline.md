@@ -25,7 +25,9 @@ python main.py local-b3d prepare paramspecs/<model>.json --out <empty-package-di
 Команда выполняет полный production gate (для ParamSpec) либо проектный
 preflight, записывает канонический `project.json`, текущий
 `ImportFurnitureFromJSON.js`, инструкции, SHA-256 manifest и детерминированный
-ZIP. Одинаковый вход и версия репозитория дают одинаковый ZIP.
+ZIP. Manifest имеет обязательные `schema`/`version`, отдельный hash/counts
+`project.json` и точный непустой набор artifacts; неполный manifest отклоняется
+до чтения B3D. Одинаковый вход и версия репозитория дают одинаковый ZIP.
 
 Далее оператор в лицензированном/триальном desktop БАЗИС запускает импортёр,
 выбирает `project.json`, проверяет модель и сохраняет её штатной командой как
@@ -38,9 +40,13 @@ python main.py local-b3d verify <package-dir> <saved.b3d> --report <report.json>
 ```
 
 Проверка фиксирует целостность пакета, секции `Header`/`Document`, структурный
-round-trip и базовый паритет имён панелей/метизов. Даже зелёный offline-отчёт
-оставляет `native_basis.confirmed=false`: финальное доказательство — фактический
-open/save/reopen либо `b3d→cfrn` round-trip в лицензированном БАЗИС.
+round-trip и fail-closed semantic evidence: непустые typed panel nodes, точное
+число/имена панелей, `Mat` каждой панели против ожидаемого CFRN mapping и
+толщину, а также точное число и multiset сигнатур `(diameter, depth)` присадок
+из `FurnList` × instances. Пустой synthetic
+BZ85 с корректными секциями отклоняется. Даже зелёный offline-отчёт оставляет
+`native_basis.status=unverified` и `confirmed=false`: финальное доказательство —
+фактический open/save/reopen либо `b3d→cfrn` round-trip в лицензированном БАЗИС.
 
 ## Ограничения текущего импортёра
 
