@@ -242,3 +242,41 @@ python main.py studio paramspecs/wardrobe_demo.json --no-open
 стандартные `OTEL_EXPORTER_OTLP_*`. Для LangSmith достаточно backend `langsmith`,
 `LANGSMITH_API_KEY` и, при необходимости, `LANGSMITH_PROJECT`; ключ хранится только
 в окружении и не сериализуется.
+
+## Offline trace replay и eval
+
+Replay does not call a model, but it is not an operation-only fixture replay.
+Every case executes the production intent router and request policy. Recorded
+intent/create/vision/edit/repair replies are validated with the production
+capability schemas; a vision reply must be digest-linked to its create node,
+and repair consumes at most `MAX_REPAIR_ITERATIONS` attempts. Before execution,
+a fail-closed privacy pass scans the dataset and every referenced fixture.
+Request policy is the first decision for every case and denial short-circuits
+router/provider/replay. Vision integrity is not treated as semantic accuracy:
+verified semantics require a digest-pinned, human-approved annotation linked to
+the create fixture; otherwise the metric is `unverified`. Privacy scanning also
+rejects identity fields and conservative full-name patterns such as Russian ФИО.
+
+Версионируемый dataset `qa/trace_eval/v1/scenarios.json` хранит неперсональные
+команды, ссылки на fixture ParamSpec, сохранённые выходы AI-узлов и ожидаемые
+diff/число деталей/присадок/production checks. Replay начинается после границы
+модели: LLM, vision и облачные API не вызываются, а записанные полные ParamSpec
+или typed operations проходят текущие reducer, генератор и production gate.
+
+```bash
+python main.py trace-eval
+python main.py trace-eval -o out/trace-eval.json
+python main.py trace-eval --compare out/trace-eval-baseline.json
+```
+
+До operation replay проверяется decision envelope: hash/class команды, результат
+router, актуальные prompt id/version из registry, allowlist provider/model,
+наличие vision stage и фактические типы операций. Подмена любого поля отклоняет
+trace до reducer/gate.
+
+JSON-отчёт детерминирован и содержит dataset digest, prompt/model profiles,
+decision/node/output/verdict digests и итог каждого сценария. `--compare`
+показывает изменения решения или производственного результата между отчётами
+разных prompt/model версий. Добавление сценария требует ожидаемых decision и
+node outputs плюс output profile; raw prompt, полный пользовательский ParamSpec,
+base64 изображения и секреты в trace-файл не помещаются.
