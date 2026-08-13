@@ -202,6 +202,35 @@ API ошибки должны иметь корректный HTTP status, ст�
 невалидный объект, оставлять на экране модель предыдущего объекта как будто это
 новая, или скрывать ошибку ответом HTTP 200.
 
+### Внешний производственный API (Cutting)
+
+Cutting-клиент по умолчанию не имеет права на сеть и мутации. Production
+credential разрешён только для pinned `https://cloud.bazissoft.ru`; тестовый
+endpoint требует явного allowlist и отдельного test key. Каждый POST требует
+уникального ключа и файлового durable ledger со строго атомарными состояниями
+`prepared/ambiguous/success`; cross-process duplicate блокируется, а ambiguous
+требует remote reconciliation. Durable mutation limit не является оценкой
+реальной стоимости или тарифа.
+
+Material links проходят единый строгий MEB-139 контракт: article/sheet
+проверки, подтверждённые исключения, запрет конфликтующих дубликатов и
+обязательный post-audit. Fuzzy/LLM-подбор запрещён. Общий deadline положителен;
+connect+read budgets каждого request вместе не превышают остаток, а ответ на
+границе deadline или позже отклоняется. Offline contract harness использует тот
+же поток, но injected/test transport никогда не может создать live E2E evidence.
+Transport sealed после construction: подмена `client.session.request` запрещена,
+а live evidence требует operator-owned transport proof. Production dispatch идёт
+через private pinned adapter, не через mutable `requests.Session.request`; patch
+любого проверяемого dispatch-компонента до construction снимает attestation.
+Live entrypoint отделён от обычного CLI/CI
+и до первой mutation повторно читает canonical machine approval: caller не
+выбирает fixture/ledger/run ID, ledger path выводится из config+fixture digest,
+а run ID генерируется как opaque token. Transport/session immutable, production
+archive обязан быть строгим HTTPS URL. Полный
+контракт, команда и blocker: `rules/cutting-api.md`.
+
+### Платная сборка B3D
+
 Любой путь к платной сборке B3D, включая прямой CLI с готовым `project.json`,
 обязан до создания cloud-клиента пройти offline preflight. Для ParamSpec это
 полный `production_gate`; для готового проекта — JSON Schema, `basis_mapping`,
