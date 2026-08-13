@@ -31,6 +31,9 @@ COMPONENTS = (
 _CANDIDATE_COMPONENTS = COMPONENTS[:4] + ("langgraph",)
 _MODES = frozenset({"off", "shadow", "canary", "on"})
 _TRUE = frozenset({"1", "true", "yes", "on"})
+_EVAL_CASE_SCHEMA = "trace-eval-case-v1"
+_EVAL_STATUSES = frozenset({"accepted", "replied", "rejected"})
+_SHA256_HEX_LENGTH = 64
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -69,6 +72,21 @@ def _hash_identity(value: str | None) -> str:
 def _scope_key(mode: str, tenant_hash: str, cohort: str) -> str:
     raw = f"{mode}|{tenant_hash}|{cohort}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
+
+
+def _evidence_digest(value: Any) -> str:
+    canonical = json.dumps(
+        value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _is_sha256(value: Any) -> bool:
+    return bool(
+        isinstance(value, str)
+        and len(value) == _SHA256_HEX_LENGTH
+        and all(character in "0123456789abcdef" for character in value)
+    )
 
 
 @dataclass(frozen=True)
@@ -534,18 +552,70 @@ class RolloutController:
         user_id: str | None,
         plan: RolloutPlan,
     ) -> dict[str, Any]:
-        """Ingest only the privacy-safe label emitted by MEB-151 trace replay."""
+        """Ingest a verified MEB-151 case or count it as inconclusive."""
+
+        def inconclusive(reason: str) -> dict[str, Any]:
+            return self.record(
+                RolloutMetric(
+                    latency_ms=0,
+                    edit_attempted=False,
+                    source="meb151_eval",
+                    metric_kind="eval_inconclusive",
+                    result_code=reason[:80],
+                ),
+                tenant_id=tenant_id,
+                user_id=user_id,
+                plan=plan,
+            )
+
+        if case.get("schema_version") != _EVAL_CASE_SCHEMA:
+            return inconclusive("eval_schema_untrusted")
+        if case.get("ok") is not True or case.get("mismatches") != []:
+            return inconclusive("eval_verdict_not_ok")
 
         label = case.get("evaluation_label")
         if not isinstance(label, Mapping) or label.get("source") != "MEB-151":
-            raise ValueError("missing independent MEB-151 evaluation label")
-        expected_status = str(label.get("expected_status") or "")
-        candidate_status = str(label.get("candidate_status") or "")
-        if expected_status not in {"accepted", "replied", "rejected"}:
-            raise ValueError("MEB-151 expected status is not labelled")
+            return inconclusive("eval_label_untrusted")
+        decision = case.get("decision")
+        output = case.get("output")
+        decision_digest = case.get("decision_digest")
+        node_outputs_digest = case.get("node_outputs_digest")
+        output_digest = case.get("output_digest")
+        verdict_digest = case.get("verdict_digest")
+        if not isinstance(decision, Mapping) or not isinstance(output, Mapping):
+            return inconclusive("eval_evidence_missing")
+        if not all(_is_sha256(value) for value in (
+            decision_digest, node_outputs_digest, output_digest, verdict_digest
+        )):
+            return inconclusive("eval_digest_invalid")
+        try:
+            valid_verdict = (
+                decision_digest == _evidence_digest(decision)
+                and output_digest == _evidence_digest(output)
+                and verdict_digest == _evidence_digest({
+                    "schema_version": _EVAL_CASE_SCHEMA,
+                    "decision": decision_digest,
+                    "node_outputs": node_outputs_digest,
+                    "output": output_digest,
+                    "evaluation_label": label,
+                    "ok": True,
+                })
+            )
+        except (TypeError, ValueError, OverflowError):
+            valid_verdict = False
+        if not valid_verdict:
+            return inconclusive("eval_verdict_invalid")
+        expected_status = label.get("expected_status")
+        candidate_status = label.get("candidate_status")
+        if not isinstance(expected_status, str) or expected_status not in _EVAL_STATUSES:
+            return inconclusive("eval_expected_status_invalid")
+        if not isinstance(candidate_status, str) or candidate_status not in _EVAL_STATUSES:
+            return inconclusive("eval_candidate_status_invalid")
+        if output.get("status") != candidate_status:
+            return inconclusive("eval_candidate_status_mismatch")
         value = expected_status in {"accepted", "replied"} and candidate_status == "rejected"
         if label.get("false_rejection") is not value:
-            raise ValueError("MEB-151 false_rejection label must be boolean")
+            return inconclusive("eval_false_rejection_invalid")
         return self.record(
             RolloutMetric(
                 latency_ms=0,
@@ -554,7 +624,7 @@ class RolloutController:
                 edit_attempted=False,
                 source="meb151_eval",
                 metric_kind="eval",
-                result_code=candidate_status[:80],
+                result_code=candidate_status,
             ),
             tenant_id=tenant_id,
             user_id=user_id,
@@ -587,6 +657,11 @@ class RolloutController:
             and row.get("false_rejection_label_source") == "MEB-151"
             and isinstance(row.get("false_rejection"), bool)
         ][-self.budgets.window_samples :]
+        inconclusive_rows = [
+            row for row in rows
+            if row.get("metric_kind") == "eval_inconclusive"
+            and row.get("source") == "meb151_eval"
+        ][-self.budgets.window_samples :]
         count = len(live_rows)
         edit_rows = [row for row in live_rows if bool(row.get("edit_attempted", True))]
         rate = lambda key: sum(bool(row.get(key)) for row in edit_rows) / max(
@@ -614,6 +689,7 @@ class RolloutController:
         return {
             "samples": count,
             "eval_samples": len(eval_rows),
+            "eval_inconclusive_samples": len(inconclusive_rows),
             "latency_p50_ms": round(_percentile((row.get("latency_ms", 0) for row in live_rows), 0.50), 3),
             "latency_p95_ms": round(_percentile((row.get("latency_ms", 0) for row in live_rows), 0.95), 3),
             "tokens_p95": round(_percentile((row.get("total_tokens", 0) for row in live_rows), 0.95), 3),
@@ -622,6 +698,7 @@ class RolloutController:
             "cost_usd_p95": round(_percentile(cost_values, 0.95), 6) if cost_values else None,
             "invalid_op_rate": round(rate("invalid_operation"), 6),
             "false_rejection_samples": len(eval_rows),
+            "false_rejection_inconclusive_samples": len(inconclusive_rows),
             "false_rejection_sample_status": "ready" if len(eval_rows) >= self.budgets.minimum_samples else "insufficient_samples",
             "false_rejection_rate": sampled_rate(eval_rows, "false_rejection"),
             "live_divergence_samples": len(divergence_rows),

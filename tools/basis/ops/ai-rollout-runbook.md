@@ -68,6 +68,12 @@ label поступает из MEB-151 trace-replay/eval dataset. Коррект�
 `cost_samples`. Cost/false-rejection budgets включаются только после собственного
 `AKEDA_SLO_MINIMUM_SAMPLES`, а не по общему числу live запросов.
 
+False-rejection denominator принимает только полный `trace-eval-case-v1` с
+`ok=true`, пустым списком mismatches, совпавшими decision/output/verdict digests
+и candidate status из строгого enum `accepted|replied|rejected`. Missing,
+timeout, unknown, failed и inconclusive не считаются успешным отказом и не
+снижают rate: они увеличивают `false_rejection_inconclusive_samples`.
+
 ## Checkpoints и деградация хранилища
 
 До `graph.invoke` SQLite атомарно регистрирует active lease. Prune не удаляет

@@ -43,6 +43,10 @@ def test_versioned_dataset_replays_every_scenario_offline() -> None:
     assert report["passed"] == 12
     assert report["failed"] == 0
     assert all(
+        case["schema_version"] == "trace-eval-case-v1"
+        for case in report["cases"]
+    )
+    assert all(
         case["decision_digest"] and case["node_outputs_digest"]
         and case["output_digest"] and case["verdict_digest"]
         for case in report["cases"]

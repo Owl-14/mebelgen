@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 import sys
@@ -66,6 +67,55 @@ def _spec() -> dict:
             encoding="utf-8"
         )
     )
+
+
+def _digest(value: object) -> str:
+    canonical = json.dumps(
+        value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _eval_case(
+    expected_status: str,
+    candidate_status: object,
+    *,
+    include_candidate_status: bool = True,
+) -> dict:
+    decision = {"route": "offline-eval"}
+    output = {"status": candidate_status}
+    decision_digest = _digest(decision)
+    node_outputs_digest = _digest({"offline-eval": output})
+    output_digest = _digest(output)
+    label = {
+        "source": "MEB-151",
+        "expected_status": expected_status,
+        "false_rejection": (
+            expected_status in {"accepted", "replied"}
+            and candidate_status == "rejected"
+        ),
+    }
+    if include_candidate_status:
+        label["candidate_status"] = candidate_status
+    return {
+        "schema_version": "trace-eval-case-v1",
+        "decision": decision,
+        "decision_digest": decision_digest,
+        "node_outputs_digest": node_outputs_digest,
+        "output": output,
+        "output_digest": output_digest,
+        "evaluation_label": label,
+        "verdict_digest": _digest({
+            "schema_version": "trace-eval-case-v1",
+            "decision": decision_digest,
+            "node_outputs": node_outputs_digest,
+            "output": output_digest,
+            "evaluation_label": label,
+            "ok": True,
+        }),
+        "ok": True,
+        "mismatches": [],
+    }
 
 
 def test_component_flags_and_kill_switches_are_independent(
@@ -492,6 +542,89 @@ def test_meb151_security_refusal_is_not_a_false_rejection(tmp_path: Path) -> Non
     assert dashboard["summary"]["false_rejection_samples"] == 1
     assert dashboard["summary"]["false_rejection_rate"] == 0
     assert dashboard["stopped"] is False
+
+
+@pytest.mark.parametrize(
+    ("candidate_status", "include_candidate_status"),
+    [
+        pytest.param(None, False, id="missing"),
+        pytest.param("", True, id="empty"),
+        pytest.param("timeout", True, id="timeout"),
+        pytest.param("unknown", True, id="unknown"),
+        pytest.param("failed", True, id="failed"),
+        pytest.param("inconclusive", True, id="inconclusive"),
+        pytest.param("failed/inconclusive", True, id="failed-inconclusive"),
+    ],
+)
+def test_unresolved_eval_status_is_inconclusive_not_false_rejection_sample(
+    tmp_path: Path,
+    candidate_status: object,
+    include_candidate_status: bool,
+) -> None:
+    controller = RolloutController(
+        tmp_path, config=_config(), budgets=_strict_budgets(minimum_samples=1)
+    )
+    plan = controller.plan(None, None)
+    dashboard = controller.record_eval_case(
+        _eval_case(
+            "accepted",
+            candidate_status,
+            include_candidate_status=include_candidate_status,
+        ),
+        tenant_id=None,
+        user_id=None,
+        plan=plan,
+    )
+    assert dashboard["summary"]["false_rejection_samples"] == 0
+    assert dashboard["summary"]["false_rejection_rate"] is None
+    assert dashboard["summary"]["false_rejection_inconclusive_samples"] == 1
+
+
+def test_missing_candidate_status_cannot_lower_existing_false_rejection_rate(
+    tmp_path: Path,
+) -> None:
+    controller = RolloutController(
+        tmp_path, config=_config(), budgets=_strict_budgets(minimum_samples=1)
+    )
+    plan = controller.plan(None, None)
+    first = controller.record_eval_case(
+        _eval_case("accepted", "rejected"),
+        tenant_id=None, user_id=None, plan=plan,
+    )
+    assert first["summary"]["false_rejection_rate"] == 1
+    dashboard = controller.record_eval_case(
+        _eval_case("accepted", None, include_candidate_status=False),
+        tenant_id=None, user_id=None, plan=plan,
+    )
+    assert dashboard["summary"]["false_rejection_samples"] == 1
+    assert dashboard["summary"]["false_rejection_rate"] == 1
+    assert dashboard["summary"]["false_rejection_inconclusive_samples"] == 1
+
+
+@pytest.mark.parametrize("defect", ["schema", "not_ok", "verdict", "label"])
+def test_untrusted_replay_case_fails_closed_into_inconclusive_counter(
+    tmp_path: Path, defect: str,
+) -> None:
+    case = _eval_case("accepted", "accepted")
+    if defect == "schema":
+        case["schema_version"] = "trace-eval-case-unknown"
+    elif defect == "not_ok":
+        case["ok"] = False
+        case["mismatches"] = ["candidate timed out"]
+    elif defect == "label":
+        case["evaluation_label"]["expected_status"] = "replied"
+    else:
+        case["verdict_digest"] = "0" * 64
+    controller = RolloutController(
+        tmp_path, config=_config(), budgets=_strict_budgets(minimum_samples=1)
+    )
+    plan = controller.plan(None, None)
+    dashboard = controller.record_eval_case(
+        case, tenant_id=None, user_id=None, plan=plan
+    )
+    assert dashboard["summary"]["false_rejection_samples"] == 0
+    assert dashboard["summary"]["false_rejection_inconclusive_samples"] == 1
+    assert dashboard["summary"]["false_rejection_rate"] is None
 
 
 def test_rollout_store_is_bounded_and_corruption_fails_closed(tmp_path: Path) -> None:

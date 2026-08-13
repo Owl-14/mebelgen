@@ -32,6 +32,7 @@ from .studio_graph import MAX_REPAIR_ITERATIONS, spec_revision
 
 
 DATASET_SCHEMA = "trace-eval-v1"
+CASE_SCHEMA = "trace-eval-case-v1"
 DEFAULT_DATASET = Path(__file__).resolve().parent.parent / "qa" / "trace_eval" / "v1" / "scenarios.json"
 _APPROVED_VISION_ANNOTATIONS = {
     "cabinet-reference-v1": "25610da2655c0b34cb6d583496b1fb9e75ab66338d17f67f3e7509bb7ef6ebb0",
@@ -525,8 +526,10 @@ def replay_case(
     mismatches.extend(_subset_errors(expected_output, actual, "expected.output"))
     ok = not mismatches
     decision_digest = _digest(decision_evidence)
+    node_outputs_digest = _digest(nodes)
     output_digest = _digest(actual)
     return {
+        "schema_version": CASE_SCHEMA,
         "id": case_id,
         "tags": list(case.get("tags") or []),
         "prompt_id": case.get("recorded", {}).get("prompt_id"),
@@ -535,13 +538,16 @@ def replay_case(
         "provider": case.get("recorded", {}).get("provider"),
         "decision": decision_evidence,
         "decision_digest": decision_digest,
-        "node_outputs_digest": _digest(nodes),
+        "node_outputs_digest": node_outputs_digest,
         "output": actual,
         "output_digest": output_digest,
         "evaluation_label": evaluation_label,
         "verdict_digest": _digest({
+            "schema_version": CASE_SCHEMA,
             "decision": decision_digest,
+            "node_outputs": node_outputs_digest,
             "output": output_digest,
+            "evaluation_label": evaluation_label,
             "ok": ok,
         }),
         "ok": ok,

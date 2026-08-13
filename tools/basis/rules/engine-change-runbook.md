@@ -188,7 +188,10 @@ Provider обязан поддерживать общий внутренний �
    false-rejection, edit-success и checkpoint retention/size. Missing reported
    cost не считается нулём: percentile/min-samples используют только reported
    values. False-rejection берётся только из labelled eval MEB-151, live
-   divergence публикуется отдельно. Превышение
+   divergence публикуется отдельно. В denominator входят только trusted
+   `trace-eval-case-v1` с `ok=true`, валидным digest verdict и конечным статусом
+   `accepted|replied|rejected`; missing/timeout/unknown/failed/inconclusive
+   учитываются отдельным inconclusive counter. Превышение
    автоматически останавливает candidate и переключает следующие запросы на
    legacy; это не должно отключать production gate.
 5. Checkpoints имеют bounded retention. Недоступность/переполнение storage
