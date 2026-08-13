@@ -144,7 +144,8 @@ prompts/     системные промпты (convert, узлы чата Studi
 paramspecs/  входные ParamSpec (в т.ч. tz_*); .previews/ — кэш миниатюр каталога
 projects/    сгенерированные проекты-примеры (.json)
 materials/   catalog.json (курируемый) + baza_materiala.json (база ≈5000) + source/
-scripts/     ImportFurnitureFromJSON.js (импорт в БАЗИС) + import_materials_base.py
+scripts/     ImportFurnitureFromJSON.js (импорт в БАЗИС), source preflight/mock-call harness,
+             detect_basis_api.js + import_materials_base.py
 rules/       источник истины: architecture, paramspec, core, generators, hardware,
              materials, studio, delivery, tumby
 tests/       pytest + tests/regression.py (гейт) + goldens/
