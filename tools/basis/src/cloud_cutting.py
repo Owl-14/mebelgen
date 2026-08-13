@@ -17,6 +17,7 @@ from typing import Any
 import requests
 
 from .cloud_api import BASE_URL
+from .material_link_contract import serialize_link_payload
 
 PREFIX = "/api-cutting-public"
 
@@ -75,7 +76,25 @@ class CuttingClient:
         return self._get(f"/cad-models/{model_id}/materials")
 
     def set_link_materials(self, model_id: int, links: Any) -> Any:
-        return self._post(f"/cad-models/{model_id}/set-link-materials", json=links)
+        """Post only the documented ``CuttingMaterialLinkDTO`` array.
+
+        Target MatBase names must already be confirmed.  This method validates
+        transport shape; it does not infer names from local articles.  The
+        remote POST is not assumed idempotent and is deliberately attempted
+        once; callers must reconcile state before any manually approved retry.
+        """
+        return self._post(
+            f"/cad-models/{model_id}/set-link-materials",
+            json=serialize_link_payload(links),
+        )
+
+    def cutting_materials(self, order_id: int) -> Any:
+        """Read linked MatBase ids, articles and configured sheet items."""
+        return self._get("/cutting-materials", orderId=order_id)
+
+    def cutted_materials(self, order_id: int) -> Any:
+        """Read post-cut material statistics used as production evidence."""
+        return self._get(f"/orders/{order_id}/cutted-materials")
 
     # --- производство ---
     def run_production_files(self, order_id: int) -> Any:
@@ -117,6 +136,8 @@ def api_overview() -> str:
         "  POST /cad-models?orderId&count&cutModels       — загрузить модель (.b3d/.cfrn) в заказ",
         "  GET  /cad-models/{id}/materials                — материалы модели",
         "  POST /cad-models/{id}/set-link-materials       — связать материалы с базой",
+        "  GET  /cutting-materials?orderId                — MatBase id, артикулы и листы",
+        "  GET  /orders/{id}/cutted-materials             — результат и статистика раскроя",
         "  POST /orders/{id}/run-generation-production-files",
         "  GET  /orders/{id}/production-files-url          — ссылка на производственные файлы",
         "  POST /orders/{id}/run-generation-control-program-files (ЧПУ)",

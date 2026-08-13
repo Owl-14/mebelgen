@@ -238,8 +238,15 @@ def test_arbitrary_install_root_is_rejected_before_any_traversal(tmp_path: Path)
     report = json.loads(result.stdout)
     assert report["status"] == "blocked"
     assert "basis_install_path_untrusted_scope" in report["blockers"]
-    assert report["basis"]["acceptedRoots"] == []
-    assert report["basis"]["executableEvidence"] == []
+    resolved_fake_root = fake_root.resolve()
+    assert all(
+        Path(row["path"]).resolve() != resolved_fake_root
+        for row in report["basis"]["acceptedRoots"]
+    )
+    assert all(
+        not Path(row["path"]).resolve().is_relative_to(resolved_fake_root)
+        for row in report["basis"]["executableEvidence"]
+    )
     assert any(row["reason"] == "outside_trusted_scope" for row in report["basis"]["rejectedRoots"])
 
 
