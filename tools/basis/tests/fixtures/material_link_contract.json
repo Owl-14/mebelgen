@@ -1,0 +1,52 @@
+{
+  "scope": "synthetic-offline-contract-only",
+  "realBasisVerified": false,
+  "cfrn": {
+    "model": {"tableIndex": -1, "objs": []},
+    "table": {
+      "materials": [
+        {"name": "__FIXTURE_CAD_SHEET__", "art": "__FIXTURE_LOCAL_ARTICLE__"}
+      ],
+      "objects": [
+        {
+          "objType": 2,
+          "materialIndex": 0,
+          "thickness": 16,
+          "contour": {"size": {"x": 720, "y": 560}}
+        }
+      ]
+    }
+  },
+  "cadModelMaterials": ["__FIXTURE_CAD_SHEET__"],
+  "confirmations": [
+    {
+      "originalMaterialFullName": "__FIXTURE_CAD_SHEET__",
+      "linkedMaterialFullName": "__FIXTURE_CONFIRMED_MATBASE_TARGET__",
+      "article": "__FIXTURE_LOCAL_ARTICLE__",
+      "sheets": [
+        {"height": 2800, "width": 2070, "count": 1, "production": true, "materialType": 1}
+      ]
+    }
+  ],
+  "cuttingMaterials": [
+    {
+      "name": "__FIXTURE_CONFIRMED_MATBASE_TARGET__",
+      "article": "__FIXTURE_LOCAL_ARTICLE__",
+      "inMaterialBaseId": 1,
+      "items": [
+        {"height": 2800, "width": 2070, "count": 1, "production": true, "materialType": 1}
+      ]
+    }
+  ],
+  "cuttedMaterials": [
+    {
+      "name": "__FIXTURE_CONFIRMED_MATBASE_TARGET__",
+      "article": "__FIXTURE_LOCAL_ARTICLE__",
+      "type": 0,
+      "inMaterialBaseId": 1,
+      "height": 2800,
+      "width": 2070,
+      "statistic": {"boardsCount": 1, "countPlate": 1}
+    }
+  ]
+}

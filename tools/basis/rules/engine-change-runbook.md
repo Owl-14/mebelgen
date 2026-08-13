@@ -67,6 +67,7 @@
 | Генераторы | `src/generators/registry.py`, `src/generators/*.py` | панели, размеры, placement и конструкция каждого архетипа |
 | Присадки/фурнитура | `src/hardware.py`, `src/hardware_geometry.py`, `src/fasteners3d.py` | система 32, отверстия, крепёж и его 3D-представление |
 | Материалы | `src/materials.py`, `src/materials_policy.py`, `materials/` | реальные материалы/артикулы, резолвинг и политика полноты |
+| Связка Cutting/MatBase | `src/material_link_contract.py`, `src/cloud_cutting.py` | offline-план name/article/sheet, строгий payload и аудит внешних результатов без выдумывания MatBase |
 | Quality gates | `src/production_gate.py`, `src/*_check.py`, `src/validate.py` | единое решение, можно ли принять ревизию и производить изделие |
 | CFRN/B3D | `src/cfrn.py`, `src/b3d_*.py`, `src/build_b3d.py` | кодирование и проверка производственных файлов |
 | Studio/API | `src/studio.py`, `rules/studio.md` | каталог, API, сохранение ревизий, UX ошибок и запуск pipeline |

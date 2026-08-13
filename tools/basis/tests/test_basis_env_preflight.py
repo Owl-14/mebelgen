@@ -258,7 +258,8 @@ def test_arbitrary_install_root_is_rejected_before_any_traversal(tmp_path: Path)
         for row in report["basis"]["acceptedRoots"]
     )
     assert all(
-        fake_root_resolved != Path(row["installRoot"]).resolve()
+        not Path(row["path"]).resolve().is_relative_to(fake_root_resolved)
+        and fake_root_resolved != Path(row["installRoot"]).resolve()
         for row in report["basis"]["executableEvidence"]
     )
     assert any(row["reason"] == "outside_trusted_scope" for row in report["basis"]["rejectedRoots"])
