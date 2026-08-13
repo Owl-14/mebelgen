@@ -1,0 +1,131 @@
+{
+  "ab_decision_rule": {
+    "adopt_when": "rule_version=paramspec-ab-v1 AND paired frozen holdout excluded from training/RAG AND confidence_level=0.95 AND cases_per_arm >= 100 AND all intervals are finite and ordered AND primary_delta_ci95.lower >= 0.02 AND production_gate_pass_rate_delta_ci95.lower >= 0.0 AND invalid_output_rate_delta_ci95.upper <= 0.0",
+    "confidence_level": 0.95,
+    "design": "paired_frozen_holdout",
+    "min_cases_per_arm": 100,
+    "min_primary_delta": 0.02,
+    "primary_metric": "paramspec_field_accuracy",
+    "rule_version": "paramspec-ab-v1",
+    "safety_metrics": {
+      "invalid_output_rate_max_delta": 0.0,
+      "production_gate_pass_rate_min_delta": 0.0
+    }
+  },
+  "ab_result": {
+    "adopt": false,
+    "decision": "not_run",
+    "reasons": [
+      "ab.result_missing"
+    ]
+  },
+  "blockers": [
+    {
+      "actual": 0,
+      "code": "dataset.minimum_clean_pairs_not_met",
+      "missing": 200,
+      "required": 200
+    },
+    {
+      "code": "dataset.split_distribution_invalid"
+    },
+    {
+      "code": "prompt_rag.evidence_missing"
+    },
+    {
+      "code": "prompt_rag.plateau_not_proven"
+    }
+  ],
+  "dataset": {
+    "clean_unique_pairs": 0,
+    "files_seen": 0,
+    "minimum_clean_pairs": 200,
+    "path": "dataset",
+    "quality_error_counts": {},
+    "quality_passed": 0
+  },
+  "decision": "stay_in_backlog",
+  "dedup": {
+    "duplicate_pair_ids": [],
+    "duplicate_pairs": [],
+    "duplicate_paramspecs": [],
+    "duplicate_sources": [],
+    "ok": true
+  },
+  "leakage": {
+    "groups": [],
+    "ok": true
+  },
+  "mode": "dry-run",
+  "prompt_rag_plateau": {
+    "benchmark_excluded_from_training_and_rag": false,
+    "benchmark_frozen": false,
+    "complete_run_identity": false,
+    "eligible_runs": 0,
+    "maximum_absolute_step_delta": 0.01,
+    "minimum_cases_per_run": 50,
+    "ok": false,
+    "required_runs": 3,
+    "same_frozen_benchmark": false,
+    "step_deltas": [],
+    "window": []
+  },
+  "provenance_policy": {
+    "allowed_rights_bases": [
+      "customer_contract",
+      "dataset_license",
+      "explicit_consent",
+      "internal_ownership"
+    ],
+    "allowed_source_types": [
+      "customer_tz",
+      "internal_production_tz",
+      "licensed_external_tz"
+    ],
+    "prohibited_source_types": [
+      "demo",
+      "fixture",
+      "generated",
+      "mock",
+      "synthetic",
+      "test"
+    ],
+    "required_scope": "paramspec-model-development",
+    "requires_structured_rights_record": true,
+    "trust_limit": "metadata_consistency_only; legal authenticity and reviewer authority require independent governance audit"
+  },
+  "ready_for_finetune_experiment": false,
+  "schema_version": "finetune-data-readiness-v1",
+  "split": {
+    "allowed": [
+      "train",
+      "validation",
+      "test"
+    ],
+    "counts": {
+      "test": 0,
+      "train": 0,
+      "validation": 0
+    },
+    "ok": false,
+    "ratio_limits": {
+      "test": [
+        0.05,
+        0.2
+      ],
+      "train": [
+        0.7,
+        0.9
+      ],
+      "validation": [
+        0.05,
+        0.2
+      ]
+    },
+    "ratios": {
+      "test": 0.0,
+      "train": 0.0,
+      "validation": 0.0
+    }
+  }
+}

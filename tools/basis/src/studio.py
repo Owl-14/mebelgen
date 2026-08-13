@@ -118,27 +118,30 @@ def build_payload(spec: dict[str, Any]) -> dict[str, Any]:
         "generate": "schema",
         "consistency": "consistency",
         "geometry": "geometry",
+        "bounds": "geometry",
         "cfrn_encoding": "cfrn",
         "cfrn_holes_parity": "holes",
         "drilling_geometry": "drilling",
+        "system_32": "drilling",
+        "purpose_registry": "drilling",
+        "completeness": "completeness",
+        "materials": "materials",
     }
     for check in decision.report.checks:
         target = stage_to_issue.get(check.name)
         for problem in check.issues:
             if problem.severity != "error":
                 continue
-            if check.name == "completeness_materials":
-                target = "materials" if problem.code.startswith("materials.") else "completeness"
             if target:
                 issues[target].append(problem.detail)
     project = decision.project
     exposed_checks = {
         "schema": ("pydantic", "json_schema", "generate"),
         "consistency": ("consistency",),
-        "geometry": ("geometry",),
+        "geometry": ("geometry", "bounds"),
         "cfrn": ("cfrn_encoding",),
         "holes": ("cfrn_holes_parity",),
-        "drilling": ("drilling_geometry",),
+        "drilling": ("drilling_geometry", "system_32", "purpose_registry"),
     }
     checks_by_name = {check.name: check for check in decision.report.checks}
     for public_name, stage_names in exposed_checks.items():

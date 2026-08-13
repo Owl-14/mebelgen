@@ -124,10 +124,14 @@ _CHECK_ORDER = (
     "generate",
     "consistency",
     "geometry",
+    "bounds",
     "cfrn_encoding",
     "cfrn_holes_parity",
     "drilling_geometry",
-    "completeness_materials",
+    "system_32",
+    "purpose_registry",
+    "completeness",
+    "materials",
 )
 
 _PURPOSES = {
@@ -136,10 +140,14 @@ _PURPOSES = {
     "generate": "Детерминированный генератор должен построить производственную модель.",
     "consistency": "Размеры деталей и их размещение должны быть согласованы без пересечений.",
     "geometry": "Детали должны находиться в габарите и не иметь запрещённых нахлёстов.",
+    "bounds": "Структурные детали должны оставаться внутри заявленных габаритов изделия.",
     "cfrn_encoding": "Модель должна без потерь кодироваться в производственный CFRN.",
     "cfrn_holes_parity": "Присадки CFRN должны совпадать с расчётом сверловки.",
     "drilling_geometry": "Все отверстия должны быть физически выполнимы на присадочном центре.",
-    "completeness_materials": "Все заявленные детали должны быть закреплены, а материалы — определены.",
+    "system_32": "Производственные присадки должны соблюдать систему 32.",
+    "purpose_registry": "Каждый purpose присадки должен быть зарегистрирован во всех потребителях.",
+    "completeness": "Все заявленные детали и функции должны быть построены и закреплены.",
+    "materials": "Все производственные материальные слоты должны быть определены.",
 }
 
 _REPAIRS = {
@@ -148,10 +156,14 @@ _REPAIRS = {
     "generate": ("SetDimension", "ChangeArchetype", "AddSection", "UpdateSection", "DeleteSection"),
     "consistency": ("MovePart", "ResizePart", "DeletePart"),
     "geometry": ("MovePart", "ResizePart", "DeletePart"),
+    "bounds": ("MovePart", "ResizePart", "DeletePart"),
     "cfrn_encoding": ("MovePart", "ResizePart", "DeletePart"),
     "cfrn_holes_parity": ("MovePart", "ResizePart", "DeletePart"),
     "drilling_geometry": ("MovePart", "ResizePart", "DeletePart"),
-    "completeness_materials": ("SetMaterial", "AddShelf", "MovePart", "ResizePart"),
+    "system_32": ("MovePart", "ResizePart", "DeletePart"),
+    "purpose_registry": ("MovePart", "ResizePart", "DeletePart"),
+    "completeness": ("AddShelf", "MovePart", "ResizePart"),
+    "materials": ("SetMaterial",),
 }
 
 
@@ -279,14 +291,24 @@ def evaluate_production_gate(candidate: Any) -> GateDecision:
         from .consistency_check import check_consistency
 
         for problem in check_consistency(project):
-            if problem.severity == "error":
-                consistency_step.issues.append(
-                    _issue(
-                        "consistency",
-                        "model.consistency",
-                        f"{problem.panel}: {problem.message}",
-                    )
+            severity = "error" if problem.code in {
+                "bad_orientation",
+                "nonpositive_span",
+                "thickness_mismatch",
+                "dim_width_mismatch",
+                "dim_height_mismatch",
+                "position_mismatch",
+                "panel_overlap",
+                "duplicate_name",
+            } else "warning"
+            consistency_step.issues.append(
+                _issue(
+                    "consistency",
+                    f"model.consistency.{problem.code}",
+                    f"{problem.panel}: {problem.message}",
+                    severity=severity,
                 )
+            )
     except Exception as error:
         consistency_step.issues.append(_issue("consistency", "check.consistency_failed", error))
     checks.append(consistency_step)
@@ -304,6 +326,18 @@ def evaluate_production_gate(candidate: Any) -> GateDecision:
     except Exception as error:
         geometry_step.issues.append(_issue("geometry", "check.geometry_failed", error))
     checks.append(geometry_step)
+
+    bounds_step = CheckStep("bounds")
+    try:
+        from .bounds_check import check_model_bounds
+
+        bounds_step.issues.extend(
+            _issue("bounds", "model.out_of_bounds", detail)
+            for detail in check_model_bounds(project)
+        )
+    except Exception as error:
+        bounds_step.issues.append(_issue("bounds", "check.bounds_failed", error))
+    checks.append(bounds_step)
 
     cfrn_step = CheckStep("cfrn_encoding")
     try:
@@ -330,6 +364,7 @@ def evaluate_production_gate(candidate: Any) -> GateDecision:
     checks.append(holes_step)
 
     drilling_step = CheckStep("drilling_geometry")
+    drilling: dict[str, list[str]] = {"errors": [], "warnings": []}
     try:
         from .drilling_check import check_drilling_geometry
 
@@ -341,24 +376,64 @@ def evaluate_production_gate(candidate: Any) -> GateDecision:
         drilling_step.issues.extend(
             _issue("drilling_geometry", "drilling.warning", detail, severity="warning")
             for detail in drilling.get("warnings", [])
+            if "система 32" not in detail
         )
     except Exception as error:
         drilling_step.issues.append(_issue("drilling_geometry", "check.drilling_failed", error))
     checks.append(drilling_step)
 
-    readiness_step = CheckStep("completeness_materials")
-    material_refs: dict[str, Any] = {}
+    system32_step = CheckStep("system_32")
+    system32_step.issues.extend(
+        _issue("system_32", "drilling.system_32", detail, severity="warning")
+        for detail in drilling.get("warnings", [])
+        if "система 32" in detail
+    )
+    checks.append(system32_step)
+
+    purpose_step = CheckStep("purpose_registry")
+    try:
+        from .fasteners3d import registered_fastener_purposes as cfrn_purposes
+        from .hardware import compute_drilling, registered_fastener_purposes as bom_purposes
+        from .webviewer import registered_viewer_fastener_purposes as viewer_purposes
+
+        emitted = {str(hole.get("purpose") or "") for hole in compute_drilling(project)}
+        registries = {
+            "BOM": bom_purposes(),
+            "CFRN 3D": cfrn_purposes(),
+            "viewer": viewer_purposes(),
+        }
+        for registry, purposes in registries.items():
+            missing = sorted(emitted - purposes)
+            if missing:
+                purpose_step.issues.append(
+                    _issue(
+                        "purpose_registry",
+                        "drilling.unregistered_purpose",
+                        f"{registry}: нет purpose {', '.join(missing)}.",
+                    )
+                )
+    except Exception as error:
+        purpose_step.issues.append(
+            _issue("purpose_registry", "check.purpose_registry_failed", error)
+        )
+    checks.append(purpose_step)
+
+    completeness_step = CheckStep("completeness")
     try:
         from .completeness_check import check_completeness
 
-        readiness_step.issues.extend(
-            _issue("completeness_materials", "model.incomplete", detail)
+        completeness_step.issues.extend(
+            _issue("completeness", "model.incomplete", detail)
             for detail in check_completeness(project, spec)
         )
     except Exception as error:
-        readiness_step.issues.append(
-            _issue("completeness_materials", "check.completeness_failed", error)
+        completeness_step.issues.append(
+            _issue("completeness", "check.completeness_failed", error)
         )
+    checks.append(completeness_step)
+
+    materials_step = CheckStep("materials")
+    material_refs: dict[str, Any] = {}
     try:
         from .materials import resolve_project_materials
 
@@ -366,26 +441,26 @@ def evaluate_production_gate(candidate: Any) -> GateDecision:
         project["material_refs"] = material_refs
         for slot, value in material_refs.items():
             if isinstance(value, Mapping) and not value.get("resolved"):
-                readiness_step.issues.append(
+                materials_step.issues.append(
                     _issue(
-                        "completeness_materials",
+                        "materials",
                         "materials.unresolved",
                         f"Не выбрана производственная позиция для слота {slot}.",
                     )
                 )
     except Exception as error:
-        readiness_step.issues.append(
-            _issue("completeness_materials", "materials.resolve_failed", error)
+        materials_step.issues.append(
+            _issue("materials", "materials.resolve_failed", error)
         )
     for warning in project.get("warnings") or []:
-        readiness_step.issues.append(
-            _issue("completeness_materials", "model.warning", warning, severity="warning")
+        materials_step.issues.append(
+            _issue("materials", "model.warning", warning, severity="warning")
         )
     for warning in project.get("estimated_values") or []:
-        readiness_step.issues.append(
-            _issue("completeness_materials", "model.estimated_value", warning, severity="warning")
+        materials_step.issues.append(
+            _issue("materials", "model.estimated_value", warning, severity="warning")
         )
-    checks.append(readiness_step)
+    checks.append(materials_step)
 
     report = CheckReport(checks)
     return GateDecision(
