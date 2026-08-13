@@ -1,0 +1,222 @@
+{
+  "project_name": "Журнальный стол 1000×450×450",
+  "furniture_type": "стол",
+  "overall_dimensions": {
+    "width": 1000,
+    "depth": 450,
+    "height": 450,
+    "tolerance": 5
+  },
+  "materials": {
+    "board_material": "МДФ под покраску",
+    "board_thickness": 50,
+    "back_wall_material": "ДВП",
+    "edge_band_thickness": 2,
+    "color": "RAL 8019",
+    "color_code": "PPL RAL 8019"
+  },
+  "sections": [
+    {
+      "id": "main",
+      "type": "desk",
+      "dimensions": {
+        "width": 900,
+        "height": 400.0,
+        "depth": 450,
+        "estimated": false
+      },
+      "elements": [
+        "Столешница",
+        "Опора левая",
+        "Опора правая"
+      ]
+    }
+  ],
+  "panels": [
+    {
+      "name": "Столешница",
+      "type": "top",
+      "basis_orientation": "horizont",
+      "material": "МДФ под покраску",
+      "thickness": 50,
+      "dimensions": {
+        "width": 1000,
+        "height": 450
+      },
+      "placement": {
+        "x1": 0,
+        "x2": 1000,
+        "y1": 400,
+        "y2": 450,
+        "z1": 0,
+        "z2": 450
+      },
+      "position": {
+        "x": 0,
+        "y": 400,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0.5,
+        "right": 0.5
+      },
+      "estimated": false
+    },
+    {
+      "name": "Опора левая",
+      "type": "side_left",
+      "basis_orientation": "vertical",
+      "material": "МДФ под покраску",
+      "thickness": 50,
+      "dimensions": {
+        "width": 450,
+        "height": 400
+      },
+      "placement": {
+        "x1": 0,
+        "x2": 50,
+        "y1": 0,
+        "y2": 400,
+        "z1": 0,
+        "z2": 450
+      },
+      "position": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
+      },
+      "estimated": false
+    },
+    {
+      "name": "Опора правая",
+      "type": "side_right",
+      "basis_orientation": "vertical",
+      "material": "МДФ под покраску",
+      "thickness": 50,
+      "dimensions": {
+        "width": 450,
+        "height": 400
+      },
+      "placement": {
+        "x1": 950,
+        "x2": 1000,
+        "y1": 0,
+        "y2": 400,
+        "z1": 0,
+        "z2": 450
+      },
+      "position": {
+        "x": 950,
+        "y": 0,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
+      },
+      "estimated": false
+    }
+  ],
+  "drawers": [],
+  "doors": [],
+  "hardware": {
+    "handles": {
+      "type": "нет",
+      "material": "—",
+      "color": "—",
+      "size": 0,
+      "count": 0,
+      "offset_from_top": 0,
+      "furniture_encoded": ""
+    },
+    "legs": {
+      "type": "боковины",
+      "adjustable": false,
+      "color": "—",
+      "height": 0,
+      "count": 0
+    }
+  },
+  "constraints": {
+    "default_gap": 2,
+    "drawer_gap": 2,
+    "door_gap": 2,
+    "back_wall_offset": 3,
+    "construction": "top_bottom_over_sides"
+  },
+  "basis_mapping": {
+    "coordinate_system": "basis_mebelshik",
+    "units": "mm",
+    "ready_for_import": true,
+    "placement_required": true
+  },
+  "warnings": [
+    "Столешница 50 мм на боковых опорах; простой журнальный стол.",
+    "Задняя стенка в ТЗ не указана — принята ДВП 3 мм (стандарт)."
+  ],
+  "estimated_values": [
+    "конструкция опор"
+  ],
+  "carcass_calculation": {
+    "W": 1000,
+    "D": 450,
+    "H": 450,
+    "T": 50,
+    "construction": "top_on_supports"
+  },
+  "material_refs": {
+    "back": {
+      "resolved": true,
+      "id": "2001",
+      "article": "2001",
+      "name": "ХДФ, 3 мм, Белый лак., Kronostar",
+      "cost": 245,
+      "unit": "кв.м.",
+      "group": "01 Листовой материал/ДВП,ХДФ",
+      "match": "задник ДВП/ХДФ",
+      "confidence": "medium"
+    },
+    "board": {
+      "resolved": false,
+      "query": "плита 50 мм",
+      "reason": "нет плиты 50 мм в базе",
+      "candidates": []
+    },
+    "edge": {
+      "resolved": true,
+      "id": "1759",
+      "article": "1759",
+      "name": "Кромка ПВХ, 19/2 мм, Белый, 91470-14, Rehau",
+      "cost": 20,
+      "unit": "пог. м",
+      "group": "02 Кромочные материалы/Кромка 19мм/2/19",
+      "match": "по толщине (в цвет плиты)",
+      "confidence": "low"
+    }
+  }
+}
