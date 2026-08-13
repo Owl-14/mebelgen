@@ -1,0 +1,10 @@
+{
+  "report_version": 1,
+  "cases": [
+    {
+      "id": "cabinet-700x400x500",
+      "project": "../../projects/cabinet_700x400x500.json",
+      "purpose": "Source input with all panel orientations, material and edge fields, plus non-empty Python system-32 drilling expectations"
+    }
+  ]
+}

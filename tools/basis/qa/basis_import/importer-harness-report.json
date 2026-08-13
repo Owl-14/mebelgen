@@ -1,0 +1,1111 @@
+{
+  "report_version": 2,
+  "evidence_taxonomy": {
+    "kind": "mock_observed_importer_calls",
+    "native_basis_observed": false,
+    "description": "calls observed while executing the real importer against a mock; not a native import result"
+  },
+  "fixture": "projects/cabinet_700x400x500.json",
+  "importer": "scripts/ImportFurnitureFromJSON.js",
+  "mock_execution_status": "pass",
+  "acceptance_status": "blocked_missing_licensed_basis",
+  "observed_importer_calls": {
+    "panels": {
+      "status": "observed_in_mock",
+      "call_count": 35,
+      "call_sequences": [
+        3,
+        7,
+        8,
+        12,
+        14,
+        15,
+        19,
+        21,
+        22,
+        26,
+        28,
+        29,
+        33,
+        35,
+        36,
+        40,
+        42,
+        43,
+        47,
+        49,
+        50,
+        54,
+        56,
+        57,
+        61,
+        63,
+        64,
+        68,
+        70,
+        71,
+        75,
+        77,
+        78,
+        82,
+        84
+      ]
+    },
+    "materials": {
+      "status": "observed_in_mock",
+      "call_count": 12,
+      "call_sequences": [
+        6,
+        11,
+        18,
+        25,
+        32,
+        39,
+        46,
+        53,
+        60,
+        67,
+        74,
+        81
+      ]
+    },
+    "edge_banding": {
+      "status": "not_observed",
+      "call_count": 0,
+      "call_sequences": []
+    },
+    "drilling": {
+      "status": "not_observed",
+      "call_count": 0,
+      "call_sequences": []
+    },
+    "native_b3d": {
+      "status": "not_observed",
+      "call_count": 0,
+      "call_sequences": []
+    }
+  },
+  "api_call_log": [
+    {
+      "sequence": 1,
+      "api": "system.askFileName",
+      "arguments": {
+        "title": "JSON проекта",
+        "filter": "JSON (*.json)|*.json|Все файлы (*.*)|*.*",
+        "returns": "projects/cabinet_700x400x500.json"
+      }
+    },
+    {
+      "sequence": 2,
+      "api": "system.readTextFile",
+      "arguments": {
+        "path": "projects/cabinet_700x400x500.json"
+      }
+    },
+    {
+      "sequence": 3,
+      "api": "objects3d.NewPanel",
+      "arguments": {
+        "width": 700,
+        "height": 400,
+        "orientation": "horizont",
+        "returns": "panel_1"
+      }
+    },
+    {
+      "sequence": 4,
+      "api": "panel.Thickness.set",
+      "arguments": {
+        "panel": "panel_1",
+        "value": 16
+      }
+    },
+    {
+      "sequence": 5,
+      "api": "panel.Name.set",
+      "arguments": {
+        "panel": "panel_1",
+        "value": "Дно"
+      }
+    },
+    {
+      "sequence": 6,
+      "api": "panel.MaterialName.set",
+      "arguments": {
+        "panel": "panel_1",
+        "value": "Белый"
+      }
+    },
+    {
+      "sequence": 7,
+      "api": "panel.Build",
+      "arguments": {
+        "panel": "panel_1"
+      }
+    },
+    {
+      "sequence": 8,
+      "api": "objects3d.NewPanel",
+      "arguments": {
+        "width": 700,
+        "height": 400,
+        "orientation": "horizont",
+        "returns": "panel_2"
+      }
+    },
+    {
+      "sequence": 9,
+      "api": "panel.Thickness.set",
+      "arguments": {
+        "panel": "panel_2",
+        "value": 16
+      }
+    },
+    {
+      "sequence": 10,
+      "api": "panel.Name.set",
+      "arguments": {
+        "panel": "panel_2",
+        "value": "Крышка"
+      }
+    },
+    {
+      "sequence": 11,
+      "api": "panel.MaterialName.set",
+      "arguments": {
+        "panel": "panel_2",
+        "value": "Белый"
+      }
+    },
+    {
+      "sequence": 12,
+      "api": "panel.Build",
+      "arguments": {
+        "panel": "panel_2"
+      }
+    },
+    {
+      "sequence": 13,
+      "api": "geometry3d.VectorMake",
+      "arguments": {
+        "x": 0,
+        "y": 484,
+        "z": 0
+      }
+    },
+    {
+      "sequence": 14,
+      "api": "panel.TranslateGCS",
+      "arguments": {
+        "panel": "panel_2",
+        "vector": {
+          "x": 0,
+          "y": 484,
+          "z": 0
+        }
+      }
+    },
+    {
+      "sequence": 15,
+      "api": "objects3d.NewPanel",
+      "arguments": {
+        "width": 400,
+        "height": 468,
+        "orientation": "vertical",
+        "returns": "panel_3"
+      }
+    },
+    {
+      "sequence": 16,
+      "api": "panel.Thickness.set",
+      "arguments": {
+        "panel": "panel_3",
+        "value": 16
+      }
+    },
+    {
+      "sequence": 17,
+      "api": "panel.Name.set",
+      "arguments": {
+        "panel": "panel_3",
+        "value": "Боковина левая"
+      }
+    },
+    {
+      "sequence": 18,
+      "api": "panel.MaterialName.set",
+      "arguments": {
+        "panel": "panel_3",
+        "value": "Белый"
+      }
+    },
+    {
+      "sequence": 19,
+      "api": "panel.Build",
+      "arguments": {
+        "panel": "panel_3"
+      }
+    },
+    {
+      "sequence": 20,
+      "api": "geometry3d.VectorMake",
+      "arguments": {
+        "x": 0,
+        "y": 16,
+        "z": 0
+      }
+    },
+    {
+      "sequence": 21,
+      "api": "panel.TranslateGCS",
+      "arguments": {
+        "panel": "panel_3",
+        "vector": {
+          "x": 0,
+          "y": 16,
+          "z": 0
+        }
+      }
+    },
+    {
+      "sequence": 22,
+      "api": "objects3d.NewPanel",
+      "arguments": {
+        "width": 400,
+        "height": 468,
+        "orientation": "vertical",
+        "returns": "panel_4"
+      }
+    },
+    {
+      "sequence": 23,
+      "api": "panel.Thickness.set",
+      "arguments": {
+        "panel": "panel_4",
+        "value": 16
+      }
+    },
+    {
+      "sequence": 24,
+      "api": "panel.Name.set",
+      "arguments": {
+        "panel": "panel_4",
+        "value": "Боковина правая"
+      }
+    },
+    {
+      "sequence": 25,
+      "api": "panel.MaterialName.set",
+      "arguments": {
+        "panel": "panel_4",
+        "value": "Белый"
+      }
+    },
+    {
+      "sequence": 26,
+      "api": "panel.Build",
+      "arguments": {
+        "panel": "panel_4"
+      }
+    },
+    {
+      "sequence": 27,
+      "api": "geometry3d.VectorMake",
+      "arguments": {
+        "x": 684,
+        "y": 16,
+        "z": 0
+      }
+    },
+    {
+      "sequence": 28,
+      "api": "panel.TranslateGCS",
+      "arguments": {
+        "panel": "panel_4",
+        "vector": {
+          "x": 684,
+          "y": 16,
+          "z": 0
+        }
+      }
+    },
+    {
+      "sequence": 29,
+      "api": "objects3d.NewPanel",
+      "arguments": {
+        "width": 668,
+        "height": 468,
+        "orientation": "front",
+        "returns": "panel_5"
+      }
+    },
+    {
+      "sequence": 30,
+      "api": "panel.Thickness.set",
+      "arguments": {
+        "panel": "panel_5",
+        "value": 16
+      }
+    },
+    {
+      "sequence": 31,
+      "api": "panel.Name.set",
+      "arguments": {
+        "panel": "panel_5",
+        "value": "Задняя стенка"
+      }
+    },
+    {
+      "sequence": 32,
+      "api": "panel.MaterialName.set",
+      "arguments": {
+        "panel": "panel_5",
+        "value": "Белый"
+      }
+    },
+    {
+      "sequence": 33,
+      "api": "panel.Build",
+      "arguments": {
+        "panel": "panel_5"
+      }
+    },
+    {
+      "sequence": 34,
+      "api": "geometry3d.VectorMake",
+      "arguments": {
+        "x": 16,
+        "y": 16,
+        "z": 384
+      }
+    },
+    {
+      "sequence": 35,
+      "api": "panel.TranslateGCS",
+      "arguments": {
+        "panel": "panel_5",
+        "vector": {
+          "x": 16,
+          "y": 16,
+          "z": 384
+        }
+      }
+    },
+    {
+      "sequence": 36,
+      "api": "objects3d.NewPanel",
+      "arguments": {
+        "width": 668,
+        "height": 368,
+        "orientation": "horizont",
+        "returns": "panel_6"
+      }
+    },
+    {
+      "sequence": 37,
+      "api": "panel.Thickness.set",
+      "arguments": {
+        "panel": "panel_6",
+        "value": 16
+      }
+    },
+    {
+      "sequence": 38,
+      "api": "panel.Name.set",
+      "arguments": {
+        "panel": "panel_6",
+        "value": "Полка 1"
+      }
+    },
+    {
+      "sequence": 39,
+      "api": "panel.MaterialName.set",
+      "arguments": {
+        "panel": "panel_6",
+        "value": "Белый"
+      }
+    },
+    {
+      "sequence": 40,
+      "api": "panel.Build",
+      "arguments": {
+        "panel": "panel_6"
+      }
+    },
+    {
+      "sequence": 41,
+      "api": "geometry3d.VectorMake",
+      "arguments": {
+        "x": 16,
+        "y": 69,
+        "z": 16
+      }
+    },
+    {
+      "sequence": 42,
+      "api": "panel.TranslateGCS",
+      "arguments": {
+        "panel": "panel_6",
+        "vector": {
+          "x": 16,
+          "y": 69,
+          "z": 16
+        }
+      }
+    },
+    {
+      "sequence": 43,
+      "api": "objects3d.NewPanel",
+      "arguments": {
+        "width": 668,
+        "height": 368,
+        "orientation": "horizont",
+        "returns": "panel_7"
+      }
+    },
+    {
+      "sequence": 44,
+      "api": "panel.Thickness.set",
+      "arguments": {
+        "panel": "panel_7",
+        "value": 16
+      }
+    },
+    {
+      "sequence": 45,
+      "api": "panel.Name.set",
+      "arguments": {
+        "panel": "panel_7",
+        "value": "Полка 2"
+      }
+    },
+    {
+      "sequence": 46,
+      "api": "panel.MaterialName.set",
+      "arguments": {
+        "panel": "panel_7",
+        "value": "Белый"
+      }
+    },
+    {
+      "sequence": 47,
+      "api": "panel.Build",
+      "arguments": {
+        "panel": "panel_7"
+      }
+    },
+    {
+      "sequence": 48,
+      "api": "geometry3d.VectorMake",
+      "arguments": {
+        "x": 16,
+        "y": 138,
+        "z": 16
+      }
+    },
+    {
+      "sequence": 49,
+      "api": "panel.TranslateGCS",
+      "arguments": {
+        "panel": "panel_7",
+        "vector": {
+          "x": 16,
+          "y": 138,
+          "z": 16
+        }
+      }
+    },
+    {
+      "sequence": 50,
+      "api": "objects3d.NewPanel",
+      "arguments": {
+        "width": 668,
+        "height": 368,
+        "orientation": "horizont",
+        "returns": "panel_8"
+      }
+    },
+    {
+      "sequence": 51,
+      "api": "panel.Thickness.set",
+      "arguments": {
+        "panel": "panel_8",
+        "value": 16
+      }
+    },
+    {
+      "sequence": 52,
+      "api": "panel.Name.set",
+      "arguments": {
+        "panel": "panel_8",
+        "value": "Полка 3"
+      }
+    },
+    {
+      "sequence": 53,
+      "api": "panel.MaterialName.set",
+      "arguments": {
+        "panel": "panel_8",
+        "value": "Белый"
+      }
+    },
+    {
+      "sequence": 54,
+      "api": "panel.Build",
+      "arguments": {
+        "panel": "panel_8"
+      }
+    },
+    {
+      "sequence": 55,
+      "api": "geometry3d.VectorMake",
+      "arguments": {
+        "x": 16,
+        "y": 207,
+        "z": 16
+      }
+    },
+    {
+      "sequence": 56,
+      "api": "panel.TranslateGCS",
+      "arguments": {
+        "panel": "panel_8",
+        "vector": {
+          "x": 16,
+          "y": 207,
+          "z": 16
+        }
+      }
+    },
+    {
+      "sequence": 57,
+      "api": "objects3d.NewPanel",
+      "arguments": {
+        "width": 668,
+        "height": 368,
+        "orientation": "horizont",
+        "returns": "panel_9"
+      }
+    },
+    {
+      "sequence": 58,
+      "api": "panel.Thickness.set",
+      "arguments": {
+        "panel": "panel_9",
+        "value": 16
+      }
+    },
+    {
+      "sequence": 59,
+      "api": "panel.Name.set",
+      "arguments": {
+        "panel": "panel_9",
+        "value": "Полка 4"
+      }
+    },
+    {
+      "sequence": 60,
+      "api": "panel.MaterialName.set",
+      "arguments": {
+        "panel": "panel_9",
+        "value": "Белый"
+      }
+    },
+    {
+      "sequence": 61,
+      "api": "panel.Build",
+      "arguments": {
+        "panel": "panel_9"
+      }
+    },
+    {
+      "sequence": 62,
+      "api": "geometry3d.VectorMake",
+      "arguments": {
+        "x": 16,
+        "y": 276,
+        "z": 16
+      }
+    },
+    {
+      "sequence": 63,
+      "api": "panel.TranslateGCS",
+      "arguments": {
+        "panel": "panel_9",
+        "vector": {
+          "x": 16,
+          "y": 276,
+          "z": 16
+        }
+      }
+    },
+    {
+      "sequence": 64,
+      "api": "objects3d.NewPanel",
+      "arguments": {
+        "width": 668,
+        "height": 368,
+        "orientation": "horizont",
+        "returns": "panel_10"
+      }
+    },
+    {
+      "sequence": 65,
+      "api": "panel.Thickness.set",
+      "arguments": {
+        "panel": "panel_10",
+        "value": 16
+      }
+    },
+    {
+      "sequence": 66,
+      "api": "panel.Name.set",
+      "arguments": {
+        "panel": "panel_10",
+        "value": "Полка 5"
+      }
+    },
+    {
+      "sequence": 67,
+      "api": "panel.MaterialName.set",
+      "arguments": {
+        "panel": "panel_10",
+        "value": "Белый"
+      }
+    },
+    {
+      "sequence": 68,
+      "api": "panel.Build",
+      "arguments": {
+        "panel": "panel_10"
+      }
+    },
+    {
+      "sequence": 69,
+      "api": "geometry3d.VectorMake",
+      "arguments": {
+        "x": 16,
+        "y": 345,
+        "z": 16
+      }
+    },
+    {
+      "sequence": 70,
+      "api": "panel.TranslateGCS",
+      "arguments": {
+        "panel": "panel_10",
+        "vector": {
+          "x": 16,
+          "y": 345,
+          "z": 16
+        }
+      }
+    },
+    {
+      "sequence": 71,
+      "api": "objects3d.NewPanel",
+      "arguments": {
+        "width": 668,
+        "height": 368,
+        "orientation": "horizont",
+        "returns": "panel_11"
+      }
+    },
+    {
+      "sequence": 72,
+      "api": "panel.Thickness.set",
+      "arguments": {
+        "panel": "panel_11",
+        "value": 16
+      }
+    },
+    {
+      "sequence": 73,
+      "api": "panel.Name.set",
+      "arguments": {
+        "panel": "panel_11",
+        "value": "Полка 6"
+      }
+    },
+    {
+      "sequence": 74,
+      "api": "panel.MaterialName.set",
+      "arguments": {
+        "panel": "panel_11",
+        "value": "Белый"
+      }
+    },
+    {
+      "sequence": 75,
+      "api": "panel.Build",
+      "arguments": {
+        "panel": "panel_11"
+      }
+    },
+    {
+      "sequence": 76,
+      "api": "geometry3d.VectorMake",
+      "arguments": {
+        "x": 16,
+        "y": 414,
+        "z": 16
+      }
+    },
+    {
+      "sequence": 77,
+      "api": "panel.TranslateGCS",
+      "arguments": {
+        "panel": "panel_11",
+        "vector": {
+          "x": 16,
+          "y": 414,
+          "z": 16
+        }
+      }
+    },
+    {
+      "sequence": 78,
+      "api": "objects3d.NewPanel",
+      "arguments": {
+        "width": 696,
+        "height": 464,
+        "orientation": "front",
+        "returns": "panel_12"
+      }
+    },
+    {
+      "sequence": 79,
+      "api": "panel.Thickness.set",
+      "arguments": {
+        "panel": "panel_12",
+        "value": 16
+      }
+    },
+    {
+      "sequence": 80,
+      "api": "panel.Name.set",
+      "arguments": {
+        "panel": "panel_12",
+        "value": "Фасад двери"
+      }
+    },
+    {
+      "sequence": 81,
+      "api": "panel.MaterialName.set",
+      "arguments": {
+        "panel": "panel_12",
+        "value": "Белый"
+      }
+    },
+    {
+      "sequence": 82,
+      "api": "panel.Build",
+      "arguments": {
+        "panel": "panel_12"
+      }
+    },
+    {
+      "sequence": 83,
+      "api": "geometry3d.VectorMake",
+      "arguments": {
+        "x": 2,
+        "y": 18,
+        "z": -16
+      }
+    },
+    {
+      "sequence": 84,
+      "api": "panel.TranslateGCS",
+      "arguments": {
+        "panel": "panel_12",
+        "vector": {
+          "x": 2,
+          "y": 18,
+          "z": -16
+        }
+      }
+    },
+    {
+      "sequence": 85,
+      "api": "alert",
+      "arguments": {
+        "message": "Шкаф 700×400×500\n\nПанелей: 12\nРучек: 0\nНаправляющие (успешных установок): 0\n\nДальше в БАЗИС: материалы/кромка → отчёты → раскрой/чертежи."
+      }
+    }
+  ],
+  "mock_panel_comparison": {
+    "source_panel_count": 12,
+    "mock_built_panel_count": 12,
+    "panels": [
+      {
+        "mock_object": "panel_1",
+        "name": "Дно",
+        "orientation": "horizont",
+        "new_panel": {
+          "width": 700,
+          "height": 400,
+          "thickness": 16
+        },
+        "material_name_property": "Белый",
+        "gab_min": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "gab_max": {
+          "x": 700,
+          "y": 16,
+          "z": 400
+        }
+      },
+      {
+        "mock_object": "panel_2",
+        "name": "Крышка",
+        "orientation": "horizont",
+        "new_panel": {
+          "width": 700,
+          "height": 400,
+          "thickness": 16
+        },
+        "material_name_property": "Белый",
+        "gab_min": {
+          "x": 0,
+          "y": 484,
+          "z": 0
+        },
+        "gab_max": {
+          "x": 700,
+          "y": 500,
+          "z": 400
+        }
+      },
+      {
+        "mock_object": "panel_3",
+        "name": "Боковина левая",
+        "orientation": "vertical",
+        "new_panel": {
+          "width": 400,
+          "height": 468,
+          "thickness": 16
+        },
+        "material_name_property": "Белый",
+        "gab_min": {
+          "x": 0,
+          "y": 16,
+          "z": 0
+        },
+        "gab_max": {
+          "x": 16,
+          "y": 484,
+          "z": 400
+        }
+      },
+      {
+        "mock_object": "panel_4",
+        "name": "Боковина правая",
+        "orientation": "vertical",
+        "new_panel": {
+          "width": 400,
+          "height": 468,
+          "thickness": 16
+        },
+        "material_name_property": "Белый",
+        "gab_min": {
+          "x": 684,
+          "y": 16,
+          "z": 0
+        },
+        "gab_max": {
+          "x": 700,
+          "y": 484,
+          "z": 400
+        }
+      },
+      {
+        "mock_object": "panel_5",
+        "name": "Задняя стенка",
+        "orientation": "front",
+        "new_panel": {
+          "width": 668,
+          "height": 468,
+          "thickness": 16
+        },
+        "material_name_property": "Белый",
+        "gab_min": {
+          "x": 16,
+          "y": 16,
+          "z": 384
+        },
+        "gab_max": {
+          "x": 684,
+          "y": 484,
+          "z": 400
+        }
+      },
+      {
+        "mock_object": "panel_6",
+        "name": "Полка 1",
+        "orientation": "horizont",
+        "new_panel": {
+          "width": 668,
+          "height": 368,
+          "thickness": 16
+        },
+        "material_name_property": "Белый",
+        "gab_min": {
+          "x": 16,
+          "y": 69,
+          "z": 16
+        },
+        "gab_max": {
+          "x": 684,
+          "y": 85,
+          "z": 384
+        }
+      },
+      {
+        "mock_object": "panel_7",
+        "name": "Полка 2",
+        "orientation": "horizont",
+        "new_panel": {
+          "width": 668,
+          "height": 368,
+          "thickness": 16
+        },
+        "material_name_property": "Белый",
+        "gab_min": {
+          "x": 16,
+          "y": 138,
+          "z": 16
+        },
+        "gab_max": {
+          "x": 684,
+          "y": 154,
+          "z": 384
+        }
+      },
+      {
+        "mock_object": "panel_8",
+        "name": "Полка 3",
+        "orientation": "horizont",
+        "new_panel": {
+          "width": 668,
+          "height": 368,
+          "thickness": 16
+        },
+        "material_name_property": "Белый",
+        "gab_min": {
+          "x": 16,
+          "y": 207,
+          "z": 16
+        },
+        "gab_max": {
+          "x": 684,
+          "y": 223,
+          "z": 384
+        }
+      },
+      {
+        "mock_object": "panel_9",
+        "name": "Полка 4",
+        "orientation": "horizont",
+        "new_panel": {
+          "width": 668,
+          "height": 368,
+          "thickness": 16
+        },
+        "material_name_property": "Белый",
+        "gab_min": {
+          "x": 16,
+          "y": 276,
+          "z": 16
+        },
+        "gab_max": {
+          "x": 684,
+          "y": 292,
+          "z": 384
+        }
+      },
+      {
+        "mock_object": "panel_10",
+        "name": "Полка 5",
+        "orientation": "horizont",
+        "new_panel": {
+          "width": 668,
+          "height": 368,
+          "thickness": 16
+        },
+        "material_name_property": "Белый",
+        "gab_min": {
+          "x": 16,
+          "y": 345,
+          "z": 16
+        },
+        "gab_max": {
+          "x": 684,
+          "y": 361,
+          "z": 384
+        }
+      },
+      {
+        "mock_object": "panel_11",
+        "name": "Полка 6",
+        "orientation": "horizont",
+        "new_panel": {
+          "width": 668,
+          "height": 368,
+          "thickness": 16
+        },
+        "material_name_property": "Белый",
+        "gab_min": {
+          "x": 16,
+          "y": 414,
+          "z": 16
+        },
+        "gab_max": {
+          "x": 684,
+          "y": 430,
+          "z": 384
+        }
+      },
+      {
+        "mock_object": "panel_12",
+        "name": "Фасад двери",
+        "orientation": "front",
+        "new_panel": {
+          "width": 696,
+          "height": 464,
+          "thickness": 16
+        },
+        "material_name_property": "Белый",
+        "gab_min": {
+          "x": 2,
+          "y": 18,
+          "z": -16
+        },
+        "gab_max": {
+          "x": 698,
+          "y": 482,
+          "z": 0
+        }
+      }
+    ]
+  },
+  "imported_result": {
+    "status": "blocked_not_observed",
+    "panels": "blocked_not_observed",
+    "materials": "blocked_not_observed",
+    "edge_banding": "blocked_not_observed",
+    "drilling": "blocked_not_observed",
+    "native_b3d": "blocked_not_observed"
+  },
+  "alerts": [
+    "Шкаф 700×400×500\n\nПанелей: 12\nРучек: 0\nНаправляющие (успешных установок): 0\n\nДальше в БАЗИС: материалы/кромка → отчёты → раскрой/чертежи."
+  ],
+  "errors": [],
+  "limitations": [
+    "mock calls prove JS control flow and arguments only; they are not calls inside licensed BAZIS",
+    "MaterialName property assignment does not prove MatBase resolution",
+    "no edge-banding, drilling or native .b3d API call is made by the current importer"
+  ]
+}
