@@ -66,4 +66,21 @@ def test_verify_parity_on_built_b3d():
     p["material_refs"] = resolve_project_materials(p)
     r = verify_b3d_parity(b3d, p)
     assert r["ok"], r
-    assert r["mesh_blobs"] >= r["instances_encoded"]
+    assert r["panels"]["actual"] == r["panels"]["expected"]
+    assert r["materials"]["actual"] == r["materials"]["expected"]
+    assert r["drilling"]["actual"] == r["drilling"]["expected"]
+
+
+def test_repository_cloud_fixture_yields_typed_semantic_evidence():
+    from src.b3d_verify import verify_b3d_parity
+
+    project = _project("wardrobe_demo")
+    fixture = ROOT / "qa" / "fixtures" / "wardrobe_demo_ours_cloud.b3d"
+    report = verify_b3d_parity(fixture, project)
+
+    assert report["nodes"]["document"]
+    assert report["nodes"]["model"]
+    assert report["nodes"]["model_objs"]
+    assert report["panels"]["actual"] == 27
+    assert report["materials"]["actual"] == 27
+    assert report["drilling"]["actual"] > 0
