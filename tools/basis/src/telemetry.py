@@ -29,6 +29,7 @@ _SAFE_KEYS = frozenset({
     "gen_ai.system", "gen_ai.request.model", "gen_ai.usage.input_tokens",
     "gen_ai.usage.output_tokens", "gen_ai.usage.total_tokens",
     "gen_ai.usage.cost_usd", "gen_ai.usage.cost_estimate_usd",
+    "gen_ai.usage.input_token_upper_bound",
     "langsmith.span.kind", "langsmith.trace.name",
 })
 _SEQUENCE_KEYS = frozenset({"operation.types", "error.codes"})

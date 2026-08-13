@@ -175,9 +175,9 @@ CfrnToB3d` → нативный `.b3d`. Команда `build-b3d`. Каждая
 | Переменная | Описание |
 |---|---|
 | `BAZIS_API_KEY` | ключ БАЗИС-Облака (для `build-b3d`, `cloud`, раскрой) — ПЛАТНЫЕ операции |
-| `SPEC_CHAT_PROVIDER` | текущий провайдер чата Studio: `mock`\|`gigachat`\|`glm`\|`kimi`\|`deepseek`\|`openai`\|`gemini`; платный rollout задаётся отдельными флагами ниже |
-| `SPEC_CHAT_PAID_ENABLED` / `SPEC_CHAT_PAID_PROVIDER` | быстрый opt-in/rollback платного default (`0` по умолчанию; provider `glm-5.2` или `kimi-k3`) |
-| `SPEC_CHAT_MAX_REQUEST_USD` / `SPEC_CHAT_MAX_COMPLETION_TOKENS` | жёсткий потолок оценки стоимости одного запроса (по умолчанию `$0.15` и максимум 4096 output tokens) |
+| `SPEC_CHAT_PROVIDER` | явный provider: `mock`\|`gigachat`\|`glm`\|`kimi`\|`deepseek`\|`openai`\|`gemini`\|`glm-5.2`\|`kimi-k3`; без значения работает прежний бесплатный/default fallback |
+| `SPEC_CHAT_PAID_ENABLED` | только разрешает явно выбранный платный ID; сам провайдера не выбирает (`0` по умолчанию) |
+| `SPEC_CHAT_MAX_REQUEST_USD` / `SPEC_CHAT_MAX_COMPLETION_TOKENS` | жёсткий потолок worst-case стоимости полного сериализованного text request (по умолчанию `$0.15` и максимум 4096 output tokens) |
 | `SPEC_CHAT_ALLOW_PAID_IN_CI` | аварийный явный opt-in live-вызовов в CI; по умолчанию платные вызовы в CI запрещены |
 | `VISION_EXTRACT_PROVIDER` | кто читает фото ТЗ в конвейере (напр. `gigachat`), сборку делает SPEC_CHAT_PROVIDER |
 | `GIGACHAT_AUTH_KEY` | GigaChat (Сбер): текст+vision, работает из РФ (+`GIGACHAT_SCOPE/MODEL/VISION_MODEL/VERIFY/CA`) |
@@ -186,7 +186,7 @@ CfrnToB3d` → нативный `.b3d`. Команда `build-b3d`. Каждая
 | `DEEPSEEK_API_KEY` | DeepSeek |
 | `OPENAI_API_KEY` | OpenAI `gpt-4o` (чат и `convert`) |
 | `GEMINI_API_KEY` | Gemini (из РФ заблокирован) |
-| `LLM_API_KEY/BASE_URL/MODEL/VISION_MODEL/JSON_MODE` | переопределение любого OpenAI-совместимого провайдера |
+| `LLM_API_KEY/BASE_URL/MODEL/VISION_MODEL/JSON_MODE` | legacy overrides OpenAI-совместимых провайдеров; paid IDs фиксируют endpoint/model под проверенный rate card |
 | `PARAMSPEC_PROVIDER` | провайдер извлечения ParamSpec для `convert`/`ingest` |
 | `BAZIS_VIEWER` | путь к БАЗИС-Просмотру (по умолчанию `D:\bazis\viewer.exe`) |
 | `AKEDA_TELEMETRY_BACKEND` | экспорт trace: `none` (по умолчанию), `console`, `file`, `otlp`, `langsmith`; можно перечислить через запятую |

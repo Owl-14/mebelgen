@@ -167,6 +167,7 @@ def test_kimi_k3_uses_strict_schema_fixed_parameters_and_cost(monkeypatch):
     # The client is fully replaced below; permit this offline contract test
     # while keeping real paid calls fail-closed in CI.
     monkeypatch.setenv("SPEC_CHAT_ALLOW_PAID_IN_CI", "1")
+    monkeypatch.setenv("SPEC_CHAT_MAX_REQUEST_USD", "1")
     monkeypatch.setenv("LLM_MODEL", "unpriced-model-must-not-win")
     monkeypatch.setenv("LLM_BASE_URL", "https://unpriced.invalid/v1")
     monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(OpenAI=FakeOpenAI))
@@ -181,6 +182,67 @@ def test_kimi_k3_uses_strict_schema_fixed_parameters_and_cost(monkeypatch):
     assert captured["model"] == "kimi-k3"
     assert captured["client"]["base_url"] == "https://api.moonshot.ai/v1"
     assert result["usage"]["cost_usd"] == pytest.approx(0.0045)
+
+
+def test_paid_flag_without_explicit_provider_keeps_safe_default(monkeypatch):
+    import src.spec_chat as sc
+
+    monkeypatch.setenv("SPEC_CHAT_PAID_ENABLED", "1")
+    monkeypatch.setenv("SPEC_CHAT_PAID_PROVIDER", "glm-5.2")
+    monkeypatch.setenv("SPEC_CHAT_PROVIDER", "mock")
+    assert sc.resolve_provider_name() == "mock"
+    assert isinstance(sc.get_chat_provider(), sc.MockChatProvider)
+
+
+def test_paid_vision_call_is_blocked_before_client_request(monkeypatch):
+    import types
+    import src.spec_chat as sc
+
+    calls = []
+
+    class Completions:
+        def create(self, **kwargs):
+            calls.append(kwargs)
+            raise AssertionError("network-shaped client call must not happen")
+
+    class FakeOpenAI:
+        def __init__(self, **_kwargs):
+            self.chat = types.SimpleNamespace(completions=Completions())
+
+    monkeypatch.setenv("KIMI_API_KEY", "test-key")
+    monkeypatch.setenv("SPEC_CHAT_PAID_ENABLED", "1")
+    monkeypatch.setenv("SPEC_CHAT_ALLOW_PAID_IN_CI", "1")
+    monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(OpenAI=FakeOpenAI))
+    provider = sc.OpenAICompatProvider("kimi-k3")
+    with pytest.raises(RuntimeError, match="vision pricing is unknown"):
+        provider.chat(SPEC, "прочитай фото", images=[{"mime": "image/png", "data": "QUJD"}])
+    assert calls == []
+
+
+def test_paid_text_ceiling_prices_full_request_before_client_call(monkeypatch):
+    import types
+    import src.spec_chat as sc
+
+    calls = []
+
+    class Completions:
+        def create(self, **kwargs):
+            calls.append(kwargs)
+            raise AssertionError("request over budget must not reach client")
+
+    class FakeOpenAI:
+        def __init__(self, **_kwargs):
+            self.chat = types.SimpleNamespace(completions=Completions())
+
+    monkeypatch.setenv("KIMI_API_KEY", "test-key")
+    monkeypatch.setenv("SPEC_CHAT_PAID_ENABLED", "1")
+    monkeypatch.setenv("SPEC_CHAT_ALLOW_PAID_IN_CI", "1")
+    monkeypatch.setenv("SPEC_CHAT_MAX_REQUEST_USD", "0.000001")
+    monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(OpenAI=FakeOpenAI))
+    provider = sc.OpenAICompatProvider("kimi-k3")
+    with pytest.raises(RuntimeError, match="exceeds"):
+        provider.chat(SPEC, "измени ширину")
+    assert calls == []
 
 
 def test_glm_52_uses_json_mode_and_disabled_thinking(monkeypatch):

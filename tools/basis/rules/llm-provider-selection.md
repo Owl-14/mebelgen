@@ -16,7 +16,7 @@
 | Управление reasoning | всегда включён, `reasoning_effort=low/high/max` | thinking можно отключить для bounded Studio latency |
 | Цена input, cache miss | $3.00 / 1M tokens | $1.40 / 1M tokens |
 | Цена output | $15.00 / 1M tokens | $4.40 / 1M tokens |
-| Vision price в локальном safety estimate | текстовый тариф K3 | консервативно текстовый тариф GLM-5.2; официальный GLM-5V-Turbo дешевле ($1.20/$4.00) |
+| Vision pricing/accounting для safety gate | unknown — paid vision fail-closed | unknown для выбранной двухмодельной цепочки — paid vision fail-closed |
 
 Источники, проверенные 2026-08-13:
 
@@ -42,13 +42,17 @@
 контракт prompt nodes. Реализация проверяет:
 
 - timeout задаётся явно, OpenAI SDK работает с `max_retries=0`;
-- paid default включается только парой
-  `SPEC_CHAT_PAID_ENABLED=1` + `SPEC_CHAT_PAID_PROVIDER=<candidate>`;
-- выключение feature flag немедленно возвращает прежний
-  `SPEC_CHAT_PROVIDER`/автовыбор без изменения кода;
+- paid flag только разрешает вызов и никогда не выбирает provider; платный ID
+  должен быть явно задан как `SPEC_CHAT_PROVIDER=<candidate>` либо в запросе;
+- без явного выбора сохраняется прежний бесплатный/default fallback;
+- выключение `SPEC_CHAT_PAID_ENABLED` блокирует явно выбранный paid ID;
 - в CI платные вызовы запрещены, пока отдельно не задан
   `SPEC_CHAT_ALLOW_PAID_IN_CI=1`;
-- один API-запрос ограничен 4096 completion tokens и worst-case оценкой $0.15;
+- text API-запрос ограничен 4096 completion tokens и worst-case оценкой $0.15;
+  input upper bound считается по UTF-8 byte length полного сериализованного
+  payload, включая history, messages, JSON Schema и request parameters;
+- paid vision заблокирован до фиксации отдельного доказанного тарифа и правила
+  token/image accounting для точной модели; text rate не подставляется;
 - K3 получает strict JSON Schema; GLM получает JSON mode; оба результата затем
   проходят тот же Pydantic/typed-operation/production gate;
 - input/output/total tokens и вычисленная `cost_usd` попадают в privacy-safe
@@ -88,19 +92,23 @@ Production winner не выбран: отсутствует требуемое �
    success, repair success, median/P95 latency и стоимость успешной операции.
 
 Платный прогон разрешено начать только когда одновременно доступны MEB-151 и
-оба тестовых API-ключа. Отсутствующий кандидат нельзя считать проигравшим.
+оба тестовых API-ключа, а для photo cases подтверждены отдельные vision pricing
+и accounting rules точных моделей. Отсутствующий или fail-closed кандидат нельзя
+считать проигравшим.
 
 ## Rollout и rollback
 
 После утверждения отчёта:
 
 1. Установить секрет победителя вне Git и оставить прежний provider секрет.
-2. Canary: `SPEC_CHAT_PAID_ENABLED=1`, `SPEC_CHAT_PAID_PROVIDER=<winner>` при
-   текущих cost/token ceilings.
+2. Canary: явно задать `SPEC_CHAT_PROVIDER=<winner>`, затем разрешить его
+   `SPEC_CHAT_PAID_ENABLED=1` при текущих cost/token ceilings. Один flag без
+   provider selection ничего не переключает.
 3. Проверить текстовое создание, photo create, typed edit, provider failure,
    trace usage/cost и отсутствие persistence при красном gate.
-4. Rollback: выставить `SPEC_CHAT_PAID_ENABLED=0` и перезапустить штатным
-   runbook; `SPEC_CHAT_PROVIDER` немедленно снова становится default.
+4. Rollback: вернуть `SPEC_CHAT_PROVIDER` к прежнему provider (или убрать явный
+   выбор) и выставить `SPEC_CHAT_PAID_ENABLED=0`, затем перезапустить штатным
+   runbook.
 5. Не удалять legacy provider до отдельного периода наблюдения.
 
 До live bake-off флаг обязан оставаться выключенным; deploy этой ветки не нужен

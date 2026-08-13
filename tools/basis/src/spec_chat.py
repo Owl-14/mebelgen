@@ -336,7 +336,7 @@ _OAI_PRESETS = {
     "deepseek": {"base": "https://api.deepseek.com", "key": "DEEPSEEK_API_KEY",
                  "model": "deepseek-chat", "vision": "deepseek-chat", "json_mode": True},
     # Paid candidates are separate IDs so the existing free GLM preset cannot
-    # begin charging after a deploy.  Both require SPEC_CHAT_PAID_ENABLED=1.
+    # begin charging after a deploy. The flag only permits an explicit ID.
     "kimi-k3": {"base": "https://api.moonshot.ai/v1", "key": "KIMI_API_KEY",
                 "alternate_key": "MOONSHOT_API_KEY", "model": "kimi-k3",
                 "vision": "kimi-k3", "json_mode": True, "json_schema": True,
@@ -466,11 +466,12 @@ class OpenAICompatProvider:
             }}
         if self.preset in {"kimi-k3", "glm-5.2"}:
             from .llm_policy import request_budget
-            budget = request_budget(self.preset, request.approximate_tokens)
+            budget = request_budget(self.preset, kw, modality="vision")
             kw["max_completion_tokens"] = budget["max_completion_tokens"]
             from .telemetry import add_current_attributes
             add_current_attributes({
-                "gen_ai.usage.cost_estimate_usd": budget["estimated_cost_usd"]
+                "gen_ai.usage.cost_estimate_usd": budget["estimated_cost_usd"],
+                "gen_ai.usage.input_token_upper_bound": budget["input_token_upper_bound"],
             })
         r = self.client.chat.completions.create(**kw)
         usage = getattr(r, "usage", None)
@@ -524,11 +525,14 @@ class OpenAICompatProvider:
             kw["extra_body"] = self.extra
         if self.preset in {"kimi-k3", "glm-5.2"}:
             from .llm_policy import request_budget
-            budget = request_budget(self.preset, request.approximate_tokens)
+            budget = request_budget(
+                self.preset, kw, modality="vision" if images else "text"
+            )
             kw["max_completion_tokens"] = budget["max_completion_tokens"]
             from .telemetry import add_current_attributes
             add_current_attributes({
-                "gen_ai.usage.cost_estimate_usd": budget["estimated_cost_usd"]
+                "gen_ai.usage.cost_estimate_usd": budget["estimated_cost_usd"],
+                "gen_ai.usage.input_token_upper_bound": budget["input_token_upper_bound"],
             })
         r = self.client.chat.completions.create(**kw)
         out = r.choices[0].message.content or "{}"
@@ -760,8 +764,7 @@ class GigaChatProvider:
 
 def resolve_provider_name(name: str | None = None) -> str:
     """Имя провайдера, которое реально будет использовано (для конвейера AKD-211)."""
-    from .llm_policy import rollout_provider
-    return (name or rollout_provider() or os.environ.get("SPEC_CHAT_PROVIDER")
+    return (name or os.environ.get("SPEC_CHAT_PROVIDER")
             or os.environ.get("PARAMSPEC_PROVIDER")
             # авто по наличию ключа; gigachat работает с РФ-серверов (Gemini — нет)
             or ("gigachat" if os.environ.get("GIGACHAT_AUTH_KEY")
