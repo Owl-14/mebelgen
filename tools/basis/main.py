@@ -141,6 +141,14 @@ def cmd_cloud(args: argparse.Namespace) -> int:
     if args.op == "info":
         print(api_overview())
         return 0
+    if args.op == "model-convert" and args.type == "cfrn-to-b3d":
+        print(
+            "Raw CFRN→B3D отключён: произвольный CFRN нельзя доказуемо связать "
+            "с прошедшим production gate. Используйте `main.py build-b3d "
+            "<paramspec-or-project.json>`, который выполняет полный offline preflight.",
+            file=sys.stderr,
+        )
+        return 2
     c = CloudTasksClient()
     if args.op == "list":
         print(json.dumps(c.list_tasks(), ensure_ascii=False, indent=2))

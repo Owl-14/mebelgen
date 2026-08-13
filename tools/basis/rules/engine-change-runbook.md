@@ -201,6 +201,16 @@ API ошибки должны иметь корректный HTTP status, ст�
 невалидный объект, оставлять на экране модель предыдущего объекта как будто это
 новая, или скрывать ошибку ответом HTTP 200.
 
+Любой путь к платной сборке B3D, включая прямой CLI с готовым `project.json`,
+обязан до создания cloud-клиента пройти offline preflight. Для ParamSpec это
+полный `production_gate`; для готового проекта — JSON Schema, `basis_mapping`,
+consistency/geometry, CFRN encoding и holes parity, drilling, materials и
+пробная сборка CFRN-архива. Параметр совместимости не может отключить этот
+барьер. Красный отчёт означает ноль вызовов `model_convert`.
+Raw `cloud model-convert --type cfrn-to-b3d` запрещён: у отдельного CFRN нет
+проверяемой связи с ParamSpec/project и его gate. Поддерживаемый путь создания
+B3D — только `build-b3d <paramspec-or-project.json>`.
+
 ## 7. Trace, логи и приватность
 
 Для AI pipeline должны быть видны как минимум:
@@ -261,6 +271,9 @@ inside referenced fixtures, not only secrets in the top-level trace.
 | drilling/hardware | hardware, hardware_geometry, drilling_check, CFRN holes parity |
 | Studio/viewer | API/contract-тесты, webviewer, ручной smoke текущего и соседнего сценария |
 | B3D/CFRN | encoding, verify, production reference; платный cloud только по разрешению |
+
+Для изменения B3D boundary дополнительно запусти `test_b3d_preflight.py` и
+проверь, что негативные сценарии не вызывают cloud-клиент.
 
 Критические негативные сценарии: provider недоступен; ответ не JSON; невалидная
 операция; попытка несвязанной мутации; красный gate; конфликт ревизии; старый
