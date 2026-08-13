@@ -137,14 +137,17 @@ def capability_schema(node: str) -> dict[str, Any]:
     if node in {"edit_operations", "part_edit", "repair"}:
         from .edit_operations import edit_operation_json_schema
 
+        operations_schema = edit_operation_json_schema()
+        definitions = operations_schema.pop("$defs", {})
         result = {
             "type": "object",
             "additionalProperties": False,
             "required": ["reply", "operations"],
             "properties": {
                 "reply": {"type": "string"},
-                "operations": edit_operation_json_schema(),
+                "operations": operations_schema,
             },
+            "$defs": definitions,
         }
         schema = json.loads(PARAMSPEC_SCHEMA_PATH.read_text(encoding="utf-8"))
         result["x-paramspec-allowed-root-fields"] = _allowed_param_roots(schema)
@@ -238,6 +241,22 @@ def classify_intent(message: str, spec: Mapping[str, Any] | None = None,
     ):
         return "answer_query"
     return "edit_operations"
+
+
+_PROMPT_INJECTION_PATTERNS = (
+    re.compile(r"\bignore\s+(?:all\s+)?(?:previous|prior|system)\b", re.IGNORECASE),
+    re.compile(r"\b(?:system|developer)\s+prompt\b", re.IGNORECASE),
+    re.compile(r"(?:игнорир|забуд)\w*\s+(?:все\s+)?(?:правил|инструкц)", re.IGNORECASE),
+    re.compile(r"(?:системн\w*\s+(?:prompt|промпт)|покажи\w*\s+инструкц)", re.IGNORECASE),
+)
+
+
+def evaluate_request_policy(message: str) -> dict[str, Any]:
+    """Return the production fail-closed policy decision for untrusted requests."""
+    text = str(message or "")
+    if any(pattern.search(text) for pattern in _PROMPT_INJECTION_PATTERNS):
+        return {"allowed": False, "code": "prompt_injection"}
+    return {"allowed": True, "code": None}
 
 
 def build_prompt_request(node: str, *, message: str = "",
