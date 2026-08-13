@@ -1,0 +1,265 @@
+{
+  "project_name": "Стол письменный 1400×700×750",
+  "furniture_type": "стол",
+  "overall_dimensions": {
+    "width": 1400,
+    "depth": 700,
+    "height": 750,
+    "tolerance": 5
+  },
+  "materials": {
+    "board_material": "ЛДСП",
+    "board_thickness": 25,
+    "back_wall_material": "ДВП",
+    "edge_band_thickness": 2,
+    "color": "Белый",
+    "color_code": ""
+  },
+  "sections": [
+    {
+      "id": "main",
+      "type": "desk",
+      "dimensions": {
+        "width": 1350,
+        "height": 725.0,
+        "depth": 700,
+        "estimated": false
+      },
+      "elements": [
+        "Столешница",
+        "Опора левая",
+        "Опора правая",
+        "Царга задняя"
+      ]
+    }
+  ],
+  "panels": [
+    {
+      "name": "Столешница",
+      "type": "top",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 25,
+      "dimensions": {
+        "width": 1400,
+        "height": 700
+      },
+      "placement": {
+        "x1": 0,
+        "x2": 1400,
+        "y1": 725,
+        "y2": 750,
+        "z1": 0,
+        "z2": 700
+      },
+      "position": {
+        "x": 0,
+        "y": 725,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0.5,
+        "right": 0.5
+      },
+      "estimated": false
+    },
+    {
+      "name": "Опора левая",
+      "type": "side_left",
+      "basis_orientation": "vertical",
+      "material": "ЛДСП",
+      "thickness": 25,
+      "dimensions": {
+        "width": 700,
+        "height": 725
+      },
+      "placement": {
+        "x1": 0,
+        "x2": 25,
+        "y1": 0,
+        "y2": 725,
+        "z1": 0,
+        "z2": 700
+      },
+      "position": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
+      },
+      "estimated": false
+    },
+    {
+      "name": "Опора правая",
+      "type": "side_right",
+      "basis_orientation": "vertical",
+      "material": "ЛДСП",
+      "thickness": 25,
+      "dimensions": {
+        "width": 700,
+        "height": 725
+      },
+      "placement": {
+        "x1": 1375,
+        "x2": 1400,
+        "y1": 0,
+        "y2": 725,
+        "z1": 0,
+        "z2": 700
+      },
+      "position": {
+        "x": 1375,
+        "y": 0,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
+      },
+      "estimated": false
+    },
+    {
+      "name": "Царга задняя",
+      "type": "back",
+      "basis_orientation": "front",
+      "material": "ЛДСП",
+      "thickness": 25,
+      "dimensions": {
+        "width": 1350,
+        "height": 120
+      },
+      "placement": {
+        "x1": 25,
+        "x2": 1375,
+        "y1": 605,
+        "y2": 725,
+        "z1": 675,
+        "z2": 700
+      },
+      "position": {
+        "x": 25,
+        "y": 605,
+        "z": 675
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0,
+        "bottom": 0,
+        "left": 0,
+        "right": 0
+      },
+      "estimated": false
+    }
+  ],
+  "drawers": [],
+  "doors": [],
+  "hardware": {
+    "handles": {
+      "type": "нет",
+      "material": "—",
+      "color": "—",
+      "size": 0,
+      "count": 0,
+      "offset_from_top": 0,
+      "furniture_encoded": ""
+    },
+    "legs": {
+      "type": "боковины",
+      "adjustable": false,
+      "color": "—",
+      "height": 0,
+      "count": 0
+    }
+  },
+  "constraints": {
+    "default_gap": 2,
+    "drawer_gap": 2,
+    "door_gap": 2,
+    "back_wall_offset": 25,
+    "construction": "top_bottom_over_sides"
+  },
+  "basis_mapping": {
+    "coordinate_system": "basis_mebelshik",
+    "units": "mm",
+    "ready_for_import": true,
+    "placement_required": true
+  },
+  "warnings": [
+    "Столешница 25 мм на боковых опорах + задняя царга.",
+    "Задняя стенка в ТЗ не указана — принята ДВП 3 мм (стандарт).",
+    "Цвет/декор в ТЗ не указан — принят дефолт «Белый» (ЛДСП), подтвердить с заказчиком."
+  ],
+  "estimated_values": [
+    "materials.color"
+  ],
+  "carcass_calculation": {
+    "W": 1400,
+    "D": 700,
+    "H": 750,
+    "T": 25,
+    "construction": "top_on_supports"
+  },
+  "material_refs": {
+    "back": {
+      "resolved": true,
+      "id": "2001",
+      "article": "2001",
+      "name": "ХДФ, 3 мм, Белый лак., Kronostar",
+      "cost": 245,
+      "unit": "кв.м.",
+      "group": "01 Листовой материал/ДВП,ХДФ",
+      "match": "задник ДВП/ХДФ",
+      "confidence": "medium"
+    },
+    "board": {
+      "resolved": true,
+      "id": "W980 ST2",
+      "article": "W980 ST2",
+      "name": "ЛДСП, 16 мм, Белый платиновый, Egger",
+      "cost": 290,
+      "unit": "кв.м.",
+      "group": "01 Листовой материал/ЛДСП/16мм",
+      "match": "толщина + цвет",
+      "confidence": "high"
+    },
+    "edge": {
+      "resolved": true,
+      "id": "1759",
+      "article": "1759",
+      "name": "Кромка ПВХ, 19/2 мм, Белый, 91470-14, Rehau",
+      "cost": 20,
+      "unit": "пог. м",
+      "group": "02 Кромочные материалы/Кромка 19мм/2/19",
+      "match": "толщина + цвет",
+      "confidence": "high"
+    }
+  }
+}
