@@ -154,6 +154,58 @@ def test_open_validates_and_builds_before_switching_current_product(tmp_path: Pa
         thread.join(timeout=2)
 
 
+def test_version_restore_canonicalizes_before_browser_activation(tmp_path: Path) -> None:
+    current = json.loads(
+        (ROOT / "paramspecs" / "wardrobe_demo.json").read_text(encoding="utf-8")
+    )
+    spec_path = tmp_path / "wardrobe.json"
+    spec_path.write_text(json.dumps(current, ensure_ascii=False), encoding="utf-8")
+    historical = json.loads(json.dumps(current))
+    historical["catalog"] = {
+        "creator_user_id": "owner-1",
+        "responsible_user_id": "designer-1",
+    }
+    historical["future_history_field"] = "must not become active"
+    invalid = json.loads(json.dumps(current))
+    invalid["dimensions"]["width"] = 10
+    spec_path.with_suffix(".versions.json").write_text(
+        json.dumps(
+            [
+                {"ts": "2026-08-13T12:00:00", "spec": historical},
+                {"ts": "2026-08-13T12:01:00", "spec": invalid},
+            ],
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    studio = _Studio(spec_path, tmp_path / "out")
+    server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(studio))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        status, raw = _request(
+            server.server_port, "POST", "/api/restore", {"index": 0}
+        )
+        assert status == 200, raw
+        restored = json.loads(raw)
+        assert "future_history_field" not in restored["spec"]
+        assert restored["spec"]["catalog"] == historical["catalog"]
+        assert restored["paramspec_read"]["unknown_fields"] == [
+            "future_history_field"
+        ]
+
+        status, raw = _request(
+            server.server_port, "POST", "/api/restore", {"index": 1}
+        )
+        assert status == 422, raw
+        assert json.loads(raw)["code"] == "invalid_paramspec"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
 def test_all_catalog_writes_are_strict_for_unknown_fields(tmp_path: Path) -> None:
     spec = json.loads(
         (ROOT / "paramspecs" / "komi_72_tumba_podkatnaya.json").read_text(

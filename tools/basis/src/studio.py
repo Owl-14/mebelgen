@@ -791,6 +791,14 @@ def _strict_paramspec_document_for_write(value: Any) -> dict[str, Any]:
     return strict_paramspec_v1_for_write(value)
 
 
+def _canonical_paramspec_document_for_activation(value: Any) -> dict[str, Any]:
+    """Normalize tolerant stored data before snapshot or active restoration."""
+
+    from .paramspec_versioning import canonical_paramspec_v1_for_activation
+
+    return canonical_paramspec_v1_for_activation(value)
+
+
 def _spec_revision(spec: dict[str, Any]) -> str:
     """Stable revision used to reject a preview rendered for an old model."""
 
@@ -879,7 +887,7 @@ def _read_versions(spec_path: Path) -> list[dict[str, Any]]:
 
 def _snapshot_version(spec_path: Path, spec: dict[str, Any], keep: int = 30) -> None:
     from datetime import datetime
-    spec = _strict_paramspec_document_for_write(spec)
+    spec = _canonical_paramspec_document_for_activation(spec)
     vs = _read_versions(spec_path)
     if vs and vs[-1]["spec"] == spec:                 # без дублей подряд
         return
@@ -2326,9 +2334,23 @@ def make_handler(st: _Studio):
                     idx = int(body.get("index", -1))
                     vs = _read_versions(spec_path)
                     if 0 <= idx < len(vs):
-                        restored = vs[idx]["spec"]
-                        self._json({"ok": True, "spec": restored,
-                                    "ts": vs[idx]["ts"]})
+                        try:
+                            restored, paramspec_read = _read_paramspec_document(
+                                vs[idx]["spec"]
+                            )
+                        except (TypeError, ValueError):
+                            self._json({
+                                "ok": False,
+                                "code": "invalid_paramspec",
+                                "error": "Версия не восстановлена: ParamSpec не прошёл проверку",
+                            }, 422)
+                            return
+                        self._json({
+                            "ok": True,
+                            "spec": restored,
+                            "ts": vs[idx]["ts"],
+                            "paramspec_read": paramspec_read,
+                        })
                     else:
                         self._json({"ok": False, "error": "нет такой версии"}, 404)
                 elif path == "/api/projects":    # каталог спек (D1)

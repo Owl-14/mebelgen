@@ -11,6 +11,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from src.paramspec_versioning import strict_paramspec_v1_for_write  # noqa: E402
 from src.studio_tenants import TenantWorkspaceManager  # noqa: E402
 
 
@@ -47,7 +48,7 @@ def _manager(tmp_path: Path) -> tuple[TenantWorkspaceManager, dict, Path]:
         "furniture_type": "тумба",
         "archetype": "cabinet",
         "dimensions": {"width": 800, "depth": 400, "height": 720},
-        "materials": {"color": "Дуб"},
+        "materials": {"board_thickness": 16, "color": "Дуб"},
         "catalog": {
             "creator_user_id": "designer-a",
             "responsible_user_id": "designer-a",
@@ -148,6 +149,78 @@ def test_archive_round_trip_preserves_model_history_preview_and_outputs(
     assert (workspace.spec_dir / ".history" / "product.ai.json").is_file()
     assert (workspace.spec_dir / ".previews" / "product.png").is_file()
     assert manager.list_archived_products(auth) == []
+
+
+def test_archive_restore_canonicalizes_active_spec_without_rewriting_history(
+    tmp_path: Path,
+) -> None:
+    manager, auth, product = _manager(tmp_path)
+    active = json.loads(product.read_text(encoding="utf-8"))
+    active["future_active_field"] = "must not resurrect"
+    product.write_text(json.dumps(active, ensure_ascii=False), encoding="utf-8")
+    versions_path = product.with_suffix(".versions.json")
+    history = json.loads(versions_path.read_text(encoding="utf-8"))
+    history[0]["spec"]["future_history_field"] = "audit bytes stay tolerant"
+    versions_path.write_text(json.dumps(history, ensure_ascii=False), encoding="utf-8")
+
+    archived = manager.archive_product(
+        auth,
+        product,
+        actor_user_id="designer-a",
+        actor_name="Автор",
+        reason="Проверка strict activation",
+    )
+    manager.restore_product(
+        auth,
+        archived["id"],
+        actor_user_id="owner-a",
+        actor_name="Владелец",
+    )
+
+    restored = json.loads(product.read_text(encoding="utf-8"))
+    assert "future_active_field" not in restored
+    assert restored["catalog"] == active["catalog"]
+    assert strict_paramspec_v1_for_write(restored) == restored
+    restored_history = json.loads(versions_path.read_text(encoding="utf-8"))
+    assert restored_history[0]["spec"]["future_history_field"] == (
+        "audit bytes stay tolerant"
+    )
+
+
+def test_archive_restore_rejects_invalid_known_active_spec(tmp_path: Path) -> None:
+    manager, auth, product = _manager(tmp_path)
+    workspace = manager.workspace(auth)
+    archived = manager.archive_product(
+        auth,
+        product,
+        actor_user_id="designer-a",
+        actor_name="Автор",
+        reason="Проверка invalid restore",
+    )
+    archived_spec_path = (
+        workspace.spec_dir.parent
+        / "archive"
+        / archived["id"]
+        / "data"
+        / "spec"
+        / "product.json"
+    )
+    invalid = json.loads(archived_spec_path.read_text(encoding="utf-8"))
+    invalid["dimensions"]["width"] = 10
+    archived_spec_path.write_text(
+        json.dumps(invalid, ensure_ascii=False), encoding="utf-8"
+    )
+
+    with pytest.raises(ValueError, match="проверку активации"):
+        manager.restore_product(
+            auth,
+            archived["id"],
+            actor_user_id="owner-a",
+            actor_name="Владелец",
+        )
+
+    assert not product.exists()
+    assert manager.list_archived_products(auth)[0]["id"] == archived["id"]
 
 
 def test_restore_refuses_to_overwrite_an_active_file(tmp_path: Path) -> None:

@@ -9,10 +9,16 @@ from pydantic import ValidationError
 from src.paramspec_migration import audit_paramspec_v1_catalogs
 from src.paramspec_versioning import (
     PARAMSPEC_V1,
+    canonical_paramspec_v1_for_activation,
     read_paramspec_v1,
     strict_paramspec_v1_for_write,
 )
-from src.studio import _migrate_catalog_identity, _production_gate_error, build_payload
+from src.studio import (
+    _migrate_catalog_identity,
+    _production_gate_error,
+    _snapshot_version,
+    build_payload,
+)
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -73,6 +79,25 @@ def test_strict_write_rejects_extensions_and_is_idempotent() -> None:
     raw["future_top_level"] = True
     with pytest.raises(ValidationError):
         strict_paramspec_v1_for_write(raw)
+
+
+def test_activation_normalizes_extensions_but_rejects_invalid_known_fields() -> None:
+    raw = _fixture()
+    raw["catalog"] = {
+        "creator_user_id": "owner-1",
+        "responsible_user_id": "designer-1",
+    }
+    raw["future_top_level"] = True
+
+    active = canonical_paramspec_v1_for_activation(raw)
+
+    assert "future_top_level" not in active
+    assert active["catalog"] == raw["catalog"]
+    assert strict_paramspec_v1_for_write(active) == active
+
+    raw["dimensions"]["width"] = 10
+    with pytest.raises(ValidationError):
+        canonical_paramspec_v1_for_activation(raw)
 
 
 def test_engine_tolerant_read_reports_extension_without_feeding_geometry() -> None:
@@ -168,3 +193,29 @@ def test_catalog_identity_migration_uses_canonical_strict_write(tmp_path: Path) 
         "responsible": "Владелец",
     }
     assert strict_paramspec_v1_for_write(persisted) == persisted
+
+
+def test_snapshot_canonicalizes_new_revision_without_rewriting_old_history(
+    tmp_path: Path,
+) -> None:
+    spec_path = tmp_path / "wardrobe.json"
+    legacy = _fixture()
+    legacy["future_history_field"] = "preserved only in old history"
+    versions_path = tmp_path / "wardrobe.versions.json"
+    versions_path.write_text(
+        json.dumps([{"ts": "2026-08-13T12:00:00", "spec": legacy}]),
+        encoding="utf-8",
+    )
+    candidate = _fixture()
+    candidate["catalog"] = {"creator_user_id": "owner-1"}
+    candidate["future_snapshot_field"] = "must not persist in the new revision"
+
+    _snapshot_version(spec_path, candidate)
+
+    revisions = json.loads(versions_path.read_text(encoding="utf-8"))
+    assert revisions[0]["spec"]["future_history_field"] == (
+        "preserved only in old history"
+    )
+    assert "future_snapshot_field" not in revisions[1]["spec"]
+    assert revisions[1]["spec"]["catalog"] == {"creator_user_id": "owner-1"}
+    assert strict_paramspec_v1_for_write(revisions[1]["spec"]) == revisions[1]["spec"]

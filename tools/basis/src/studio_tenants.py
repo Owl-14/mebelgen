@@ -520,7 +520,24 @@ class TenantWorkspaceManager:
                     raise FileExistsError("Данные изделия уже существуют")
                 target.parent.mkdir(parents=True, exist_ok=True)
                 temporary = target.with_name(f".{target.name}.{archive_id}.restore")
-                self._copy_archive_item(source, temporary)
+                if target == target_spec:
+                    from .paramspec_versioning import (
+                        canonical_paramspec_v1_for_activation,
+                    )
+
+                    try:
+                        archived_spec = json.loads(source.read_text(encoding="utf-8"))
+                        active_spec = canonical_paramspec_v1_for_activation(archived_spec)
+                    except (OSError, ValueError, TypeError) as error:
+                        raise ValueError(
+                            "Архивный ParamSpec не прошёл проверку активации"
+                        ) from error
+                    temporary.write_text(
+                        json.dumps(active_spec, ensure_ascii=False, indent=2),
+                        encoding="utf-8",
+                    )
+                else:
+                    self._copy_archive_item(source, temporary)
                 staged.append((temporary, target, source.is_dir()))
 
             # ParamSpec becomes visible last, after every companion is ready.

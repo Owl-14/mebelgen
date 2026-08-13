@@ -82,6 +82,14 @@ payload: они доходят в производный `project.json` и ис�
 сохранение непонятных данных противоречило бы strict-write. Studio сначала отдаёт
 клиенту канонический известный v1, а серверная запись повторно проверяет его.
 
+Та же граница действует при активации сохранённых копий через
+`canonical_paramspec_v1_for_activation`: новая revision snapshot, восстановление
+`versions[].spec` в редактор и archive → active catalog проходят tolerant-read,
+затем strict canonical v1. Разрешённый `catalog` metadata сохраняется; unknown
+extensions отбрасываются; невалидное известное поле или чужая `schemaVersion`
+останавливают активацию. Старые history/revision/archive bytes можно хранить
+неизменными для аудита и rollback, но копировать их напрямую в active state нельзя.
+
 ## Dry-run, метрики и доказательство эквивалентности
 
 Команда только читает legacy/tenant каталоги и history snapshots:
@@ -108,7 +116,7 @@ unknown-field documents/count, число потенциальных canonical c
 ## History, backup и rollback
 
 Пока v2 отсутствует, миграции нет и rollback не требуется: adapter применяется
-на чтении, массовая запись запрещена. Если когда-либо будет разрешён canonical
+на чтении и на границе активации, массовая запись запрещена. Если когда-либо будет разрешён canonical
 rewrite v1, обязательны: отдельная копия tenant root, manifest с SHA-256 каждого
 файла, атомарная запись, сохранение всех `<stem>.versions.json` и `.history`,
 повторный dry-run после записи и rollback восстановлением точных байтов backup.

@@ -191,3 +191,16 @@ def strict_paramspec_v1_for_write(data: Mapping[str, Any]) -> dict[str, Any]:
         raise TypeError("ParamSpec document must be a mapping")
     typed = ParamSpec.model_validate(dict(data))
     return typed.to_generator_dict()
+
+
+def canonical_paramspec_v1_for_activation(data: Mapping[str, Any]) -> dict[str, Any]:
+    """Normalize a stored v1 document before it becomes active or is snapshotted.
+
+    Historical and archived inputs use the tolerant read boundary so unknown
+    extensions can remain preserved at rest.  Activation always emits the
+    strict canonical shape, retains typed catalog metadata, and still rejects
+    invalid known fields or an unsupported schema version.
+    """
+
+    envelope = read_paramspec_v1(data)
+    return strict_paramspec_v1_for_write(envelope.canonical_document())
