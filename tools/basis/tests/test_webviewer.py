@@ -74,3 +74,15 @@ def test_orbit_navigation_is_bounded_relative_to_the_current_model():
     assert "orbitMaxPan=Math.max(120,sphere*1.35)" in SCENE_JS
     assert "controls.addEventListener('change',clampOrbitTarget)" in SCENE_JS
     assert "setOrbitBounds(c,sphere)" in SCENE_JS
+
+
+def test_new_payload_resets_camera_while_same_product_rebuild_only_updates_bounds():
+    """Камера другого изделия не протекает в новую модель.
+
+    Для AI-пересчёта текущего изделия ракурс сохраняется, но пределы orbit/zoom
+    обязательно пересчитываются по новым габаритам.
+    """
+
+    assert "if(!fitted||opts.resetView||opts.refit)" in SCENE_JS
+    assert "if(opts.resetView)curView=opts.view||'persp'" in SCENE_JS
+    assert "else setOrbitBounds(modelCenter,modelSphere)" in SCENE_JS

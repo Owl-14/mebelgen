@@ -350,6 +350,18 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_finetune_readiness(args: argparse.Namespace) -> int:
+    from src.finetune_readiness import evaluate_readiness, write_report
+
+    evidence = Path(args.evidence) if args.evidence else None
+    report = evaluate_readiness(Path(args.dataset), evidence_path=evidence)
+    encoded = json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True)
+    if args.output:
+        write_report(report, Path(args.output))
+    print(encoded)
+    return 0 if report["ready_for_finetune_experiment"] else 2
+
+
 def cmd_generate(args: argparse.Namespace) -> int:
     from src.paramspec import validate_paramspec
     from src.generators import generate_from_paramspec
@@ -602,12 +614,21 @@ def main() -> int:
 
     p_ing = sub.add_parser(
         "ingest",
-        help="Записать принятый проект как обучающую пару (ParamSpec→project) в dataset/",
+        help="Записать legacy-пару ParamSpec→project; она не заменяет MEB-141 ТЗ→ParamSpec gate",
     )
     p_ing.add_argument("--paramspec", required=True, help="ParamSpec, по которому строили")
     p_ing.add_argument("--project", required=True, help="Принятый/исправленный project.json")
     p_ing.add_argument("--tz", help="Текст исходного ТЗ (опционально)")
     p_ing.set_defaults(func=cmd_ingest)
+
+    p_ft = sub.add_parser(
+        "finetune-readiness",
+        help="Offline dry-run gate данных ТЗ→ParamSpec; fine-tune и LLM не запускаются",
+    )
+    p_ft.add_argument("--dataset", default="dataset", help="Каталог JSON-пар ТЗ→ParamSpec")
+    p_ft.add_argument("--evidence", help="JSON с offline prompt+RAG и A/B evidence")
+    p_ft.add_argument("--output", help="Записать машиночитаемый JSON-отчёт")
+    p_ft.set_defaults(func=cmd_finetune_readiness)
 
     p_cons = sub.add_parser(
         "check-consistency",
