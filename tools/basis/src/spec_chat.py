@@ -335,6 +335,15 @@ _OAI_PRESETS = {
                  "extra": {"thinking": {"type": "disabled"}}},
     "deepseek": {"base": "https://api.deepseek.com", "key": "DEEPSEEK_API_KEY",
                  "model": "deepseek-chat", "vision": "deepseek-chat", "json_mode": True},
+    # Paid candidates are separate IDs so the existing free GLM preset cannot
+    # begin charging after a deploy.  Both require SPEC_CHAT_PAID_ENABLED=1.
+    "kimi-k3": {"base": "https://api.moonshot.ai/v1", "key": "KIMI_API_KEY",
+                "alternate_key": "MOONSHOT_API_KEY", "model": "kimi-k3",
+                "vision": "kimi-k3", "json_mode": True, "json_schema": True,
+                "temperature": None, "extra": {"reasoning_effort": "low"}},
+    "glm-5.2": {"base": "https://open.bigmodel.cn/api/paas/v4", "key": "GLM_API_KEY",
+                "model": "glm-5.2", "vision": "glm-5v-turbo", "json_mode": True,
+                "extra": {"thinking": {"type": "disabled"}}},
 }
 
 
@@ -344,6 +353,19 @@ def _json_object(text: str) -> dict[str, Any]:
         return {}
     value = json.loads(text[start:end + 1])
     return value if isinstance(value, dict) else {}
+
+
+def _vendor_json_schema(value: Any) -> Any:
+    """Remove Akeda-only capability annotations before sending JSON Schema."""
+    if isinstance(value, dict):
+        return {
+            key: _vendor_json_schema(item)
+            for key, item in value.items()
+            if not str(key).startswith("x-")
+        }
+    if isinstance(value, list):
+        return [_vendor_json_schema(item) for item in value]
+    return value
 
 
 def _provider_result(data: dict[str, Any], request: Any, *, usage: Any = None,
@@ -376,10 +398,14 @@ class OpenAICompatProvider:
 
     def __init__(self, preset: str = "openai") -> None:
         p = _OAI_PRESETS.get(preset, _OAI_PRESETS["openai"])
-        api_key = os.environ.get("LLM_API_KEY") or os.environ.get(p["key"])
+        api_key = (os.environ.get("LLM_API_KEY") or os.environ.get(p["key"])
+                   or os.environ.get(p.get("alternate_key", "")))
         if not api_key:
             raise ValueError(f"Нет {p['key']} (или LLM_API_KEY) для SPEC_CHAT_PROVIDER={preset}")
-        base = os.environ.get("LLM_BASE_URL", p["base"])
+        paid_preset = preset in {"kimi-k3", "glm-5.2"}
+        # Paid IDs pin endpoint/model to the rate card used by the budget gate.
+        # Legacy presets retain the existing generic overrides.
+        base = p["base"] if paid_preset else os.environ.get("LLM_BASE_URL", p["base"])
         from openai import OpenAI
         try:
             timeout = max(1.0, float(os.environ.get("SPEC_CHAT_TIMEOUT_S", "120")))
@@ -389,11 +415,18 @@ class OpenAICompatProvider:
         # Повтор команды остаётся явным решением пользователя в Studio.
         self.client = OpenAI(api_key=api_key, timeout=timeout, max_retries=0,
                              **({"base_url": base} if base else {}))
-        self.model = os.environ.get("LLM_MODEL", p["model"])
-        self.vision_model = os.environ.get("LLM_VISION_MODEL", p["vision"])
+        self.model = p["model"] if paid_preset else os.environ.get("LLM_MODEL", p["model"])
+        self.vision_model = (p["vision"] if paid_preset else
+                             os.environ.get("LLM_VISION_MODEL", p["vision"]))
         self.json_mode = os.environ.get("LLM_JSON_MODE",
                                         "1" if p["json_mode"] else "0") not in ("0", "false", "no")
+        self.json_schema = bool(p.get("json_schema"))
+        self.temperature = p.get("temperature", 0.1)
         self.extra = p.get("extra") or {}             # extra_body (напр. thinking off)
+        self.preset = preset
+        self.last_usage: dict[str, Any] = {}
+        from .llm_policy import paid_calls_allowed
+        paid_calls_allowed(preset)
 
     def balance(self) -> dict[str, Any] | None:
         """Денежный баланс аккаунта (Moonshot-стиль GET /users/me/balance).
@@ -419,9 +452,39 @@ class OpenAICompatProvider:
         for im in images:
             content.append({"type": "image_url", "image_url":
                             {"url": f"data:{im.get('mime','image/png')};base64,{im.get('data','')}"}})
-        r = self.client.chat.completions.create(
-            model=self.vision_model, temperature=0.1,
-            messages=[{"role": "user", "content": content}])
+        kw: dict[str, Any] = {"model": self.vision_model,
+                              "messages": [{"role": "user", "content": content}]}
+        if self.temperature is not None:
+            kw["temperature"] = self.temperature
+        if self.extra:
+            kw["extra_body"] = self.extra
+        if self.json_schema:
+            from .prompt_registry import capability_schema
+            kw["response_format"] = {"type": "json_schema", "json_schema": {
+                "name": "vision-facts", "strict": True,
+                "schema": _vendor_json_schema(capability_schema("vision_facts")),
+            }}
+        if self.preset in {"kimi-k3", "glm-5.2"}:
+            from .llm_policy import request_budget
+            budget = request_budget(self.preset, request.approximate_tokens)
+            kw["max_completion_tokens"] = budget["max_completion_tokens"]
+            from .telemetry import add_current_attributes
+            add_current_attributes({
+                "gen_ai.usage.cost_estimate_usd": budget["estimated_cost_usd"]
+            })
+        r = self.client.chat.completions.create(**kw)
+        usage = getattr(r, "usage", None)
+        from .llm_policy import usage_cost
+        self.last_usage = {
+            "model": self.vision_model,
+            "prompt": getattr(usage, "prompt_tokens", None),
+            "completion": getattr(usage, "completion_tokens", None),
+            "total": getattr(usage, "total_tokens", None),
+            "cost_usd": usage_cost(
+                self.preset, getattr(usage, "prompt_tokens", None),
+                getattr(usage, "completion_tokens", None),
+            ),
+        }
         text = r.choices[0].message.content or ""
         return str(_json_object(text).get("reply") or text)
 
@@ -445,17 +508,41 @@ class OpenAICompatProvider:
         else:
             msgs.append({"role": "user", "content": text})
         model = self.vision_model if images else self.model
-        kw: dict[str, Any] = {"model": model, "temperature": 0.1, "messages": msgs}
+        kw: dict[str, Any] = {"model": model, "messages": msgs}
+        if self.temperature is not None:
+            kw["temperature"] = self.temperature
         if self.json_mode and not images:
-            kw["response_format"] = {"type": "json_object"}
+            if self.json_schema:
+                from .prompt_registry import capability_schema
+                kw["response_format"] = {"type": "json_schema", "json_schema": {
+                    "name": request.node.replace("_", "-"), "strict": True,
+                    "schema": _vendor_json_schema(capability_schema(request.node)),
+                }}
+            else:
+                kw["response_format"] = {"type": "json_object"}
         if self.extra:
             kw["extra_body"] = self.extra
+        if self.preset in {"kimi-k3", "glm-5.2"}:
+            from .llm_policy import request_budget
+            budget = request_budget(self.preset, request.approximate_tokens)
+            kw["max_completion_tokens"] = budget["max_completion_tokens"]
+            from .telemetry import add_current_attributes
+            add_current_attributes({
+                "gen_ai.usage.cost_estimate_usd": budget["estimated_cost_usd"]
+            })
         r = self.client.chat.completions.create(**kw)
         out = r.choices[0].message.content or "{}"
         c1, c2 = out.find("{"), out.rfind("}")
         data = json.loads(out[c1:c2 + 1]) if c1 >= 0 else {}
         usage = getattr(r, "usage", None)
-        return _provider_result(data, request, usage=usage, model=model)
+        result = _provider_result(data, request, usage=usage, model=model)
+        if isinstance(result.get("usage"), dict):
+            from .llm_policy import usage_cost
+            result["usage"]["cost_usd"] = usage_cost(
+                self.preset, result["usage"].get("prompt"), result["usage"].get("completion")
+            )
+            self.last_usage = dict(result["usage"])
+        return result
 
 
 # обратная совместимость: SPEC_CHAT_PROVIDER=openai
@@ -673,7 +760,8 @@ class GigaChatProvider:
 
 def resolve_provider_name(name: str | None = None) -> str:
     """Имя провайдера, которое реально будет использовано (для конвейера AKD-211)."""
-    return (name or os.environ.get("SPEC_CHAT_PROVIDER")
+    from .llm_policy import rollout_provider
+    return (name or rollout_provider() or os.environ.get("SPEC_CHAT_PROVIDER")
             or os.environ.get("PARAMSPEC_PROVIDER")
             # авто по наличию ключа; gigachat работает с РФ-серверов (Gemini — нет)
             or ("gigachat" if os.environ.get("GIGACHAT_AUTH_KEY")
@@ -687,12 +775,12 @@ def get_chat_provider(name: str | None = None) -> Any:
         return GigaChatProvider()
     if name == "gemini":
         return GeminiChatProvider()
-    if name in ("openai", "kimi", "glm", "deepseek"):   # OpenAI-совместимые (AKD-209)
+    if name in ("openai", "kimi", "glm", "deepseek", "kimi-k3", "glm-5.2"):
         return OpenAICompatProvider(name)
     if name == "mock":
         return MockChatProvider()
     raise ValueError(f"Неизвестный SPEC_CHAT_PROVIDER={name!r} "
-                     "(mock|openai|kimi|glm|deepseek|gemini|gigachat)")
+                     "(mock|openai|kimi|glm|deepseek|kimi-k3|glm-5.2|gemini|gigachat)")
 
 
 # ------------------------------------------------------------------ вход
@@ -882,6 +970,7 @@ def chat_edit(spec: dict[str, Any], message: str,
     extract_name = (os.environ.get("VISION_EXTRACT_PROVIDER") or build_name).lower()
     vision_trace = build_prompt_request("vision_facts").trace if images else None
     two_stage = False
+    vision_usage: dict[str, Any] = {}
     try:
         with span("operations.plan", base_trace) as plan_span:
             vis = get_chat_provider(extract_name) if images else None
@@ -893,8 +982,15 @@ def chat_edit(spec: dict[str, Any], message: str,
                     "image.count": len(images or []),
                     "prompt.version": (vision_trace or {}).get("prompt_version"),
                     "langsmith.span.kind": "llm",
-                }):
+                }) as vision_span:
                     desc = vis.vision_extract(images) if hasattr(vis, "vision_extract") else ""
+                    vision_usage = dict(getattr(vis, "last_usage", {}) or {})
+                    vision_span.set_attributes({
+                        "gen_ai.usage.input_tokens": vision_usage.get("prompt"),
+                        "gen_ai.usage.output_tokens": vision_usage.get("completion"),
+                        "gen_ai.usage.total_tokens": vision_usage.get("total"),
+                        "gen_ai.usage.cost_usd": vision_usage.get("cost_usd"),
+                    })
                 if desc.strip():
                     aug = (("Создай новый ParamSpec по этому ТЗ. " + message).strip()
                            + "\n\nРаспознано с фото ТЗ (используй как факты, ничего не додумывай "
@@ -911,12 +1007,22 @@ def chat_edit(spec: dict[str, Any], message: str,
                     res = build.chat(provider_spec, message, history)
             provider_usage = res.get("usage") if isinstance(res, dict) else None
             if isinstance(provider_usage, dict):
+                if vision_usage:
+                    for key in ("prompt", "completion", "total"):
+                        provider_usage[key] = int(provider_usage.get(key) or 0) + int(
+                            vision_usage.get(key) or 0
+                        )
+                    provider_usage["cost_usd"] = round(
+                        float(provider_usage.get("cost_usd") or 0)
+                        + float(vision_usage.get("cost_usd") or 0), 8
+                    )
                 plan_span.set_attributes({
                     "model": provider_usage.get("model") or model_name,
                     "gen_ai.request.model": provider_usage.get("model") or model_name,
                     "gen_ai.usage.input_tokens": provider_usage.get("prompt"),
                     "gen_ai.usage.output_tokens": provider_usage.get("completion"),
                     "gen_ai.usage.total_tokens": provider_usage.get("total"),
+                    "gen_ai.usage.cost_usd": provider_usage.get("cost_usd"),
                 })
     except Exception as e:                            # сеть/ключ/парсинг — в чат, не 500
         error_message = f"Сервис AI не ответил: {e}"
@@ -1074,6 +1180,8 @@ _PROVIDER_META = {          # id → (человекочитаемое имя, e
     "deepseek": ("DeepSeek", "DEEPSEEK_API_KEY"),
     "gemini": ("Gemini (Google)", "GEMINI_API_KEY"),
     "openai": ("OpenAI", "OPENAI_API_KEY"),
+    "kimi-k3": ("Kimi K3 (платный)", "KIMI_API_KEY"),
+    "glm-5.2": ("GLM-5.2 (платный)", "GLM_API_KEY"),
 }
 
 
@@ -1082,9 +1190,16 @@ def available_providers() -> dict[str, Any]:
     умолчанию — для селектора в UI (AKD-210)."""
     out = [{"id": "mock", "name": "Базовый (правила, без ИИ)"}]
     for pid, (label, envk) in _PROVIDER_META.items():
-        if os.environ.get(envk) or os.environ.get("LLM_API_KEY"):
+        if pid in {"kimi-k3", "glm-5.2"}:
+            from .llm_policy import truthy_env
+            if not truthy_env("SPEC_CHAT_PAID_ENABLED"):
+                continue
+        has_key = bool(os.environ.get(envk) or os.environ.get("LLM_API_KEY"))
+        if pid == "kimi-k3":
+            has_key = has_key or bool(os.environ.get("MOONSHOT_API_KEY"))
+        if has_key:
             out.append({"id": pid, "name": label})
-    active = (os.environ.get("SPEC_CHAT_PROVIDER") or "").lower()
+    active = resolve_provider_name()
     if active not in {p["id"] for p in out}:
         active = out[1]["id"] if len(out) > 1 else "mock"
     return {"active": active, "providers": out}

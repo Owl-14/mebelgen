@@ -10,6 +10,8 @@ import os
 import sys
 from pathlib import Path
 
+import pytest
+
 os.environ["SPEC_CHAT_PROVIDER"] = "mock"   # тесты всегда офлайн, даже при наличии ключа
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -139,6 +141,72 @@ def test_openai_compat_provider_has_bounded_timeout_without_hidden_retries(monke
 
     assert captured["timeout"] == 45.0
     assert captured["max_retries"] == 0
+
+
+def test_kimi_k3_uses_strict_schema_fixed_parameters_and_cost(monkeypatch):
+    import types
+    import src.spec_chat as sc
+
+    captured = {}
+
+    class Completions:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            message = types.SimpleNamespace(content=json.dumps({"reply": "ok", "operations": []}))
+            usage = types.SimpleNamespace(prompt_tokens=1000, completion_tokens=100,
+                                          total_tokens=1100)
+            return types.SimpleNamespace(choices=[types.SimpleNamespace(message=message)], usage=usage)
+
+    class FakeOpenAI:
+        def __init__(self, **kwargs):
+            captured["client"] = kwargs
+            self.chat = types.SimpleNamespace(completions=Completions())
+
+    monkeypatch.setenv("KIMI_API_KEY", "test-key")
+    monkeypatch.setenv("SPEC_CHAT_PAID_ENABLED", "1")
+    monkeypatch.setenv("LLM_MODEL", "unpriced-model-must-not-win")
+    monkeypatch.setenv("LLM_BASE_URL", "https://unpriced.invalid/v1")
+    monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(OpenAI=FakeOpenAI))
+    result = sc.OpenAICompatProvider("kimi-k3").chat(SPEC, "измени ширину")
+
+    assert "temperature" not in captured
+    assert captured["extra_body"] == {"reasoning_effort": "low"}
+    assert captured["response_format"]["type"] == "json_schema"
+    assert captured["response_format"]["json_schema"]["strict"] is True
+    assert "x-paramspec" not in json.dumps(captured["response_format"])
+    assert captured["max_completion_tokens"] == 4096
+    assert captured["model"] == "kimi-k3"
+    assert captured["client"]["base_url"] == "https://api.moonshot.ai/v1"
+    assert result["usage"]["cost_usd"] == pytest.approx(0.0045)
+
+
+def test_glm_52_uses_json_mode_and_disabled_thinking(monkeypatch):
+    import types
+    import src.spec_chat as sc
+
+    captured = {}
+
+    class Completions:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            message = types.SimpleNamespace(content=json.dumps({"reply": "ok", "operations": []}))
+            return types.SimpleNamespace(
+                choices=[types.SimpleNamespace(message=message)],
+                usage=types.SimpleNamespace(prompt_tokens=10, completion_tokens=5, total_tokens=15),
+            )
+
+    class FakeOpenAI:
+        def __init__(self, **_kwargs):
+            self.chat = types.SimpleNamespace(completions=Completions())
+
+    monkeypatch.setenv("GLM_API_KEY", "test-key")
+    monkeypatch.setenv("SPEC_CHAT_PAID_ENABLED", "1")
+    monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(OpenAI=FakeOpenAI))
+    sc.OpenAICompatProvider("glm-5.2").chat(SPEC, "измени ширину")
+
+    assert captured["response_format"] == {"type": "json_object"}
+    assert captured["extra_body"] == {"thinking": {"type": "disabled"}}
+    assert captured["max_completion_tokens"] == 4096
 
 
 def test_result_regenerates():

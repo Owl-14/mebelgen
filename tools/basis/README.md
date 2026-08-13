@@ -175,11 +175,14 @@ CfrnToB3d` → нативный `.b3d`. Команда `build-b3d`. Каждая
 | Переменная | Описание |
 |---|---|
 | `BAZIS_API_KEY` | ключ БАЗИС-Облака (для `build-b3d`, `cloud`, раскрой) — ПЛАТНЫЕ операции |
-| `SPEC_CHAT_PROVIDER` | провайдер чата Studio по умолчанию: `mock`\|`gigachat`\|`glm`\|`kimi`\|`deepseek`\|`openai`\|`gemini` |
+| `SPEC_CHAT_PROVIDER` | текущий провайдер чата Studio: `mock`\|`gigachat`\|`glm`\|`kimi`\|`deepseek`\|`openai`\|`gemini`; платный rollout задаётся отдельными флагами ниже |
+| `SPEC_CHAT_PAID_ENABLED` / `SPEC_CHAT_PAID_PROVIDER` | быстрый opt-in/rollback платного default (`0` по умолчанию; provider `glm-5.2` или `kimi-k3`) |
+| `SPEC_CHAT_MAX_REQUEST_USD` / `SPEC_CHAT_MAX_COMPLETION_TOKENS` | жёсткий потолок оценки стоимости одного запроса (по умолчанию `$0.15` и максимум 4096 output tokens) |
+| `SPEC_CHAT_ALLOW_PAID_IN_CI` | аварийный явный opt-in live-вызовов в CI; по умолчанию платные вызовы в CI запрещены |
 | `VISION_EXTRACT_PROVIDER` | кто читает фото ТЗ в конвейере (напр. `gigachat`), сборку делает SPEC_CHAT_PROVIDER |
 | `GIGACHAT_AUTH_KEY` | GigaChat (Сбер): текст+vision, работает из РФ (+`GIGACHAT_SCOPE/MODEL/VISION_MODEL/VERIFY/CA`) |
 | `GLM_API_KEY` | GLM/Zhipu `glm-4.5-flash` (бесплатный, thinking отключён) |
-| `KIMI_API_KEY` | Kimi/Moonshot (платный) |
+| `KIMI_API_KEY` / `MOONSHOT_API_KEY` | Kimi/Moonshot; новый `kimi-k3` требует paid feature flag |
 | `DEEPSEEK_API_KEY` | DeepSeek |
 | `OPENAI_API_KEY` | OpenAI `gpt-4o` (чат и `convert`) |
 | `GEMINI_API_KEY` | Gemini (из РФ заблокирован) |
@@ -196,7 +199,8 @@ CfrnToB3d` → нативный `.b3d`. Команда `build-b3d`. Каждая
 
 Studio создаёт один `trace_id` на AI-запрос и показывает его в серверной истории
 команд. В trace входят только хэши проекта/ревизии, провайдер и модель, версия
-промпта, типы операций, token usage, количества панелей/присадок и итоги проверок.
+промпта, типы операций, token usage, вычисленная стоимость USD, количества
+панелей/присадок и итоги проверок.
 Полный текст ТЗ, сообщения, изображения, ParamSpec и секреты отбрасываются
 deny-by-default политикой `src/telemetry.py`; исключения записываются только кодом
 класса без текста и stack trace.

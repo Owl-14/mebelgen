@@ -28,6 +28,7 @@ _SAFE_KEYS = frozenset({
     "revision.persisted", "http.route", "http.status_code", "response.changed",
     "gen_ai.system", "gen_ai.request.model", "gen_ai.usage.input_tokens",
     "gen_ai.usage.output_tokens", "gen_ai.usage.total_tokens",
+    "gen_ai.usage.cost_usd", "gen_ai.usage.cost_estimate_usd",
     "langsmith.span.kind", "langsmith.trace.name",
 })
 _SEQUENCE_KEYS = frozenset({"operation.types", "error.codes"})
@@ -80,6 +81,8 @@ def _safe_value(key: str, value: Any) -> Any | None:
     if isinstance(value, int):
         return value
     if isinstance(value, float):
+        if key in {"gen_ai.usage.cost_usd", "gen_ai.usage.cost_estimate_usd"}:
+            return round(value, 8)
         return round(value, 3)
     if value is None:
         return None
