@@ -1,0 +1,307 @@
+{
+  "project_name": "Стол кофейный куб 400×400×400",
+  "furniture_type": "стол",
+  "overall_dimensions": {
+    "width": 400,
+    "depth": 400,
+    "height": 400,
+    "tolerance": 5
+  },
+  "materials": {
+    "board_material": "МДФ под покраску",
+    "board_thickness": 16,
+    "back_wall_material": "ДВП",
+    "edge_band_thickness": 2,
+    "color": "Белый",
+    "color_code": ""
+  },
+  "sections": [
+    {
+      "id": "main",
+      "type": "open",
+      "dimensions": {
+        "width": 368,
+        "height": 368,
+        "depth": 368,
+        "estimated": false
+      },
+      "elements": [
+        "Дно",
+        "Крышка",
+        "Боковина левая",
+        "Боковина правая",
+        "Задняя стенка"
+      ]
+    }
+  ],
+  "panels": [
+    {
+      "name": "Дно",
+      "type": "bottom",
+      "basis_orientation": "horizont",
+      "material": "МДФ под покраску",
+      "thickness": 16,
+      "dimensions": {
+        "width": 400,
+        "height": 400
+      },
+      "placement": {
+        "x1": 0,
+        "x2": 400,
+        "y1": 0,
+        "y2": 16,
+        "z1": 0,
+        "z2": 400
+      },
+      "position": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0.5,
+        "right": 0.5
+      },
+      "estimated": false
+    },
+    {
+      "name": "Крышка",
+      "type": "top",
+      "basis_orientation": "horizont",
+      "material": "МДФ под покраску",
+      "thickness": 16,
+      "dimensions": {
+        "width": 400,
+        "height": 400
+      },
+      "placement": {
+        "x1": 0,
+        "x2": 400,
+        "y1": 384,
+        "y2": 400,
+        "z1": 0,
+        "z2": 400
+      },
+      "position": {
+        "x": 0,
+        "y": 384,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0.5,
+        "right": 0.5
+      },
+      "estimated": false
+    },
+    {
+      "name": "Боковина левая",
+      "type": "side_left",
+      "basis_orientation": "vertical",
+      "material": "МДФ под покраску",
+      "thickness": 16,
+      "dimensions": {
+        "width": 400,
+        "height": 368
+      },
+      "placement": {
+        "x1": 0,
+        "x2": 16,
+        "y1": 16,
+        "y2": 384,
+        "z1": 0,
+        "z2": 400
+      },
+      "position": {
+        "x": 0,
+        "y": 16,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
+      },
+      "estimated": false
+    },
+    {
+      "name": "Боковина правая",
+      "type": "side_right",
+      "basis_orientation": "vertical",
+      "material": "МДФ под покраску",
+      "thickness": 16,
+      "dimensions": {
+        "width": 400,
+        "height": 368
+      },
+      "placement": {
+        "x1": 384,
+        "x2": 400,
+        "y1": 16,
+        "y2": 384,
+        "z1": 0,
+        "z2": 400
+      },
+      "position": {
+        "x": 384,
+        "y": 16,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
+      },
+      "estimated": false
+    },
+    {
+      "name": "Задняя стенка",
+      "type": "back",
+      "basis_orientation": "front",
+      "material": "ДВП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 368,
+        "height": 368
+      },
+      "placement": {
+        "x1": 16,
+        "x2": 384,
+        "y1": 16,
+        "y2": 384,
+        "z1": 384,
+        "z2": 400
+      },
+      "position": {
+        "x": 16,
+        "y": 16,
+        "z": 384
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0,
+        "bottom": 0,
+        "left": 0,
+        "right": 0
+      },
+      "estimated": false
+    }
+  ],
+  "drawers": [],
+  "doors": [],
+  "hardware": {
+    "handles": {
+      "type": "нет",
+      "material": "—",
+      "color": "—",
+      "size": 0,
+      "count": 0,
+      "offset_from_top": 0,
+      "furniture_encoded": ""
+    },
+    "legs": {
+      "type": "нет",
+      "adjustable": false,
+      "color": "—",
+      "height": 0,
+      "count": 0
+    }
+  },
+  "constraints": {
+    "default_gap": 2,
+    "drawer_gap": 2,
+    "door_gap": 2,
+    "back_wall_offset": 16,
+    "construction": "top_bottom_over_sides"
+  },
+  "basis_mapping": {
+    "coordinate_system": "basis_mebelshik",
+    "units": "mm",
+    "ready_for_import": true,
+    "placement_required": true
+  },
+  "warnings": [
+    "Куб-стол: закрытый короб 400×400×400.",
+    "Задняя стенка в ТЗ не указана — принята ДВП 3 мм (стандарт).",
+    "Цвет/декор в ТЗ не указан — принят дефолт «Белый» (ЛДСП), подтвердить с заказчиком."
+  ],
+  "estimated_values": [
+    "color",
+    "thickness"
+  ],
+  "carcass_calculation": {
+    "W": 400,
+    "D": 400,
+    "H": 400,
+    "T": 16,
+    "T_back": 16,
+    "Hleg": 0,
+    "construction": "top_bottom_over_sides",
+    "inner_width": "W - 2*T = 368",
+    "side_y": "16..384"
+  },
+  "material_refs": {
+    "back": {
+      "resolved": true,
+      "id": "2001",
+      "article": "2001",
+      "name": "ХДФ, 3 мм, Белый лак., Kronostar",
+      "cost": 245,
+      "unit": "кв.м.",
+      "group": "01 Листовой материал/ДВП,ХДФ",
+      "match": "задник ДВП/ХДФ",
+      "confidence": "medium"
+    },
+    "board": {
+      "resolved": true,
+      "id": "W1000 ST26",
+      "article": "W1000 ST26",
+      "name": "ЛДСП, 16 мм, Белый Премиум, Egger",
+      "cost": 250,
+      "unit": "кв.м.",
+      "group": "01 Листовой материал/ЛДСП/16мм",
+      "match": "толщина + цвет",
+      "confidence": "high"
+    },
+    "edge": {
+      "resolved": true,
+      "id": "1759",
+      "article": "1759",
+      "name": "Кромка ПВХ, 19/2 мм, Белый, 91470-14, Rehau",
+      "cost": 20,
+      "unit": "пог. м",
+      "group": "02 Кромочные материалы/Кромка 19мм/2/19",
+      "match": "толщина + цвет",
+      "confidence": "high"
+    }
+  }
+}

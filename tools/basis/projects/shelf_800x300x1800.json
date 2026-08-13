@@ -1,0 +1,502 @@
+{
+  "project_name": "Стеллаж 800×300×1800",
+  "furniture_type": "стеллаж",
+  "overall_dimensions": {
+    "width": 800,
+    "depth": 300,
+    "height": 1800,
+    "tolerance": 5
+  },
+  "materials": {
+    "board_material": "ЛДСП",
+    "board_thickness": 16,
+    "back_wall_material": "ЛДСП",
+    "edge_band_thickness": 0.4,
+    "color": "Белый",
+    "color_code": ""
+  },
+  "sections": [
+    {
+      "id": "main",
+      "type": "open",
+      "dimensions": {
+        "width": 768,
+        "height": 1768,
+        "depth": 268,
+        "estimated": false
+      },
+      "elements": [
+        "Дно",
+        "Крышка",
+        "Боковина левая",
+        "Боковина правая",
+        "Задняя стенка",
+        "Полка 1",
+        "Полка 2",
+        "Полка 3",
+        "Полка 4",
+        "Полка 5"
+      ]
+    }
+  ],
+  "panels": [
+    {
+      "name": "Дно",
+      "type": "bottom",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 800,
+        "height": 300
+      },
+      "placement": {
+        "x1": 0,
+        "x2": 800,
+        "y1": 0,
+        "y2": 16,
+        "z1": 0,
+        "z2": 300
+      },
+      "position": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0.5,
+        "right": 0.5
+      },
+      "estimated": false
+    },
+    {
+      "name": "Крышка",
+      "type": "top",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 800,
+        "height": 300
+      },
+      "placement": {
+        "x1": 0,
+        "x2": 800,
+        "y1": 1784,
+        "y2": 1800,
+        "z1": 0,
+        "z2": 300
+      },
+      "position": {
+        "x": 0,
+        "y": 1784,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0.5,
+        "right": 0.5
+      },
+      "estimated": false
+    },
+    {
+      "name": "Боковина левая",
+      "type": "side_left",
+      "basis_orientation": "vertical",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 300,
+        "height": 1768
+      },
+      "placement": {
+        "x1": 0,
+        "x2": 16,
+        "y1": 16,
+        "y2": 1784,
+        "z1": 0,
+        "z2": 300
+      },
+      "position": {
+        "x": 0,
+        "y": 16,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
+      },
+      "estimated": false
+    },
+    {
+      "name": "Боковина правая",
+      "type": "side_right",
+      "basis_orientation": "vertical",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 300,
+        "height": 1768
+      },
+      "placement": {
+        "x1": 784,
+        "x2": 800,
+        "y1": 16,
+        "y2": 1784,
+        "z1": 0,
+        "z2": 300
+      },
+      "position": {
+        "x": 784,
+        "y": 16,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
+      },
+      "estimated": false
+    },
+    {
+      "name": "Задняя стенка",
+      "type": "back",
+      "basis_orientation": "front",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 768,
+        "height": 1768
+      },
+      "placement": {
+        "x1": 16,
+        "x2": 784,
+        "y1": 16,
+        "y2": 1784,
+        "z1": 284,
+        "z2": 300
+      },
+      "position": {
+        "x": 16,
+        "y": 16,
+        "z": 284
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "top": 0,
+        "bottom": 0,
+        "left": 0,
+        "right": 0
+      },
+      "estimated": false
+    },
+    {
+      "name": "Полка 1",
+      "type": "shelf",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 768,
+        "height": 268
+      },
+      "placement": {
+        "x1": 16,
+        "x2": 784,
+        "y1": 297,
+        "y2": 313,
+        "z1": 16,
+        "z2": 284
+      },
+      "position": {
+        "x": 16,
+        "y": 297,
+        "z": 16
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0,
+        "right": 0
+      },
+      "estimated": false,
+      "section_id": "main"
+    },
+    {
+      "name": "Полка 2",
+      "type": "shelf",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 768,
+        "height": 268
+      },
+      "placement": {
+        "x1": 16,
+        "x2": 784,
+        "y1": 594,
+        "y2": 610,
+        "z1": 16,
+        "z2": 284
+      },
+      "position": {
+        "x": 16,
+        "y": 594,
+        "z": 16
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0,
+        "right": 0
+      },
+      "estimated": false,
+      "section_id": "main"
+    },
+    {
+      "name": "Полка 3",
+      "type": "shelf",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 768,
+        "height": 268
+      },
+      "placement": {
+        "x1": 16,
+        "x2": 784,
+        "y1": 891,
+        "y2": 907,
+        "z1": 16,
+        "z2": 284
+      },
+      "position": {
+        "x": 16,
+        "y": 891,
+        "z": 16
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0,
+        "right": 0
+      },
+      "estimated": false,
+      "section_id": "main"
+    },
+    {
+      "name": "Полка 4",
+      "type": "shelf",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 768,
+        "height": 268
+      },
+      "placement": {
+        "x1": 16,
+        "x2": 784,
+        "y1": 1188,
+        "y2": 1204,
+        "z1": 16,
+        "z2": 284
+      },
+      "position": {
+        "x": 16,
+        "y": 1188,
+        "z": 16
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0,
+        "right": 0
+      },
+      "estimated": false,
+      "section_id": "main"
+    },
+    {
+      "name": "Полка 5",
+      "type": "shelf",
+      "basis_orientation": "horizont",
+      "material": "ЛДСП",
+      "thickness": 16,
+      "dimensions": {
+        "width": 768,
+        "height": 268
+      },
+      "placement": {
+        "x1": 16,
+        "x2": 784,
+        "y1": 1485,
+        "y2": 1501,
+        "z1": 16,
+        "z2": 284
+      },
+      "position": {
+        "x": 16,
+        "y": 1485,
+        "z": 16
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0,
+        "right": 0
+      },
+      "estimated": false,
+      "section_id": "main"
+    }
+  ],
+  "drawers": [],
+  "doors": [],
+  "hardware": {
+    "handles": {
+      "type": "нет",
+      "material": "—",
+      "color": "—",
+      "size": 0,
+      "count": 0,
+      "offset_from_top": 0,
+      "furniture_encoded": ""
+    },
+    "legs": {
+      "type": "опоры регулируемые",
+      "adjustable": false,
+      "color": "—",
+      "height": 0,
+      "count": 0
+    }
+  },
+  "constraints": {
+    "default_gap": 2,
+    "drawer_gap": 2,
+    "door_gap": 2,
+    "back_wall_offset": 16,
+    "construction": "top_bottom_over_sides"
+  },
+  "basis_mapping": {
+    "coordinate_system": "basis_mebelshik",
+    "units": "mm",
+    "ready_for_import": true,
+    "placement_required": true
+  },
+  "warnings": [
+    "Открытый стеллаж, 5 полок равномерно.",
+    "Цвет/декор в ТЗ не указан — принят дефолт «Белый» (ЛДСП), подтвердить с заказчиком."
+  ],
+  "estimated_values": [
+    "materials.color"
+  ],
+  "carcass_calculation": {
+    "W": 800,
+    "D": 300,
+    "H": 1800,
+    "T": 16,
+    "T_back": 16,
+    "Hleg": 0,
+    "construction": "top_bottom_over_sides",
+    "inner_width": "W - 2*T = 768",
+    "side_y": "16..1784",
+    "shelf_levels": [
+      297,
+      594,
+      891,
+      1188,
+      1485
+    ]
+  },
+  "material_refs": {
+    "back": {
+      "resolved": true,
+      "id": "U767 ST9",
+      "article": "U767 ST9",
+      "name": "ЛДСП, 16 мм, Кубанит серый, Egger",
+      "cost": 250,
+      "unit": "кв.м.",
+      "group": "01 Листовой материал/ЛДСП/16мм",
+      "match": "по толщине (цвет не задан → дефолт: дешевле)",
+      "confidence": "low"
+    },
+    "board": {
+      "resolved": true,
+      "id": "W1000 ST26",
+      "article": "W1000 ST26",
+      "name": "ЛДСП, 16 мм, Белый Премиум, Egger",
+      "cost": 250,
+      "unit": "кв.м.",
+      "group": "01 Листовой материал/ЛДСП/16мм",
+      "match": "толщина + цвет",
+      "confidence": "high"
+    },
+    "edge": {
+      "resolved": true,
+      "id": "992",
+      "article": "992",
+      "name": "Кромка ПВХ, 19/0,4 мм, Белый, 91470-14, Rehau",
+      "cost": 8,
+      "unit": "пог. м",
+      "group": "02 Кромочные материалы/Кромка 19мм/0,4/19",
+      "match": "толщина + цвет",
+      "confidence": "high"
+    }
+  }
+}
