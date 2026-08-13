@@ -13,24 +13,21 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from .cfrn import check_cfrn_encoding, project_to_cfrn_bytes
+from .b3d_preflight import B3DPreflightError, require_b3d_project_preflight
+from .cfrn import project_to_cfrn_bytes
 from .cloud_api import CloudTasksClient
-from .generators import generate_from_paramspec
-from .paramspec import validate_paramspec
 
 
 def build_b3d(project: dict[str, Any], out_path: str | Path, *,
               client: CloudTasksClient | None = None, timeout: float = 180,
               skip_encoding_check: bool = False) -> dict[str, Any]:
     """project.json (панели) → .cfrn → облако CfrnToB3d → .b3d на диск. Возвращает отчёт."""
-    # проверка кодирования ДО платной конвертации: матрицы .cfrn должны
-    # воспроизводить placement и не давать нахлёстов (иначе .b3d будет с браком).
-    if not skip_encoding_check:
-        enc = check_cfrn_encoding(project)
-        if enc:
-            raise RuntimeError(
-                "Кодирование .cfrn не сошлось с placement (сборка отменена, деньги не потрачены):\n  "
-                + "\n  ".join(enc[:10]))
+    # ``skip_encoding_check`` оставлен только для совместимости вызовов. Он
+    # больше не ослабляет safety boundary: любой платный вызов проходит весь
+    # offline preflight, включая encoding, holes, drilling и materials.
+    _ = skip_encoding_check
+    preflight = require_b3d_project_preflight(project)
+    project = preflight.project
     client = client or CloudTasksClient()
     cfrn = project_to_cfrn_bytes(project)
     with tempfile.NamedTemporaryFile("wb", suffix=".cfrn", delete=False) as tf:
@@ -50,11 +47,9 @@ def build_b3d(project: dict[str, Any], out_path: str | Path, *,
 
 
 def build_b3d_from_paramspec(spec: dict[str, Any], out_path: str | Path, **kw: Any) -> dict[str, Any]:
-    errors = validate_paramspec(spec)
-    if errors:
-        raise ValueError("ParamSpec не прошёл валидацию:\n" + "\n".join(errors))
-    project = generate_from_paramspec(spec)
-    # привязать реальные материалы/фурнитуру, чтобы декор и артикулы попали в .cfrn
-    from .materials import resolve_project_materials
-    project["material_refs"] = resolve_project_materials(project)
-    return build_b3d(project, out_path, **kw)
+    from .production_gate import evaluate_production_gate
+
+    decision = evaluate_production_gate(spec)
+    if not decision.report.ok or decision.project is None:
+        raise B3DPreflightError(decision.report.to_dict())
+    return build_b3d(decision.project, out_path, **kw)
