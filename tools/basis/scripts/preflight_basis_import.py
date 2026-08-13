@@ -28,7 +28,7 @@ def main() -> int:
         args.output.write_text(rendered, encoding="utf-8")
     else:
         sys.stdout.write(rendered)
-    return 0 if report["offline_status"] == "pass" else 1
+    return 0 if report["source_preflight_status"] == "pass" else 1
 
 
 if __name__ == "__main__":

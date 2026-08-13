@@ -4,7 +4,7 @@
     {
       "id": "cabinet-700x400x500",
       "project": "../../projects/cabinet_700x400x500.json",
-      "purpose": "All three panel orientations, material name, edge data and non-empty system-32 drilling"
+      "purpose": "Source input with all panel orientations, material and edge fields, plus non-empty Python system-32 drilling expectations"
     }
   ]
 }

@@ -31,8 +31,9 @@ function detectBasisApi() {
   const objects = typeof objects3d !== 'undefined' ? objects3d : null;
   const action = typeof Action !== 'undefined' ? Action : null;
   const report = {
-    report_version: 1,
+    report_version: 2,
     read_only: true,
+    evidence_scope: 'runtime capability presence only; does not observe importer calls or imported objects',
     capabilities: {
       system: {
         askFileName: hasFunction(sys, 'askFileName'),
@@ -71,6 +72,20 @@ function detectBasisApi() {
   ];
   report.importer_core_ready = required.every(function (value) { return value; });
   report.furniture_ready = report.capabilities.furniture.NewFurnitureValue;
+  report.importer_call_evidence = {
+    status: 'not_observed_by_detector',
+    edge_banding: 'not_observed_by_detector',
+    drilling: 'not_observed_by_detector',
+    native_b3d: 'not_observed_by_detector'
+  };
+  report.imported_result = {
+    status: 'blocked_not_observed',
+    panels: 'blocked_not_observed',
+    materials: 'blocked_not_observed',
+    edge_banding: 'blocked_not_observed',
+    drilling: 'blocked_not_observed',
+    native_b3d: 'blocked_not_observed'
+  };
   return report;
 }
 
