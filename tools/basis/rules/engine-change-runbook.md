@@ -72,7 +72,7 @@
 | Studio/API | `src/studio.py`, `rules/studio.md` | каталог, API, сохранение ревизий, UX ошибок и запуск pipeline |
 | 3D-viewer | `src/webviewer.py` | отображение уже рассчитанной модели; не источник геометрии |
 | Наблюдаемость | `src/telemetry.py` | privacy-safe spans, prompt/model/version, usage, error codes, trace id |
-| Регрессии | `tests/`, `tests/regression.py`, `qa/`, `goldens/` | доказательство совместимости и производимости |
+| Регрессии | `tests/`, `tests/regression.py`, `qa/trace_eval/`, `goldens/` | доказательство совместимости, производимости и offline replay AI-выходов |
 
 Перед правкой открой также профильный документ из `rules/`, на который ссылается
 `tools/basis/AGENTS.md`.
@@ -207,6 +207,15 @@ Live trace-тест не заменяет unit/regression. Он нужен дл�
 реально решил provider», проводится на неперсональном fixture, без persistence
 и с заранее ограниченными запросами/стоимостью.
 
+Версионируемый offline trace replay — отдельный обязательный контур для
+create/edit/diagnosis/repair изменений. Dataset хранит только неперсональные
+команды, ссылки на fixture и сохранённые структурированные node outputs. Replay
+не вызывает provider: записанный результат проходит текущие Pydantic-контракты,
+typed reducer, генератор и production gate, после чего сравниваются node outputs,
+diff, число деталей/присадок и статусы всех проверок. Сравнимый JSON-отчёт должен
+содержать prompt/model версии и стабильные digests, но не raw prompt, полный
+пользовательский ParamSpec, изображения или секреты.
+
 ## 8. Минимальная матрица проверки
 
 Для любого изменения движка выбери профильные тесты, затем всегда выполни оба
@@ -216,6 +225,7 @@ Live trace-тест не заменяет unit/regression. Он нужен дл�
 |---|---|
 | ParamSpec/schema | `test_paramspec_pydantic.py`, все catalog validation, migration tests |
 | create/edit AI | `test_prompt_registry.py`, `test_spec_chat.py`, `test_edit_operations.py`, `test_studio_graph.py` |
+| trace/eval dataset | `python main.py trace-eval`, `test_trace_replay.py`; только offline, live provider не является CI-гейтом |
 | import/API | профильный HTTP-тест Studio: status, code, trace id, отсутствие записи при ошибке |
 | generator | тест архетипа, geometry/consistency, production gate, regression/golden |
 | drilling/hardware | hardware, hardware_geometry, drilling_check, CFRN holes parity |

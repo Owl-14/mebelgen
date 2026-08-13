@@ -214,3 +214,24 @@ python main.py studio paramspecs/wardrobe_demo.json --no-open
 стандартные `OTEL_EXPORTER_OTLP_*`. Для LangSmith достаточно backend `langsmith`,
 `LANGSMITH_API_KEY` и, при необходимости, `LANGSMITH_PROJECT`; ключ хранится только
 в окружении и не сериализуется.
+
+## Offline trace replay и eval
+
+Версионируемый dataset `qa/trace_eval/v1/scenarios.json` хранит неперсональные
+команды, ссылки на fixture ParamSpec, сохранённые выходы AI-узлов и ожидаемые
+diff/число деталей/присадок/production checks. Replay начинается после границы
+модели: LLM, vision и облачные API не вызываются, а записанные полные ParamSpec
+или typed operations проходят текущие reducer, генератор и production gate.
+
+```bash
+python main.py trace-eval
+python main.py trace-eval -o out/trace-eval.json
+python main.py trace-eval --compare out/trace-eval-baseline.json
+```
+
+JSON-отчёт детерминирован и содержит dataset digest, prompt/model profiles,
+node-output digest и итог каждого сценария. `--compare` показывает поведенческие
+различия между отчётами разных prompt/model версий; смена только метаданных
+модели не считается регрессией. Добавление сценария требует отдельного ожидаемого
+node output и output profile; raw prompt, полный пользовательский ParamSpec,
+base64 изображения и секреты в trace-файл не помещаются.

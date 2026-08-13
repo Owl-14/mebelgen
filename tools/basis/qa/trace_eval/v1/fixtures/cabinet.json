@@ -1,0 +1,70 @@
+{
+  "schemaVersion": "paramspec-v1",
+  "project_name": "Eval: двухсекционный шкаф",
+  "furniture_type": "шкаф",
+  "archetype": "wardrobe",
+  "dimensions": {
+    "width": 1200,
+    "depth": 600,
+    "height": 2200,
+    "tolerance": 5
+  },
+  "materials": {
+    "board_thickness": 16,
+    "back_thickness": 3.2,
+    "board_material": "ЛДСП",
+    "back_material": "ДВП",
+    "edge_band_thickness": 0.4,
+    "color": "по согласованию",
+    "color_code": ""
+  },
+  "legs": {
+    "type": "опоры",
+    "height": 60
+  },
+  "gaps": {
+    "facade": 2,
+    "default": 2
+  },
+  "interior_z_front": 16,
+  "sections": [
+    {
+      "id": "left",
+      "kind": "door",
+      "width_share": 1,
+      "shelf_levels": [700, 1100, 1500, 1900],
+      "shelf_label": "Полка левая",
+      "door": 1,
+      "door_name": "Дверь левая"
+    },
+    {
+      "id": "right",
+      "kind": "drawers",
+      "width_share": 1,
+      "drawers": 3,
+      "front_bottom": 76,
+      "drawer_heights": [200, 200, 200],
+      "box_depth": 520,
+      "box_height": 160,
+      "rod": {
+        "height": 1900
+      }
+    }
+  ],
+  "hardware": {
+    "handles": {
+      "type": "ручка",
+      "material": "металл",
+      "color": "—",
+      "size": 128,
+      "count": 4,
+      "offset_from_top": 32,
+      "furniture_encoded": ""
+    }
+  },
+  "features": ["штанга", "антресоль"],
+  "warnings": [
+    "Неперсональный offline fixture для trace-replay."
+  ],
+  "estimated_values": []
+}
