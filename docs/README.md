@@ -12,6 +12,9 @@
    — процесс работы и проверки по типам задач.
 5. [`../tools/basis/ops/runbook.md`](../tools/basis/ops/runbook.md) — production.
 
+Для подготовки лицензированной Windows-среды БАЗИС без установки и платных
+вызовов используется [`BASIS_ENV_PREFLIGHT.md`](BASIS_ENV_PREFLIGHT.md).
+
 Если исследование ниже противоречит `tools/basis/rules/`, действуют правила.
 
 ## Технические исследования
