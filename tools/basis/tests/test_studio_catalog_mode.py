@@ -159,10 +159,23 @@ def test_catalog_uses_available_width_without_losing_inspector_slot() -> None:
         flags=re.DOTALL,
     )
     assert "#catGrid{display:grid" in css
-    assert "repeat(auto-fill,minmax(clamp(230px,19vw,290px),1fr))" in css
+    assert "grid-template-columns:repeat(5,minmax(0,1fr))" in css
+    assert "@media (max-width:1200px){\n    #catGrid{grid-template-columns:repeat(4,minmax(0,1fr))}" in css
     assert "#catInspector.is-empty #catInspectorEmpty{display:flex}" in css
     assert "#app.catalog-mode #catalogInspectorSlot{display:block" in css
     assert "catalogInspectorSlot').append($('catInspector'))" in PAGE
+
+
+def test_catalog_scope_keeps_selected_type_filter() -> None:
+    controls = PAGE[
+        PAGE.index("function renderCatalogControls(){") : PAGE.index("function selectedCatalogItem")
+    ]
+    scope_handler = controls[
+        controls.index("$('catScopes').querySelectorAll") : controls.index("$('catResponsible').innerHTML")
+    ]
+    assert "CAT_SCOPE=button.dataset.scope" in scope_handler
+    assert "CAT_TYPE='all'" not in scope_handler
+    assert "CAT_TYPE=button.dataset.type" in controls
 
 
 def test_catalog_open_commits_only_a_prebuilt_candidate() -> None:

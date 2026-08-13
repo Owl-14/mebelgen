@@ -3343,10 +3343,11 @@ PAGE = r"""<!DOCTYPE html>
   .catchip:focus-visible,.cat-scope:focus-visible,.cat-filter-select:focus-visible,
     #catClose:focus-visible,#catInspectorClose:focus-visible,
     #catInspectorActions button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-  /* Широкий каталог использует свободное место под карточки, но не мельчит их:
-     обычно 5 на большом экране, 4–3 на более компактном desktop. */
+  /* Каталог всегда использует всю свободную ширину, но не превращается в
+     бесконечную ленту мелких карточек: пять колонок на широком desktop,
+     четыре — на обычном рабочем экране. */
   #catGrid{display:grid;flex:1;min-height:0;align-content:start;
-    grid-template-columns:repeat(auto-fill,minmax(clamp(230px,19vw,290px),1fr));
+    grid-template-columns:repeat(5,minmax(0,1fr));
     grid-auto-rows:max-content;gap:12px;
     overflow-y:auto;padding:1px 14px 20px 1px;scrollbar-gutter:stable}
   #catalogPreviewRenderer{position:fixed;left:-10000px;top:0;width:420px;height:315px;
@@ -3435,6 +3436,7 @@ PAGE = r"""<!DOCTYPE html>
   #catArchive:hover{border-color:#d49497;background:#fff0f0;color:#88252a}
   #catRestore{border-color:#9db9e6;background:#eef4ff;color:#245eae;font-weight:600}
   @media (max-width:1200px){
+    #catGrid{grid-template-columns:repeat(4,minmax(0,1fr))}
     #catInspectPreview{height:150px;flex-basis:150px}
     #catFilterbar{align-items:flex-start;flex-direction:column;gap:4px;padding-bottom:7px}
     #catScopes{height:34px}
@@ -5897,7 +5899,10 @@ function renderCatalogControls(){
       aria-pressed="${value===CAT_SCOPE}" ${value==='mine'&&!CAT_CURRENT_USER_ID?'disabled':''}>
       <span>${label}</span><output>${count}</output></button>`).join('');
   $('catScopes').querySelectorAll('.cat-scope').forEach(button=>button.onclick=()=>{
-    CAT_SCOPE=button.dataset.scope;CAT_RESPONSIBLE='all';CAT_STATUS='all';CAT_TYPE='all';
+    /* Верхняя область меняет набор изделий, но не намерение человека по типу:
+       выбрал «Стеллажи» — значит, при переходе в «Мои» или «Без ответственного»
+       он всё ещё смотрит именно стеллажи. */
+    CAT_SCOPE=button.dataset.scope;CAT_RESPONSIBLE='all';CAT_STATUS='all';
     refreshCatalog({clearSelection:true});
   });
   $('catResponsible').innerHTML=`<option value="all">Все ответственные</option>
