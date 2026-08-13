@@ -109,7 +109,8 @@ python main.py build-b3d         projects/<project>.json -o out.b3d
 
 # Offline hand-off без APIList: пакет для desktop БАЗИС, затем проверка сохранённого файла
 python main.py local-b3d prepare paramspecs/<model>.json --out out/local-b3d-package
-python main.py local-b3d verify  out/local-b3d-package out/<model>.b3d
+python main.py local-b3d verify  out/local-b3d-package out/<model>.b3d \
+  --expected-package-sha256 <SHA-256 из prepare>
 python main.py cloud info | list | model-convert … | drawing-convert …
 python main.py cutting …                                          # раскрой (облако, платно)
 ```

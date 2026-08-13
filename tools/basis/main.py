@@ -146,7 +146,12 @@ def cmd_local_b3d(args: argparse.Namespace) -> int:
         return 0
 
     report_path = args.report or str(Path(args.package) / "verification.json")
-    result = verify_local_b3d(args.package, args.b3d, report_path)
+    result = verify_local_b3d(
+        args.package,
+        args.b3d,
+        args.expected_package_sha256,
+        report_path,
+    )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     print(f"Отчёт: {report_path}")
     print("Нативность БАЗИС не подтверждена автоматически; нужен реальный open/save/reopen или round-trip.")
@@ -575,6 +580,11 @@ def main() -> int:
     p_local_verify = local_b3d_sub.add_parser("verify", help="проверить сохранённый desktop БАЗИС .b3d")
     p_local_verify.add_argument("package", help="каталог, созданный local-b3d prepare")
     p_local_verify.add_argument("b3d", help=".b3d, сохранённый из БАЗИС")
+    p_local_verify.add_argument(
+        "--expected-package-sha256",
+        required=True,
+        help="внешний SHA-256 deterministic ZIP, напечатанный local-b3d prepare",
+    )
     p_local_verify.add_argument("--report", help="путь JSON-отчёта (по умолчанию <package>/verification.json)")
     p_local_verify.set_defaults(func=cmd_local_b3d)
 

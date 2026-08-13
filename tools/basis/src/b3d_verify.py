@@ -13,6 +13,9 @@ from pathlib import Path
 from typing import Any
 
 
+ALLOWED_MODEL_OBJECT_TYPES = frozenset({999, 1005, 2004, 3001, 4001, 4002, 4004})
+
+
 def _child(node: tuple | None, name: str) -> tuple | None:
     if node and node[1] == "obj":
         return next((item for item in node[2] if item[0] == name), None)
@@ -80,8 +83,12 @@ def _b3d_evidence(doc: dict[str, Any]) -> dict[str, Any]:
 
     panels: list[dict[str, Any]] = []
     instances: list[int] = []
+    object_types: Counter[Any] = Counter()
     for node in _walk(model_objs):
+        if node[0] != "Obj":
+            continue
         node_type = _value(node, "Type")
+        object_types[node_type if isinstance(node_type, int) else "missing"] += 1
         if node_type == 4002:
             panels.append({
                 "name": str(_value(node, "Name", "")).split("\r")[0],
@@ -119,6 +126,7 @@ def _b3d_evidence(doc: dict[str, Any]) -> dict[str, Any]:
         },
         "panels": panels,
         "furniture_instances": len(instances),
+        "object_types": object_types,
         "drilling": drilling,
     }
 
@@ -145,6 +153,15 @@ def verify_b3d_parity(b3d_path: str | Path, project: dict[str, Any]) -> dict[str
     for name in ("document", "model", "model_objs"):
         if not evidence["nodes"][name]:
             errors.append({"code": f"b3d.node.{name}_missing", "detail": f"Обязательный узел {name} не найден"})
+    unknown_types = sorted(
+        (value for value in evidence["object_types"] if value not in ALLOWED_MODEL_OBJECT_TYPES),
+        key=str,
+    )
+    if unknown_types:
+        errors.append({
+            "code": "b3d.model_object_type.unknown",
+            "detail": f"Неизвестные/лишние Type в Model: {unknown_types}",
+        })
 
     expected_by_name = {str(panel.get("name", "")): panel for panel in expected_panels if panel.get("name")}
     expected_materials = _expected_panel_materials(project)
@@ -217,6 +234,11 @@ def verify_b3d_parity(b3d_path: str | Path, project: dict[str, Any]) -> dict[str
         "ok": not errors,
         "errors": errors,
         "nodes": evidence["nodes"],
+        "model_object_types": {
+            "allowed": sorted(ALLOWED_MODEL_OBJECT_TYPES),
+            "actual": {str(key): count for key, count in sorted(evidence["object_types"].items(), key=lambda item: str(item[0]))},
+            "unknown": unknown_types,
+        },
         "panels": {
             "expected": len(expected_panels),
             "actual": len(evidence["panels"]),

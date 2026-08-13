@@ -26,6 +26,21 @@ function runImport(path) {
   // eslint-disable-next-line no-undef
   const raw = system.readTextFile(path);
   const project = JSON.parse(raw);
+  const handoff = project._local_b3d_handoff;
+  if (!handoff || handoff.requires_new_empty_document !== true) {
+    // eslint-disable-next-line no-undef
+    alert('Импорт остановлен: пакет не требует новый пустой документ БАЗИС.');
+    return;
+  }
+  if (typeof confirm !== 'function') {
+    // eslint-disable-next-line no-undef
+    alert('Импорт остановлен: среда не поддерживает подтверждение пустого документа.');
+    return;
+  }
+  // eslint-disable-next-line no-undef
+  if (!confirm('Подтвердите: открыт НОВЫЙ ПУСТОЙ документ БАЗИС без существующих объектов.')) {
+    return;
+  }
   const placementByName = buildPlacementMap(project);
   const panelMap = buildPanels(project);
 

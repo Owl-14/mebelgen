@@ -36,14 +36,24 @@ ZIP. Manifest имеет обязательные `schema`/`version`, отдел
 Результат проверяется бесплатно:
 
 ```bash
-python main.py local-b3d verify <package-dir> <saved.b3d> --report <report.json>
+python main.py local-b3d verify <package-dir> <saved.b3d> \
+  --expected-package-sha256 <SHA-256 из prepare> --report <report.json>
 ```
 
-Проверка фиксирует целостность пакета, секции `Header`/`Document`, структурный
+До доверия `manifest.json` проверяется внешний trust anchor: SHA-256 исходного
+deterministic ZIP, напечатанный `prepare`. Распакованные файлы обязаны побайтно
+совпасть с anchored ZIP; затем фактический `project.json` повторно проходит
+project preflight. Поэтому согласованная подмена project+manifest/ZIP не проходит
+с исходным внешним SHA-256.
+
+Handoff разрешён только в **новый пустой документ БАЗИС**; import-script требует
+явного подтверждения, а manifest/project несут обязательный marker. Проверка
+фиксирует целостность пакета, секции `Header`/`Document`, структурный
 round-trip и fail-closed semantic evidence: непустые typed panel nodes, точное
 число/имена панелей, `Mat` каждой панели против ожидаемого CFRN mapping и
 толщину, а также точное число и multiset сигнатур `(diameter, depth)` присадок
-из `FurnList` × instances. Пустой synthetic
+из `FurnList` × instances. Любой неизвестный/лишний `Model/Obj Type` вне
+fail-closed whitelist отклоняется (`Type=9999` — красный). Пустой synthetic
 BZ85 с корректными секциями отклоняется. Даже зелёный offline-отчёт оставляет
 `native_basis.status=unverified` и `confirmed=false`: финальное доказательство —
 фактический open/save/reopen либо `b3d→cfrn` round-trip в лицензированном БАЗИС.
