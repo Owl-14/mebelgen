@@ -54,6 +54,15 @@ Material links проходят единый контракт MEB-139 (`material
 межпроцессную сериализацию; одинаковый idempotency key блокируется между
 клиентами и процессами.
 
+Live ledger не выбирается caller-ом. Единственный machine approval читается из
+canonical path `C:\ProgramData\Akeda\Cutting\approved-live.json` (Linux:
+`/etc/akeda/cutting/approved-live.json`). SHA-256 байтов config, включающего
+approved fixture SHA-256, однозначно задаёт ledger identity и путь
+`ledgers/<approval-digest>.sqlite3`. Новый произвольный SQLite не может открыть
+live run. Для одного approval digest ledger атомарно создаёт ровно один opaque
+`run_<32 hex>`; caller не передаёт run ID и не может использовать его как канал
+PII. Повторное открытие сохраняет исходный absolute deadline и mutation count.
+
 Если результат неизвестен, оператор обязан сначала сверить remote state и
 зафиксировать reconciliation с хешем evidence. Даже `not_applied` не разрешает
 повтор старого ключа — новая попытка требует нового утверждённого ключа.
@@ -91,7 +100,7 @@ failure или возврат после deadline означает `cutting.tran
 
 Upstream body, exception text и secrets не возвращаются пользователю.
 Внутренний trace ID — 32-символьный UUID hex, не принимаемый извне. Sanitized
-trace/evidence содержит run ID, timestamps, transport attestation, fixture/model
+trace/evidence содержит только server-generated opaque run ID, timestamps, transport attestation, fixture/model
 SHA-256, route-template и outcome; в нём нет API key, JSON body, customer names,
 локальных путей, remote IDs или signed URL.
 
@@ -116,24 +125,22 @@ Operator entrypoint намеренно вынесен из обычного CLI/
 ```powershell
 $env:BAZIS_API_KEY = '<approved test Cutting key>'
 python operator/cutting_live_smoke.py `
-  --fixture '<absolute path to approved live fixture.json>' `
-  --approved-fixture-sha256 '<separately reviewed 64-char sha256>' `
-  --ledger '<absolute durable path outside repository>\meb-140.sqlite3' `
-  --run-id 'MEB-140-APPROVED-<unique-run-id>' `
-  --overall-timeout 600 `
-  --production-interval 5 `
-  --max-mutations 5 `
   --authorization 'MEB-140-CUTTING-LIVE-APPROVED'
 ```
 
-До первой mutation entrypoint проверяет точный fixture SHA-256, model SHA-256,
-`scope=approved-live-cutting-smoke`, `approvedForLive=true`, отсутствие
-synthetic sentinels, абсолютный ledger path вне репозитория и ровно пять
-разрешённых мутаций.
+До команды независимый approver устанавливает canonical config с exact schema:
+`contractVersion`, `authorizationScope`, `approvedForLive`, absolute
+`fixturePath`, `fixtureSha256`, `maxMutations=5`, positive `overallTimeout` и
+`productionInterval`. CLI не принимает их как аргументы. До первой mutation
+entrypoint повторно читает config, fixture и model, проверяет hashes,
+`scope=approved-live-cutting-smoke`, отсутствие synthetic sentinels, canonical
+ledger identity и внутренний pinned HTTPS session. Transport/session immutable
+после construction. Production archive принимается только как чистый absolute
+credential-free HTTPS URL с default port.
 
 Точный текущий blocker: отсутствуют (1) отдельное разрешение на платный Cutting
 smoke, (2) выделенный тестовый `BAZIS_API_KEY`, (3) подтверждённая лицензия и
 тариф/стоимость, (4) несинтетический `.b3d` fixture с отдельно утверждённым
-SHA-256 и строгой таблицей реальных source→linked материалов и (5) утверждённый
-внешний durable ledger/run ID. Поэтому реальных order/model/run IDs,
+SHA-256 и строгой таблицей реальных source→linked материалов и (5) установленный
+независимым approver-ом canonical machine config/ledger identity. Поэтому реальных order/model/run IDs,
 production archive и live E2E evidence нет и не заявляется.

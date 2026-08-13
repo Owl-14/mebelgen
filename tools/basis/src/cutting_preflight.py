@@ -137,11 +137,25 @@ def run_cutting_flow(
 ) -> dict[str, Any]:
     if not client.run_id:
         raise ValueError("registered run_id is required")
+    if client.approved_mode == "live" and not client.live_evidence_allowed:
+        raise ValueError("live ledger cannot run outside the canonical operator trust boundary")
+    live_mode = client.live_evidence_allowed
+    if require_live_evidence and not live_mode:
+        raise ValueError("live evidence requires internally confirmed pinned HTTPS transport")
+    client.revalidate_approval()
+    # Re-read and fully validate fixture/model immediately before the first
+    # mutation. A caller cannot mutate a previously approved in-memory object or
+    # swap its file after operator approval.
+    revalidated = load_cutting_fixture(
+        fixture.path,
+        require_live_approval=live_mode,
+        approved_fixture_sha256=fixture.fixture_sha256,
+    )
+    if revalidated != fixture:
+        raise ValueError("fixture changed after approval and before mutation")
     if fixture.fixture_sha256 != client.fixture_sha256 \
             or fixture.model_sha256 != client.model_sha256:
         raise ValueError("fixture/model hashes differ from the durable ledger approval")
-    if require_live_evidence and not client.live_evidence_allowed:
-        raise ValueError("live evidence requires internally confirmed pinned HTTPS transport")
     data = fixture.data
     plan = plan_sheet_links(data["cadModelMaterials"], data["cfrn"], data["confirmations"])
     prefix = client.run_id
@@ -180,7 +194,7 @@ def run_cutting_flow(
         raise ValueError("cutting.materials.post_audit: article/sheet/cutting evidence failed")
 
     completed_at = client._timestamp(client.wall_clock())
-    mode = "live" if client.live_evidence_allowed else "offline_contract"
+    mode = "live" if live_mode else "offline_contract"
     evidence = {
         "mode": mode,
         "live_transport_confirmed": client.live_evidence_allowed,
@@ -191,6 +205,7 @@ def run_cutting_flow(
         "completed_at": completed_at,
         "fixture_sha256": fixture.fixture_sha256,
         "model_sha256": fixture.model_sha256,
+        "approval_digest": client.approval_digest,
         "order_ref": _opaque_ref(client.run_id, order_id),
         "model_ref": _opaque_ref(client.run_id, model_id),
         "material_count": len(actual_sources),

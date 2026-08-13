@@ -26,7 +26,8 @@ def test_offline_contract_harness_runs_strict_full_order_without_network(capsys)
     assert evidence["strict_material_audit"] is True
     assert len(evidence["fixture_sha256"]) == 64
     assert len(evidence["model_sha256"]) == 64
-    assert evidence["run_id"] == "MEB-140-OFFLINE-CONTRACT"
+    assert evidence["run_id"].startswith("run_")
+    assert len(evidence["run_id"]) == 36
     assert evidence["started_at"].endswith("Z")
     assert evidence["completed_at"].endswith("Z")
     assert [event["step"] for event in output["trace"]] == [
@@ -49,8 +50,8 @@ def test_remote_material_mismatch_stops_before_links_and_paid_generation() -> No
     trace = []
     with tempfile.TemporaryDirectory(prefix="meb140-mismatch-") as temp_dir:
         ledger = MutationLedger(Path(temp_dir) / "ledger.sqlite3")
-        ledger.register_run(
-            run_id="MEB-140-MISMATCH-RUN",
+        run = ledger.approve_run(
+            approval_digest="e" * 64,
             mode="offline_contract",
             fixture_sha256=fixture.fixture_sha256,
             model_sha256=fixture.model_sha256,
@@ -65,7 +66,7 @@ def test_remote_material_mismatch_stops_before_links_and_paid_generation() -> No
             allow_live=True,
             allow_mutations=True,
             ledger=ledger,
-            run_id="MEB-140-MISMATCH-RUN",
+            ledger_run=run,
             overall_timeout=30,
             session=session,
             trace_sink=trace.append,
@@ -111,8 +112,10 @@ def test_ordinary_cli_has_no_live_or_mutation_flags() -> None:
 
 def test_live_operator_entrypoint_is_separate_and_has_no_default_fixture() -> None:
     source = (ROOT / "operator" / "cutting_live_smoke.py").read_text(encoding="utf-8")
-    assert 'parser.add_argument("--fixture", type=Path, required=True)' in source
-    assert "--approved-fixture-sha256" in source
-    assert "--ledger" in source
+    assert "--fixture" not in source
+    assert "--approved-fixture-sha256" not in source
+    assert "--ledger" not in source
+    assert "--run-id" not in source
+    assert "load_canonical_operator_approval" in source
     assert "AUTHORIZATION_PHRASE" in source
     assert "cutting_test_order.json" not in source

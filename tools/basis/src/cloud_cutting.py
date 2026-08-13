@@ -25,6 +25,7 @@ SUPPORTED_MODEL_EXTENSIONS = {
     ".k3bz", ".cfrn",
 }
 _ORDER_FIELDS = {"managerId", "clientId", "note", "factoryOrderId", "factoryId", "uid1C"}
+_OPERATOR_TRUST_TOKEN = object()
 
 
 class CuttingError(RuntimeError):
@@ -104,6 +105,23 @@ def _origin(value: str) -> str:
     return f"https://{parsed.hostname.lower()}"
 
 
+def _validated_https_url(value: Any) -> str:
+    if not isinstance(value, str) or not value or value != value.strip() \
+            or any(ord(char) < 32 for char in value):
+        raise ValueError("production files URL must be a clean HTTPS URL")
+    parsed = urlsplit(value)
+    if parsed.scheme.lower() != "https" or not parsed.hostname \
+            or parsed.username or parsed.password or parsed.fragment:
+        raise ValueError("production files URL must be an absolute credential-free HTTPS URL")
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("production files URL has an invalid port") from exc
+    if port not in (None, 443):
+        raise ValueError("production files URL must use the default HTTPS port")
+    return value
+
+
 class CuttingClient:
     """Cutting client with pinned transport, deadline and durable mutations.
 
@@ -112,6 +130,19 @@ class CuttingClient:
     allowlisted test origins can exercise the contract with ``test_api_key``
     but can never produce live evidence.
     """
+
+    _IMMUTABLE_AFTER_CONSTRUCTION = {
+        "transport_origin", "transport_kind", "base", "session", "api_key",
+        "ledger", "run_id", "_ledger_run", "_operator_trusted",
+        "_construction_complete", "_session_injected",
+        "_approval_revalidator",
+    }
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if getattr(self, "_construction_complete", False) \
+                and name in self._IMMUTABLE_AFTER_CONSTRUCTION:
+            raise AttributeError(f"{name} is immutable after CuttingClient construction")
+        object.__setattr__(self, name, value)
 
     def __init__(
         self,
@@ -123,7 +154,7 @@ class CuttingClient:
         allow_live: bool = False,
         allow_mutations: bool = False,
         ledger: MutationLedger | None = None,
-        run_id: str | None = None,
+        ledger_run: LedgerRun | None = None,
         overall_timeout: float | None = None,
         max_upload_bytes: int = 100 * 1024 * 1024,
         timeouts: CuttingTimeouts | None = None,
@@ -132,6 +163,8 @@ class CuttingClient:
         clock: Callable[[], float] = time.monotonic,
         wall_clock: Callable[[], float] = time.time,
         sleeper: Callable[[float], None] = time.sleep,
+        _operator_trust: object | None = None,
+        _approval_revalidator: Callable[[], None] | None = None,
     ) -> None:
         requested_origin = _origin(base_url or PINNED_ORIGIN)
         allowlisted = {_origin(item) for item in test_endpoint_allowlist}
@@ -157,7 +190,8 @@ class CuttingClient:
         self.allow_live = allow_live
         self.allow_mutations = allow_mutations
         self.ledger = ledger
-        self.run_id = run_id
+        self._operator_trusted = _operator_trust is _OPERATOR_TRUST_TOKEN
+        self._approval_revalidator = _approval_revalidator
         self.max_upload_bytes = max_upload_bytes
         self.timeouts = timeouts or CuttingTimeouts()
         self.session = session or requests.Session()
@@ -176,12 +210,17 @@ class CuttingClient:
         if max_upload_bytes <= 0:
             raise ValueError("max_upload_bytes must be positive")
         self._ledger_run: LedgerRun | None = None
-        if ledger is not None or run_id is not None:
-            if ledger is None or not run_id:
-                raise ValueError("ledger and run_id must be supplied together")
-            self._ledger_run = ledger.get_run(run_id)
+        if ledger is not None or ledger_run is not None:
+            if ledger is None or ledger_run is None:
+                raise ValueError("ledger and ledger_run must be supplied together")
+            persisted = ledger.get_run(ledger_run.run_id)
+            if persisted != ledger_run:
+                raise ValueError("ledger_run does not match durable ledger approval")
+            self._ledger_run = persisted
             if self._ledger_run.transport_origin != self.transport_origin:
                 raise ValueError("ledger run transport origin does not match client transport")
+        self.run_id = self._ledger_run.run_id if self._ledger_run else None
+        self._construction_complete = True
 
     @staticmethod
     def _timestamp(epoch: float) -> str:
@@ -195,6 +234,8 @@ class CuttingClient:
     def live_evidence_allowed(self) -> bool:
         return (
             self.transport_kind == "pinned_https"
+            and self._operator_trusted
+            and self._approval_revalidator is not None
             and self._ledger_run is not None
             and self._ledger_run.mode == "live"
         )
@@ -206,6 +247,20 @@ class CuttingClient:
     @property
     def model_sha256(self) -> str | None:
         return self._ledger_run.model_sha256 if self._ledger_run else None
+
+    @property
+    def approved_mode(self) -> str | None:
+        return self._ledger_run.mode if self._ledger_run else None
+
+    @property
+    def approval_digest(self) -> str | None:
+        return self._ledger_run.approval_digest if self._ledger_run else None
+
+    def revalidate_approval(self) -> None:
+        if self.approved_mode == "live":
+            if not self.live_evidence_allowed or self._approval_revalidator is None:
+                raise ValueError("live approval is outside the canonical operator trust boundary")
+            self._approval_revalidator()
 
     def _error(
         self,
@@ -239,6 +294,7 @@ class CuttingClient:
             "transport": self.transport_kind,
             "fixture_sha256": self.fixture_sha256,
             "model_sha256": self.model_sha256,
+            "approval_digest": self.approval_digest,
         }
         self.trace_sink(copy.deepcopy({**base, **event}))
 
@@ -246,6 +302,11 @@ class CuttingClient:
         if not self.allow_live:
             raise self._error(
                 "cutting.live_guard.required", "Cutting access requires explicit authorization",
+            )
+        if self.transport_kind == "pinned_https" and not self._operator_trusted:
+            raise self._error(
+                "cutting.transport.attestation",
+                "pinned live transport is available only inside the operator trust boundary",
             )
 
     def remaining_seconds(self) -> float:
@@ -619,6 +680,7 @@ class CuttingClient:
         return self._request(
             "GET", f"/orders/{order_id}/production-files-url",
             route="/orders/{id}/production-files-url", operation="production_files_url",
+            response_validator=_validated_https_url,
         )
 
     def run_control_program(self, order_id: int, *, idempotency_key: str) -> Any:
@@ -635,6 +697,7 @@ class CuttingClient:
         return self._request(
             "GET", f"/orders/{order_id}/control-program-files-url",
             route="/orders/{id}/control-program-files-url", operation="control_program_url",
+            response_validator=_validated_https_url,
         )
 
     # Long tasks

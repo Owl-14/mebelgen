@@ -218,7 +218,10 @@ Material links проходят единый строгий MEB-139 контра
 а каждый request получает timeout не больше оставшегося времени. Offline
 contract harness использует тот же поток, но injected/test transport никогда
 не может создать live E2E evidence. Live entrypoint отделён от обычного CLI/CI
-и до первой mutation требует approved fixture/model hashes и ledger-run. Полный
+и до первой mutation повторно читает canonical machine approval: caller не
+выбирает fixture/ledger/run ID, ledger path выводится из config+fixture digest,
+а run ID генерируется как opaque token. Transport/session immutable, production
+archive обязан быть строгим HTTPS URL. Полный
 контракт, команда и blocker: `rules/cutting-api.md`.
 
 ## 7. Trace, логи и приватность

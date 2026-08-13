@@ -8,6 +8,7 @@ durable SQLite ledger. It can never produce ``mode=live`` evidence.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 import tempfile
@@ -114,8 +115,10 @@ def run_offline(fixture_path: Path) -> dict[str, Any]:
     session = _offline_session(fixture.data)
     with tempfile.TemporaryDirectory(prefix="meb140-cutting-ledger-") as temp_dir:
         ledger = MutationLedger(Path(temp_dir) / "ledger.sqlite3")
-        ledger.register_run(
-            run_id="MEB-140-OFFLINE-CONTRACT",
+        run = ledger.approve_run(
+            approval_digest=hashlib.sha256(
+                f"offline-contract:{fixture.fixture_sha256}".encode("ascii")
+            ).hexdigest(),
             mode="offline_contract",
             fixture_sha256=fixture.fixture_sha256,
             model_sha256=fixture.model_sha256,
@@ -130,7 +133,7 @@ def run_offline(fixture_path: Path) -> dict[str, Any]:
             allow_live=True,
             allow_mutations=True,
             ledger=ledger,
-            run_id="MEB-140-OFFLINE-CONTRACT",
+            ledger_run=run,
             overall_timeout=30,
             session=session,
             trace_sink=trace.append,

@@ -8,12 +8,12 @@ import pytest
 import requests
 
 from src.cloud_cutting import CuttingClient, CuttingError, CuttingTimeouts, sha256_file
-from src.cutting_ledger import MutationLedger
+from src.cutting_ledger import CuttingLedgerError, MutationLedger
 
 TEST_ORIGIN = "https://cutting-test.invalid"
 FIXTURE_HASH = "a" * 64
 MODEL_HASH = "b" * 64
-RUN_ID = "MEB-140-TEST-RUN"
+APPROVAL_HASH = "c" * 64
 
 
 class Response:
@@ -53,8 +53,8 @@ class Session:
 
 def ledger(tmp_path: Path, *, max_mutations: int = 5, model_hash: str = MODEL_HASH) -> MutationLedger:
     result = MutationLedger(tmp_path / "ledger.sqlite3")
-    result.register_run(
-        run_id=RUN_ID,
+    result._test_run = result.approve_run(
+        approval_digest=APPROVAL_HASH,
         mode="offline_contract",
         fixture_sha256=FIXTURE_HASH,
         model_sha256=model_hash,
@@ -76,7 +76,7 @@ def client(session: Session, tmp_path: Path, **kwargs: Any) -> CuttingClient:
         session=session,
         timeouts=CuttingTimeouts(connect=1, read=2, mutation_read=3),
         ledger=mutation_ledger,
-        run_id=RUN_ID if mutation_ledger else None,
+        ledger_run=mutation_ledger._test_run if mutation_ledger else None,
         **kwargs,
     )
 
@@ -138,10 +138,63 @@ def test_injected_session_cannot_target_pinned_production_origin() -> None:
         CuttingClient(api_key="real-key", session=Session())
 
 
+def test_ordinary_client_cannot_use_or_claim_pinned_live_transport() -> None:
+    c = CuttingClient(api_key="not-a-real-key", allow_live=True, overall_timeout=30)
+    assert c.live_evidence_allowed is False
+    with pytest.raises(CuttingError) as caught:
+        c.list_orders()
+    assert caught.value.code == "cutting.transport.attestation"
+
+
+def test_transport_and_session_are_immutable_after_construction(tmp_path: Path) -> None:
+    original_session = Session(Response(payload=[]))
+    c = client(original_session, tmp_path)
+    for name, value in (
+        ("session", Session()), ("base", "https://evil.invalid"),
+        ("transport_origin", "https://evil.invalid"),
+        ("transport_kind", "pinned_https"),
+        ("_operator_trusted", True),
+        ("_approval_revalidator", lambda: None),
+        ("_construction_complete", False),
+    ):
+        with pytest.raises(AttributeError, match="immutable"):
+            setattr(c, name, value)
+    assert c.session is original_session
+
+
+def test_caller_cannot_supply_pii_run_id() -> None:
+    with pytest.raises(TypeError, match="run_id"):
+        CuttingClient(run_id="customer@example.com")  # type: ignore[call-arg]
+
+
+def test_approval_has_one_opaque_run_and_live_cannot_use_another_sqlite(tmp_path: Path) -> None:
+    canonical = tmp_path / "canonical" / "ledger.sqlite3"
+    approved = MutationLedger(
+        canonical, canonical_path=canonical, ledger_identity="d" * 64,
+    )
+    kwargs = dict(
+        approval_digest=APPROVAL_HASH, mode="live", fixture_sha256=FIXTURE_HASH,
+        model_sha256=MODEL_HASH, transport_origin="https://cloud.bazissoft.ru",
+        max_mutations=5, deadline_epoch=10_000_000_000,
+    )
+    first = approved.approve_run(**kwargs)
+    second = approved.approve_run(**kwargs)
+    assert first.run_id == second.run_id
+    assert first.run_id.startswith("run_") and "MEB-140" not in first.run_id
+
+    alternate = MutationLedger(tmp_path / "attacker.sqlite3")
+    with pytest.raises(CuttingLedgerError) as caught:
+        alternate.approve_run(**kwargs)
+    assert getattr(caught.value, "code", None) == "cutting.ledger.noncanonical"
+
+
 def test_offline_transport_cannot_claim_or_mutate_as_live(tmp_path: Path) -> None:
-    mutation_ledger = MutationLedger(tmp_path / "live-ledger.sqlite3")
-    mutation_ledger.register_run(
-        run_id=RUN_ID,
+    ledger_path = tmp_path / "live-ledger.sqlite3"
+    mutation_ledger = MutationLedger(
+        ledger_path, canonical_path=ledger_path, ledger_identity="d" * 64,
+    )
+    run = mutation_ledger.approve_run(
+        approval_digest=APPROVAL_HASH,
         mode="live",
         fixture_sha256=FIXTURE_HASH,
         model_sha256=MODEL_HASH,
@@ -157,7 +210,7 @@ def test_offline_transport_cannot_claim_or_mutate_as_live(tmp_path: Path) -> Non
         allow_live=True,
         allow_mutations=True,
         ledger=mutation_ledger,
-        run_id=RUN_ID,
+        ledger_run=run,
         overall_timeout=30,
         session=session,
     )
@@ -198,7 +251,7 @@ def test_successful_mutation_transitions_durable_state(tmp_path: Path) -> None:
     assert c.run_cutting(42, idempotency_key="MEB-140:cutting:1") is None
 
     assert mutation_ledger.operation("MEB-140:cutting:1")["state"] == "success"
-    assert mutation_ledger.run_operation_count(RUN_ID) == 1
+    assert mutation_ledger.run_operation_count(c.run_id) == 1
     assert session.calls[0]["timeout"] == (1, 3)
 
 
@@ -210,6 +263,7 @@ def test_cross_client_duplicate_key_is_blocked(tmp_path: Path) -> None:
 
     second_session = Session(Response())
     reopened_ledger = MutationLedger(mutation_ledger.path)
+    reopened_ledger._test_run = mutation_ledger._test_run
     second = client(second_session, tmp_path, ledger=reopened_ledger, allow_mutations=True)
     with pytest.raises(CuttingError) as caught:
         second.run_cutting(42, idempotency_key="MEB-140:duplicate")
@@ -252,6 +306,7 @@ def test_durable_run_limit_applies_across_clients(tmp_path: Path) -> None:
     first.run_cutting(1, idempotency_key="MEB-140:budget:one")
     second_session = Session(Response())
     reopened_ledger = MutationLedger(mutation_ledger.path)
+    reopened_ledger._test_run = mutation_ledger._test_run
     second = client(second_session, tmp_path, ledger=reopened_ledger, allow_mutations=True)
 
     with pytest.raises(CuttingError) as caught:
@@ -265,6 +320,7 @@ def test_conflicting_key_fingerprint_is_blocked(tmp_path: Path) -> None:
     first = client(Session(Response()), tmp_path, ledger=mutation_ledger, allow_mutations=True)
     first.run_cutting(1, idempotency_key="MEB-140:collision")
     reopened_ledger = MutationLedger(mutation_ledger.path)
+    reopened_ledger._test_run = mutation_ledger._test_run
     second = client(Session(Response()), tmp_path, ledger=reopened_ledger, allow_mutations=True)
     with pytest.raises(CuttingError) as caught:
         second.run_cutting(2, idempotency_key="MEB-140:collision")
@@ -292,6 +348,18 @@ def test_request_timeouts_use_positive_remaining_overall_deadline(tmp_path: Path
     with pytest.raises(CuttingError) as caught:
         c.list_orders()
     assert caught.value.code == "cutting.deadline.exceeded"
+
+
+@pytest.mark.parametrize("value", [
+    "not-a-url", "http://download.example/archive.zip",
+    "https://user:secret@download.example/archive.zip",
+    "https://download.example:444/archive.zip",
+])
+def test_production_files_url_requires_strict_https(value: str, tmp_path: Path) -> None:
+    c = client(Session(Response(payload=value)), tmp_path)
+    with pytest.raises(CuttingError) as caught:
+        c.production_files_url(1)
+    assert caught.value.code == "cutting.response.contract"
 
 
 @pytest.mark.parametrize(
@@ -328,9 +396,11 @@ def test_trace_has_internal_bounded_id_and_approved_hashes(tmp_path: Path) -> No
     c.run_cutting(1, idempotency_key="MEB-140:trace:key")
     assert len(c.trace_id) == 32 and int(c.trace_id, 16) >= 0
     event = trace[0]
-    assert event["run_id"] == RUN_ID
+    assert event["run_id"] == c.run_id
+    assert event["run_id"].startswith("run_") and len(event["run_id"]) == 36
     assert event["fixture_sha256"] == FIXTURE_HASH
     assert event["model_sha256"] == MODEL_HASH
+    assert event["approval_digest"] == APPROVAL_HASH
     assert event["timestamp"].endswith("Z")
     assert event["transport"] == "allowlisted_test"
 
@@ -364,7 +434,7 @@ def test_material_link_conflicts_fail_before_ledger_or_http(tmp_path: Path) -> N
              "linkedMaterialFullName": "Target B"},
         ], idempotency_key="MEB-140:links:key")
     assert session.calls == []
-    assert mutation_ledger.run_operation_count(RUN_ID) == 0
+    assert mutation_ledger.run_operation_count(c.run_id) == 0
 
 
 def test_result_evidence_endpoints_use_safe_routes(tmp_path: Path) -> None:

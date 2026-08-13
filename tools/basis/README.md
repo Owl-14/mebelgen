@@ -110,7 +110,7 @@ python main.py cloud info | list | model-convert … | drawing-convert …
 python main.py cutting info                                       # контракт без сети/ключа
 python qa/cutting_contract_harness.py                             # полный offline contract flow
 # live Cutting отсутствует в обычном CLI/CI; отдельный operator entrypoint,
-# approved fixture hash + durable ledger + точный blocker: rules/cutting-api.md
+# canonical machine approval + digest-derived ledger + точный blocker: rules/cutting-api.md
 ```
 
 ## Тесты
