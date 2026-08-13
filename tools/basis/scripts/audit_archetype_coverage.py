@@ -30,7 +30,7 @@ MODEL_BY_ARCHETYPE = {
 # ParamSpec paths that select optional generator behavior, mapped to the function
 # that actually consumes each value.  This intentionally does not repeat fields
 # that merely exist in the broad ParamSpec model but are ignored by a generator.
-VARIANT_PARAMETER_CONSUMERS = {
+DIRECT_PARAMETER_CONSUMERS = {
     "corpus": {
         "legs.as_panel": "src.generators.base.read_carcass",
         "sides_over_top": "src.generators.corpus.generate",
@@ -142,9 +142,104 @@ _CABINET_CONSUMERS = {
     "socle_recess": "src.generators.cabinet.generate",
     "top_overhang": "src.generators.cabinet.generate",
 }
-VARIANT_PARAMETER_CONSUMERS["cabinet"] = dict(_CABINET_CONSUMERS)
-VARIANT_PARAMETER_CONSUMERS["wardrobe"] = dict(_CABINET_CONSUMERS)
-VARIANT_PARAMETER_CONSUMERS["table"] = dict(VARIANT_PARAMETER_CONSUMERS["desk"])
+DIRECT_PARAMETER_CONSUMERS["cabinet"] = dict(_CABINET_CONSUMERS)
+DIRECT_PARAMETER_CONSUMERS["wardrobe"] = dict(_CABINET_CONSUMERS)
+DIRECT_PARAMETER_CONSUMERS["table"] = dict(DIRECT_PARAMETER_CONSUMERS["desk"])
+VARIANT_PARAMETER_CONSUMERS = {
+    archetype: dict(consumers)
+    for archetype, consumers in DIRECT_PARAMETER_CONSUMERS.items()
+}
+
+READ_CARCASS_ARCHETYPES = (
+    "cabinet", "corpus", "desk", "door_unit", "drawer_unit",
+    "round_table", "shelving", "table", "wardrobe",
+)
+READ_CARCASS_CONSUMER = "src.generators.base.read_carcass"
+_BOX_ARCHETYPES = (
+    "cabinet", "corpus", "door_unit", "drawer_unit", "shelving", "wardrobe",
+)
+_DESK_ARCHETYPES = ("desk", "table")
+_FACADE_ARCHETYPES = ("cabinet", "door_unit", "drawer_unit", "wardrobe")
+
+# Executable reverse inventory for the shared carcass reader.  Every returned
+# Carcass field is owned by at least one ParamSpec path; ``clear`` records
+# precedence that a probe must remove before changing the lower-priority path.
+READ_CARCASS_PARAMETER_REGISTRY = {
+    "dimensions.width": {
+        "carcass_field": "W", "probe": 737.0,
+        "archetypes": READ_CARCASS_ARCHETYPES,
+    },
+    "dimensions.depth": {
+        "carcass_field": "D", "probe": 473.0,
+        "clear": ("dimensions.depth_carcass",),
+        "archetypes": (*_BOX_ARCHETYPES, *_DESK_ARCHETYPES),
+    },
+    "dimensions.depth_carcass": {
+        "carcass_field": "D", "probe": 327.0,
+        "archetypes": (*_BOX_ARCHETYPES, *_DESK_ARCHETYPES),
+    },
+    "dimensions.height": {
+        "carcass_field": "H", "probe": 991.0,
+        "archetypes": READ_CARCASS_ARCHETYPES,
+    },
+    "materials.board_thickness": {
+        "carcass_field": "T", "probe": 19.0,
+        "archetypes": READ_CARCASS_ARCHETYPES,
+    },
+    "materials.back_thickness": {
+        "carcass_field": "T_back", "probe": 7.0,
+        "archetypes": _BOX_ARCHETYPES,
+    },
+    "materials.board_material": {
+        "carcass_field": "mat", "probe": "PROBE_BOARD",
+        "archetypes": READ_CARCASS_ARCHETYPES,
+    },
+    "materials.back_material": {
+        "carcass_field": "mat_back", "probe": "PROBE_BACK",
+        "archetypes": _BOX_ARCHETYPES,
+    },
+    "materials.top_thickness": {
+        "carcass_field": "T_top", "probe": 37.0,
+        "archetypes": (*_BOX_ARCHETYPES, *_DESK_ARCHETYPES),
+    },
+    "legs.height": {
+        "carcass_field": "Hleg", "probe": 83.0,
+        "archetypes": (*_BOX_ARCHETYPES, *_DESK_ARCHETYPES),
+    },
+    "legs.as_panel": {
+        "carcass_field": "leg_as_panel", "probe": True,
+        "setup": {"legs.height": 83.0, "legs.as_panel": False},
+        "archetypes": _BOX_ARCHETYPES,
+    },
+    "legs.type": {
+        "carcass_field": "leg_type", "probe": "PROBE_LEG",
+        "archetypes": (*_BOX_ARCHETYPES, *_DESK_ARCHETYPES),
+    },
+    "gaps.default": {
+        "carcass_field": "gap", "probe": 9.0,
+        "clear": ("gaps.facade",),
+        "archetypes": _FACADE_ARCHETYPES,
+    },
+    "gaps.facade": {
+        "carcass_field": "gap", "probe": 11.0,
+        "archetypes": _FACADE_ARCHETYPES,
+    },
+}
+
+
+def _normalize_consumer_registry() -> None:
+    for consumers in VARIANT_PARAMETER_CONSUMERS.values():
+        for parameter, value in tuple(consumers.items()):
+            consumers[parameter] = (value,) if isinstance(value, str) else tuple(value)
+    for parameter, descriptor in READ_CARCASS_PARAMETER_REGISTRY.items():
+        for archetype in descriptor["archetypes"]:
+            consumers = VARIANT_PARAMETER_CONSUMERS[archetype]
+            current = consumers.get(parameter, ())
+            if READ_CARCASS_CONSUMER not in current:
+                consumers[parameter] = (*current, READ_CARCASS_CONSUMER)
+
+
+_normalize_consumer_registry()
 
 
 def _spec_paths() -> list[Path]:
@@ -211,13 +306,15 @@ def build_report() -> dict[str, Any]:
             else:
                 mismatched_goldens.append(name)
         consumers = []
-        for parameter, consumer in sorted(VARIANT_PARAMETER_CONSUMERS[archetype].items()):
+        for parameter, parameter_consumers in sorted(
+            VARIANT_PARAMETER_CONSUMERS[archetype].items()
+        ):
             fixture_evidence = sorted(
                 name for name in fixtures if _path_present(specs_by_name[name], parameter)
             )
             consumers.append({
                 "parameter": parameter,
-                "consumer": consumer,
+                "consumers": list(parameter_consumers),
                 "fixture_evidence": fixture_evidence,
             })
         rows.append({
@@ -260,7 +357,7 @@ def build_report() -> dict[str, Any]:
         bool(row["exact_panel_goldens"]) for row in implementation_rows
     )
     return {
-        "schema_version": "archetype-coverage-v2",
+        "schema_version": "archetype-coverage-v3",
         "sources": [
             "src/paramspec.py", "schema/paramspec.schema.json",
             "src/generators/registry.py", "src/generators/*.py",
@@ -282,6 +379,16 @@ def build_report() -> dict[str, Any]:
             "json_schema_tags": sorted(schema_tags),
             "registry_tags": sorted(registry_tags),
             "all_match": _ARCHETYPE_TAGS == schema_tags == registry_tags,
+        },
+        "reverse_completeness": {
+            "registry": "READ_CARCASS_PARAMETER_REGISTRY",
+            "consumer": READ_CARCASS_CONSUMER,
+            "archetypes": list(READ_CARCASS_ARCHETYPES),
+            "parameter_count": len(READ_CARCASS_PARAMETER_REGISTRY),
+            "binding_count": sum(
+                len(item["archetypes"])
+                for item in READ_CARCASS_PARAMETER_REGISTRY.values()
+            ),
         },
         "archetypes": rows,
         "generator_implementations": implementation_rows,
