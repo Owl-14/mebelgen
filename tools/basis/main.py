@@ -166,37 +166,9 @@ def cmd_cloud(args: argparse.Namespace) -> int:
 
 
 def cmd_cutting(args: argparse.Namespace) -> int:
-    from src.cloud_cutting import CuttingClient, api_overview
+    from src.cloud_cutting import api_overview
 
-    if args.op == "info":
-        print(api_overview())
-        return 0
-    c = CuttingClient()
-    a = args.args
-    out = None
-    if args.op == "orders":
-        out = c.list_orders()
-    elif args.op == "order":
-        out = c.get_order(int(a[0]))
-    elif args.op == "details":
-        out = c.order_details(int(a[0]))
-    elif args.op == "specification":
-        out = c.order_specification(int(a[0]))
-    elif args.op == "cad-models":
-        out = c.list_cad_models(int(a[0]))
-    elif args.op == "upload":
-        out = c.upload_cad_model(int(a[0]), a[1])
-    elif args.op == "materials":
-        out = c.cad_model_materials(int(a[0]))
-    elif args.op == "run-production":
-        out = c.run_production_files(int(a[0]))
-    elif args.op == "production-url":
-        out = c.production_files_url(int(a[0]))
-    elif args.op == "long-tasks":
-        out = c.list_long_tasks()
-    elif args.op == "long-task":
-        out = c.long_task(int(a[0]))
-    print(json.dumps(out, ensure_ascii=False, indent=2) if not isinstance(out, str) else out)
+    print(api_overview())
     return 0
 
 
@@ -610,10 +582,8 @@ def main() -> int:
     p_cloud.add_argument("--format", choices=["pdf", "jpeg", "wmf", "svg"], help="для drawing-convert")
     p_cloud.set_defaults(func=cmd_cloud)
 
-    p_cut = sub.add_parser("cutting", help="БАЗИС-Облако Cutting API раскрой/производство ('cutting info' без ключа)")
-    p_cut.add_argument("op", choices=["info", "orders", "order", "details", "specification", "cad-models",
-                                      "upload", "materials", "run-production", "production-url", "long-tasks", "long-task"])
-    p_cut.add_argument("args", nargs="*", help="id заказа/модели; для upload: orderId file")
+    p_cut = sub.add_parser("cutting", help="информация о закрытом Cutting-контуре; live только operator entrypoint")
+    p_cut.add_argument("op", choices=["info"])
     p_cut.set_defaults(func=cmd_cutting)
 
     p_mat = sub.add_parser("materials", help="Каталог + база производства; --search поиск, --check сверка проекта")
