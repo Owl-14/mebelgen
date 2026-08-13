@@ -29,8 +29,8 @@ def test_payload_ok_model():
     assert p["check_report"]["ok"] is True
     assert [check["name"] for check in p["check_report"]["checks"]] == [
         "pydantic", "json_schema", "generate", "consistency", "geometry",
-        "cfrn_encoding", "cfrn_holes_parity", "drilling_geometry",
-        "completeness_materials",
+        "bounds", "cfrn_encoding", "cfrn_holes_parity", "drilling_geometry",
+        "system_32", "purpose_registry", "completeness", "materials",
     ]
     v = p["viewer"]
     assert len(v["panels"]) == 20

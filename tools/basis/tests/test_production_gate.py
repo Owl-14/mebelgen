@@ -26,10 +26,14 @@ CHECK_ORDER = [
     "generate",
     "consistency",
     "geometry",
+    "bounds",
     "cfrn_encoding",
     "cfrn_holes_parity",
     "drilling_geometry",
-    "completeness_materials",
+    "system_32",
+    "purpose_registry",
+    "completeness",
+    "materials",
 ]
 
 
