@@ -53,7 +53,7 @@ ParamSpec; координаты всегда считает детерминир
 | `bounds_check.py` | структурные панели внутри заявленного W×D×H; overlay-фасад/задник может выйти только по Z и не дальше своей заявленной толщины |
 | `cfrn.py` | project.json → `.cfrn` (родная ЛЕВОсторонняя конвенция БАЗИС, разворот фасадами к камере) + `check_cfrn_encoding` / `check_cfrn_holes` |
 | `b3d_format.py`, `b3d_verify.py` | чтение .b3d, паритет .b3d ↔ модель |
-| `build_b3d.py`, `cloud_api.py`, `cloud_cutting.py` | облако БАЗИС (ПЛАТНО, только по явной просьбе); pinned Cutting transport и API contract — `rules/cutting-api.md` |
+| `b3d_preflight.py`, `build_b3d.py`, `cloud_api.py`, `cloud_cutting.py` | обязательный offline B3D preflight и облако БАЗИС (ПЛАТНО, только по явной просьбе); красная модель не создаёт cloud-клиент/`model_convert`, Cutting использует pinned transport — `rules/cutting-api.md` |
 | `cutting_ledger.py`, `cutting_operator_trust.py`, `cutting_preflight.py`, `material_link_contract.py` | approval-digest canonical ledger/operator boundary, общий offline/live preflight и строгий article/sheet/post-audit material-link contract |
 | `webviewer.py` | `viewer_payload` + `SCENE_JS` (общий three.js-движок: панели, присадки, метизы, анимация открывания, ракурсы `setView`, снапшоты) |
 | `studio.py` | Studio: HTTP-сервер, страница редактора, каталог изделий (+SVG-аксонометрия карточек `/thumb/`), версии, экспорт-центр (rules/studio.md) |
