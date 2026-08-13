@@ -115,6 +115,22 @@ unknown-field documents/count, число потенциальных canonical c
 
 ## History, backup и rollback
 
+### Deterministic offline migration plan
+
+The audit emits a stable `report_digest`, an exact-byte `backup_manifest`, and
+a matching `rollback_manifest`. Every source file is identified by logical
+catalog path, byte size, and SHA-256; revision files are included as whole
+files so rollback restores their exact bytes. The proposed operation list is
+sorted and contains hashes only, never ParamSpec values.
+
+Planning is fail-closed and all-or-nothing across a mixed catalog. An invalid
+known field, unsupported discriminator, geometry/drilling/CFRN mismatch, or
+non-idempotent canonicalization makes `migration_plan.ready=false`. The tool
+has no apply mode, reports `source_writes_allowed=false` and
+`writes_performed=0`, and is safe to repeat on copied tenant data. A real
+rewrite remains blocked on an approved data-version contract, explicit batch
+authorization, and a separately verified backup location.
+
 Пока v2 отсутствует, миграции нет и rollback не требуется: adapter применяется
 на чтении и на границе активации, массовая запись запрещена. Если когда-либо будет разрешён canonical
 rewrite v1, обязательны: отдельная копия tenant root, manifest с SHA-256 каждого

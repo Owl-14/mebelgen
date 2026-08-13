@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -163,6 +164,13 @@ def test_dry_run_audits_fixture_tenant_and_revisions_without_writes(
     assert report["canonical_changes"] == 3
     assert report["equivalence_checked"] == 3
     assert report["equivalence_failed"] == 0
+    assert report["canonical_idempotence_failed"] == 0
+    assert report["migration_plan"]["ready"] is True
+    assert report["migration_plan"]["source_writes_allowed"] is False
+    assert report["backup_manifest"]["source_tree_sha256"] == (
+        report["rollback_manifest"]["source_tree_sha256"]
+    )
+    assert len(report["backup_manifest"]["files"]) == 3
     assert all(
         all(item["equivalence"].values())
         for item in report["items"]
@@ -171,6 +179,63 @@ def test_dry_run_audits_fixture_tenant_and_revisions_without_writes(
     assert {
         path: path.read_bytes() for path in (legacy_path, tenant_path, versions_path)
     } == before
+
+
+def test_dry_run_report_and_exact_byte_manifests_are_deterministic(
+    tmp_path: Path,
+) -> None:
+    legacy = tmp_path / "legacy"
+    legacy.mkdir()
+    path = legacy / "wardrobe.json"
+    path.write_text(json.dumps(_fixture(), ensure_ascii=False), encoding="utf-8")
+
+    first = audit_paramspec_v1_catalogs(legacy, tmp_path / "tenants")
+    second = audit_paramspec_v1_catalogs(legacy, tmp_path / "tenants")
+
+    assert first == second
+    assert first["report_digest"] == second["report_digest"]
+    manifest_file = first["backup_manifest"]["files"][0]
+    assert manifest_file == {
+        "path": "legacy/wardrobe.json",
+        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        "size": len(path.read_bytes()),
+    }
+    assert first["rollback_manifest"]["files"] == [manifest_file]
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda value: value.update(schemaVersion="paramspec-v2"),
+        lambda value: value["dimensions"].update(width=10),
+    ],
+    ids=["unsupported-version", "invalid-known-field"],
+)
+def test_mixed_catalog_plan_fails_atomically_without_source_writes(
+    tmp_path: Path,
+    mutate,
+) -> None:
+    legacy = tmp_path / "legacy"
+    legacy.mkdir()
+    valid_path = legacy / "valid-v1.json"
+    invalid_path = legacy / "invalid.json"
+    valid_path.write_text(json.dumps(_fixture()), encoding="utf-8")
+    invalid = _fixture()
+    mutate(invalid)
+    invalid_path.write_text(json.dumps(invalid), encoding="utf-8")
+    before = {path: path.read_bytes() for path in (valid_path, invalid_path)}
+
+    report = audit_paramspec_v1_catalogs(legacy, tmp_path / "tenants")
+
+    assert report["documents"] == 2
+    assert report["invalid"] == 1
+    assert report["migration_plan"]["ready"] is False
+    assert report["migration_plan"]["atomicity"] == "all-or-nothing"
+    assert report["migration_plan"]["blockers"] == [
+        "invalid_or_unsupported_paramspec"
+    ]
+    assert report["writes_performed"] == 0
+    assert {path: path.read_bytes() for path in before} == before
 
 
 def test_catalog_identity_migration_uses_canonical_strict_write(tmp_path: Path) -> None:
