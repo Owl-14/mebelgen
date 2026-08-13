@@ -76,6 +76,33 @@
 
 CLI: `python main.py hardware <project|paramspec> [--full]`.
 
+## Производственные golden и паритет форматов (MEB-152)
+
+`qa/fixtures/hardware_connections_golden.json` фиксирует точные сигнатуры
+координат, оси, направления входа, диаметра, глубины, `purpose` и BOM для
+шканта+эксцентрика, конфирмата, съёмной/фиксированной полки, петель,
+направляющих, фасадной стяжки, задника, опор, штанги и металлокаркаса.
+
+Бесплатный отчёт запускается из `tools/basis`:
+
+```bash
+python scripts/hardware_parity_report.py
+```
+
+Он сравнивает golden с `compute_drilling`, те же отверстия в Studio payload и
+полную реконструкцию отверстий из CFRN. Независимый approval-manifest
+`qa/approvals/hardware_connections_approval.json` отдельно фиксирует digest
+baseline, происхождение утверждения и человекочитаемую topology-сигнатуру
+каждого класса. Поэтому штатный `--candidate` не может молча узаконить baseline,
+пересчитанный ошибочным движком: требуется отдельное явное изменение approval.
+
+Утверждённый `qa/fixtures/wardrobe_demo_production.b3d` выводится в отдельной
+секции `approved_b3d_evidence`: это доказательство целостности fixture и
+извлечённого B3D inventory, а не вычисленный тем же движком паритет Studio/CFRN.
+Отчёт всегда содержит `cloud_calls: 0`; обычный CI не вызывает платные
+конвертации. Кандидат новых значений можно только вывести через `--candidate`:
+скрипт намеренно не умеет перезаписывать ни golden, ни approval-manifest.
+
 
 ## Система 32 — стандарт производства (AKD-202)
 
