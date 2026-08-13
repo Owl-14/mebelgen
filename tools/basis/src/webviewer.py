@@ -19,6 +19,43 @@ from __future__ import annotations
 import json
 from typing import Any
 
+
+# Exact purpose registry consumed by the browser payload.  Paired pilot/channel
+# holes intentionally use ``hole``: their physical fastener is rendered by the
+# matching mate at the same joint.
+_VIEWER_FASTENER_KIND = {
+    "задник (гвоздь)": "nail",
+    "задник (прокол Ø3)": "hole",
+    "задник (саморез)": "screw",
+    "короб ящика (саморез)": "screw",
+    "направляющая (саморез)": "screw",
+    "ручка (винт)": "handle_screw",
+    "эксцентрик полки (чашка Ø20)": "cam20",
+    "эксцентрик полки (шток)": "bolt",
+    "петля (чашка Ø35)": "hinge_cup",
+    "петля (накол чашки)": "screw",
+    "петля (планка)": "screw",
+    "евровинт (проход Ø8)": "hole",
+    "конфирмат": "confirmat",
+    "шкант 8×30 (торец)": "dowel",
+    "шкант 8×30 (пласть)": "hole",
+    "эксцентрик (чашка Ø15)": "cam15",
+    "эксцентрик (шток)": "bolt",
+    "эксцентрик (канал Ø8)": "hole",
+    "фасадная стяжка (эксцентрик Ø15)": "cam15",
+    "фасадная стяжка (шток)": "bolt",
+    "замок (цилиндр Ø18)": "lock",
+    "штангодержатель (саморез)": "screw",
+    "опора (саморез)": "screw",
+    "каркас (саморез)": "screw",
+}
+
+
+def registered_viewer_fastener_purposes() -> frozenset[str]:
+    """Purposes with an explicit browser-side representation contract."""
+
+    return frozenset(_VIEWER_FASTENER_KIND)
+
 from .decor_colors import build_palette, decor_label
 
 # Палитра по умолчанию (когда декор не указан) — «обезличенное дерево»
@@ -93,6 +130,7 @@ def _holes(project: dict[str, Any]) -> list[dict[str, Any]]:
         from .hardware import compute_drilling
         return [{"x": h["x"], "y": h["y"], "z": h["z"], "panel": h.get("panel"),
                  "d": h["diameter"], "purpose": h["purpose"],
+                 "fastener_kind": _VIEWER_FASTENER_KIND.get(h["purpose"]),
                  "depth": h.get("depth"), "axis": h.get("axis"), "dir": h.get("dir")}
                 for h in compute_drilling(project)]
     except Exception:
@@ -356,36 +394,36 @@ function MebelScene(container){
     // hp: {d, depth, axis, dir, purpose}; сцена: мировой Z инвертирован (TZ)
     const g=new THREE.Group();
     const axis=hp.axis||'z', dir=(axis==='z'?-1:1)*(hp.dir||1);
-    const depth=hp.depth||12, pu=hp.purpose||'';
+    const depth=hp.depth||12, kind=hp.fastener_kind||'hole';
     const add=(mesh,off)=>{orient(mesh,axis);
       alongAxis(mesh.position,axis,off); g.add(mesh);};
     // отверстие: тёмный цилиндр Ø×глубина, утопленный вглубь
     add(cyl(hp.d,depth,_MTL.hole),dir*depth/2);
-    if(pu.includes('конфирмат')){
+    if(kind==='confirmat'){
       add(cyl(7,50,_MTL.steel),dir*25);
       add(cyl(10,3.5,_MTL.steel),dir*1.2);                 // головка
-    }else if(pu.includes('саморез')||pu.includes('планка')){
+    }else if(kind==='screw'){
       add(cyl(3.5,16,_MTL.dark),dir*8);
       add(cyl(7,2,_MTL.dark),dir*0.8);
-    }else if(pu.includes('гвоздь')){
+    }else if(kind==='nail'){
       add(cyl(1.8,25,_MTL.steel),dir*12);
       add(cyl(3.5,1,_MTL.steel),dir*0.4);
-    }else if(pu.includes('шкант')){
-      if(pu.includes('торец')) add(cyl(8,30,_MTL.wood),dir*10);  // одно тело на пару отверстий
-    }else if(pu.includes('чашка Ø20')){          // эксцентрик полки SE01PB (AKD-287)
+    }else if(kind==='dowel'){
+      add(cyl(8,30,_MTL.wood),dir*10);                         // одно тело на пару отверстий
+    }else if(kind==='cam20'){                   // эксцентрик полки SE01PB (AKD-287)
       add(cyl(20,13,_MTL.chrome),dir*6.5);
-    }else if(pu.includes('чашка Ø15')){
+    }else if(kind==='cam15'){
       add(cyl(15,13,_MTL.brass),dir*6.5);
-    }else if(pu.includes('шток')){
+    }else if(kind==='bolt'){
       add(cyl(7,depth,_MTL.steel),dir*depth/2);
-    }else if(pu.includes('полкодержатель')){
+    }else if(kind==='shelf_pin'){
       add(cyl(5,10,_MTL.chrome),dir*5);
       add(cyl(7,5,_MTL.chrome),dir*-2.5);                  // опорный носик наружу
-    }else if(pu.includes('ручка (винт)')){
+    }else if(kind==='handle_screw'){
       add(cyl(4,25,_MTL.chrome),dir*12);
-    }else if(pu.includes('направляющая')){
-      add(cyl(3.5,12,_MTL.dark),dir*6);
-    }else if(pu.includes('замок')){
+    }else if(kind==='hinge_cup'){
+      add(cyl(35,12,_MTL.chrome),dir*6);
+    }else if(kind==='lock'){
       add(cyl(18,depth,_MTL.chrome),dir*depth/2);
       add(cyl(22,2,_MTL.chrome),dir*1);
     }
