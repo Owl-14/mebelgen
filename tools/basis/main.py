@@ -141,6 +141,14 @@ def cmd_cloud(args: argparse.Namespace) -> int:
     if args.op == "info":
         print(api_overview())
         return 0
+    if args.op == "model-convert" and args.type == "cfrn-to-b3d":
+        print(
+            "Raw CFRN→B3D отключён: произвольный CFRN нельзя доказуемо связать "
+            "с прошедшим production gate. Используйте `main.py build-b3d "
+            "<paramspec-or-project.json>`, который выполняет полный offline preflight.",
+            file=sys.stderr,
+        )
+        return 2
     c = CloudTasksClient()
     if args.op == "list":
         print(json.dumps(c.list_tasks(), ensure_ascii=False, indent=2))
@@ -158,37 +166,9 @@ def cmd_cloud(args: argparse.Namespace) -> int:
 
 
 def cmd_cutting(args: argparse.Namespace) -> int:
-    from src.cloud_cutting import CuttingClient, api_overview
+    from src.cloud_cutting import api_overview
 
-    if args.op == "info":
-        print(api_overview())
-        return 0
-    c = CuttingClient()
-    a = args.args
-    out = None
-    if args.op == "orders":
-        out = c.list_orders()
-    elif args.op == "order":
-        out = c.get_order(int(a[0]))
-    elif args.op == "details":
-        out = c.order_details(int(a[0]))
-    elif args.op == "specification":
-        out = c.order_specification(int(a[0]))
-    elif args.op == "cad-models":
-        out = c.list_cad_models(int(a[0]))
-    elif args.op == "upload":
-        out = c.upload_cad_model(int(a[0]), a[1])
-    elif args.op == "materials":
-        out = c.cad_model_materials(int(a[0]))
-    elif args.op == "run-production":
-        out = c.run_production_files(int(a[0]))
-    elif args.op == "production-url":
-        out = c.production_files_url(int(a[0]))
-    elif args.op == "long-tasks":
-        out = c.list_long_tasks()
-    elif args.op == "long-task":
-        out = c.long_task(int(a[0]))
-    print(json.dumps(out, ensure_ascii=False, indent=2) if not isinstance(out, str) else out)
+    print(api_overview())
     return 0
 
 
@@ -485,6 +465,43 @@ def cmd_finish(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_trace_eval(args: argparse.Namespace) -> int:
+    """Replay recorded AI node outputs without calling an LLM or cloud API."""
+
+    from src.trace_replay import (
+        DEFAULT_DATASET,
+        compare_reports,
+        run_dataset,
+        write_report,
+    )
+
+    report = run_dataset(Path(args.dataset) if args.dataset else DEFAULT_DATASET)
+    print(
+        f"trace-eval {report['dataset_version']}: "
+        f"{report['passed']}/{report['case_count']} сценариев прошли"
+    )
+    for case in report["cases"]:
+        marker = "OK" if case["ok"] else "FAIL"
+        print(f"  {marker} {case['id']} [{case['prompt_version']} / {case['model']}]")
+        for mismatch in case["mismatches"]:
+            print(f"    - {mismatch}")
+    if args.output:
+        write_report(report, args.output)
+        print(f"Отчёт: {args.output}")
+
+    comparison = None
+    if args.compare:
+        baseline = json.loads(Path(args.compare).read_text(encoding="utf-8"))
+        comparison = compare_reports(baseline, report)
+        print(
+            f"Сравнение: {comparison['comparable_cases']} общих сценариев, "
+            f"изменено {len(comparison['changed'])}"
+        )
+        for change in comparison["changed"]:
+            print(f"  CHANGED {change['id']}")
+    return 0 if report["failed"] == 0 and (comparison is None or comparison["ok"]) else 2
+
+
 def main() -> int:
     load_dotenv()
     parser = argparse.ArgumentParser(
@@ -565,10 +582,8 @@ def main() -> int:
     p_cloud.add_argument("--format", choices=["pdf", "jpeg", "wmf", "svg"], help="для drawing-convert")
     p_cloud.set_defaults(func=cmd_cloud)
 
-    p_cut = sub.add_parser("cutting", help="БАЗИС-Облако Cutting API раскрой/производство ('cutting info' без ключа)")
-    p_cut.add_argument("op", choices=["info", "orders", "order", "details", "specification", "cad-models",
-                                      "upload", "materials", "run-production", "production-url", "long-tasks", "long-task"])
-    p_cut.add_argument("args", nargs="*", help="id заказа/модели; для upload: orderId file")
+    p_cut = sub.add_parser("cutting", help="информация о закрытом Cutting-контуре; live только operator entrypoint")
+    p_cut.add_argument("op", choices=["info"])
     p_cut.set_defaults(func=cmd_cutting)
 
     p_mat = sub.add_parser("materials", help="Каталог + база производства; --search поиск, --check сверка проекта")
@@ -651,6 +666,20 @@ def main() -> int:
     p_ing.add_argument("--tz", help="Текст исходного ТЗ (опционально)")
     p_ing.set_defaults(func=cmd_ingest)
 
+    p_eval = sub.add_parser(
+        "trace-eval",
+        help="Offline replay сохранённых AI node outputs через reducer и production gate",
+    )
+    p_eval.add_argument(
+        "--dataset",
+        help="Версионированный scenarios.json (по умолчанию qa/trace_eval/v1)",
+    )
+    p_eval.add_argument("-o", "--output", help="Записать сравнимый JSON-отчёт")
+    p_eval.add_argument(
+        "--compare",
+        help="Сравнить результат с ранее сохранённым JSON-отчётом prompt/model",
+    )
+    p_eval.set_defaults(func=cmd_trace_eval)
     p_ft = sub.add_parser(
         "finetune-readiness",
         help="Offline dry-run gate данных ТЗ→ParamSpec; fine-tune и LLM не запускаются",
