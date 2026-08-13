@@ -49,7 +49,8 @@ ParamSpec; координаты всегда считает детерминир
 | `geometry_check.py` | геометрия placement (нахлёсты, выход за габарит) |
 | `drilling_check.py` | сверловка: отверстие в теле панели, шаг 32, планки на уровне полок |
 | `completeness_check.py` | полнота: каждая деталь закреплена, заявленное (полки/штанги/опоры) построено |
-| `production_gate.py` | атомарный гейт AI/reducer-кандидата: Pydantic → JSON Schema → генерация → все производственные проверки → полнота/материалы; возвращает `CheckReport`, не применяя красную ревизию |
+| `production_gate.py` | атомарный гейт AI/reducer-кандидата: Pydantic → JSON Schema → генерация → consistency/geometry/bounds → CFRN → drilling/system 32/purpose registry → completeness/materials; возвращает `CheckReport`, не применяя красную ревизию |
+| `bounds_check.py` | структурные панели внутри заявленного W×D×H; overlay-фасад/задник может выйти только по Z и не дальше своей заявленной толщины |
 | `cfrn.py` | project.json → `.cfrn` (родная ЛЕВОсторонняя конвенция БАЗИС, разворот фасадами к камере) + `check_cfrn_encoding` / `check_cfrn_holes` |
 | `b3d_format.py`, `b3d_verify.py` | чтение .b3d, паритет .b3d ↔ модель |
 | `build_b3d.py`, `cloud_api.py`, `cloud_cutting.py` | облако БАЗИС (ПЛАТНО, только по явной просьбе); Cutting live/mutation/idempotency contract — `rules/cutting-api.md` |
@@ -81,8 +82,9 @@ ParamSpec; координаты всегда считает детерминир
 | присадки | cfrn.check_cfrn_holes | присадки в .cfrn ≠ compute_drilling |
 | сверловка | drilling_check | отверстие вне тела панели, нарушение системы 32 |
 
-Дополнительно: `completeness_check` (гейт регресса — крепёж каждой детали,
-заявленное построено) и `b3d_verify` (паритет после платной сборки).
+Дополнительно обязательный production gate проверяет bounds, purpose registry,
+completeness и materials отдельными шагами. `b3d_verify` остаётся паритетом после
+платной сборки и в offline-матрицу не входит.
 
 **Грабли, проверенные опытом:**
 
@@ -102,9 +104,15 @@ ParamSpec; координаты всегда считает детерминир
 
 ```bash
 cd tools/basis
+python -m qa.engine_checks           # обязательная matrix archetype/fixture/gate
 python -m pytest tests/ -q          # юнит + goldens (итерирует ВСЕ paramspecs/)
 python -m tests.regression          # ГЕЙТ перед merge: 37 спек valid + 8 golden EXACT
 ```
+
+Manifest матрицы: `qa/fixtures/engine_checks/manifest.json`. Команда полностью
+offline, не обновляет goldens и возвращает ненулевой exit code при красном gate
+или неполном покрытии обязательных архетипов/вариантов. Features manifest
+проверяются точным сравнением с признаками, выведенными из generated project.
 
 - Goldens (`tests/goldens/`) — эталонные panels. Обновлять ЗАМЕНОЙ блока `panels`
   из свежей генерации (не руками), только когда изменение геометрии осознанное.
