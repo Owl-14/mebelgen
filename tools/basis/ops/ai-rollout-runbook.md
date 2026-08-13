@@ -74,6 +74,12 @@ False-rejection denominator принимает только полный `trace-
 timeout, unknown, failed и inconclusive не считаются успешным отказом и не
 снижают rate: они увеличивают `false_rejection_inconclusive_samples`.
 
+Самосогласованных caller hashes недостаточно. Checked-in
+`qa/trace_eval/v1/approved-evidence.json` связывает утверждённые MEB-151
+`case_id`, dataset/report digests, node-output digest и полный verdict digest.
+Публичный `record()` отвергает false-rejection поля и eval marker strings;
+denominator пополняет только приватный verified path `record_eval_case`.
+
 ## Checkpoints и деградация хранилища
 
 До `graph.invoke` SQLite атомарно регистрирует active lease. Prune не удаляет

@@ -34,6 +34,10 @@ _TRUE = frozenset({"1", "true", "yes", "on"})
 _EVAL_CASE_SCHEMA = "trace-eval-case-v1"
 _EVAL_STATUSES = frozenset({"accepted", "replied", "rejected"})
 _SHA256_HEX_LENGTH = 64
+_EVAL_APPROVAL_MANIFEST = (
+    Path(__file__).resolve().parent.parent
+    / "qa" / "trace_eval" / "v1" / "approved-evidence.json"
+)
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -467,14 +471,25 @@ class RolloutController:
         user_id: str | None,
         plan: RolloutPlan,
     ) -> dict[str, Any]:
-        if metric.false_rejection is not None and not (
-            metric.metric_kind == "eval"
-            and metric.source == "meb151_eval"
-            and metric.false_rejection_label_source == "MEB-151"
+        if (
+            metric.false_rejection is not None
+            or metric.metric_kind in {"eval", "eval_inconclusive"}
+            or metric.source == "meb151_eval"
+            or metric.false_rejection_label_source == "MEB-151"
         ):
             raise ValueError(
-                "false_rejection requires independent MEB-151 eval-labelled evidence"
+                "eval evidence can only be recorded through record_eval_case"
             )
+        return self._record(metric, tenant_id=tenant_id, user_id=user_id, plan=plan)
+
+    def _record(
+        self,
+        metric: RolloutMetric,
+        *,
+        tenant_id: str | None,
+        user_id: str | None,
+        plan: RolloutPlan,
+    ) -> dict[str, Any]:
         event = {
             "at": int(time.time()),
             "scope_key": plan.scope_key,
@@ -555,7 +570,7 @@ class RolloutController:
         """Ingest a verified MEB-151 case or count it as inconclusive."""
 
         def inconclusive(reason: str) -> dict[str, Any]:
-            return self.record(
+            return self._record(
                 RolloutMetric(
                     latency_ms=0,
                     edit_attempted=False,
@@ -576,6 +591,24 @@ class RolloutController:
         label = case.get("evaluation_label")
         if not isinstance(label, Mapping) or label.get("source") != "MEB-151":
             return inconclusive("eval_label_untrusted")
+        try:
+            approval = json.loads(_EVAL_APPROVAL_MANIFEST.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return inconclusive("eval_approval_manifest_unavailable")
+        if not isinstance(approval, Mapping):
+            return inconclusive("eval_approval_manifest_invalid")
+        case_id = case.get("id")
+        approved_cases = approval.get("cases")
+        approved_case = approved_cases.get(case_id) if isinstance(approved_cases, Mapping) else None
+        if (
+            approval.get("schema_version") != "meb151-approved-evidence-v1"
+            or not isinstance(case_id, str)
+            or not case_id
+            or not isinstance(approved_case, Mapping)
+            or case.get("dataset_digest") != approval.get("dataset_digest")
+            or case.get("report_digest") != approval.get("report_digest")
+        ):
+            return inconclusive("eval_provenance_unapproved")
         decision = case.get("decision")
         output = case.get("output")
         decision_digest = case.get("decision_digest")
@@ -588,6 +621,10 @@ class RolloutController:
             decision_digest, node_outputs_digest, output_digest, verdict_digest
         )):
             return inconclusive("eval_digest_invalid")
+        if node_outputs_digest != approved_case.get("node_outputs_digest"):
+            return inconclusive("eval_node_outputs_unapproved")
+        if verdict_digest != approved_case.get("verdict_digest"):
+            return inconclusive("eval_verdict_unapproved")
         try:
             valid_verdict = (
                 decision_digest == _evidence_digest(decision)
@@ -616,7 +653,7 @@ class RolloutController:
         value = expected_status in {"accepted", "replied"} and candidate_status == "rejected"
         if label.get("false_rejection") is not value:
             return inconclusive("eval_false_rejection_invalid")
-        return self.record(
+        return self._record(
             RolloutMetric(
                 latency_ms=0,
                 false_rejection=value,

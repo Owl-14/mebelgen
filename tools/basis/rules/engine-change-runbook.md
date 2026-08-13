@@ -192,7 +192,10 @@ Provider обязан поддерживать общий внутренний �
    divergence публикуется отдельно. В denominator входят только trusted
    `trace-eval-case-v1` с `ok=true`, валидным digest verdict и конечным статусом
    `accepted|replied|rejected`; missing/timeout/unknown/failed/inconclusive
-   учитываются отдельным inconclusive counter. Превышение
+   учитываются отдельным inconclusive counter. Самосогласованные caller hashes
+   недостаточны: case id, dataset/report, node-output и verdict digests должны
+   совпасть с immutable checked-in MEB-151 approval manifest; общий telemetry
+   `record()` не принимает false-rejection поля или eval marker strings. Превышение
    автоматически останавливает candidate и переключает следующие запросы на
    legacy; это не должно отключать production gate.
 5. Checkpoints имеют bounded retention. Недоступность/переполнение storage

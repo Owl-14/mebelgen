@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import sqlite3
@@ -507,7 +508,7 @@ def test_false_rejection_requires_meb151_label_and_live_divergence_is_separate(
         tmp_path, config=_config(), budgets=_strict_budgets(minimum_samples=1)
     )
     plan = controller.plan("tenant", "user")
-    with pytest.raises(ValueError, match="MEB-151"):
+    with pytest.raises(ValueError, match="record_eval_case"):
         controller.record(
             RolloutMetric(latency_ms=1, false_rejection=True),
             tenant_id="tenant", user_id="user", plan=plan,
@@ -519,6 +520,33 @@ def test_false_rejection_requires_meb151_label_and_live_divergence_is_separate(
     assert dashboard["summary"]["live_divergence_rate"] == 1
     assert dashboard["summary"]["false_rejection_samples"] == 0
     assert dashboard["summary"]["false_rejection_rate"] is None
+
+
+@pytest.mark.parametrize(
+    "metric",
+    [
+        RolloutMetric(latency_ms=1, false_rejection=False),
+        RolloutMetric(latency_ms=1, source="meb151_eval"),
+        RolloutMetric(latency_ms=1, metric_kind="eval"),
+        RolloutMetric(latency_ms=1, metric_kind="eval_inconclusive"),
+        RolloutMetric(latency_ms=1, false_rejection_label_source="MEB-151"),
+        RolloutMetric(
+            latency_ms=1,
+            false_rejection=True,
+            source="meb151_eval",
+            metric_kind="eval",
+            false_rejection_label_source="MEB-151",
+        ),
+    ],
+)
+def test_general_record_rejects_false_rejection_and_eval_marker_spoof(
+    tmp_path: Path, metric: RolloutMetric,
+) -> None:
+    controller = RolloutController(tmp_path, config=_config())
+    plan = controller.plan(None, None)
+    with pytest.raises(ValueError, match="record_eval_case"):
+        controller.record(metric, tenant_id=None, user_id=None, plan=plan)
+    assert controller.store.read()["events"] == []
 
 
 def test_meb151_security_refusal_is_not_a_false_rejection(tmp_path: Path) -> None:
@@ -587,11 +615,17 @@ def test_missing_candidate_status_cannot_lower_existing_false_rejection_rate(
         tmp_path, config=_config(), budgets=_strict_budgets(minimum_samples=1)
     )
     plan = controller.plan(None, None)
-    first = controller.record_eval_case(
-        _eval_case("accepted", "rejected"),
-        tenant_id=None, user_id=None, plan=plan,
-    )
-    assert first["summary"]["false_rejection_rate"] == 1
+    controller.store.append({
+        "at": 1,
+        "scope_key": plan.scope_key,
+        "mode": plan.requested_mode,
+        "tenant_hash": plan.tenant_hash,
+        "cohort": plan.cohort,
+        "metric_kind": "eval",
+        "source": "meb151_eval",
+        "false_rejection_label_source": "MEB-151",
+        "false_rejection": True,
+    })
     dashboard = controller.record_eval_case(
         _eval_case("accepted", None, include_candidate_status=False),
         tenant_id=None, user_id=None, plan=plan,
@@ -605,7 +639,9 @@ def test_missing_candidate_status_cannot_lower_existing_false_rejection_rate(
 def test_untrusted_replay_case_fails_closed_into_inconclusive_counter(
     tmp_path: Path, defect: str,
 ) -> None:
-    case = _eval_case("accepted", "accepted")
+    from src.trace_replay import run_dataset
+
+    case = copy.deepcopy(run_dataset()["cases"][0])
     if defect == "schema":
         case["schema_version"] = "trace-eval-case-unknown"
     elif defect == "not_ok":
@@ -621,6 +657,30 @@ def test_untrusted_replay_case_fails_closed_into_inconclusive_counter(
     plan = controller.plan(None, None)
     dashboard = controller.record_eval_case(
         case, tenant_id=None, user_id=None, plan=plan
+    )
+    assert dashboard["summary"]["false_rejection_samples"] == 0
+    assert dashboard["summary"]["false_rejection_inconclusive_samples"] == 1
+    assert dashboard["summary"]["false_rejection_rate"] is None
+
+
+def test_fully_forged_self_consistent_eval_envelope_is_inconclusive(
+    tmp_path: Path,
+) -> None:
+    from src.trace_replay import run_dataset
+
+    approved = run_dataset()["cases"][0]
+    forged = _eval_case("accepted", "rejected")
+    forged.update({
+        "id": approved["id"],
+        "dataset_digest": approved["dataset_digest"],
+        "report_digest": approved["report_digest"],
+    })
+    controller = RolloutController(
+        tmp_path, config=_config(), budgets=_strict_budgets(minimum_samples=1)
+    )
+    plan = controller.plan(None, None)
+    dashboard = controller.record_eval_case(
+        forged, tenant_id=None, user_id=None, plan=plan
     )
     assert dashboard["summary"]["false_rejection_samples"] == 0
     assert dashboard["summary"]["false_rejection_inconclusive_samples"] == 1

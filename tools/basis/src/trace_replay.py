@@ -34,6 +34,7 @@ from .studio_graph import MAX_REPAIR_ITERATIONS, spec_revision
 DATASET_SCHEMA = "trace-eval-v1"
 CASE_SCHEMA = "trace-eval-case-v1"
 DEFAULT_DATASET = Path(__file__).resolve().parent.parent / "qa" / "trace_eval" / "v1" / "scenarios.json"
+APPROVED_EVIDENCE = DEFAULT_DATASET.with_name("approved-evidence.json")
 _APPROVED_VISION_ANNOTATIONS = {
     "cabinet-reference-v1": "25610da2655c0b34cb6d583496b1fb9e75ab66338d17f67f3e7509bb7ef6ebb0",
 }
@@ -666,10 +667,11 @@ def run_dataset(path: Path | str = DEFAULT_DATASET) -> dict[str, Any]:
     if not isinstance(policies, Mapping) or not policies:
         raise TraceReplayError("dataset provider_policies must be a non-empty object")
     results = [replay_case(case, dataset_path.parent, profiles, policies) for case in cases]
-    return {
+    dataset_digest = _digest(dataset)
+    report = {
         "schema_version": DATASET_SCHEMA,
         "dataset_version": dataset.get("dataset_version"),
-        "dataset_digest": _digest(dataset),
+        "dataset_digest": dataset_digest,
         "case_count": len(results),
         "passed": sum(case["ok"] for case in results),
         "failed": sum(not case["ok"] for case in results),
@@ -679,6 +681,35 @@ def run_dataset(path: Path | str = DEFAULT_DATASET) -> dict[str, Any]:
         }),
         "cases": results,
     }
+    report_digest = _digest(report)
+    if dataset_path == DEFAULT_DATASET.resolve():
+        try:
+            approval = json.loads(APPROVED_EVIDENCE.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise TraceReplayError("approved MEB-151 evidence manifest is unavailable") from error
+        if not isinstance(approval, Mapping):
+            raise TraceReplayError("approved MEB-151 evidence manifest is invalid")
+        approved_cases = approval.get("cases")
+        if (
+            approval.get("schema_version") != "meb151-approved-evidence-v1"
+            or approval.get("dataset_digest") != dataset_digest
+            or approval.get("report_digest") != report_digest
+            or not isinstance(approved_cases, Mapping)
+            or set(approved_cases) != {case["id"] for case in results}
+            or any(
+                approved_cases[case["id"]].get("node_outputs_digest")
+                != case["node_outputs_digest"]
+                or approved_cases[case["id"]].get("verdict_digest")
+                != case["verdict_digest"]
+                for case in results
+            )
+        ):
+            raise TraceReplayError("replay output is not approved by the MEB-151 manifest")
+    for case in results:
+        case["dataset_digest"] = dataset_digest
+        case["report_digest"] = report_digest
+    report["report_digest"] = report_digest
+    return report
 
 
 def compare_reports(baseline: Mapping[str, Any], candidate: Mapping[str, Any]) -> dict[str, Any]:
