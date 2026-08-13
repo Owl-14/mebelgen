@@ -22,6 +22,8 @@ jobs:
           cache-dependency-path: tools/basis/requirements*.txt
       - name: deps
         run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: engine check matrix
+        run: python -m qa.engine_checks
       - name: unit tests
         run: python -m pytest tests/ -q
       - name: regression gate (goldens)
