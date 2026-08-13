@@ -1,73 +1,99 @@
 # Cutting Public API: безопасный контракт и E2E preflight
 
-Этот документ описывает интеграцию после готового `.b3d`. Cutting — внешний
-контур, а его мутации могут быть платными. Ни unit-тесты, ни offline harness не
-являются доказательством реального производственного E2E.
+Cutting — внешний потенциально платный производственный контур. Обычный CLI и
+CI не имеют live-команды: `main.py cutting info` только печатает контракт, а
+`qa/cutting_contract_harness.py` использует scripted session без сокетов.
+Offline-тесты никогда не являются доказательством реального E2E.
 
-Источник контракта: официальный OpenAPI 3.0.1 snapshot от 2026-06-30,
-сохранённый в истории репозитория как
-`5bc53df:docs/bazis_cloud_cutting_swagger.json`. Snapshot нужен только для
-исследования; runtime не читает файл из Git history и не обращается к Swagger.
+Источник endpoint-контракта — официальный OpenAPI 3.0.1 snapshot от
+2026-06-30, сохранённый в истории как
+`5bc53df:docs/bazis_cloud_cutting_swagger.json`. Runtime не читает snapshot и
+не обращается к Swagger.
 
-## Порядок тестового заказа
+## Транспорт и credentials
 
-Строгий порядок в `qa/fixtures/cutting_test_order.json` и
-`qa/cutting_contract_harness.py`:
+- production origin жёстко закреплён как `https://cloud.bazissoft.ru` без
+  path, query, credentials, любого явного порта или redirect;
+- production `apiKey` нельзя отправить по HTTP или на другой host;
+- тестовый endpoint разрешён только через явный allowlist и отдельный
+  `test_api_key`; production key в таком клиенте отклоняется;
+- `verify=True` и `allow_redirects=False` передаются каждому запросу;
+- injected session вообще не может target pinned production origin, а
+  allowlisted test transport никогда не получает `live_evidence_allowed`.
 
-1. `POST /orders` — создать неперсональный тестовый заказ.
-2. `POST /cad-models` — загрузить один `.b3d`; multipart-поле называется
-   **`models`**, параметры `orderId`, `count`, `cutModels`.
-3. `GET /cad-models/{id}/materials` — получить исходные строки материалов.
-4. Проверить точное равенство утверждённому fixture и полноту связок.
-5. `POST /cad-models/{id}/set-link-materials` — отправить только проверенные
-   `originalMaterialFullName`, `materialType`, `linkedMaterialFullName`.
-6. `POST /orders/{id}/run-cutting`.
-7. `POST /orders/{id}/run-generation-production-files`.
-8. С ограниченным timeout читать `GET /orders/{id}/production-files-url`.
+Live evidence допустимо только для внутренней `requests.Session`, pinned
+transport и зарегистрированного ledger-run с `mode=live`.
 
-Нельзя угадывать связь материала, автоматически выбирать похожее название или
-переходить к раскрою при несовпадении списка материалов.
+## Строгий порядок fixture
 
-## Обязательные клиентские предусловия
+`qa/fixtures/cutting_test_order.json` задаёт полный offline-порядок:
 
-OpenAPI помечает многие nullable-поля заказа необязательными, поэтому ниже не
-выдумывается серверная обязательность. Клиент жёстко проверяет безопасные
-предусловия, без которых запрос неоднозначен:
+1. `POST /orders`;
+2. `POST /cad-models` с multipart-полем `models`, `orderId`, `count`,
+   `cutModels`;
+3. `GET /cad-models/{id}/materials`;
+4. строгая сверка source materials с утверждённым fixture;
+5. `POST /cad-models/{id}/set-link-materials`;
+6. `GET /cad-models/{id}/cutting-materials`;
+7. `POST /orders/{id}/run-cutting`;
+8. `POST /orders/{id}/run-generation-production-files`;
+9. bounded poll `GET /orders/{id}/production-files-url`;
+10. `GET /cad-models/{id}/cutted-materials` и строгий post-audit.
 
-- положительные `orderId`, `modelId`, `taskId` и `count`;
-- существующий непустой файл одного из расширений из OpenAPI, с лимитом размера;
-- upload использует `models[]`, не legacy-поле `file`;
-- непустой массив material links, все три поля в каждой записи, тип `0..5`;
-- внешний доступ только при `allow_live`;
-- каждый POST только при `allow_mutations`, в рамках точного бюджета и с
-  непустым idempotency key.
+Material links проходят единый контракт MEB-139 (`material_link_contract.py`):
+точное name/article/sheet сопоставление, подтверждённые исключения, полнота
+листовых материалов и post-audit. Fuzzy/LLM-подбор запрещён. Повтор source-link
+запрещён; конфликтующие дубликаты с разными targets также отклоняются.
 
-API не документирует серверный idempotency header. Поэтому ключ защищает от
-повтора внутри одного запуска. После timeout/transport failure мутация имеет
-состояние `ambiguous`: автоматический повтор запрещён, сначала оператор сверяет
-удалённый заказ. Скрытых retry у клиента нет.
+## Durable mutation ledger
 
-## Error taxonomy
+Каждая мутация до сети атомарно записывается в файловый SQLite ledger. Состояния
+операции: `prepared → ambiguous → success`. Переход в `ambiguous` фиксируется
+до фактического request, поэтому падение процесса не создаёт ложного разрешения
+на повтор. `BEGIN IMMEDIATE`, WAL и `synchronous=FULL` обеспечивают
+межпроцессную сериализацию; одинаковый idempotency key блокируется между
+клиентами и процессами.
 
-| Код | Значение | Повтор |
-|---|---|---|
-| `cutting.live_guard.required` | live-доступ не разрешён | только после разрешения |
-| `cutting.cost_guard.required` / `.exhausted` | нет разрешения или исчерпан бюджет POST | нет |
-| `cutting.idempotency.required` / `.collision` / `.ambiguous` | отсутствует, переиспользован иначе или результат прошлого POST неизвестен | нет до аудита |
-| `cutting.transport.timeout` / `.unavailable` | GET не дошёл/не ответил | допустим операторский повтор |
-| `cutting.transport.ambiguous` | POST мог дойти до сервера | нет до сверки remote state |
-| `cutting.http.auth` | 401/403 | после исправления доступа |
-| `cutting.http.validation` | 400/422 | после исправления fixture |
-| `cutting.http.not_found` | 404 | для URL архива допустим bounded poll |
-| `cutting.http.conflict` | 409 | только после проверки состояния |
-| `cutting.http.rate_limited` / `.server` | 429 / 5xx | только GET автоматически не повторяется, но помечен retryable |
-| `cutting.response.invalid_json` / `.contract` | ответ нарушил ожидаемую форму | нет, нужен аудит контракта |
-| `cutting.long_task.failed` / `.timeout` | длинная задача упала/не уложилась в deadline | операторское решение |
+Если результат неизвестен, оператор обязан сначала сверить remote state и
+зафиксировать reconciliation с хешем evidence. Даже `not_applied` не разрешает
+повтор старого ключа — новая попытка требует нового утверждённого ключа.
+Серверный idempotency header не документирован.
 
-Пользователю не отдаётся upstream `detail`/exception text. Trace содержит только
-`trace_id`, step, HTTP method, route-template без ID, status, duration, outcome,
-error code и использованный счётчик мутаций. В нём нет ключа, JSON body, названий
-материалов, локального пути, order/model ID или signed download URL.
+`max_mutations` — durable лимит утверждённого ledger-run, а не надёжная оценка
+денежной стоимости. Он ограничивает число уникально подготовленных POST между
+процессами, но реальный тариф/стоимость должен быть отдельно подтверждён
+оператором.
+
+## Deadline и ошибки
+
+Live/offline-authorized клиент требует положительный `overall_timeout`. Перед
+каждым request вычисляется оставшееся общее время; connect/read timeout не
+может его превышать. Истёкший deadline блокирует запрос. Для POST transport
+failure или возврат после deadline означает `cutting.transport.ambiguous` и
+обязательную remote reconciliation.
+
+Основные стабильные коды:
+
+| Код | Значение |
+|---|---|
+| `cutting.live_guard.required` | нет явного разрешения на доступ |
+| `cutting.transport.attestation` | ledger mode не соответствует подтверждённому transport |
+| `cutting.deadline.required` / `.exceeded` | нет общего deadline или он истёк |
+| `cutting.ledger.required` / `.run_missing` | нет durable approval ledger |
+| `cutting.cost_guard.required` / `.exhausted` | мутации не разрешены / durable лимит исчерпан |
+| `cutting.idempotency.required` / `.collision` / `.duplicate` / `.ambiguous` | невалидный, конфликтующий, использованный или неизвестный ключ |
+| `cutting.transport.timeout` / `.unavailable` | read-only transport failure |
+| `cutting.transport.ambiguous` | POST мог дойти до сервера |
+| `cutting.http.auth` / `.validation` / `.not_found` / `.conflict` | 401/403, 400/422, 404, 409 |
+| `cutting.http.rate_limited` / `.server` / `.redirect_blocked` | 429, 5xx, 3xx |
+| `cutting.response.invalid_json` / `.contract` | ответ нарушил контракт |
+| `cutting.long_task.failed` / `.timeout` | production task завершилась ошибкой / не уложилась |
+
+Upstream body, exception text и secrets не возвращаются пользователю.
+Внутренний trace ID — 32-символьный UUID hex, не принимаемый извне. Sanitized
+trace/evidence содержит run ID, timestamps, transport attestation, fixture/model
+SHA-256, route-template и outcome; в нём нет API key, JSON body, customer names,
+локальных путей, remote IDs или signed URL.
 
 ## Offline contract harness
 
@@ -77,29 +103,37 @@ error code и использованный счётчик мутаций. В н�
 python qa/cutting_contract_harness.py
 ```
 
-Команда использует только `_ScriptedSession`, локальный
-`qa/fixtures/wardrobe_demo_production.b3d` и синтетические material links. В
-результате явно стоит `mode=offline_contract`. Это доказательство сериализации,
-guard-ов, порядка вызовов и sanitization, но не существования заказа или архива
-в БАЗИС-Облаке.
+Harness использует synthetic fixture, отдельный test key, allowlisted `.invalid`
+origin и временный файловый ledger. Результат всегда имеет
+`mode=offline_contract` и `live_transport_confirmed=false`.
 
-## Разрешённый live smoke (не запускать без отдельного разрешения)
+## Разрешённый live smoke — только после отдельного approval
 
-После выдачи отдельного разрешения, тестового API key и утверждённого
-неперсонального fixture с реальными source→linked material names команда имеет
-вид:
+Operator entrypoint намеренно вынесен из обычного CLI/CI. Команда ниже —
+шаблон для будущего отдельно разрешённого запуска; в MEB-140 она **не
+выполнялась**:
 
 ```powershell
-$env:BAZIS_API_KEY = '<test Cutting key>'
-python qa/cutting_contract_harness.py --live --fixture '<absolute path to approved live fixture.json>' --allow-mutations --max-mutations 5 --idempotency-prefix 'MEB-140-<unique-approved-run-id>' --production-timeout 600 --production-interval 5
+$env:BAZIS_API_KEY = '<approved test Cutting key>'
+python operator/cutting_live_smoke.py `
+  --fixture '<absolute path to approved live fixture.json>' `
+  --approved-fixture-sha256 '<separately reviewed 64-char sha256>' `
+  --ledger '<absolute durable path outside repository>\meb-140.sqlite3' `
+  --run-id 'MEB-140-APPROVED-<unique-run-id>' `
+  --overall-timeout 600 `
+  --production-interval 5 `
+  --max-mutations 5 `
+  --authorization 'MEB-140-CUTTING-LIVE-APPROVED'
 ```
 
-Один запуск разрешает ровно пять POST: order, upload, links, run-cutting и
-production generation. Повтор с тем же prefix в новом процессе не считается
-безопасным, потому что серверная идемпотентность не документирована.
+До первой mutation entrypoint проверяет точный fixture SHA-256, model SHA-256,
+`scope=approved-live-cutting-smoke`, `approvedForLive=true`, отсутствие
+synthetic sentinels, абсолютный ledger path вне репозитория и ровно пять
+разрешённых мутаций.
 
-Текущий blocker live E2E: в задаче нет отдельного разрешения на Cutting API,
-тестового `BAZIS_API_KEY`, подтверждённой лицензии/тарифа и утверждённой таблицы
-реальных material links для загружаемого `.b3d`. Синтетические значения offline
-fixture намеренно непригодны для live. Пока все четыре условия не выполнены,
-нельзя честно получить order/model IDs, Cutting result или production archive.
+Точный текущий blocker: отсутствуют (1) отдельное разрешение на платный Cutting
+smoke, (2) выделенный тестовый `BAZIS_API_KEY`, (3) подтверждённая лицензия и
+тариф/стоимость, (4) несинтетический `.b3d` fixture с отдельно утверждённым
+SHA-256 и строгой таблицей реальных source→linked материалов и (5) утверждённый
+внешний durable ledger/run ID. Поэтому реальных order/model/run IDs,
+production archive и live E2E evidence нет и не заявляется.

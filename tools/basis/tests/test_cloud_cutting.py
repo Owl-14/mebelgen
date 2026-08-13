@@ -7,7 +7,13 @@ from typing import Any
 import pytest
 import requests
 
-from src.cloud_cutting import CuttingClient, CuttingError, CuttingTimeouts
+from src.cloud_cutting import CuttingClient, CuttingError, CuttingTimeouts, sha256_file
+from src.cutting_ledger import MutationLedger
+
+TEST_ORIGIN = "https://cutting-test.invalid"
+FIXTURE_HASH = "a" * 64
+MODEL_HASH = "b" * 64
+RUN_ID = "MEB-140-TEST-RUN"
 
 
 class Response:
@@ -45,207 +51,326 @@ class Session:
         return result
 
 
-def client(session: Session, **kwargs: Any) -> CuttingClient:
+def ledger(tmp_path: Path, *, max_mutations: int = 5, model_hash: str = MODEL_HASH) -> MutationLedger:
+    result = MutationLedger(tmp_path / "ledger.sqlite3")
+    result.register_run(
+        run_id=RUN_ID,
+        mode="offline_contract",
+        fixture_sha256=FIXTURE_HASH,
+        model_sha256=model_hash,
+        transport_origin=TEST_ORIGIN,
+        max_mutations=max_mutations,
+        deadline_epoch=10_000_000_000,
+    )
+    return result
+
+
+def client(session: Session, tmp_path: Path, **kwargs: Any) -> CuttingClient:
+    mutation_ledger = kwargs.pop("ledger", None)
     return CuttingClient(
-        api_key="do-not-log-this-key",
-        base_url="https://offline.invalid",
+        base_url=TEST_ORIGIN,
+        test_api_key="offline-test-key",
+        test_endpoint_allowlist=[TEST_ORIGIN],
         allow_live=True,
+        overall_timeout=30,
         session=session,
         timeouts=CuttingTimeouts(connect=1, read=2, mutation_read=3),
+        ledger=mutation_ledger,
+        run_id=RUN_ID if mutation_ledger else None,
         **kwargs,
     )
 
 
-def test_live_access_is_disabled_by_default() -> None:
+@pytest.mark.parametrize("url", [
+    "http://cloud.bazissoft.ru",
+    "https://cloud.bazissoft.ru.evil.example",
+    "https://cloud.bazissoft.ru:443",
+    "https://cloud.bazissoft.ru:444",
+    "https://cloud.bazissoft.ru/path",
+])
+def test_production_transport_is_exact_https_origin(url: str) -> None:
+    with pytest.raises(ValueError):
+        CuttingClient(api_key="real-key", base_url=url)
+
+
+def test_test_endpoint_requires_explicit_allowlist_and_nonproduction_key() -> None:
+    with pytest.raises(ValueError, match="allowlisted"):
+        CuttingClient(base_url=TEST_ORIGIN, test_api_key="test")
+    with pytest.raises(ValueError, match="production api_key"):
+        CuttingClient(
+            api_key="must-not-leak", base_url=TEST_ORIGIN,
+            test_endpoint_allowlist=[TEST_ORIGIN],
+        )
+
+
+def test_live_guard_and_overall_deadline_fail_before_http(tmp_path: Path) -> None:
     session = Session(Response(payload=[]))
-    c = CuttingClient(api_key="key", session=session)
-
+    guarded = CuttingClient(
+        base_url=TEST_ORIGIN, test_api_key="test",
+        test_endpoint_allowlist=[TEST_ORIGIN], session=session,
+    )
     with pytest.raises(CuttingError) as caught:
-        c.list_orders()
-
+        guarded.list_orders()
     assert caught.value.code == "cutting.live_guard.required"
+
+    no_deadline = CuttingClient(
+        base_url=TEST_ORIGIN, test_api_key="test",
+        test_endpoint_allowlist=[TEST_ORIGIN], session=session, allow_live=True,
+    )
+    with pytest.raises(CuttingError) as caught:
+        no_deadline.list_orders()
+    assert caught.value.code == "cutting.deadline.required"
     assert session.calls == []
 
 
-def test_mutation_needs_budget_and_idempotency_key() -> None:
-    session = Session(Response(payload=123))
-    c = client(session)
-
-    with pytest.raises(CuttingError) as caught:
-        c.create_order({}, idempotency_key="one")
-    assert caught.value.code == "cutting.cost_guard.required"
-
-    guarded = client(Session(Response(payload=123)), allow_mutations=True, max_mutations=1)
-    with pytest.raises(CuttingError) as caught:
-        guarded.create_order({}, idempotency_key="")
-    assert caught.value.code == "cutting.idempotency.required"
+def test_allowlisted_test_transport_never_attests_live(tmp_path: Path) -> None:
+    c = client(Session(Response(payload=[])), tmp_path)
+    assert c.live_evidence_allowed is False
+    assert c.list_orders() == []
+    call = c.session.calls[0]
+    assert call["headers"] == {"apiKey": "offline-test-key"}
+    assert call["verify"] is True
+    assert call["allow_redirects"] is False
 
 
-def test_idempotent_replay_does_not_repeat_even_for_empty_response() -> None:
+def test_injected_session_cannot_target_pinned_production_origin() -> None:
+    with pytest.raises(ValueError, match="injected sessions cannot target"):
+        CuttingClient(api_key="real-key", session=Session())
+
+
+def test_offline_transport_cannot_claim_or_mutate_as_live(tmp_path: Path) -> None:
+    mutation_ledger = MutationLedger(tmp_path / "live-ledger.sqlite3")
+    mutation_ledger.register_run(
+        run_id=RUN_ID,
+        mode="live",
+        fixture_sha256=FIXTURE_HASH,
+        model_sha256=MODEL_HASH,
+        transport_origin=TEST_ORIGIN,
+        max_mutations=5,
+        deadline_epoch=10_000_000_000,
+    )
     session = Session(Response())
-    trace: list[dict[str, Any]] = []
-    c = client(
-        session,
+    c = CuttingClient(
+        base_url=TEST_ORIGIN,
+        test_api_key="offline-test-key",
+        test_endpoint_allowlist=[TEST_ORIGIN],
+        allow_live=True,
         allow_mutations=True,
-        max_mutations=1,
-        trace_sink=trace.append,
+        ledger=mutation_ledger,
+        run_id=RUN_ID,
+        overall_timeout=30,
+        session=session,
     )
 
-    assert c.run_cutting(42, idempotency_key="same-key") is None
-    assert c.run_cutting(42, idempotency_key="same-key") is None
-
-    assert len(session.calls) == 1
-    assert c.mutation_count == 1
-    assert trace[-1]["outcome"] == "idempotent_replay"
-
-
-def test_idempotency_collision_is_rejected_before_http() -> None:
-    session = Session(Response(), Response())
-    c = client(session, allow_mutations=True, max_mutations=2)
-    c.run_cutting(42, idempotency_key="shared")
-
+    assert c.live_evidence_allowed is False
     with pytest.raises(CuttingError) as caught:
-        c.run_cutting(43, idempotency_key="shared")
+        c.run_cutting(1, idempotency_key="MEB-140:injected-live")
+    assert caught.value.code == "cutting.transport.attestation"
+    assert session.calls == []
 
-    assert caught.value.code == "cutting.idempotency.collision"
-    assert len(session.calls) == 1
+
+@pytest.mark.parametrize("value", [0, -1, False])
+def test_overall_timeout_must_be_positive(value: Any) -> None:
+    with pytest.raises(ValueError, match="overall_timeout must be positive"):
+        CuttingClient(
+            base_url=TEST_ORIGIN,
+            test_api_key="test",
+            test_endpoint_allowlist=[TEST_ORIGIN],
+            allow_live=True,
+            overall_timeout=value,
+            session=Session(),
+        )
 
 
-def test_timed_out_mutation_is_ambiguous_and_cannot_be_retried() -> None:
-    session = Session(requests.Timeout("private upstream text"), Response())
-    c = client(session, allow_mutations=True, max_mutations=2)
-
+def test_mutation_requires_registered_durable_ledger(tmp_path: Path) -> None:
+    c = client(Session(Response()), tmp_path, allow_mutations=True)
     with pytest.raises(CuttingError) as caught:
-        c.run_production_files(42, idempotency_key="production-42")
+        c.run_cutting(1, idempotency_key="MEB-140:no-ledger")
+    assert caught.value.code == "cutting.ledger.required"
+    assert c.session.calls == []
+
+
+def test_successful_mutation_transitions_durable_state(tmp_path: Path) -> None:
+    mutation_ledger = ledger(tmp_path)
+    session = Session(Response())
+    c = client(session, tmp_path, ledger=mutation_ledger, allow_mutations=True)
+
+    assert c.run_cutting(42, idempotency_key="MEB-140:cutting:1") is None
+
+    assert mutation_ledger.operation("MEB-140:cutting:1")["state"] == "success"
+    assert mutation_ledger.run_operation_count(RUN_ID) == 1
+    assert session.calls[0]["timeout"] == (1, 3)
+
+
+def test_cross_client_duplicate_key_is_blocked(tmp_path: Path) -> None:
+    mutation_ledger = ledger(tmp_path)
+    first_session = Session(Response())
+    first = client(first_session, tmp_path, ledger=mutation_ledger, allow_mutations=True)
+    first.run_cutting(42, idempotency_key="MEB-140:duplicate")
+
+    second_session = Session(Response())
+    reopened_ledger = MutationLedger(mutation_ledger.path)
+    second = client(second_session, tmp_path, ledger=reopened_ledger, allow_mutations=True)
+    with pytest.raises(CuttingError) as caught:
+        second.run_cutting(42, idempotency_key="MEB-140:duplicate")
+
+    assert caught.value.code == "cutting.idempotency.duplicate"
+    assert second_session.calls == []
+
+
+def test_ambiguous_mutation_requires_remote_reconciliation(tmp_path: Path) -> None:
+    mutation_ledger = ledger(tmp_path)
+    first = client(
+        Session(requests.Timeout("secret upstream text")), tmp_path,
+        ledger=mutation_ledger, allow_mutations=True,
+    )
+    with pytest.raises(CuttingError) as caught:
+        first.run_production_files(42, idempotency_key="MEB-140:ambiguous")
     assert caught.value.code == "cutting.transport.ambiguous"
-    assert not caught.value.retryable
-    assert "private upstream text" not in str(caught.value)
+    assert "secret upstream text" not in str(caught.value)
+    assert mutation_ledger.operation("MEB-140:ambiguous")["state"] == "ambiguous"
 
-    with pytest.raises(CuttingError) as replay:
-        c.run_production_files(42, idempotency_key="production-42")
-    assert replay.value.code == "cutting.idempotency.ambiguous"
-    assert len(session.calls) == 1
+    second_session = Session(Response())
+    second = client(second_session, tmp_path, ledger=mutation_ledger, allow_mutations=True)
+    with pytest.raises(CuttingError) as duplicate:
+        second.run_production_files(42, idempotency_key="MEB-140:ambiguous")
+    assert duplicate.value.code == "cutting.idempotency.ambiguous"
+    assert second_session.calls == []
 
-
-@pytest.mark.parametrize(
-    ("status", "code"),
-    [(400, "cutting.http.validation"), (401, "cutting.http.auth"),
-     (404, "cutting.http.not_found"), (409, "cutting.http.conflict"),
-     (429, "cutting.http.rate_limited"), (503, "cutting.http.server")],
-)
-def test_http_error_taxonomy_is_stable_and_sanitized(status: int, code: str) -> None:
-    secret = "customer material and signed URL"
-    session = Session(Response(status, {"detail": secret}))
-    trace: list[dict[str, Any]] = []
-    c = client(session, trace_sink=trace.append)
-
-    with pytest.raises(CuttingError) as caught:
-        c.get_order(17)
-
-    assert caught.value.code == code
-    assert secret not in str(caught.value)
-    assert secret not in json.dumps(trace)
-    assert all(event["route"] == "/orders/{id}" for event in trace)
-    assert "do-not-log-this-key" not in json.dumps(trace)
+    mutation_ledger.record_reconciliation(
+        "MEB-140:ambiguous", remote_outcome="not_applied", evidence_sha256="c" * 64,
+    )
+    # Reconciliation is durable, but retry still requires a fresh key.
+    with pytest.raises(CuttingError) as still_blocked:
+        second.run_production_files(42, idempotency_key="MEB-140:ambiguous")
+    assert still_blocked.value.code == "cutting.idempotency.ambiguous"
 
 
-def test_upload_uses_openapi_models_field_and_bounded_timeout(tmp_path: Path) -> None:
-    model = tmp_path / "fixture.b3d"
-    model.write_bytes(b"B3D fixture")
-    session = Session(Response(payload=[{"id": 9}]))
-    c = client(session, allow_mutations=True, max_mutations=1)
-
-    result = c.upload_cad_model(7, model, idempotency_key="upload-7")
-
-    assert result == [{"id": 9}]
-    call = session.calls[0]
-    assert set(call["files"]) == {"models"}
-    assert call["params"] == {"orderId": 7, "count": 1, "cutModels": True}
-    assert call["timeout"] == (1, 3)
-
-
-def test_upload_rejects_missing_empty_large_and_wrong_extension(tmp_path: Path) -> None:
-    c = client(Session(), allow_mutations=True, max_mutations=4, max_upload_bytes=2)
-    empty = tmp_path / "empty.b3d"
-    empty.write_bytes(b"")
-    large = tmp_path / "large.b3d"
-    large.write_bytes(b"123")
-    wrong = tmp_path / "wrong.exe"
-    wrong.write_bytes(b"1")
-
-    with pytest.raises(FileNotFoundError):
-        c.upload_cad_model(1, tmp_path / "missing.b3d", idempotency_key="missing")
-    with pytest.raises(ValueError, match="empty"):
-        c.upload_cad_model(1, empty, idempotency_key="empty")
-    with pytest.raises(ValueError, match="max_upload_bytes"):
-        c.upload_cad_model(1, large, idempotency_key="large")
-    with pytest.raises(ValueError, match="extension"):
-        c.upload_cad_model(1, wrong, idempotency_key="wrong")
-
-
-def test_material_links_require_all_contract_fields() -> None:
-    c = client(Session(), allow_mutations=True, max_mutations=1)
-    with pytest.raises(ValueError, match="exactly"):
-        c.set_link_materials(
-            3,
-            [{"originalMaterialFullName": "source", "materialType": 0}],
-            idempotency_key="links",
-        )
-    with pytest.raises(ValueError, match="0..5"):
-        c.set_link_materials(
-            3,
-            [{
-                "originalMaterialFullName": "source",
-                "materialType": 9,
-                "linkedMaterialFullName": "target",
-            }],
-            idempotency_key="links-2",
-        )
-
-
-def test_mutation_budget_is_exact() -> None:
-    session = Session(Response(), Response())
-    c = client(session, allow_mutations=True, max_mutations=1)
-    c.run_cutting(1, idempotency_key="one")
+def test_durable_run_limit_applies_across_clients(tmp_path: Path) -> None:
+    mutation_ledger = ledger(tmp_path, max_mutations=1)
+    first = client(Session(Response()), tmp_path, ledger=mutation_ledger, allow_mutations=True)
+    first.run_cutting(1, idempotency_key="MEB-140:budget:one")
+    second_session = Session(Response())
+    reopened_ledger = MutationLedger(mutation_ledger.path)
+    second = client(second_session, tmp_path, ledger=reopened_ledger, allow_mutations=True)
 
     with pytest.raises(CuttingError) as caught:
-        c.run_production_files(1, idempotency_key="two")
-
+        second.run_production_files(1, idempotency_key="MEB-140:budget:two")
     assert caught.value.code == "cutting.cost_guard.exhausted"
-    assert len(session.calls) == 1
+    assert second_session.calls == []
 
 
-def test_material_response_contract_is_checked() -> None:
-    trace: list[dict[str, Any]] = []
-    c = client(Session(Response(payload={"material": "wrong"})), trace_sink=trace.append)
+def test_conflicting_key_fingerprint_is_blocked(tmp_path: Path) -> None:
+    mutation_ledger = ledger(tmp_path)
+    first = client(Session(Response()), tmp_path, ledger=mutation_ledger, allow_mutations=True)
+    first.run_cutting(1, idempotency_key="MEB-140:collision")
+    reopened_ledger = MutationLedger(mutation_ledger.path)
+    second = client(Session(Response()), tmp_path, ledger=reopened_ledger, allow_mutations=True)
     with pytest.raises(CuttingError) as caught:
-        c.cad_model_materials(3)
-    assert caught.value.code == "cutting.response.contract"
-    assert trace[-1]["error_code"] == "cutting.response.contract"
+        second.run_cutting(2, idempotency_key="MEB-140:collision")
+    assert caught.value.code == "cutting.idempotency.collision"
 
 
-def test_poll_long_task_has_bounded_timeout_without_hidden_http_retry() -> None:
-    now = [0.0]
+def test_request_timeouts_use_positive_remaining_overall_deadline(tmp_path: Path) -> None:
+    now = [10.0]
 
     def clock() -> float:
         return now[0]
 
-    def sleep(seconds: float) -> None:
-        now[0] += seconds
-
-    session = Session(Response(payload={"state": "running"}), Response(payload={"state": "running"}))
+    session = Session(Response(payload=[]), Response(payload=[]))
     c = CuttingClient(
-        api_key="key",
-        base_url="https://offline.invalid",
-        allow_live=True,
-        session=session,
-        clock=clock,
-        sleeper=sleep,
+        base_url=TEST_ORIGIN, test_api_key="test", test_endpoint_allowlist=[TEST_ORIGIN],
+        allow_live=True, overall_timeout=5, session=session, clock=clock,
+        timeouts=CuttingTimeouts(connect=10, read=20, mutation_read=30),
     )
-
+    c.list_orders()
+    assert session.calls[0]["timeout"] == (5.0, 5.0)
+    now[0] = 14.5
+    c.list_orders()
+    assert session.calls[1]["timeout"] == (0.5, 0.5)
+    now[0] = 15.0
     with pytest.raises(CuttingError) as caught:
-        c.poll_long_task(5, timeout=2, interval=1)
+        c.list_orders()
+    assert caught.value.code == "cutting.deadline.exceeded"
 
-    assert caught.value.code == "cutting.long_task.timeout"
-    assert caught.value.retryable
-    assert len(session.calls) == 2
+
+@pytest.mark.parametrize(
+    ("status", "code"),
+    [(302, "cutting.http.redirect_blocked"), (400, "cutting.http.validation"),
+     (401, "cutting.http.auth"), (404, "cutting.http.not_found"),
+     (409, "cutting.http.conflict"), (429, "cutting.http.rate_limited"),
+     (503, "cutting.http.server")],
+)
+def test_http_error_taxonomy_is_stable_and_sanitized(
+    status: int, code: str, tmp_path: Path,
+) -> None:
+    secret = "customer material and signed URL"
+    session = Session(Response(status, {"detail": secret}))
+    trace: list[dict[str, Any]] = []
+    c = client(session, tmp_path, trace_sink=trace.append)
+    with pytest.raises(CuttingError) as caught:
+        c.get_order(17)
+    assert caught.value.code == code
+    serialized = json.dumps(trace)
+    assert secret not in str(caught.value)
+    assert secret not in serialized
+    assert all(event["route"] == "/orders/{id}" for event in trace)
+    assert "offline-test-key" not in serialized
+
+
+def test_trace_has_internal_bounded_id_and_approved_hashes(tmp_path: Path) -> None:
+    mutation_ledger = ledger(tmp_path)
+    trace: list[dict[str, Any]] = []
+    c = client(
+        Session(Response()), tmp_path, ledger=mutation_ledger,
+        allow_mutations=True, trace_sink=trace.append,
+    )
+    c.run_cutting(1, idempotency_key="MEB-140:trace:key")
+    assert len(c.trace_id) == 32 and int(c.trace_id, 16) >= 0
+    event = trace[0]
+    assert event["run_id"] == RUN_ID
+    assert event["fixture_sha256"] == FIXTURE_HASH
+    assert event["model_sha256"] == MODEL_HASH
+    assert event["timestamp"].endswith("Z")
+    assert event["transport"] == "allowlisted_test"
+
+
+def test_upload_requires_ledger_approved_model_hash(tmp_path: Path) -> None:
+    model = tmp_path / "fixture.b3d"
+    model.write_bytes(b"B3D fixture")
+    mutation_ledger = ledger(tmp_path, model_hash=sha256_file(model))
+    session = Session(Response(payload=[{"id": 9}]))
+    c = client(session, tmp_path, ledger=mutation_ledger, allow_mutations=True)
+    assert c.upload_cad_model(7, model, idempotency_key="MEB-140:upload:key") == [{"id": 9}]
+    assert set(session.calls[0]["files"]) == {"models"}
+
+    changed = tmp_path / "changed.b3d"
+    changed.write_bytes(b"changed")
+    with pytest.raises(CuttingError) as caught:
+        c.upload_cad_model(7, changed, idempotency_key="MEB-140:upload:changed")
+    assert caught.value.code == "cutting.fixture.model_hash"
+    assert len(session.calls) == 1
+
+
+def test_material_link_conflicts_fail_before_ledger_or_http(tmp_path: Path) -> None:
+    mutation_ledger = ledger(tmp_path)
+    session = Session(Response())
+    c = client(session, tmp_path, ledger=mutation_ledger, allow_mutations=True)
+    with pytest.raises(ValueError, match="conflicting duplicate"):
+        c.set_link_materials(3, [
+            {"originalMaterialFullName": " Board ", "materialType": 0,
+             "linkedMaterialFullName": "Target A"},
+            {"originalMaterialFullName": "board", "materialType": 0,
+             "linkedMaterialFullName": "Target B"},
+        ], idempotency_key="MEB-140:links:key")
+    assert session.calls == []
+    assert mutation_ledger.run_operation_count(RUN_ID) == 0
+
+
+def test_result_evidence_endpoints_use_safe_routes(tmp_path: Path) -> None:
+    session = Session(Response(payload=[]), Response(payload=[]))
+    c = client(session, tmp_path)
+    assert c.cutting_materials(23) == []
+    assert c.cutted_materials(23) == []
+    assert session.calls[0]["params"] == {"orderId": 23}
+    assert session.calls[1]["params"] is None

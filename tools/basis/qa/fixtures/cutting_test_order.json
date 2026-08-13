@@ -1,32 +1,67 @@
 {
   "contractVersion": "cutting-public-openapi-2026-06-30",
+  "scope": "synthetic-offline-contract-only",
+  "approvedForLive": false,
   "order": {
     "managerId": null,
     "clientId": null,
-    "note": "MEB-140 non-personal contract fixture",
-    "factoryOrderId": "${IDEMPOTENCY_PREFIX}",
+    "note": "synthetic MEB-140 offline contract fixture",
+    "factoryOrderId": "${RUN_ID}",
     "factoryId": null,
     "uid1C": null
   },
   "model": {
     "path": "wardrobe_demo_production.b3d",
+    "sha256": "e990e0a73c57014a6f07073015dd52a6a765b63c5343be1c28e2fd471ca8d839",
     "count": 1,
     "cutModels": true
   },
-  "expectedSourceMaterials": [
-    "MEB-140 FIXTURE BOARD",
-    "MEB-140 FIXTURE EDGE"
+  "cfrn": {
+    "model": {"tableIndex": -1, "objs": []},
+    "table": {
+      "materials": [
+        {"name": "__FIXTURE_CAD_SHEET__", "art": "__FIXTURE_LOCAL_ARTICLE__"}
+      ],
+      "objects": [
+        {
+          "objType": 2,
+          "materialIndex": 0,
+          "thickness": 16,
+          "contour": {"size": {"x": 720, "y": 560}}
+        }
+      ]
+    }
+  },
+  "cadModelMaterials": ["__FIXTURE_CAD_SHEET__"],
+  "confirmations": [
+    {
+      "originalMaterialFullName": "__FIXTURE_CAD_SHEET__",
+      "linkedMaterialFullName": "__FIXTURE_CONFIRMED_MATBASE_TARGET__",
+      "article": "__FIXTURE_LOCAL_ARTICLE__",
+      "sheets": [
+        {"height": 2800, "width": 2070, "count": 1, "production": true, "materialType": 1}
+      ]
+    }
   ],
-  "materialLinks": [
+  "cuttingMaterials": [
     {
-      "originalMaterialFullName": "MEB-140 FIXTURE BOARD",
-      "materialType": 0,
-      "linkedMaterialFullName": "MEB-140 APPROVED BOARD"
-    },
+      "name": "__FIXTURE_CONFIRMED_MATBASE_TARGET__",
+      "article": "__FIXTURE_LOCAL_ARTICLE__",
+      "inMaterialBaseId": 1,
+      "items": [
+        {"height": 2800, "width": 2070, "count": 1, "production": true, "materialType": 1}
+      ]
+    }
+  ],
+  "cuttedMaterials": [
     {
-      "originalMaterialFullName": "MEB-140 FIXTURE EDGE",
-      "materialType": 2,
-      "linkedMaterialFullName": "MEB-140 APPROVED EDGE"
+      "name": "__FIXTURE_CONFIRMED_MATBASE_TARGET__",
+      "article": "__FIXTURE_LOCAL_ARTICLE__",
+      "type": 0,
+      "inMaterialBaseId": 1,
+      "height": 2800,
+      "width": 2070,
+      "statistic": {"boardsCount": 1, "countPlate": 1}
     }
   ],
   "expectedOrder": [
@@ -34,8 +69,10 @@
     "POST /cad-models",
     "GET /cad-models/140002/materials",
     "POST /cad-models/140002/set-link-materials",
+    "GET /cutting-materials",
     "POST /orders/140001/run-cutting",
     "POST /orders/140001/run-generation-production-files",
-    "GET /orders/140001/production-files-url"
+    "GET /orders/140001/production-files-url",
+    "GET /orders/140001/cutted-materials"
   ]
 }

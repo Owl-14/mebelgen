@@ -99,7 +99,7 @@ def serialize_link_payload(links: Sequence[Mapping[str, Any]]) -> list[dict[str,
     if isinstance(links, (str, bytes)) or not isinstance(links, Sequence):
         raise MaterialLinkContractError("links must be a sequence of objects")
     payload: list[dict[str, Any]] = []
-    seen: set[tuple[str, int]] = set()
+    seen: dict[tuple[str, int], str] = {}
     for index, raw in enumerate(links):
         if not isinstance(raw, Mapping):
             raise MaterialLinkContractError(f"links[{index}] must be an object")
@@ -115,10 +115,16 @@ def serialize_link_payload(links: Sequence[Mapping[str, Any]]) -> list[dict[str,
         if isinstance(material_type, bool) or not isinstance(material_type, int) \
                 or material_type not in range(6):
             raise MaterialLinkContractError("materialType must be a CadModelMaterialType integer 0..5")
-        key = (source, material_type)
+        key = (_normal_name(source), material_type)
         if key in seen:
-            raise MaterialLinkContractError(f"duplicate material link: {source!r}, type={material_type}")
-        seen.add(key)
+            if seen[key] != target:
+                raise MaterialLinkContractError(
+                    f"conflicting duplicate material link: {source!r}, type={material_type}"
+                )
+            raise MaterialLinkContractError(
+                f"duplicate material link: {source!r}, type={material_type}"
+            )
+        seen[key] = target
         payload.append({
             "originalMaterialFullName": source,
             "materialType": material_type,
@@ -194,8 +200,8 @@ def plan_sheet_links(
     if isinstance(cad_model_materials, (str, bytes)):
         raise MaterialLinkContractError("cad_model_materials must be an array of strings")
     cad_names = [_text(name, "cad_model_materials[]") for name in cad_model_materials]
-    if len(cad_names) != len(set(cad_names)):
-        raise MaterialLinkContractError("cad_model_materials contains duplicate exact names")
+    if len(cad_names) != len({_normal_name(name) for name in cad_names}):
+        raise MaterialLinkContractError("cad_model_materials contains duplicate normalized names")
     manifest = sheet_manifest(cfrn)
 
     by_exact: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -210,12 +216,13 @@ def plan_sheet_links(
     confirmed: dict[str, Mapping[str, Any]] = {}
     for raw in confirmations:
         source = _text(raw.get("originalMaterialFullName"), "confirmation.originalMaterialFullName")
-        if source in confirmed:
+        normalized_source = _normal_name(source)
+        if normalized_source in confirmed:
             raise MaterialLinkContractError(f"duplicate confirmation for {source!r}")
         _text(raw.get("linkedMaterialFullName"), "confirmation.linkedMaterialFullName")
         _text(raw.get("article"), "confirmation.article")
         _expected_sheets(raw.get("sheets"), "confirmation.sheets")
-        confirmed[source] = raw
+        confirmed[normalized_source] = raw
 
     payload: list[dict[str, Any]] = []
     decisions: list[dict[str, Any]] = []
@@ -234,7 +241,8 @@ def plan_sheet_links(
                               "reason": "no unique exact/normalized sheet material in exported CFRN"})
             continue
 
-        confirmation = confirmed.get(cad_name) or confirmed.get(local["source_name"])
+        confirmation = confirmed.get(_normal_name(cad_name)) \
+            or confirmed.get(_normal_name(local["source_name"]))
         if confirmation is None:
             decisions.append({"source_name": cad_name, "status": "blocked",
                               "article": local["article"], "match": match,

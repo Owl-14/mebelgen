@@ -1,11 +1,4 @@
-"""Safety-first client for the BAZIS Cloud Cutting Public API.
-
-The endpoint is external and may charge for mutations.  Network access is
-therefore disabled by default.  Callers must opt in to live reads and provide
-an explicit, bounded mutation budget plus an idempotency key for every POST.
-The contract is based on the official OpenAPI 3.0.1 snapshot captured in
-repository history at ``5bc53df:docs/bazis_cloud_cutting_swagger.json``.
-"""
+"""Fail-closed client for the pinned BAZIS Cloud Cutting Public API."""
 
 from __future__ import annotations
 
@@ -18,26 +11,24 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
+from urllib.parse import urlsplit
 
 import requests
 
-from .cloud_api import BASE_URL
+from .cutting_ledger import CuttingLedgerError, LedgerRun, MutationLedger
 from .material_link_contract import serialize_link_payload
 
+PINNED_ORIGIN = "https://cloud.bazissoft.ru"
 PREFIX = "/api-cutting-public"
 SUPPORTED_MODEL_EXTENSIONS = {
     ".b3d", ".fr3d", ".shn", ".obl", ".oblx", ".zbprj", ".xml",
     ".k3bz", ".cfrn",
 }
 _ORDER_FIELDS = {"managerId", "clientId", "note", "factoryOrderId", "factoryId", "uid1C"}
-_MATERIAL_LINK_FIELDS = {
-    "originalMaterialFullName", "materialType", "linkedMaterialFullName",
-}
-_NO_REPLAY = object()
 
 
 class CuttingError(RuntimeError):
-    """Stable, privacy-safe error returned by the Cutting integration."""
+    """Stable, privacy-safe integration error."""
 
     def __init__(
         self,
@@ -72,7 +63,7 @@ class CuttingTimeouts:
 
     def __post_init__(self) -> None:
         for name, value in vars(self).items():
-            if value <= 0:
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
                 raise ValueError(f"{name} timeout must be positive")
 
 
@@ -85,16 +76,7 @@ def _positive_id(value: Any, field: str) -> int:
     return value
 
 
-def _json_fingerprint(value: Any) -> str:
-    encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
-    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
-
-
-def _resource_ref(value: int) -> str:
-    return hashlib.sha256(str(value).encode("ascii")).hexdigest()[:12]
-
-
-def _file_sha256(path: Path) -> str:
+def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
@@ -102,56 +84,128 @@ def _file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-class CuttingClient:
-    """Cutting API client with live, mutation-budget and replay guards.
+def sha256_json(value: Any) -> str:
+    encoded = json.dumps(
+        value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
-    ``session`` is injectable so the complete production flow can be tested
-    offline without DNS or HTTP access.  The client does not implement hidden
-    retries: a timed-out mutation is marked ambiguous and cannot be replayed
-    under the same idempotency key.
+
+def _origin(value: str) -> str:
+    parsed = urlsplit(value.rstrip("/"))
+    if parsed.scheme.lower() != "https":
+        raise ValueError("Cutting endpoint must use HTTPS")
+    if not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
+        raise ValueError("Cutting endpoint must be a plain HTTPS origin")
+    if parsed.path not in ("", "/"):
+        raise ValueError("Cutting endpoint must not include a path")
+    if parsed.port is not None:
+        raise ValueError("Cutting endpoint must not specify a port")
+    return f"https://{parsed.hostname.lower()}"
+
+
+class CuttingClient:
+    """Cutting client with pinned transport, deadline and durable mutations.
+
+    Production credentials are sent only to ``PINNED_ORIGIN`` through an
+    internally created ``requests.Session``. Injected sessions and explicitly
+    allowlisted test origins can exercise the contract with ``test_api_key``
+    but can never produce live evidence.
     """
 
     def __init__(
         self,
         api_key: str | None = None,
         base_url: str | None = None,
-        key_header: str | None = None,
         *,
+        test_api_key: str | None = None,
+        test_endpoint_allowlist: Sequence[str] = (),
         allow_live: bool = False,
         allow_mutations: bool = False,
-        max_mutations: int = 0,
+        ledger: MutationLedger | None = None,
+        run_id: str | None = None,
+        overall_timeout: float | None = None,
         max_upload_bytes: int = 100 * 1024 * 1024,
         timeouts: CuttingTimeouts | None = None,
         session: Any | None = None,
         trace_sink: TraceSink | None = None,
-        trace_id: str | None = None,
         clock: Callable[[], float] = time.monotonic,
+        wall_clock: Callable[[], float] = time.time,
         sleeper: Callable[[float], None] = time.sleep,
     ) -> None:
-        self.api_key = api_key or os.environ.get("BAZIS_API_KEY")
-        self.base = (base_url or BASE_URL).rstrip("/")
-        self.key_header = key_header or os.environ.get("BAZIS_API_KEY_HEADER", "apiKey")
+        requested_origin = _origin(base_url or PINNED_ORIGIN)
+        allowlisted = {_origin(item) for item in test_endpoint_allowlist}
+        injected = session is not None
+        self.transport_origin = requested_origin
+        self._session_injected = injected
+        if requested_origin == PINNED_ORIGIN:
+            if injected:
+                raise ValueError("injected sessions cannot target the production origin")
+            if test_api_key is not None:
+                raise ValueError("test_api_key cannot target the production origin")
+            self.api_key = api_key or os.environ.get("BAZIS_API_KEY")
+            self.transport_kind = "pinned_https" if not injected else "injected_test"
+        else:
+            if requested_origin not in allowlisted:
+                raise ValueError("test Cutting endpoint is not explicitly allowlisted")
+            if api_key is not None:
+                raise ValueError("production api_key cannot be used with a test endpoint")
+            self.api_key = test_api_key
+            self.transport_kind = "allowlisted_test"
+
+        self.base = requested_origin
         self.allow_live = allow_live
         self.allow_mutations = allow_mutations
-        self.max_mutations = max_mutations
+        self.ledger = ledger
+        self.run_id = run_id
         self.max_upload_bytes = max_upload_bytes
         self.timeouts = timeouts or CuttingTimeouts()
         self.session = session or requests.Session()
         self.trace_sink = trace_sink
-        self.trace_id = trace_id or uuid.uuid4().hex
+        self._trace_id = uuid.uuid4().hex
         self.clock = clock
+        self.wall_clock = wall_clock
         self.sleeper = sleeper
-        self._mutation_count = 0
-        self._idempotency: dict[str, dict[str, Any]] = {}
-
-        if max_mutations < 0:
-            raise ValueError("max_mutations cannot be negative")
+        self.started_at = self._timestamp(self.wall_clock())
+        self._deadline = None
+        if overall_timeout is not None:
+            if isinstance(overall_timeout, bool) or not isinstance(overall_timeout, (int, float)) \
+                    or overall_timeout <= 0:
+                raise ValueError("overall_timeout must be positive")
+            self._deadline = self.clock() + float(overall_timeout)
         if max_upload_bytes <= 0:
             raise ValueError("max_upload_bytes must be positive")
+        self._ledger_run: LedgerRun | None = None
+        if ledger is not None or run_id is not None:
+            if ledger is None or not run_id:
+                raise ValueError("ledger and run_id must be supplied together")
+            self._ledger_run = ledger.get_run(run_id)
+            if self._ledger_run.transport_origin != self.transport_origin:
+                raise ValueError("ledger run transport origin does not match client transport")
+
+    @staticmethod
+    def _timestamp(epoch: float) -> str:
+        return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(epoch))
 
     @property
-    def mutation_count(self) -> int:
-        return self._mutation_count
+    def trace_id(self) -> str:
+        return self._trace_id
+
+    @property
+    def live_evidence_allowed(self) -> bool:
+        return (
+            self.transport_kind == "pinned_https"
+            and self._ledger_run is not None
+            and self._ledger_run.mode == "live"
+        )
+
+    @property
+    def fixture_sha256(self) -> str | None:
+        return self._ledger_run.fixture_sha256 if self._ledger_run else None
+
+    @property
+    def model_sha256(self) -> str | None:
+        return self._ledger_run.model_sha256 if self._ledger_run else None
 
     def _error(
         self,
@@ -162,16 +216,15 @@ class CuttingClient:
         retryable: bool = False,
     ) -> CuttingError:
         return CuttingError(
-            code, message, trace_id=self.trace_id, status=status, retryable=retryable
+            code, message, trace_id=self.trace_id, status=status, retryable=retryable,
         )
 
     def _headers(self) -> dict[str, str]:
         if not self.api_key:
             raise self._error(
-                "cutting.auth.missing",
-                "BAZIS_API_KEY is required for live Cutting access.",
+                "cutting.auth.missing", "an API key is required for authorized Cutting access",
             )
-        return {self.key_header: self.api_key}
+        return {"apiKey": self.api_key}
 
     def _url(self, suffix: str) -> str:
         return f"{self.base}{PREFIX}{suffix}"
@@ -179,53 +232,81 @@ class CuttingClient:
     def _emit_trace(self, **event: Any) -> None:
         if self.trace_sink is None:
             return
-        safe = {"trace_id": self.trace_id, **event}
-        self.trace_sink(copy.deepcopy(safe))
+        base = {
+            "trace_id": self.trace_id,
+            "run_id": self.run_id,
+            "timestamp": self._timestamp(self.wall_clock()),
+            "transport": self.transport_kind,
+            "fixture_sha256": self.fixture_sha256,
+            "model_sha256": self.model_sha256,
+        }
+        self.trace_sink(copy.deepcopy({**base, **event}))
 
     def _live_guard(self) -> None:
         if not self.allow_live:
             raise self._error(
-                "cutting.live_guard.required",
-                "Live Cutting access is disabled; pass an explicit live authorization.",
+                "cutting.live_guard.required", "Cutting access requires explicit authorization",
             )
 
-    def _reserve_mutation(self, operation: str, idempotency_key: str, fingerprint: str) -> Any:
-        if not idempotency_key or not idempotency_key.strip():
+    def remaining_seconds(self) -> float:
+        if self._deadline is None:
             raise self._error(
-                "cutting.idempotency.required",
-                f"Mutation {operation} requires a non-empty idempotency key.",
+                "cutting.deadline.required", "authorized Cutting access requires an overall deadline",
             )
-        previous = self._idempotency.get(idempotency_key)
-        if previous is not None:
-            if previous["fingerprint"] != fingerprint:
-                raise self._error(
-                    "cutting.idempotency.collision",
-                    "The idempotency key was already used for a different request.",
-                )
-            if previous["state"] == "success":
-                self._emit_trace(
-                    step=operation,
-                    method="POST",
-                    route=previous["route"],
-                    outcome="idempotent_replay",
-                    mutation_count=self._mutation_count,
-                )
-                return copy.deepcopy(previous["result"])
+        remaining = self._deadline - self.clock()
+        if remaining <= 0:
             raise self._error(
-                "cutting.idempotency.ambiguous",
-                "The earlier mutation may have reached the server; inspect remote state before retrying.",
+                "cutting.deadline.exceeded", "the overall Cutting deadline has expired",
             )
+        return remaining
+
+    def _request_timeout(self, mutation: bool) -> tuple[float, float]:
+        remaining = self.remaining_seconds()
+        read_limit = self.timeouts.mutation_read if mutation else self.timeouts.read
+        return min(self.timeouts.connect, remaining), min(read_limit, remaining)
+
+    def _prepare_mutation(
+        self,
+        *,
+        operation: str,
+        route: str,
+        idempotency_key: str,
+        fingerprint: str,
+    ) -> None:
         if not self.allow_mutations:
             raise self._error(
-                "cutting.cost_guard.required",
-                "Cutting mutations are disabled; explicit mutation authorization is required.",
+                "cutting.cost_guard.required", "Cutting mutations require explicit authorization",
             )
-        if self._mutation_count >= self.max_mutations:
+        if self.ledger is None or self._ledger_run is None or not self.run_id:
             raise self._error(
-                "cutting.cost_guard.exhausted",
-                f"Mutation budget exhausted before {operation}.",
+                "cutting.ledger.required", "a registered durable ledger run is required before mutation",
             )
-        return _NO_REPLAY
+        expected_mode = "live" if self.transport_kind == "pinned_https" else "offline_contract"
+        if self._ledger_run.mode != expected_mode:
+            raise self._error(
+                "cutting.transport.attestation", "ledger mode does not match the confirmed transport",
+            )
+        try:
+            self.ledger.prepare(
+                run_id=self.run_id,
+                idempotency_key=idempotency_key,
+                fingerprint=fingerprint,
+                route=route,
+                trace_id=self.trace_id,
+                now_epoch=self.wall_clock(),
+            )
+            self.ledger.mark_ambiguous(idempotency_key, now_epoch=self.wall_clock())
+        except CuttingLedgerError as exc:
+            raise self._error(exc.code, str(exc)) from exc
+
+    def _mark_success(self, key: str, result: Any) -> None:
+        assert self.ledger is not None
+        try:
+            self.ledger.mark_success(
+                key, sha256_json(result), now_epoch=self.wall_clock(),
+            )
+        except CuttingLedgerError as exc:
+            raise self._error(exc.code, str(exc)) from exc
 
     def _request(
         self,
@@ -242,120 +323,102 @@ class CuttingClient:
         response_validator: Callable[[Any], Any] | None = None,
     ) -> Any:
         self._live_guard()
+        headers = self._headers()
         mutation = method.upper() != "GET"
+        timeout = self._request_timeout(mutation)
         fingerprint = ""
         if mutation:
-            fingerprint = _json_fingerprint({
+            fingerprint = sha256_json({
                 "operation": operation,
                 "route": route,
                 "params": params,
                 "json": json_body,
                 "meta": fingerprint_meta,
             })
-            replay = self._reserve_mutation(operation, idempotency_key or "", fingerprint)
-            if replay is not _NO_REPLAY:
-                return replay
-            self._mutation_count += 1
-            self._idempotency[idempotency_key or ""] = {
-                "fingerprint": fingerprint,
-                "state": "ambiguous",
-                "route": route,
-            }
+            self._prepare_mutation(
+                operation=operation,
+                route=route,
+                idempotency_key=idempotency_key or "",
+                fingerprint=fingerprint,
+            )
 
         started = self.clock()
-        timeout = (
-            self.timeouts.connect,
-            self.timeouts.mutation_read if mutation else self.timeouts.read,
-        )
         try:
             response = self.session.request(
-                method.upper(),
-                self._url(suffix),
-                headers=self._headers(),
-                params=dict(params) if params else None,
-                json=json_body,
-                files=files,
-                timeout=timeout,
+                method.upper(), self._url(suffix), headers=headers,
+                params=dict(params) if params else None, json=json_body, files=files,
+                timeout=timeout, allow_redirects=False, verify=True,
             )
         except requests.Timeout as exc:
             code = "cutting.transport.ambiguous" if mutation else "cutting.transport.timeout"
             self._emit_trace(
-                step=operation, method=method.upper(), route=route,
-                outcome="error", error_code=code,
-                duration_ms=round((self.clock() - started) * 1000),
-                mutation_count=self._mutation_count,
+                step=operation, method=method.upper(), route=route, outcome="error",
+                error_code=code, duration_ms=round((self.clock() - started) * 1000),
             )
             raise self._error(
                 code,
-                "Cutting request timed out. Inspect remote state before retrying a mutation."
-                if mutation else "Cutting request timed out.",
+                "mutation outcome is unknown; reconcile remote state before any new attempt"
+                if mutation else "Cutting request timed out",
                 retryable=not mutation,
             ) from exc
         except requests.RequestException as exc:
             code = "cutting.transport.ambiguous" if mutation else "cutting.transport.unavailable"
             self._emit_trace(
-                step=operation, method=method.upper(), route=route,
-                outcome="error", error_code=code,
-                duration_ms=round((self.clock() - started) * 1000),
-                mutation_count=self._mutation_count,
+                step=operation, method=method.upper(), route=route, outcome="error",
+                error_code=code, duration_ms=round((self.clock() - started) * 1000),
             )
             raise self._error(
                 code,
-                "Cutting transport failed. Inspect remote state before retrying a mutation."
-                if mutation else "Cutting service is unavailable.",
+                "mutation outcome is unknown; reconcile remote state before any new attempt"
+                if mutation else "Cutting service is unavailable",
                 retryable=not mutation,
             ) from exc
 
+        if self.clock() > self._deadline:  # type: ignore[operator]
+            raise self._error(
+                "cutting.transport.ambiguous" if mutation else "cutting.deadline.exceeded",
+                "request returned after the overall deadline; mutation requires reconciliation"
+                if mutation else "request exceeded the overall deadline",
+            )
         status = int(response.status_code)
         if not 200 <= status < 300:
             code, retryable = self._classify_http(status)
             self._emit_trace(
-                step=operation, method=method.upper(), route=route,
-                outcome="error", error_code=code, http_status=status,
+                step=operation, method=method.upper(), route=route, outcome="error",
+                error_code=code, http_status=status,
                 duration_ms=round((self.clock() - started) * 1000),
-                mutation_count=self._mutation_count,
             )
             raise self._error(
-                code,
-                f"Cutting API rejected {operation} (HTTP {status}).",
-                status=status,
-                retryable=retryable and not mutation,
+                code, f"Cutting API rejected {operation} (HTTP {status})",
+                status=status, retryable=retryable and not mutation,
             )
 
         try:
             result = self._decode_response(response, operation)
             if response_validator is not None:
                 result = response_validator(result)
-        except (TypeError, ValueError, KeyError) as exc:
-            contract_error = self._error(
-                "cutting.response.contract",
-                f"Cutting API returned an invalid {operation} response.",
-                status=status,
-            )
-            self._emit_trace(
-                step=operation, method=method.upper(), route=route,
-                outcome="error", error_code=contract_error.code, http_status=status,
-                duration_ms=round((self.clock() - started) * 1000),
-                mutation_count=self._mutation_count,
-            )
-            raise contract_error from exc
         except CuttingError as exc:
             self._emit_trace(
-                step=operation, method=method.upper(), route=route,
-                outcome="error", error_code=exc.code, http_status=status,
+                step=operation, method=method.upper(), route=route, outcome="error",
+                error_code=exc.code, http_status=status,
                 duration_ms=round((self.clock() - started) * 1000),
-                mutation_count=self._mutation_count,
             )
             raise
-        if mutation:
-            self._idempotency[idempotency_key or ""].update(
-                state="success", result=copy.deepcopy(result)
+        except (TypeError, ValueError, KeyError) as exc:
+            error = self._error(
+                "cutting.response.contract", f"invalid {operation} response", status=status,
             )
+            self._emit_trace(
+                step=operation, method=method.upper(), route=route, outcome="error",
+                error_code=error.code, http_status=status,
+                duration_ms=round((self.clock() - started) * 1000),
+            )
+            raise error from exc
+        if mutation:
+            self._mark_success(idempotency_key or "", result)
         self._emit_trace(
-            step=operation, method=method.upper(), route=route,
-            outcome="success", http_status=status,
-            duration_ms=round((self.clock() - started) * 1000),
-            mutation_count=self._mutation_count,
+            step=operation, method=method.upper(), route=route, outcome="success",
+            http_status=status, duration_ms=round((self.clock() - started) * 1000),
         )
         return result
 
@@ -371,6 +434,8 @@ class CuttingClient:
             return "cutting.http.conflict", False
         if status == 429:
             return "cutting.http.rate_limited", True
+        if 300 <= status < 400:
+            return "cutting.http.redirect_blocked", False
         if status >= 500:
             return "cutting.http.server", True
         return "cutting.http.error", False
@@ -383,10 +448,9 @@ class CuttingClient:
         if "json" in content_type:
             try:
                 return response.json()
-            except (ValueError, json.JSONDecodeError) as exc:
+            except ValueError as exc:
                 raise self._error(
-                    "cutting.response.invalid_json",
-                    f"Cutting API returned malformed JSON for {operation}.",
+                    "cutting.response.invalid_json", f"malformed JSON for {operation}",
                     status=int(response.status_code),
                 ) from exc
         return response.text
@@ -408,28 +472,6 @@ class CuttingClient:
                 raise TypeError(f"{field} must be a string or null")
         return dict(payload)
 
-    @staticmethod
-    def _validate_material_links(links: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
-        if isinstance(links, (str, bytes)) or not isinstance(links, Sequence) or not links:
-            raise ValueError("material links must be a non-empty array")
-        validated: list[dict[str, Any]] = []
-        for index, link in enumerate(links):
-            if not isinstance(link, Mapping):
-                raise TypeError(f"material link {index} must be an object")
-            if set(link) != _MATERIAL_LINK_FIELDS:
-                raise ValueError(f"material link {index} must contain exactly the contract fields")
-            original = link["originalMaterialFullName"]
-            linked = link["linkedMaterialFullName"]
-            material_type = link["materialType"]
-            if not isinstance(original, str) or not original.strip():
-                raise ValueError(f"material link {index} has no original material name")
-            if not isinstance(linked, str) or not linked.strip():
-                raise ValueError(f"material link {index} has no linked material name")
-            if isinstance(material_type, bool) or not isinstance(material_type, int) or not 0 <= material_type <= 5:
-                raise ValueError(f"material link {index} materialType must be 0..5")
-            validated.append(dict(link))
-        return validated
-
     # Orders
     def list_orders(self, page_index: int = 0, page_size: int = 20, **filters: Any) -> Any:
         if page_index < 0 or not 1 <= page_size <= 1000:
@@ -440,17 +482,14 @@ class CuttingClient:
         )
 
     def create_order(self, payload: Mapping[str, Any], *, idempotency_key: str) -> Any:
-        body = self._validate_order_payload(payload)
         return self._request(
             "POST", "/orders", route="/orders", operation="create_order",
-            json_body=body, idempotency_key=idempotency_key,
+            json_body=self._validate_order_payload(payload), idempotency_key=idempotency_key,
         )
 
     def get_order(self, order_id: int) -> Any:
         order_id = _positive_id(order_id, "order_id")
-        return self._request(
-            "GET", f"/orders/{order_id}", route="/orders/{id}", operation="get_order",
-        )
+        return self._request("GET", f"/orders/{order_id}", route="/orders/{id}", operation="get_order")
 
     def order_details(self, order_id: int) -> Any:
         order_id = _positive_id(order_id, "order_id")
@@ -494,11 +533,13 @@ class CuttingClient:
         if not path.is_file():
             raise FileNotFoundError(path)
         size = path.stat().st_size
-        if size <= 0:
-            raise ValueError("CAD model must not be empty")
-        if size > self.max_upload_bytes:
-            raise ValueError("CAD model exceeds max_upload_bytes")
-        digest = _file_sha256(path)
+        if size <= 0 or size > self.max_upload_bytes:
+            raise ValueError("CAD model size is outside the approved range")
+        digest = sha256_file(path)
+        if self.model_sha256 is not None and digest != self.model_sha256:
+            raise self._error(
+                "cutting.fixture.model_hash", "model hash differs from the approved ledger run",
+            )
         with path.open("rb") as handle:
             return self._request(
                 "POST", "/cad-models", route="/cad-models", operation="upload_cad_model",
@@ -531,15 +572,16 @@ class CuttingClient:
     ) -> Any:
         model_id = _positive_id(model_id, "model_id")
         body = serialize_link_payload(links)
+        if not body:
+            raise ValueError("material links must not be empty")
         return self._request(
             "POST", f"/cad-models/{model_id}/set-link-materials",
             route="/cad-models/{id}/set-link-materials", operation="set_link_materials",
             json_body=body, idempotency_key=idempotency_key,
-            fingerprint_meta={"model_ref": _resource_ref(model_id), "link_count": len(body)},
+            fingerprint_meta={"model_ref": sha256_json(model_id), "link_count": len(body)},
         )
 
     def cutting_materials(self, order_id: int) -> Any:
-        """Read linked MatBase ids, articles and configured sheet items."""
         order_id = _positive_id(order_id, "order_id")
         return self._request(
             "GET", "/cutting-materials", route="/cutting-materials",
@@ -547,7 +589,6 @@ class CuttingClient:
         )
 
     def cutted_materials(self, order_id: int) -> Any:
-        """Read post-cut material statistics used as production evidence."""
         order_id = _positive_id(order_id, "order_id")
         return self._request(
             "GET", f"/orders/{order_id}/cutted-materials",
@@ -561,7 +602,7 @@ class CuttingClient:
             "POST", f"/orders/{order_id}/run-cutting",
             route="/orders/{id}/run-cutting", operation="run_cutting",
             idempotency_key=idempotency_key,
-            fingerprint_meta={"order_ref": _resource_ref(order_id)},
+            fingerprint_meta={"order_ref": sha256_json(order_id)},
         )
 
     def run_production_files(self, order_id: int, *, idempotency_key: str) -> Any:
@@ -570,7 +611,7 @@ class CuttingClient:
             "POST", f"/orders/{order_id}/run-generation-production-files",
             route="/orders/{id}/run-generation-production-files",
             operation="run_production_files", idempotency_key=idempotency_key,
-            fingerprint_meta={"order_ref": _resource_ref(order_id)},
+            fingerprint_meta={"order_ref": sha256_json(order_id)},
         )
 
     def production_files_url(self, order_id: int) -> Any:
@@ -586,7 +627,7 @@ class CuttingClient:
             "POST", f"/orders/{order_id}/run-generation-control-program-files",
             route="/orders/{id}/run-generation-control-program-files",
             operation="run_control_program", idempotency_key=idempotency_key,
-            fingerprint_meta={"order_ref": _resource_ref(order_id)},
+            fingerprint_meta={"order_ref": sha256_json(order_id)},
         )
 
     def control_program_url(self, order_id: int) -> Any:
@@ -598,9 +639,7 @@ class CuttingClient:
 
     # Long tasks
     def list_long_tasks(self) -> Any:
-        return self._request(
-            "GET", "/long-tasks", route="/long-tasks", operation="list_long_tasks",
-        )
+        return self._request("GET", "/long-tasks", route="/long-tasks", operation="list_long_tasks")
 
     def long_task(self, task_id: int) -> Any:
         task_id = _positive_id(task_id, "task_id")
@@ -612,42 +651,33 @@ class CuttingClient:
         task_id = _positive_id(task_id, "task_id")
         if timeout <= 0 or interval <= 0:
             raise ValueError("timeout and interval must be positive")
-        deadline = self.clock() + timeout
-        first_poll = True
+        local_deadline = min(self.clock() + timeout, self.clock() + self.remaining_seconds())
         while True:
-            if not first_poll and self.clock() >= deadline:
+            if self.clock() >= local_deadline:
                 raise self._error(
-                    "cutting.long_task.timeout",
-                    "Cutting long task did not complete within the bounded timeout.",
+                    "cutting.long_task.timeout", "long task exceeded its bounded deadline",
                     retryable=True,
                 )
-            first_poll = False
             task = self.long_task(task_id)
             if not isinstance(task, Mapping):
-                raise self._error(
-                    "cutting.response.contract",
-                    "Cutting API returned an invalid long-task response.",
-                )
+                raise self._error("cutting.response.contract", "invalid long-task response")
             state = str(task.get("state", task.get("status", ""))).lower()
             if state in ("success", "completed", "2"):
                 return task
             if state in ("failed", "error", "3"):
-                raise self._error(
-                    "cutting.long_task.failed",
-                    "Cutting long task failed; inspect remote task details.",
-                )
-            self.sleeper(min(interval, max(0.0, deadline - self.clock())))
+                raise self._error("cutting.long_task.failed", "Cutting long task failed")
+            remaining = min(interval, local_deadline - self.clock(), self.remaining_seconds())
+            if remaining <= 0:
+                raise self._error("cutting.long_task.timeout", "long task deadline expired")
+            self.sleeper(remaining)
 
 
 def api_overview() -> str:
     return "\n".join([
-        f"BAZIS Cloud Cutting Public API: {BASE_URL}{PREFIX}",
-        "Network access is disabled by default.",
+        f"BAZIS Cloud Cutting Public API: {PINNED_ORIGIN}{PREFIX}",
+        "The ordinary CLI exposes information only; live operations use the operator entrypoint.",
         "Offline contract: python qa/cutting_contract_harness.py",
-        "Live mutations require --allow-live, --allow-mutations, a bounded budget,",
-        "and a unique idempotency prefix. Never retry an ambiguous mutation.",
-        "Flow: create order -> upload .b3d -> read/link materials -> run-cutting",
-        "      -> generation-production-files -> production-files-url.",
-        "Evidence: cutting-materials (article/sheets) -> cutted-materials (post-cut audit).",
-        "Key: env BAZIS_API_KEY (header apiKey).",
+        "Operator entrypoint: operator/cutting_live_smoke.py (separate authorization required).",
+        "Every mutation requires an approved durable ledger run and unique key.",
+        "Ambiguous operations require remote reconciliation and are never retried.",
     ])

@@ -191,15 +191,22 @@ API ошибки должны иметь корректный HTTP status, ст�
 
 ### Внешний производственный API (Cutting)
 
-Cutting-клиент по умолчанию не имеет права на сеть и мутации. Live-доступ
-разрешается отдельно, каждый POST требует ограниченного бюджета и уникального
-idempotency key. Если transport error случился после отправки POST, результат
-считается неоднозначным: скрытый retry запрещён до проверки удалённого заказа.
-Material links принимаются только как полная утверждённая таблица для точно
-прочитанного списка материалов; fuzzy/LLM-подбор запрещён. Offline contract
-harness обязан использовать тот же клиент и тот же порядок вызовов, но его
-результат нельзя называть live E2E evidence. Полный контракт и команда smoke:
-`rules/cutting-api.md`.
+Cutting-клиент по умолчанию не имеет права на сеть и мутации. Production
+credential разрешён только для pinned `https://cloud.bazissoft.ru`; тестовый
+endpoint требует явного allowlist и отдельного test key. Каждый POST требует
+уникального ключа и файлового durable ledger со строго атомарными состояниями
+`prepared/ambiguous/success`; cross-process duplicate блокируется, а ambiguous
+требует remote reconciliation. Durable mutation limit не является оценкой
+реальной стоимости или тарифа.
+
+Material links проходят единый строгий MEB-139 контракт: article/sheet
+проверки, подтверждённые исключения, запрет конфликтующих дубликатов и
+обязательный post-audit. Fuzzy/LLM-подбор запрещён. Общий deadline положителен,
+а каждый request получает timeout не больше оставшегося времени. Offline
+contract harness использует тот же поток, но injected/test transport никогда
+не может создать live E2E evidence. Live entrypoint отделён от обычного CLI/CI
+и до первой mutation требует approved fixture/model hashes и ledger-run. Полный
+контракт, команда и blocker: `rules/cutting-api.md`.
 
 ## 7. Trace, логи и приватность
 

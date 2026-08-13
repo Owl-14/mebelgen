@@ -9,7 +9,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from src.cloud_cutting import CuttingClient  # noqa: E402
+from src.cloud_cutting import CuttingClient, sha256_json  # noqa: E402
 from src.cfrn import project_to_cfrn_json  # noqa: E402
 from src.generators import generate_from_paramspec  # noqa: E402
 from src.materials import list_sheet_decors, resolve_project_materials  # noqa: E402
@@ -139,49 +139,95 @@ def test_transport_rejects_articles_extra_keys_and_invalid_types():
         serialize_link_payload([{**valid[0], "materialType": 6}])
 
 
+def test_transport_rejects_normalized_duplicate_and_conflicting_links():
+    first = {
+        "originalMaterialFullName": "  SOURCE BOARD ",
+        "materialType": 0,
+        "linkedMaterialFullName": "Target A",
+    }
+    with pytest.raises(MaterialLinkContractError, match="duplicate material link"):
+        serialize_link_payload([first, {
+            "originalMaterialFullName": "source   board",
+            "materialType": 0,
+            "linkedMaterialFullName": "Target A",
+        }])
+    with pytest.raises(MaterialLinkContractError, match="conflicting duplicate"):
+        serialize_link_payload([first, {
+            "originalMaterialFullName": "source board",
+            "materialType": 0,
+            "linkedMaterialFullName": "Target B",
+        }])
+
+
 def test_cutting_client_posts_only_validated_payload(monkeypatch):
     calls = []
-    client = CuttingClient(api_key="offline-fixture", base_url="https://fixture.invalid")
-    monkeypatch.setattr(client, "_post", lambda suffix, **kwargs: calls.append((suffix, kwargs)) or None)
+    client = CuttingClient(
+        base_url="https://fixture.invalid", test_api_key="offline-fixture",
+        test_endpoint_allowlist=["https://fixture.invalid"],
+    )
+    monkeypatch.setattr(
+        client, "_request",
+        lambda method, suffix, **kwargs: calls.append((method, suffix, kwargs)) or None,
+    )
     client.set_link_materials(17, [{
         "originalMaterialFullName": "source",
         "materialType": 0,
         "linkedMaterialFullName": "target",
-    }])
-    assert calls == [("/cad-models/17/set-link-materials", {"json": [{
+    }], idempotency_key="MEB-139:test:links")
+    assert calls == [("POST", "/cad-models/17/set-link-materials", {
+        "route": "/cad-models/{id}/set-link-materials",
+        "operation": "set_link_materials",
+        "json_body": [{
         "originalMaterialFullName": "source",
         "materialType": 0,
         "linkedMaterialFullName": "target",
-    }]})]
+        }],
+        "idempotency_key": "MEB-139:test:links",
+        "fingerprint_meta": {"model_ref": sha256_json(17), "link_count": 1},
+    })]
 
 
 def test_cutting_client_does_not_retry_remote_post_without_live_idempotency_evidence(monkeypatch):
     calls = []
-    client = CuttingClient(api_key="offline-fixture", base_url="https://fixture.invalid")
+    client = CuttingClient(
+        base_url="https://fixture.invalid", test_api_key="offline-fixture",
+        test_endpoint_allowlist=["https://fixture.invalid"],
+    )
 
-    def fail_once(suffix, **kwargs):
-        calls.append((suffix, kwargs))
+    def fail_once(method, suffix, **kwargs):
+        calls.append((method, suffix, kwargs))
         raise TimeoutError("synthetic timeout with unknown remote outcome")
 
-    monkeypatch.setattr(client, "_post", fail_once)
+    monkeypatch.setattr(client, "_request", fail_once)
     with pytest.raises(TimeoutError, match="unknown remote outcome"):
         client.set_link_materials(17, [{
             "originalMaterialFullName": "source",
             "materialType": 0,
             "linkedMaterialFullName": "target",
-        }])
+        }], idempotency_key="MEB-139:timeout:links")
     assert len(calls) == 1
 
 
 def test_cutting_client_exposes_result_evidence_endpoints(monkeypatch):
     calls = []
-    client = CuttingClient(api_key="offline-fixture", base_url="https://fixture.invalid")
-    monkeypatch.setattr(client, "_get", lambda suffix, **kwargs: calls.append((suffix, kwargs)) or [])
+    client = CuttingClient(
+        base_url="https://fixture.invalid", test_api_key="offline-fixture",
+        test_endpoint_allowlist=["https://fixture.invalid"],
+    )
+    monkeypatch.setattr(
+        client, "_request",
+        lambda method, suffix, **kwargs: calls.append((method, suffix, kwargs)) or [],
+    )
     assert client.cutting_materials(23) == []
     assert client.cutted_materials(23) == []
     assert calls == [
-        ("/cutting-materials", {"orderId": 23}),
-        ("/orders/23/cutted-materials", {}),
+        ("GET", "/cutting-materials", {
+            "route": "/cutting-materials", "operation": "cutting_materials",
+            "params": {"orderId": 23},
+        }),
+        ("GET", "/orders/23/cutted-materials", {
+            "route": "/orders/{id}/cutted-materials", "operation": "cutted_materials",
+        }),
     ]
 
 
