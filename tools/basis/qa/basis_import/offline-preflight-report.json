@@ -1,0 +1,342 @@
+{
+  "dimensions": {
+    "consistency_issues": [],
+    "geometry_ok": true,
+    "orientation_counts": {
+      "front": 2,
+      "horizont": 8,
+      "vertical": 2
+    },
+    "overall_dimensions": {
+      "depth": 400,
+      "height": 500,
+      "tolerance": 5,
+      "width": 700
+    },
+    "panel_count": 12
+  },
+  "drilling": {
+    "by_purpose": {
+      "евровинт (проход Ø8)": 4,
+      "задник (саморез)": 18,
+      "конфирмат": 4,
+      "петля (накол чашки)": 4,
+      "петля (планка)": 4,
+      "петля (чашка Ø35)": 2,
+      "ручка (винт)": 2,
+      "шкант 8×30 (пласть)": 16,
+      "шкант 8×30 (торец)": 16,
+      "эксцентрик (канал Ø8)": 12,
+      "эксцентрик (чашка Ø15)": 12,
+      "эксцентрик (шток)": 12,
+      "эксцентрик полки (чашка Ø20)": 24,
+      "эксцентрик полки (шток)": 24
+    },
+    "cfrn_encoding_errors": [],
+    "cfrn_hole_parity_errors": [],
+    "count": 154,
+    "fingerprint_sha256": "69eed1d2b8e9cd08c93ebbdd905510bc37cf4349107d79214bf5bbc2f5a32a9e",
+    "geometry_errors": [],
+    "geometry_warnings": []
+  },
+  "edge_banding": {
+    "assignments_by_thickness_mm": {
+      "0.4": 48
+    },
+    "missing": []
+  },
+  "errors": [],
+  "importer_projection": [
+    {
+      "expected_gab_max": {
+        "x": 700.0,
+        "y": 16.0,
+        "z": 400.0
+      },
+      "gab_min": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "material_name": "Белый",
+      "name": "Дно",
+      "new_panel": {
+        "height": 400.0,
+        "thickness": 16.0,
+        "width": 700.0
+      },
+      "orientation": "horizont",
+      "thickness_axis": "y"
+    },
+    {
+      "expected_gab_max": {
+        "x": 700.0,
+        "y": 500.0,
+        "z": 400.0
+      },
+      "gab_min": {
+        "x": 0.0,
+        "y": 484.0,
+        "z": 0.0
+      },
+      "material_name": "Белый",
+      "name": "Крышка",
+      "new_panel": {
+        "height": 400.0,
+        "thickness": 16.0,
+        "width": 700.0
+      },
+      "orientation": "horizont",
+      "thickness_axis": "y"
+    },
+    {
+      "expected_gab_max": {
+        "x": 16.0,
+        "y": 484.0,
+        "z": 400.0
+      },
+      "gab_min": {
+        "x": 0.0,
+        "y": 16.0,
+        "z": 0.0
+      },
+      "material_name": "Белый",
+      "name": "Боковина левая",
+      "new_panel": {
+        "height": 468.0,
+        "thickness": 16.0,
+        "width": 400.0
+      },
+      "orientation": "vertical",
+      "thickness_axis": "x"
+    },
+    {
+      "expected_gab_max": {
+        "x": 700.0,
+        "y": 484.0,
+        "z": 400.0
+      },
+      "gab_min": {
+        "x": 684.0,
+        "y": 16.0,
+        "z": 0.0
+      },
+      "material_name": "Белый",
+      "name": "Боковина правая",
+      "new_panel": {
+        "height": 468.0,
+        "thickness": 16.0,
+        "width": 400.0
+      },
+      "orientation": "vertical",
+      "thickness_axis": "x"
+    },
+    {
+      "expected_gab_max": {
+        "x": 684.0,
+        "y": 484.0,
+        "z": 400.0
+      },
+      "gab_min": {
+        "x": 16.0,
+        "y": 16.0,
+        "z": 384.0
+      },
+      "material_name": "Белый",
+      "name": "Задняя стенка",
+      "new_panel": {
+        "height": 468.0,
+        "thickness": 16.0,
+        "width": 668.0
+      },
+      "orientation": "front",
+      "thickness_axis": "z"
+    },
+    {
+      "expected_gab_max": {
+        "x": 684.0,
+        "y": 85.0,
+        "z": 384.0
+      },
+      "gab_min": {
+        "x": 16.0,
+        "y": 69.0,
+        "z": 16.0
+      },
+      "material_name": "Белый",
+      "name": "Полка 1",
+      "new_panel": {
+        "height": 368.0,
+        "thickness": 16.0,
+        "width": 668.0
+      },
+      "orientation": "horizont",
+      "thickness_axis": "y"
+    },
+    {
+      "expected_gab_max": {
+        "x": 684.0,
+        "y": 154.0,
+        "z": 384.0
+      },
+      "gab_min": {
+        "x": 16.0,
+        "y": 138.0,
+        "z": 16.0
+      },
+      "material_name": "Белый",
+      "name": "Полка 2",
+      "new_panel": {
+        "height": 368.0,
+        "thickness": 16.0,
+        "width": 668.0
+      },
+      "orientation": "horizont",
+      "thickness_axis": "y"
+    },
+    {
+      "expected_gab_max": {
+        "x": 684.0,
+        "y": 223.0,
+        "z": 384.0
+      },
+      "gab_min": {
+        "x": 16.0,
+        "y": 207.0,
+        "z": 16.0
+      },
+      "material_name": "Белый",
+      "name": "Полка 3",
+      "new_panel": {
+        "height": 368.0,
+        "thickness": 16.0,
+        "width": 668.0
+      },
+      "orientation": "horizont",
+      "thickness_axis": "y"
+    },
+    {
+      "expected_gab_max": {
+        "x": 684.0,
+        "y": 292.0,
+        "z": 384.0
+      },
+      "gab_min": {
+        "x": 16.0,
+        "y": 276.0,
+        "z": 16.0
+      },
+      "material_name": "Белый",
+      "name": "Полка 4",
+      "new_panel": {
+        "height": 368.0,
+        "thickness": 16.0,
+        "width": 668.0
+      },
+      "orientation": "horizont",
+      "thickness_axis": "y"
+    },
+    {
+      "expected_gab_max": {
+        "x": 684.0,
+        "y": 361.0,
+        "z": 384.0
+      },
+      "gab_min": {
+        "x": 16.0,
+        "y": 345.0,
+        "z": 16.0
+      },
+      "material_name": "Белый",
+      "name": "Полка 5",
+      "new_panel": {
+        "height": 368.0,
+        "thickness": 16.0,
+        "width": 668.0
+      },
+      "orientation": "horizont",
+      "thickness_axis": "y"
+    },
+    {
+      "expected_gab_max": {
+        "x": 684.0,
+        "y": 430.0,
+        "z": 384.0
+      },
+      "gab_min": {
+        "x": 16.0,
+        "y": 414.0,
+        "z": 16.0
+      },
+      "material_name": "Белый",
+      "name": "Полка 6",
+      "new_panel": {
+        "height": 368.0,
+        "thickness": 16.0,
+        "width": 668.0
+      },
+      "orientation": "horizont",
+      "thickness_axis": "y"
+    },
+    {
+      "expected_gab_max": {
+        "x": 698.0,
+        "y": 482.0,
+        "z": 0.0
+      },
+      "gab_min": {
+        "x": 2.0,
+        "y": 18.0,
+        "z": -16.0
+      },
+      "material_name": "Белый",
+      "name": "Фасад двери",
+      "new_panel": {
+        "height": 464.0,
+        "thickness": 16.0,
+        "width": 696.0
+      },
+      "orientation": "front",
+      "thickness_axis": "z"
+    }
+  ],
+  "licensed_basis": {
+    "required_checks": [
+      "run scripts/detect_basis_api.js in the target licensed BAZIS version",
+      "run ImportFurnitureFromJSON.js with the pinned fixture and save a native .b3d",
+      "compare native panel AABBs and orientations with importer_projection",
+      "confirm MaterialName resolves to the intended MatBase entries",
+      "confirm edge banding is assigned to the intended native panel edges",
+      "confirm native drilling/fixtures and .b3d round-trip match drilling.fingerprint_sha256"
+    ],
+    "status": "blocked_not_run"
+  },
+  "materials": {
+    "material_refs_present": false,
+    "notes": [
+      "Цвет «Белый» не встречается в каталоге плит — проверить наличие в базе БАЗИС."
+    ],
+    "panel_material_counts": {
+      "ЛДСП": 12
+    },
+    "project": {
+      "back_wall_material": "ЛДСП",
+      "board_material": "ЛДСП",
+      "board_thickness": 16,
+      "color": "Белый",
+      "color_code": "",
+      "edge_band_thickness": 0.4
+    }
+  },
+  "offline_status": "pass",
+  "project_name": "Шкаф 700×400×500",
+  "report_version": 1,
+  "schema": {
+    "errors": [],
+    "ok": true
+  },
+  "source": "projects/cabinet_700x400x500.json",
+  "warnings": [
+    "Цвет «Белый» не встречается в каталоге плит — проверить наличие в базе БАЗИС."
+  ]
+}

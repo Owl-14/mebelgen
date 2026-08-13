@@ -1,0 +1,257 @@
+{
+  "report_version": 1,
+  "fixture": "projects/cabinet_700x400x500.json",
+  "importer": "scripts/ImportFurnitureFromJSON.js",
+  "status": "pass",
+  "panel_count": 12,
+  "panels": [
+    {
+      "name": "Дно",
+      "orientation": "horizont",
+      "new_panel": {
+        "width": 700,
+        "height": 400,
+        "thickness": 16
+      },
+      "material_name": "Белый",
+      "gab_min": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "gab_max": {
+        "x": 700,
+        "y": 16,
+        "z": 400
+      }
+    },
+    {
+      "name": "Крышка",
+      "orientation": "horizont",
+      "new_panel": {
+        "width": 700,
+        "height": 400,
+        "thickness": 16
+      },
+      "material_name": "Белый",
+      "gab_min": {
+        "x": 0,
+        "y": 484,
+        "z": 0
+      },
+      "gab_max": {
+        "x": 700,
+        "y": 500,
+        "z": 400
+      }
+    },
+    {
+      "name": "Боковина левая",
+      "orientation": "vertical",
+      "new_panel": {
+        "width": 400,
+        "height": 468,
+        "thickness": 16
+      },
+      "material_name": "Белый",
+      "gab_min": {
+        "x": 0,
+        "y": 16,
+        "z": 0
+      },
+      "gab_max": {
+        "x": 16,
+        "y": 484,
+        "z": 400
+      }
+    },
+    {
+      "name": "Боковина правая",
+      "orientation": "vertical",
+      "new_panel": {
+        "width": 400,
+        "height": 468,
+        "thickness": 16
+      },
+      "material_name": "Белый",
+      "gab_min": {
+        "x": 684,
+        "y": 16,
+        "z": 0
+      },
+      "gab_max": {
+        "x": 700,
+        "y": 484,
+        "z": 400
+      }
+    },
+    {
+      "name": "Задняя стенка",
+      "orientation": "front",
+      "new_panel": {
+        "width": 668,
+        "height": 468,
+        "thickness": 16
+      },
+      "material_name": "Белый",
+      "gab_min": {
+        "x": 16,
+        "y": 16,
+        "z": 384
+      },
+      "gab_max": {
+        "x": 684,
+        "y": 484,
+        "z": 400
+      }
+    },
+    {
+      "name": "Полка 1",
+      "orientation": "horizont",
+      "new_panel": {
+        "width": 668,
+        "height": 368,
+        "thickness": 16
+      },
+      "material_name": "Белый",
+      "gab_min": {
+        "x": 16,
+        "y": 69,
+        "z": 16
+      },
+      "gab_max": {
+        "x": 684,
+        "y": 85,
+        "z": 384
+      }
+    },
+    {
+      "name": "Полка 2",
+      "orientation": "horizont",
+      "new_panel": {
+        "width": 668,
+        "height": 368,
+        "thickness": 16
+      },
+      "material_name": "Белый",
+      "gab_min": {
+        "x": 16,
+        "y": 138,
+        "z": 16
+      },
+      "gab_max": {
+        "x": 684,
+        "y": 154,
+        "z": 384
+      }
+    },
+    {
+      "name": "Полка 3",
+      "orientation": "horizont",
+      "new_panel": {
+        "width": 668,
+        "height": 368,
+        "thickness": 16
+      },
+      "material_name": "Белый",
+      "gab_min": {
+        "x": 16,
+        "y": 207,
+        "z": 16
+      },
+      "gab_max": {
+        "x": 684,
+        "y": 223,
+        "z": 384
+      }
+    },
+    {
+      "name": "Полка 4",
+      "orientation": "horizont",
+      "new_panel": {
+        "width": 668,
+        "height": 368,
+        "thickness": 16
+      },
+      "material_name": "Белый",
+      "gab_min": {
+        "x": 16,
+        "y": 276,
+        "z": 16
+      },
+      "gab_max": {
+        "x": 684,
+        "y": 292,
+        "z": 384
+      }
+    },
+    {
+      "name": "Полка 5",
+      "orientation": "horizont",
+      "new_panel": {
+        "width": 668,
+        "height": 368,
+        "thickness": 16
+      },
+      "material_name": "Белый",
+      "gab_min": {
+        "x": 16,
+        "y": 345,
+        "z": 16
+      },
+      "gab_max": {
+        "x": 684,
+        "y": 361,
+        "z": 384
+      }
+    },
+    {
+      "name": "Полка 6",
+      "orientation": "horizont",
+      "new_panel": {
+        "width": 668,
+        "height": 368,
+        "thickness": 16
+      },
+      "material_name": "Белый",
+      "gab_min": {
+        "x": 16,
+        "y": 414,
+        "z": 16
+      },
+      "gab_max": {
+        "x": 684,
+        "y": 430,
+        "z": 384
+      }
+    },
+    {
+      "name": "Фасад двери",
+      "orientation": "front",
+      "new_panel": {
+        "width": 696,
+        "height": 464,
+        "thickness": 16
+      },
+      "material_name": "Белый",
+      "gab_min": {
+        "x": 2,
+        "y": 18,
+        "z": -16
+      },
+      "gab_max": {
+        "x": 698,
+        "y": 482,
+        "z": 0
+      }
+    }
+  ],
+  "alerts": [
+    "Шкаф 700×400×500\n\nПанелей: 12\nРучек: 0\nНаправляющие (успешных установок): 0\n\nДальше в БАЗИС: материалы/кромка → отчёты → раскрой/чертежи."
+  ],
+  "errors": [],
+  "limitations": [
+    "mock proves importer control flow, NewPanel arguments and final AABBs only",
+    "native MatBase, edge assignment, drilling objects and .b3d require licensed BAZIS"
+  ]
+}
