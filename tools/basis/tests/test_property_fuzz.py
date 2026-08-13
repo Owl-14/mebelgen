@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import json
 import math
+from collections import Counter
 
 import pytest
 from hypothesis import HealthCheck, given, settings, strategies as st
@@ -158,11 +159,70 @@ def _assert_panel_contract(panel):
     assert spans[thickness_axis] == pytest.approx(panel["thickness"], abs=0.01)
 
 
+def _assert_drawer_project_invariants(spec, project):
+    """Reject empty/partial drawer projects before checking individual placements."""
+    panels = project.get("panels")
+    assert isinstance(panels, list) and panels, "drawer project panels must not be empty"
+    drawers = project.get("drawers")
+    assert isinstance(drawers, list), "drawer metadata must be a list"
+
+    section = spec["sections"][0]
+    expected_drawers = section["drawers"]
+    assert len(drawers) == expected_drawers
+    assert {drawer["id"] for drawer in drawers} == {
+        f"drawer_{index}" for index in range(1, expected_drawers + 1)
+    }
+    assert len({panel["name"] for panel in panels}) == len(panels)
+
+    type_counts = Counter(panel["type"] for panel in panels)
+    assert type_counts["bottom"] == 1
+    assert type_counts["top"] == 1
+    assert type_counts["side_left"] == 1
+    assert type_counts["side_right"] == 1
+    assert type_counts["back"] == 1
+    for panel_type in (
+        "drawer_front", "drawer_bottom", "drawer_side_left",
+        "drawer_side_right", "drawer_back",
+    ):
+        assert type_counts[panel_type] == expected_drawers
+    assert len(panels) >= 5 + 5 * expected_drawers
+
+    assert project["sections"]
+    drawer_section = project["sections"][0]
+    assert drawer_section["id"] == "drawer_stack"
+    assert drawer_section["type"] == "drawer_stack"
+    assert len(drawer_section["elements"]) == expected_drawers
+    assert set(drawer_section["elements"]) == {
+        panel["name"] for panel in panels if panel["type"] == "drawer_front"
+    }
+    for axis in ("width", "depth", "height"):
+        assert project["overall_dimensions"][axis] == spec["dimensions"][axis]
+
+    for drawer in drawers:
+        assert all(value > 0 for value in drawer["dimensions"].values())
+        assert drawer["position"]["x"] >= 0
+        assert drawer["position"]["y"] >= 0
+        assert drawer["position"]["z"] >= 0
+        assert (
+            drawer["position"]["x"] + drawer["dimensions"]["width"]
+            <= spec["dimensions"]["width"]
+        )
+        assert (
+            drawer["position"]["y"] + drawer["dimensions"]["height"]
+            <= spec["dimensions"]["height"]
+        )
+        assert (
+            drawer["position"]["z"] + drawer["dimensions"]["depth"]
+            <= spec["dimensions"]["depth"]
+        )
+
+
 @PROPERTY_SETTINGS
 @given(producible_drawer_spec())
 def test_generated_drawers_keep_positive_consistent_placement_inside_product(spec):
     assert not validate_paramspec(spec)
     project = generate_from_paramspec(spec)
+    _assert_drawer_project_invariants(spec, project)
     width, depth, height = (spec["dimensions"][key] for key in ("width", "depth", "height"))
     back = spec["materials"]["back_thickness"]
     thickness = spec["materials"]["board_thickness"]
@@ -174,6 +234,54 @@ def test_generated_drawers_keep_positive_consistent_placement_inside_product(spe
         assert -thickness <= placement["z1"] < placement["z2"] <= depth + back
 
 
+def test_regression_empty_panels_are_rejected_by_drawer_invariant():
+    """EMPTY_PANELS_ACCEPTED: the old property silently passed this mutant."""
+    spec = {
+        "dimensions": {"width": 350, "depth": 250, "height": 400},
+        "sections": [{"drawers": 1}],
+    }
+    with pytest.raises(AssertionError, match="panels must not be empty"):
+        _assert_drawer_project_invariants(spec, {"panels": [], "drawers": []})
+
+
+def _translated_panel(panel, origin, prefix):
+    expected = copy.deepcopy(panel)
+    expected["name"] = f"{prefix}: {panel['name']}" if prefix else panel["name"]
+    for axis, offset in zip("xyz", origin):
+        expected["placement"][f"{axis}1"] += offset
+        expected["placement"][f"{axis}2"] += offset
+        expected["position"][axis] += offset
+    return expected
+
+
+def _assert_panel_only_composite_translation(child_project, composite_project, origin, prefix):
+    """Compare panel-only corpus output exactly, except documented name/coordinate shifts."""
+    child_panels = child_project.get("panels")
+    composite_panels = composite_project.get("panels")
+    assert isinstance(child_panels, list) and child_panels, "child panels must not be empty"
+    assert isinstance(composite_panels, list) and composite_panels, "composite panels must not be empty"
+
+    # This property intentionally covers a panel-only corpus child. Metadata-bearing
+    # drawer, door and rod children require separate entity-specific translation tests.
+    assert child_project.get("drawers") == []
+    assert child_project.get("doors") == []
+    assert not (child_project.get("hardware") or {}).get("rods")
+    assert composite_project.get("drawers") == []
+    assert composite_project.get("doors") == []
+    assert not (composite_project.get("hardware") or {}).get("rods")
+
+    expected = [_translated_panel(panel, origin, prefix) for panel in child_panels]
+    expected_by_name = {panel["name"]: panel for panel in expected}
+    actual_by_name = {panel["name"]: panel for panel in composite_panels}
+    assert len(expected_by_name) == len(expected)
+    assert len(actual_by_name) == len(composite_panels)
+    assert actual_by_name.keys() == expected_by_name.keys()
+    for name, expected_panel in expected_by_name.items():
+        actual_panel = actual_by_name[name]
+        _assert_panel_contract(actual_panel)
+        assert actual_panel == expected_panel
+
+
 @PROPERTY_SETTINGS
 @given(
     origin=st.tuples(
@@ -182,7 +290,8 @@ def test_generated_drawers_keep_positive_consistent_placement_inside_product(spe
         st.integers(min_value=-2_000, max_value=2_000),
     )
 )
-def test_composite_origin_is_a_pure_translation(origin):
+def test_composite_panel_only_corpus_origin_is_a_pure_translation(origin):
+    """A panel-only corpus block preserves identity/metadata and shifts only origin fields."""
     child = {
         "schemaVersion": "paramspec-v1",
         "project_name": "child",
@@ -203,18 +312,38 @@ def test_composite_origin_is_a_pure_translation(origin):
         }],
     }
     assert parse_paramspec(composite).to_generator_dict() == composite
-    child_panels = generate_from_paramspec(child)["panels"]
-    composite_panels = generate_from_paramspec(composite)["panels"]
-    assert len(child_panels) == len(composite_panels)
-    for child_panel, shifted_panel in zip(child_panels, composite_panels):
-        _assert_panel_contract(shifted_panel)
-        for axis, offset in zip("xyz", origin):
-            assert shifted_panel["placement"][f"{axis}1"] == pytest.approx(
-                child_panel["placement"][f"{axis}1"] + offset
-            )
-            assert shifted_panel["placement"][f"{axis}2"] == pytest.approx(
-                child_panel["placement"][f"{axis}2"] + offset
-            )
+    child_project = generate_from_paramspec(child)
+    composite_project = generate_from_paramspec(composite)
+    _assert_panel_only_composite_translation(
+        child_project, composite_project, origin, prefix="block"
+    )
+
+
+@pytest.mark.parametrize("field", ["material", "type"])
+def test_regression_corrupted_composite_metadata_is_rejected(field):
+    """CORRUPTED_COMPOSITE_METADATA_ACCEPTED: coordinates alone are insufficient."""
+    child = {
+        "schemaVersion": "paramspec-v1",
+        "project_name": "child",
+        "archetype": "corpus",
+        "dimensions": {"width": 600, "depth": 400, "height": 800},
+        "materials": {"board_thickness": 16, "back_thickness": 3},
+    }
+    composite = {
+        "schemaVersion": "paramspec-v1",
+        "project_name": "composite",
+        "archetype": "composite",
+        "dimensions": {"width": 600, "depth": 400, "height": 800},
+        "materials": {"board_thickness": 16, "back_thickness": 3},
+        "blocks": [{"name": "block", "origin": {"x": 1, "y": 2, "z": 3}, "spec": child}],
+    }
+    child_project = generate_from_paramspec(child)
+    corrupted = copy.deepcopy(generate_from_paramspec(composite))
+    corrupted["panels"][0][field] = "CORRUPTED"
+    with pytest.raises(AssertionError):
+        _assert_panel_only_composite_translation(
+            child_project, corrupted, (1, 2, 3), prefix="block"
+        )
 
 
 def _base_edit_spec():
