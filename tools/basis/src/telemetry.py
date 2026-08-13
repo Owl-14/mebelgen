@@ -29,10 +29,17 @@ _SAFE_KEYS = frozenset({
     "gen_ai.system", "gen_ai.request.model", "gen_ai.usage.input_tokens",
     "gen_ai.usage.output_tokens", "gen_ai.usage.total_tokens",
     "langsmith.span.kind", "langsmith.trace.name",
+    "rollout.primary", "rollout.shadow", "rollout.canary", "rollout.stopped",
+    "shadow.equal", "shadow.paramspec_equal", "shadow.geometry_equal",
+    "shadow.drilling_equal", "checkpoint.bytes", "checkpoint.degraded",
+    "gen_ai.usage.cost_usd",
 })
 _SEQUENCE_KEYS = frozenset({"operation.types", "error.codes"})
 _FALLBACK_TRACE_ID: contextvars.ContextVar[str] = contextvars.ContextVar(
     "akeda_trace_id", default=""
+)
+_ROLLOUT_ATTRIBUTES: contextvars.ContextVar[dict[str, Any]] = contextvars.ContextVar(
+    "akeda_rollout_attributes", default={}
 )
 _CONFIG_LOCK = threading.Lock()
 _FILE_LOCK = threading.Lock()
@@ -133,6 +140,32 @@ class _JsonFileExporter:
         return True
 
 
+class _RolloutFilteringExporter:
+    """Apply request rollout selection after server-owned identity is known."""
+
+    def __init__(self, exporter: Any, mode: str) -> None:
+        self.exporter = exporter
+        self.mode = mode
+
+    def export(self, spans: Any) -> Any:
+        from opentelemetry.sdk.trace.export import SpanExportResult
+
+        rows = list(spans)
+        if self.mode == "canary":
+            rows = [row for row in rows if bool((row.attributes or {}).get("rollout.canary"))]
+        elif self.mode == "shadow":
+            rows = [row for row in rows if bool((row.attributes or {}).get("rollout.shadow"))]
+        if not rows:
+            return SpanExportResult.SUCCESS
+        return self.exporter.export(rows)
+
+    def shutdown(self) -> Any:
+        return self.exporter.shutdown()
+
+    def force_flush(self, timeout_millis: int = 30000) -> bool:
+        return bool(self.exporter.force_flush(timeout_millis=timeout_millis))
+
+
 def _ratio() -> float:
     raw = os.environ.get("AKEDA_TELEMETRY_SAMPLE_RATE", "0.1")
     try:
@@ -178,19 +211,33 @@ def configure(*, force: bool = False) -> Any:
                 "service.version": os.environ.get("AKEDA_SERVICE_VERSION", "dev"),
             }),
         )
+        exporter_mode = os.environ.get(
+            "AKEDA_ROLLOUT_TRACING_EXPORTERS", "on"
+        ).strip().casefold()
+        exporter_killed = os.environ.get(
+            "AKEDA_KILL_SWITCH_TRACING_EXPORTERS", ""
+        ).strip().casefold() in {"1", "true", "yes", "on"}
         backends = {
             item.strip().casefold()
             for item in os.environ.get("AKEDA_TELEMETRY_BACKEND", "none").split(",")
             if item.strip()
         }
+        if exporter_killed or exporter_mode == "off":
+            backends = {"none"}
         if "console" in backends:
-            provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
+            provider.add_span_processor(SimpleSpanProcessor(
+                _RolloutFilteringExporter(ConsoleSpanExporter(), exporter_mode)
+            ))
         if "file" in backends:
             path = Path(os.environ.get("AKEDA_TELEMETRY_FILE", "out/traces.jsonl"))
-            provider.add_span_processor(SimpleSpanProcessor(_JsonFileExporter(path)))
+            provider.add_span_processor(SimpleSpanProcessor(
+                _RolloutFilteringExporter(_JsonFileExporter(path), exporter_mode)
+            ))
         if "otlp" in backends:
             from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-            provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+            provider.add_span_processor(BatchSpanProcessor(
+                _RolloutFilteringExporter(OTLPSpanExporter(), exporter_mode)
+            ))
         if "langsmith" in backends:
             api_key = os.environ.get("LANGSMITH_API_KEY", "").strip()
             if api_key:
@@ -204,7 +251,9 @@ def configure(*, force: bool = False) -> Any:
                 if project:
                     headers["Langsmith-Project"] = project
                 provider.add_span_processor(BatchSpanProcessor(
-                    OTLPSpanExporter(endpoint=endpoint, headers=headers)
+                    _RolloutFilteringExporter(
+                        OTLPSpanExporter(endpoint=endpoint, headers=headers), exporter_mode
+                    )
                 ))
         _PROVIDER = provider
         _TRACER = provider.get_tracer("akeda.studio")
@@ -242,8 +291,9 @@ def span(name: str, attributes: Mapping[str, Any] | None = None) -> Iterator[Spa
 
     from opentelemetry.trace import Status, StatusCode
 
+    combined = {**_ROLLOUT_ATTRIBUTES.get(), **dict(attributes or {})}
     with tracer.start_as_current_span(
-        name, attributes=safe_attributes(attributes), record_exception=False
+        name, attributes=safe_attributes(combined), record_exception=False
     ) as raw:
         handle = SpanHandle(raw)
         raw.set_attribute("trace_id", f"{raw.get_span_context().trace_id:032x}")
@@ -279,6 +329,16 @@ def add_current_attributes(attributes: Mapping[str, Any] | None) -> None:
         return
 
 
+def set_rollout_context(*, primary: str, shadow: bool, canary: bool) -> None:
+    """Attach compact rollout selection to subsequent spans in this request."""
+
+    _ROLLOUT_ATTRIBUTES.set({
+        "rollout.primary": primary,
+        "rollout.shadow": bool(shadow),
+        "rollout.canary": bool(canary),
+    })
+
+
 def force_flush(timeout_millis: int = 30000) -> bool:
     if _PROVIDER is None:
         return True
@@ -311,5 +371,5 @@ def traced_http_request(function: Any) -> Any:
 __all__ = [
     "add_current_attributes", "configure", "current_trace_id", "force_flush",
     "hash_payload", "operation_types", "prompt_version", "safe_attributes",
-    "span", "traced_http_request",
+    "set_rollout_context", "span", "traced_http_request",
 ]
