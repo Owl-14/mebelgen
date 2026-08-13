@@ -69,7 +69,7 @@
 | Материалы | `src/materials.py`, `src/materials_policy.py`, `materials/` | реальные материалы/артикулы, резолвинг и политика полноты |
 | Связка Cutting/MatBase | `src/material_link_contract.py`, `src/cloud_cutting.py` | offline-план name/article/sheet, строгий payload и аудит внешних результатов без выдумывания MatBase |
 | Quality gates | `src/production_gate.py`, `src/*_check.py`, `src/validate.py` | единое решение, можно ли принять ревизию и производить изделие |
-| CFRN/B3D | `src/cfrn.py`, `src/b3d_*.py`, `src/build_b3d.py` | кодирование и проверка производственных файлов |
+| CFRN/B3D | `src/cfrn.py`, `src/b3d_*.py`, `src/build_b3d.py`, `src/local_b3d.py` | кодирование, offline hand-off и проверка производственных файлов; структурный BZ85 не выдавать за подтверждённый нативный |
 | Studio/API | `src/studio.py`, `rules/studio.md` | каталог, API, сохранение ревизий, UX ошибок и запуск pipeline |
 | 3D-viewer | `src/webviewer.py` | отображение уже рассчитанной модели; не источник геометрии |
 | Наблюдаемость | `src/telemetry.py` | privacy-safe spans, prompt/model/version, usage, error codes, trace id |
@@ -333,6 +333,13 @@ inside referenced fixtures, not only secrets in the top-level trace.
 | drilling/hardware | hardware, hardware_geometry, drilling_check, CFRN holes parity |
 | Studio/viewer | API/contract-тесты, webviewer, ручной smoke текущего и соседнего сценария |
 | B3D/CFRN | encoding, verify, production reference; платный cloud только по разрешению |
+
+Offline-пакет `local-b3d prepare` не создаёт B3D: он передаёт проверенный проект
+лицензированному desktop БАЗИС. `local-b3d verify` доказывает структуру и базовый
+паритет только при внешнем SHA-256 trust anchor исходного ZIP, повторном
+project preflight, новом пустом документе и отсутствии неизвестных Model types,
+но не открываемость/нативность; для этого нужен фактический
+open/save/reopen либо B3D→CFRN round-trip. См. `rules/local_b3d_pipeline.md`.
 
 Для изменения B3D boundary дополнительно запусти `test_b3d_preflight.py` и
 проверь, что негативные сценарии не вызывают cloud-клиент.
