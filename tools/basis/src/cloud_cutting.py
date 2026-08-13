@@ -26,6 +26,67 @@ SUPPORTED_MODEL_EXTENSIONS = {
 }
 _ORDER_FIELDS = {"managerId", "clientId", "note", "factoryOrderId", "factoryId", "uid1C"}
 _OPERATOR_TRUST_TOKEN = object()
+_SESSION_CLASS = requests.sessions.Session
+_REQUEST_CLASS = requests.models.Request
+_SESSION_REQUEST_IMPLEMENTATION = requests.Session.request
+_SESSION_PREPARE_IMPLEMENTATION = requests.Session.prepare_request
+_SESSION_ENV_IMPLEMENTATION = requests.Session.merge_environment_settings
+_SESSION_SEND_IMPLEMENTATION = requests.Session.send
+
+
+class _PinnedHttpsAdapter:
+    """Private production adapter that never dispatches through Session.request."""
+
+    __slots__ = ("__session",)
+
+    def __init__(self) -> None:
+        object.__setattr__(self, "_PinnedHttpsAdapter__session", _SESSION_CLASS())
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise AttributeError("pinned HTTPS adapter is sealed after construction")
+
+    def request(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: Mapping[str, str],
+        params: Mapping[str, Any] | None,
+        json: Any,
+        files: Any,
+        timeout: tuple[float, float],
+        allow_redirects: bool,
+        verify: bool,
+    ) -> Any:
+        request = _REQUEST_CLASS(
+            method=method, url=url, headers=dict(headers), params=params, json=json, files=files,
+        )
+        prepared = _SESSION_PREPARE_IMPLEMENTATION(self.__session, request)
+        settings = _SESSION_ENV_IMPLEMENTATION(
+            self.__session, prepared.url, {}, None, verify, None,
+        )
+        return _SESSION_SEND_IMPLEMENTATION(
+            self.__session, prepared, timeout=timeout,
+            allow_redirects=allow_redirects, **settings,
+        )
+
+
+_PINNED_ADAPTER_REQUEST_IMPLEMENTATION = _PinnedHttpsAdapter.request
+
+
+def _pinned_transport_integrity_ok() -> bool:
+    """Reject construction if any dispatch component was patched after import."""
+    return (
+        requests.Session is _SESSION_CLASS
+        and requests.sessions.Session is _SESSION_CLASS
+        and requests.Request is _REQUEST_CLASS
+        and requests.models.Request is _REQUEST_CLASS
+        and requests.Session.request is _SESSION_REQUEST_IMPLEMENTATION
+        and requests.Session.prepare_request is _SESSION_PREPARE_IMPLEMENTATION
+        and requests.Session.merge_environment_settings is _SESSION_ENV_IMPLEMENTATION
+        and requests.Session.send is _SESSION_SEND_IMPLEMENTATION
+        and _PinnedHttpsAdapter.request is _PINNED_ADAPTER_REQUEST_IMPLEMENTATION
+    )
 
 
 class _SealedTransport:
@@ -214,9 +275,19 @@ class CuttingClient:
         self._approval_revalidator = _approval_revalidator
         self.max_upload_bytes = max_upload_bytes
         self.timeouts = timeouts or CuttingTimeouts()
-        raw_session = session or requests.Session()
+        if requested_origin == PINNED_ORIGIN:
+            raw_session = _PinnedHttpsAdapter()
+            transport_integrity = _pinned_transport_integrity_ok()
+            request_callable = _PINNED_ADAPTER_REQUEST_IMPLEMENTATION.__get__(
+                raw_session, _PinnedHttpsAdapter,
+            )
+        else:
+            raw_session = session or requests.Session()
+            transport_integrity = False
+            request_callable = raw_session.request
         self.session = _SealedTransport(
-            raw_session.request, operator_proven=self._operator_trusted and not injected,
+            request_callable,
+            operator_proven=self._operator_trusted and not injected and transport_integrity,
         )
         self.trace_sink = trace_sink
         self._trace_id = uuid.uuid4().hex

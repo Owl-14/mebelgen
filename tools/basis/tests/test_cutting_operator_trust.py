@@ -5,8 +5,10 @@ import json
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import pytest
+import requests
 
 from src import cutting_operator_trust as trust
 from src.cutting_preflight import run_cutting_flow
@@ -82,6 +84,25 @@ def test_canonical_config_digest_derives_only_ledger_and_opaque_run(
     forged = replace(approval, ledger_path=tmp_path / "fresh.sqlite3")
     with pytest.raises(ValueError, match="not the current canonical"):
         trust.build_operator_client(forged, api_key="not-a-real-key")
+
+
+def test_preconstruction_session_request_patch_cannot_forge_live_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    approval, _fixture = _canonical_approval(tmp_path, monkeypatch)
+    scripted_calls: list[dict[str, Any]] = []
+
+    def scripted_request(*args: Any, **kwargs: Any) -> Any:
+        scripted_calls.append({"args": args, "kwargs": kwargs})
+        raise AssertionError("scripted transport must never be called")
+
+    with patch.object(requests.Session, "request", scripted_request):
+        with pytest.raises(RuntimeError, match="transport attestation failed"):
+            trust.build_operator_client(
+                approval, api_key="not-a-real-key",
+            )
+
+    assert scripted_calls == []
 
 
 def test_run_flow_revalidates_approved_fixture_before_first_live_request(

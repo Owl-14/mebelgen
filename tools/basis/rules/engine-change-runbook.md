@@ -219,7 +219,10 @@ connect+read budgets каждого request вместе не превышают
 границе deadline или позже отклоняется. Offline contract harness использует тот
 же поток, но injected/test transport никогда не может создать live E2E evidence.
 Transport sealed после construction: подмена `client.session.request` запрещена,
-а live evidence требует operator-owned transport proof. Live entrypoint отделён от обычного CLI/CI
+а live evidence требует operator-owned transport proof. Production dispatch идёт
+через private pinned adapter, не через mutable `requests.Session.request`; patch
+любого проверяемого dispatch-компонента до construction снимает attestation.
+Live entrypoint отделён от обычного CLI/CI
 и до первой mutation повторно читает canonical machine approval: caller не
 выбирает fixture/ledger/run ID, ledger path выводится из config+fixture digest,
 а run ID генерируется как opaque token. Transport/session immutable, production
