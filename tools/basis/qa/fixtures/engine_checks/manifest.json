@@ -1,0 +1,17 @@
+{
+  "fixtures": [
+    {"id": "corpus_thick_back", "path": "paramspecs/tz_stol_kofeyny_cube.json", "archetype": "corpus", "features": ["thick_back"]},
+    {"id": "cabinet_thin_back_legs", "path": "paramspecs/tumba_tv_1600x450x600.json", "archetype": "cabinet", "features": ["thin_back", "legs", "overlay", "drawer_shallow"]},
+    {"id": "wardrobe_deep_drawers", "path": "paramspecs/wardrobe_demo.json", "archetype": "wardrobe", "features": ["thin_back", "legs", "overlay", "drawer_deep"]},
+    {"id": "drawer_default_depth", "path": "paramspecs/komi_72_tumba_podkatnaya.json", "archetype": "drawer_unit", "features": ["thin_back", "legs", "overlay", "drawer_shallow"]},
+    {"id": "drawer_explicit_depth", "path": "paramspecs/tumba_404x490x674_drawers.json", "archetype": "drawer_unit", "features": ["thin_back", "overlay", "drawer_deep"]},
+    {"id": "door_left_overlay", "path": "qa/fixtures/engine_checks/door_left_overlay.json", "archetype": "door_unit", "features": ["thick_back", "overlay", "door_left"]},
+    {"id": "door_right_inset", "path": "qa/fixtures/engine_checks/door_right_inset.json", "archetype": "door_unit", "features": ["thick_back", "inset", "door_right"]},
+    {"id": "door_up_overlay", "path": "qa/fixtures/engine_checks/door_up_overlay.json", "archetype": "door_unit", "features": ["thick_back", "overlay", "door_up"]},
+    {"id": "door_down_overlay", "path": "qa/fixtures/engine_checks/door_down_overlay.json", "archetype": "door_unit", "features": ["thick_back", "overlay", "door_down"]},
+    {"id": "shelving", "path": "paramspecs/shelf_800x300x1800.json", "archetype": "shelving", "features": ["thick_back"]},
+    {"id": "desk_table", "path": "paramspecs/stol_ofisny_foto.json", "archetype": "desk", "features": ["thick_back"]},
+    {"id": "round_table", "path": "paramspecs/tz_stol_kofeyny_round.json", "archetype": "round_table", "features": []},
+    {"id": "composite", "path": "paramspecs/lunit_demo.json", "archetype": "composite", "features": ["thick_back", "overlay", "drawer_deep"]}
+  ]
+}

@@ -113,10 +113,23 @@ python main.py cutting …                                          # раскр
 ## Тесты
 
 ```bash
+python -m qa.engine_checks  # обязательная offline-матрица archetype/fixture/gate для CI
 python -m tests.regression   # ГЕЙТ перед merge: все спеки valid + goldens EXACT
 python -m pytest tests/ -q   # юнит-тесты (сканируют все paramspecs/)
 python qa/e2e_ai.py          # e2e ИИ-помощника (нужен живой провайдер с ключом)
 ```
+
+`python -m qa.engine_checks` — единая команда проверки пути
+ParamSpec → геометрия → присадки → CFRN. Она не вызывает Basis/cloud API и
+печатает отдельную строку для каждого `archetype / fixture / gate`, поэтому
+ошибка локализуется без повторной диагностики. Обязательное покрытие manifest:
+corpus, cabinet/wardrobe, drawer_unit, door_unit, shelving, desk/table,
+round_table, composite; тонкий/толстый задник, overlay/inset, опоры, двери
+left/right/up/down и ящики разной глубины. Fixtures и их признаки перечислены в
+`qa/fixtures/engine_checks/manifest.json`, но меткам manifest не доверяют:
+features повторно выводятся из сгенерированного project и должны совпасть точно.
+Production-решения делегируются `src.production_gate`, а не реализуются повторно
+в harness.
 
 ## Структура
 
@@ -133,7 +146,7 @@ scripts/     ImportFurnitureFromJSON.js (импорт в БАЗИС), source pre
 rules/       источник истины: architecture, paramspec, core, generators, hardware,
              materials, studio, delivery, tumby
 tests/       pytest + tests/regression.py (гейт) + goldens/
-qa/          e2e_ai.py — e2e-матрица ИИ-помощника
+qa/          обязательная engine-check matrix + e2e-матрица ИИ-помощника
 landing/     обложка демо (planovo.pro/bazis)
 ```
 
