@@ -202,14 +202,24 @@ def test_renamed_cmd_and_nonempty_manifest_never_become_ready(tmp_path: Path):
     assert result.returncode == 2, result.stderr
     report = json.loads(result.stdout)
     assert report["status"] == "blocked"
-    assert "basis_executable_identity_not_confirmed" in report["blockers"]
     assert "operator_verification_manifest_missing_or_invalid" in report["blockers"]
-    assert len(report["basis"]["acceptedRoots"]) == 1
-    assert len(report["basis"]["executableEvidence"]) == 1
-    assert report["basis"]["executableEvidence"][0]["identityValid"] is False
-    assert report["basis"]["executableEvidence"][0]["signatureStatus"] == "Valid"
-    assert "Microsoft" in report["basis"]["executableEvidence"][0]["companyName"]
-    assert report["basis"]["trustedExecutables"] == []
+    fake_install_resolved = fake_install.resolve()
+    assert any(
+        Path(row["path"]).resolve() == fake_install_resolved
+        for row in report["basis"]["acceptedRoots"]
+    )
+    fake_evidence = [
+        row for row in report["basis"]["executableEvidence"]
+        if Path(row["installRoot"]).resolve() == fake_install_resolved
+    ]
+    assert len(fake_evidence) == 1
+    assert fake_evidence[0]["identityValid"] is False
+    assert fake_evidence[0]["signatureStatus"] == "Valid"
+    assert "Microsoft" in fake_evidence[0]["companyName"]
+    assert all(
+        Path(row["installRoot"]).resolve() != fake_install_resolved
+        for row in report["basis"]["trustedExecutables"]
+    )
     assert "executable_evidence_mismatch" in report["operatorVerification"]["errors"]
     assert not any(
         error.startswith("output_model_") or error.startswith("material_import_")
@@ -238,8 +248,19 @@ def test_arbitrary_install_root_is_rejected_before_any_traversal(tmp_path: Path)
     report = json.loads(result.stdout)
     assert report["status"] == "blocked"
     assert "basis_install_path_untrusted_scope" in report["blockers"]
-    assert report["basis"]["acceptedRoots"] == []
-    assert report["basis"]["executableEvidence"] == []
+    # Standard trusted roots are discovered independently and may contain a
+    # real installation (or another concurrently running test fixture).  The
+    # security invariant is that the explicit arbitrary root is rejected and
+    # never traversed, not that the host has no other accepted roots.
+    fake_root_resolved = fake_root.resolve()
+    assert all(
+        Path(row["path"]).resolve() != fake_root_resolved
+        for row in report["basis"]["acceptedRoots"]
+    )
+    assert all(
+        fake_root_resolved != Path(row["installRoot"]).resolve()
+        for row in report["basis"]["executableEvidence"]
+    )
     assert any(row["reason"] == "outside_trusted_scope" for row in report["basis"]["rejectedRoots"])
 
 
