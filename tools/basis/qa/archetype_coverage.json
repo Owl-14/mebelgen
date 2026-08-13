@@ -1,5 +1,5 @@
 {
-  "schema_version": "archetype-coverage-v1",
+  "schema_version": "archetype-coverage-v2",
   "sources": [
     "src/paramspec.py",
     "schema/paramspec.schema.json",
@@ -13,7 +13,9 @@
     "public_archetype_count": 10,
     "generator_implementation_count": 8,
     "paramspec_fixture_count": 38,
+    "existing_panel_golden_count": 15,
     "matched_exact_panel_golden_count": 15,
+    "mismatched_panel_golden_count": 0,
     "archetypes_with_paramspec_fixture": 10,
     "archetypes_with_exact_panel_golden": 10,
     "implementations_with_exact_panel_golden": 8
@@ -76,6 +78,14 @@
         "tv_stand_1600x450x600",
         "tz_shkaf_dokumenty"
       ],
+      "existing_panel_goldens": [
+        "kashpo",
+        "moderator_cabinet",
+        "office_equipment_cabinet",
+        "tumba_moderatora",
+        "tumba_tv_1600x450x600",
+        "tv_stand_1600x450x600"
+      ],
       "exact_panel_goldens": [
         "kashpo",
         "moderator_cabinet",
@@ -84,75 +94,312 @@
         "tumba_tv_1600x450x600",
         "tv_stand_1600x450x600"
       ],
-      "supported_variants": [
-        "door_section",
-        "drawers_section",
-        "mixed_sections",
-        "multi_column",
-        "open_section",
-        "rods",
-        "shelves_section",
-        "width_share"
+      "mismatched_panel_goldens": [],
+      "variant_parameter_consumers": [
+        {
+          "parameter": "carcass_z_front",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "facade_reveal",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "interior_z_front",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": [
+            "kashpo",
+            "moderator_cabinet",
+            "office_equipment_cabinet",
+            "tumba_tv_1600x450x600",
+            "tv_stand_1600x450x600",
+            "tz_shkaf_dokumenty"
+          ]
+        },
+        {
+          "parameter": "sections[].box_back_mode",
+          "consumer": "src.generators.columns.drawer_stack",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "sections[].box_back_thickness",
+          "consumer": "src.generators.columns.drawer_stack",
+          "fixture_evidence": [
+            "moderator_cabinet",
+            "tumba_tv_1600x450x600"
+          ]
+        },
+        {
+          "parameter": "sections[].box_bottom_mode",
+          "consumer": "src.generators.columns.drawer_stack",
+          "fixture_evidence": [
+            "moderator_cabinet"
+          ]
+        },
+        {
+          "parameter": "sections[].box_bottom_thickness",
+          "consumer": "src.generators.columns.drawer_stack",
+          "fixture_evidence": [
+            "moderator_cabinet",
+            "tumba_tv_1600x450x600"
+          ]
+        },
+        {
+          "parameter": "sections[].box_depth",
+          "consumer": "src.generators.columns.drawer_stack",
+          "fixture_evidence": [
+            "moderator_cabinet",
+            "tumba_tv_1600x450x600"
+          ]
+        },
+        {
+          "parameter": "sections[].box_height",
+          "consumer": "src.generators.columns.drawer_stack",
+          "fixture_evidence": [
+            "moderator_cabinet",
+            "tumba_tv_1600x450x600"
+          ]
+        },
+        {
+          "parameter": "sections[].box_sides_on_bottom",
+          "consumer": "src.generators.columns.drawer_stack",
+          "fixture_evidence": [
+            "moderator_cabinet"
+          ]
+        },
+        {
+          "parameter": "sections[].box_y_offset",
+          "consumer": "src.generators.columns.drawer_stack",
+          "fixture_evidence": [
+            "moderator_cabinet",
+            "tumba_tv_1600x450x600"
+          ]
+        },
+        {
+          "parameter": "sections[].box_z1",
+          "consumer": "src.generators.columns.drawer_stack",
+          "fixture_evidence": [
+            "moderator_cabinet",
+            "tumba_tv_1600x450x600"
+          ]
+        },
+        {
+          "parameter": "sections[].boxes",
+          "consumer": "src.generators.columns.drawer_stack",
+          "fixture_evidence": [
+            "tv_stand_1600x450x600"
+          ]
+        },
+        {
+          "parameter": "sections[].cover_top",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "sections[].door",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": [
+            "komi_39_tumba_pristavnaya",
+            "komi_46_shkaf_dokumenty",
+            "komi_48_shkaf_kombinirovanny",
+            "komi_50_sistema_garderobnyh",
+            "komi_55_sistema_referentov",
+            "moderator_cabinet",
+            "office_equipment_cabinet",
+            "tumba_moderatora",
+            "tumba_tv_1600x450x600",
+            "tv_stand_1600x450x600",
+            "tz_shkaf_dokumenty"
+          ]
+        },
+        {
+          "parameter": "sections[].door_below_shelf",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": [
+            "office_equipment_cabinet"
+          ]
+        },
+        {
+          "parameter": "sections[].door_name",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": [
+            "komi_39_tumba_pristavnaya",
+            "komi_46_shkaf_dokumenty",
+            "komi_48_shkaf_kombinirovanny",
+            "komi_50_sistema_garderobnyh",
+            "komi_55_sistema_referentov",
+            "moderator_cabinet",
+            "office_equipment_cabinet",
+            "tumba_tv_1600x450x600",
+            "tv_stand_1600x450x600",
+            "tz_shkaf_dokumenty"
+          ]
+        },
+        {
+          "parameter": "sections[].door_names",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "sections[].door_swing",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "sections[].door_z",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": [
+            "tv_stand_1600x450x600"
+          ]
+        },
+        {
+          "parameter": "sections[].drawer_heights",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": [
+            "moderator_cabinet",
+            "tumba_tv_1600x450x600",
+            "tv_stand_1600x450x600"
+          ]
+        },
+        {
+          "parameter": "sections[].drawers",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": [
+            "komi_39_tumba_pristavnaya",
+            "moderator_cabinet",
+            "tumba_moderatora",
+            "tumba_tv_1600x450x600",
+            "tv_stand_1600x450x600"
+          ]
+        },
+        {
+          "parameter": "sections[].front_bottom",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": [
+            "moderator_cabinet",
+            "tumba_tv_1600x450x600",
+            "tv_stand_1600x450x600"
+          ]
+        },
+        {
+          "parameter": "sections[].front_top",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "sections[].guide_gap",
+          "consumer": "src.generators.columns.drawer_stack",
+          "fixture_evidence": [
+            "moderator_cabinet",
+            "tumba_tv_1600x450x600"
+          ]
+        },
+        {
+          "parameter": "sections[].guide_type",
+          "consumer": "src.generators.columns.drawer_stack",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "sections[].niche_z_front",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "sections[].rod",
+          "consumer": "src.generators.columns.rod_in_column",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "sections[].shelf_label",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": [
+            "kashpo",
+            "komi_39_tumba_pristavnaya",
+            "komi_46_shkaf_dokumenty",
+            "komi_48_shkaf_kombinirovanny",
+            "komi_50_sistema_garderobnyh",
+            "komi_55_sistema_referentov",
+            "moderator_cabinet",
+            "office_equipment_cabinet",
+            "tv_stand_1600x450x600",
+            "tz_shkaf_dokumenty"
+          ]
+        },
+        {
+          "parameter": "sections[].shelf_levels",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": [
+            "kashpo",
+            "komi_48_shkaf_kombinirovanny",
+            "komi_50_sistema_garderobnyh",
+            "komi_55_sistema_referentov",
+            "moderator_cabinet",
+            "office_equipment_cabinet",
+            "tv_stand_1600x450x600"
+          ]
+        },
+        {
+          "parameter": "sections[].shelves",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": [
+            "komi_39_tumba_pristavnaya",
+            "komi_46_shkaf_dokumenty",
+            "komi_48_shkaf_kombinirovanny",
+            "komi_55_sistema_referentov",
+            "tumba_moderatora",
+            "tz_shkaf_dokumenty"
+          ]
+        },
+        {
+          "parameter": "sections[].width_share",
+          "consumer": "src.generators.columns.column_bounds",
+          "fixture_evidence": [
+            "moderator_cabinet",
+            "office_equipment_cabinet",
+            "tumba_tv_1600x450x600",
+            "tv_stand_1600x450x600"
+          ]
+        },
+        {
+          "parameter": "sides_over_top",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "socle_full",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": [
+            "tv_stand_1600x450x600"
+          ]
+        },
+        {
+          "parameter": "socle_recess",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "top_overhang",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": [
+            "office_equipment_cabinet"
+          ]
+        }
       ],
-      "observed_variant_evidence": {
-        "door_section": [
-          "komi_39_tumba_pristavnaya",
-          "komi_46_shkaf_dokumenty",
-          "komi_48_shkaf_kombinirovanny",
-          "komi_50_sistema_garderobnyh",
-          "komi_55_sistema_referentov",
-          "moderator_cabinet",
-          "office_equipment_cabinet",
-          "tumba_moderatora",
-          "tumba_tv_1600x450x600",
-          "tv_stand_1600x450x600",
-          "tz_shkaf_dokumenty"
-        ],
-        "drawers_section": [
-          "komi_39_tumba_pristavnaya",
-          "moderator_cabinet",
-          "tumba_moderatora",
-          "tumba_tv_1600x450x600",
-          "tv_stand_1600x450x600"
-        ],
-        "mixed_sections": [
-          "komi_39_tumba_pristavnaya",
-          "moderator_cabinet",
-          "tumba_moderatora",
-          "tumba_tv_1600x450x600",
-          "tv_stand_1600x450x600"
-        ],
-        "multi_column": [
-          "kashpo",
-          "komi_39_tumba_pristavnaya",
-          "komi_46_shkaf_dokumenty",
-          "komi_48_shkaf_kombinirovanny",
-          "komi_50_sistema_garderobnyh",
-          "komi_55_sistema_referentov",
-          "moderator_cabinet",
-          "office_equipment_cabinet",
-          "tumba_moderatora",
-          "tumba_tv_1600x450x600",
-          "tv_stand_1600x450x600",
-          "tz_shkaf_dokumenty"
-        ],
-        "open_section": [
-          "komi_39_tumba_pristavnaya",
-          "moderator_cabinet"
-        ],
-        "shelves_section": [
-          "kashpo",
-          "tumba_moderatora"
-        ],
-        "width_share": [
-          "moderator_cabinet",
-          "office_equipment_cabinet",
-          "tumba_tv_1600x450x600",
-          "tv_stand_1600x450x600"
-        ]
-      },
-      "uncovered_variants": [
-        "rods"
+      "uncovered_variant_parameters": [
+        "carcass_z_front",
+        "facade_reveal",
+        "sections[].box_back_mode",
+        "sections[].cover_top",
+        "sections[].door_names",
+        "sections[].door_swing",
+        "sections[].front_top",
+        "sections[].guide_type",
+        "sections[].niche_z_front",
+        "sections[].rod",
+        "sides_over_top",
+        "socle_recess"
       ]
     },
     {
@@ -163,33 +410,63 @@
         "kitchen_1860x630x2400",
         "lunit_demo"
       ],
+      "existing_panel_goldens": [
+        "kitchen_1860x630x2400"
+      ],
       "exact_panel_goldens": [
         "kitchen_1860x630x2400"
       ],
-      "supported_variants": [
-        "horizontal_offsets",
-        "mixed_block_archetypes",
-        "single_level_blocks",
-        "vertical_offsets"
+      "mismatched_panel_goldens": [],
+      "variant_parameter_consumers": [
+        {
+          "parameter": "blocks",
+          "consumer": "src.generators.composite.generate",
+          "fixture_evidence": [
+            "kitchen_1860x630x2400",
+            "lunit_demo"
+          ]
+        },
+        {
+          "parameter": "blocks[].name",
+          "consumer": "src.generators.composite.generate",
+          "fixture_evidence": [
+            "kitchen_1860x630x2400",
+            "lunit_demo"
+          ]
+        },
+        {
+          "parameter": "blocks[].origin.x",
+          "consumer": "src.generators.composite.generate",
+          "fixture_evidence": [
+            "kitchen_1860x630x2400",
+            "lunit_demo"
+          ]
+        },
+        {
+          "parameter": "blocks[].origin.y",
+          "consumer": "src.generators.composite.generate",
+          "fixture_evidence": [
+            "kitchen_1860x630x2400"
+          ]
+        },
+        {
+          "parameter": "blocks[].origin.z",
+          "consumer": "src.generators.composite.generate",
+          "fixture_evidence": [
+            "kitchen_1860x630x2400",
+            "lunit_demo"
+          ]
+        },
+        {
+          "parameter": "blocks[].spec",
+          "consumer": "src.generators.composite.generate",
+          "fixture_evidence": [
+            "kitchen_1860x630x2400",
+            "lunit_demo"
+          ]
+        }
       ],
-      "observed_variant_evidence": {
-        "horizontal_offsets": [
-          "kitchen_1860x630x2400",
-          "lunit_demo"
-        ],
-        "mixed_block_archetypes": [
-          "kitchen_1860x630x2400",
-          "lunit_demo"
-        ],
-        "single_level_blocks": [
-          "kitchen_1860x630x2400",
-          "lunit_demo"
-        ],
-        "vertical_offsets": [
-          "kitchen_1860x630x2400"
-        ]
-      },
-      "uncovered_variants": []
+      "uncovered_variant_parameters": []
     },
     {
       "archetype": "corpus",
@@ -198,22 +475,34 @@
       "paramspec_fixtures": [
         "tz_stol_kofeyny_cube"
       ],
+      "existing_panel_goldens": [
+        "tz_stol_kofeyny_cube"
+      ],
       "exact_panel_goldens": [
         "tz_stol_kofeyny_cube"
       ],
-      "supported_variants": [
-        "plain_carcass",
-        "sides_over_top",
-        "socle_panel"
+      "mismatched_panel_goldens": [],
+      "variant_parameter_consumers": [
+        {
+          "parameter": "legs.as_panel",
+          "consumer": "src.generators.base.read_carcass",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "sides_over_top",
+          "consumer": "src.generators.corpus.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "socle_recess",
+          "consumer": "src.generators.corpus.generate",
+          "fixture_evidence": []
+        }
       ],
-      "observed_variant_evidence": {
-        "plain_carcass": [
-          "tz_stol_kofeyny_cube"
-        ]
-      },
-      "uncovered_variants": [
+      "uncovered_variant_parameters": [
+        "legs.as_panel",
         "sides_over_top",
-        "socle_panel"
+        "socle_recess"
       ]
     },
     {
@@ -231,49 +520,100 @@
         "stol_ofisny_foto",
         "tz_stol_rabochiy"
       ],
+      "existing_panel_goldens": [
+        "desk_demo"
+      ],
       "exact_panel_goldens": [
         "desk_demo"
       ],
-      "supported_variants": [
-        "apron_disabled",
-        "apron_enabled",
-        "metal_frame",
-        "modesty_screen",
-        "panel_supports",
-        "top_overhang"
+      "mismatched_panel_goldens": [],
+      "variant_parameter_consumers": [
+        {
+          "parameter": "apron",
+          "consumer": "src.generators.desk.generate",
+          "fixture_evidence": [
+            "desk_demo",
+            "stol_ofisny_foto",
+            "tz_stol_rabochiy"
+          ]
+        },
+        {
+          "parameter": "apron_height",
+          "consumer": "src.generators.desk.generate",
+          "fixture_evidence": [
+            "desk_demo",
+            "stol_ofisny_foto",
+            "tz_stol_rabochiy"
+          ]
+        },
+        {
+          "parameter": "frame",
+          "consumer": "src.generators.desk._is_metal",
+          "fixture_evidence": [
+            "komi_38_stol_direktora",
+            "komi_43_stol_zam",
+            "komi_44_brifing_pristavka",
+            "komi_52_stol_bolshaya_peregovornaya",
+            "komi_69_stol_korrespondencii",
+            "komi_71_stol_ohrannika"
+          ]
+        },
+        {
+          "parameter": "legs.type",
+          "consumer": "src.generators.desk._is_metal",
+          "fixture_evidence": [
+            "desk_demo",
+            "komi_38_stol_direktora",
+            "komi_43_stol_zam",
+            "komi_44_brifing_pristavka",
+            "komi_52_stol_bolshaya_peregovornaya",
+            "komi_69_stol_korrespondencii",
+            "komi_71_stol_ohrannika",
+            "stol_ofisny_foto",
+            "tz_stol_rabochiy"
+          ]
+        },
+        {
+          "parameter": "screen",
+          "consumer": "src.generators.desk.generate",
+          "fixture_evidence": [
+            "komi_38_stol_direktora",
+            "komi_43_stol_zam"
+          ]
+        },
+        {
+          "parameter": "screen_height",
+          "consumer": "src.generators.desk.generate",
+          "fixture_evidence": [
+            "komi_38_stol_direktora",
+            "komi_43_stol_zam"
+          ]
+        },
+        {
+          "parameter": "screen_margin",
+          "consumer": "src.generators.desk.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "screen_thickness",
+          "consumer": "src.generators.desk.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "screen_z",
+          "consumer": "src.generators.desk.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "top_overhang",
+          "consumer": "src.generators.desk.generate",
+          "fixture_evidence": []
+        }
       ],
-      "observed_variant_evidence": {
-        "apron_enabled": [
-          "desk_demo",
-          "komi_38_stol_direktora",
-          "komi_43_stol_zam",
-          "komi_44_brifing_pristavka",
-          "komi_52_stol_bolshaya_peregovornaya",
-          "komi_69_stol_korrespondencii",
-          "komi_71_stol_ohrannika",
-          "stol_ofisny_foto",
-          "tz_stol_rabochiy"
-        ],
-        "metal_frame": [
-          "komi_38_stol_direktora",
-          "komi_43_stol_zam",
-          "komi_44_brifing_pristavka",
-          "komi_52_stol_bolshaya_peregovornaya",
-          "komi_69_stol_korrespondencii",
-          "komi_71_stol_ohrannika"
-        ],
-        "modesty_screen": [
-          "komi_38_stol_direktora",
-          "komi_43_stol_zam"
-        ],
-        "panel_supports": [
-          "desk_demo",
-          "stol_ofisny_foto",
-          "tz_stol_rabochiy"
-        ]
-      },
-      "uncovered_variants": [
-        "apron_disabled",
+      "uncovered_variant_parameters": [
+        "screen_margin",
+        "screen_thickness",
+        "screen_z",
         "top_overhang"
       ]
     },
@@ -287,38 +627,73 @@
         "komi_53_tumba_peregovornaya",
         "tz_srednyaya_tumba2"
       ],
+      "existing_panel_goldens": [
+        "cabinet_700x400x500"
+      ],
       "exact_panel_goldens": [
         "cabinet_700x400x500"
       ],
-      "supported_variants": [
-        "double_door",
-        "explicit_door_swing",
-        "explicit_shelf_levels",
-        "inset_door",
-        "shelf_count",
-        "single_door"
+      "mismatched_panel_goldens": [],
+      "variant_parameter_consumers": [
+        {
+          "parameter": "sections[].door",
+          "consumer": "src.generators.door_unit.generate",
+          "fixture_evidence": [
+            "cabinet_700x400x500",
+            "komi_47_shkaf_garderobny",
+            "komi_53_tumba_peregovornaya",
+            "tz_srednyaya_tumba2"
+          ]
+        },
+        {
+          "parameter": "sections[].door_swing",
+          "consumer": "src.generators.door_unit.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "sections[].door_z",
+          "consumer": "src.generators.door_unit.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "sections[].rod",
+          "consumer": "src.generators.columns.rod_in_column",
+          "fixture_evidence": [
+            "komi_47_shkaf_garderobny"
+          ]
+        },
+        {
+          "parameter": "sections[].shelf_levels",
+          "consumer": "src.generators.door_unit.generate",
+          "fixture_evidence": [
+            "komi_47_shkaf_garderobny"
+          ]
+        },
+        {
+          "parameter": "sections[].shelves",
+          "consumer": "src.generators.door_unit.generate",
+          "fixture_evidence": [
+            "cabinet_700x400x500",
+            "komi_53_tumba_peregovornaya",
+            "tz_srednyaya_tumba2"
+          ]
+        },
+        {
+          "parameter": "sides_over_top",
+          "consumer": "src.generators.door_unit.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "socle_recess",
+          "consumer": "src.generators.door_unit.generate",
+          "fixture_evidence": []
+        }
       ],
-      "observed_variant_evidence": {
-        "double_door": [
-          "komi_47_shkaf_garderobny",
-          "komi_53_tumba_peregovornaya",
-          "tz_srednyaya_tumba2"
-        ],
-        "explicit_shelf_levels": [
-          "komi_47_shkaf_garderobny"
-        ],
-        "shelf_count": [
-          "cabinet_700x400x500",
-          "komi_53_tumba_peregovornaya",
-          "tz_srednyaya_tumba2"
-        ],
-        "single_door": [
-          "cabinet_700x400x500"
-        ]
-      },
-      "uncovered_variants": [
-        "explicit_door_swing",
-        "inset_door"
+      "uncovered_variant_parameters": [
+        "sections[].door_swing",
+        "sections[].door_z",
+        "sides_over_top",
+        "socle_recess"
       ]
     },
     {
@@ -330,32 +705,136 @@
         "tumba_404x490x674_drawers",
         "tz_tumba_dokumenty"
       ],
+      "existing_panel_goldens": [
+        "tumba_404x490x674_drawers"
+      ],
       "exact_panel_goldens": [
         "tumba_404x490x674_drawers"
       ],
-      "supported_variants": [
-        "boxes_disabled",
-        "custom_box_geometry",
-        "drawer_count",
-        "explicit_drawer_heights",
-        "front_top_niche"
+      "mismatched_panel_goldens": [],
+      "variant_parameter_consumers": [
+        {
+          "parameter": "facade_reveal",
+          "consumer": "src.generators.drawer_unit.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "sections[].box_back_thickness",
+          "consumer": "src.generators.drawer_unit.generate",
+          "fixture_evidence": [
+            "tumba_404x490x674_drawers"
+          ]
+        },
+        {
+          "parameter": "sections[].box_bottom_thickness",
+          "consumer": "src.generators.drawer_unit.generate",
+          "fixture_evidence": [
+            "tumba_404x490x674_drawers"
+          ]
+        },
+        {
+          "parameter": "sections[].box_depth",
+          "consumer": "src.generators.drawer_unit.generate",
+          "fixture_evidence": [
+            "tumba_404x490x674_drawers"
+          ]
+        },
+        {
+          "parameter": "sections[].box_height",
+          "consumer": "src.generators.drawer_unit.generate",
+          "fixture_evidence": [
+            "tumba_404x490x674_drawers"
+          ]
+        },
+        {
+          "parameter": "sections[].box_y_offset",
+          "consumer": "src.generators.drawer_unit.generate",
+          "fixture_evidence": [
+            "tumba_404x490x674_drawers"
+          ]
+        },
+        {
+          "parameter": "sections[].box_z1",
+          "consumer": "src.generators.drawer_unit.generate",
+          "fixture_evidence": [
+            "tumba_404x490x674_drawers"
+          ]
+        },
+        {
+          "parameter": "sections[].cover_top",
+          "consumer": "src.generators.drawer_unit.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "sections[].drawer_heights",
+          "consumer": "src.generators.drawer_unit.generate",
+          "fixture_evidence": [
+            "tumba_404x490x674_drawers"
+          ]
+        },
+        {
+          "parameter": "sections[].drawers",
+          "consumer": "src.generators.drawer_unit.generate",
+          "fixture_evidence": [
+            "komi_72_tumba_podkatnaya",
+            "tumba_404x490x674_drawers",
+            "tz_tumba_dokumenty"
+          ]
+        },
+        {
+          "parameter": "sections[].front_bottom",
+          "consumer": "src.generators.drawer_unit.generate",
+          "fixture_evidence": [
+            "tumba_404x490x674_drawers"
+          ]
+        },
+        {
+          "parameter": "sections[].front_top",
+          "consumer": "src.generators.drawer_unit.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "sections[].guide_gap",
+          "consumer": "src.generators.drawer_unit.generate",
+          "fixture_evidence": [
+            "tumba_404x490x674_drawers"
+          ]
+        },
+        {
+          "parameter": "sections[].guide_type",
+          "consumer": "src.generators.drawer_unit.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "sections[].niche_z_front",
+          "consumer": "src.generators.drawer_unit.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "sides_over_top",
+          "consumer": "src.generators.drawer_unit.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "socle_recess",
+          "consumer": "src.generators.drawer_unit.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "top_overhang",
+          "consumer": "src.generators.drawer_unit.generate",
+          "fixture_evidence": []
+        }
       ],
-      "observed_variant_evidence": {
-        "custom_box_geometry": [
-          "tumba_404x490x674_drawers"
-        ],
-        "drawer_count": [
-          "komi_72_tumba_podkatnaya",
-          "tumba_404x490x674_drawers",
-          "tz_tumba_dokumenty"
-        ],
-        "explicit_drawer_heights": [
-          "tumba_404x490x674_drawers"
-        ]
-      },
-      "uncovered_variants": [
-        "boxes_disabled",
-        "front_top_niche"
+      "uncovered_variant_parameters": [
+        "facade_reveal",
+        "sections[].cover_top",
+        "sections[].front_top",
+        "sections[].guide_type",
+        "sections[].niche_z_front",
+        "sides_over_top",
+        "socle_recess",
+        "top_overhang"
       ]
     },
     {
@@ -366,27 +845,56 @@
         "komi_41_stol_peregovorny_round",
         "tz_stol_kofeyny_round"
       ],
+      "existing_panel_goldens": [
+        "tz_stol_kofeyny_round"
+      ],
       "exact_panel_goldens": [
         "tz_stol_kofeyny_round"
       ],
-      "supported_variants": [
-        "custom_diameters",
-        "no_base",
-        "pedestal_base"
+      "mismatched_panel_goldens": [],
+      "variant_parameter_consumers": [
+        {
+          "parameter": "base",
+          "consumer": "src.generators.round_table.generate",
+          "fixture_evidence": [
+            "komi_41_stol_peregovorny_round",
+            "tz_stol_kofeyny_round"
+          ]
+        },
+        {
+          "parameter": "base_diameter",
+          "consumer": "src.generators.round_table.generate",
+          "fixture_evidence": [
+            "komi_41_stol_peregovorny_round",
+            "tz_stol_kofeyny_round"
+          ]
+        },
+        {
+          "parameter": "base_thickness",
+          "consumer": "src.generators.round_table.generate",
+          "fixture_evidence": [
+            "komi_41_stol_peregovorny_round",
+            "tz_stol_kofeyny_round"
+          ]
+        },
+        {
+          "parameter": "pedestal_diameter",
+          "consumer": "src.generators.round_table.generate",
+          "fixture_evidence": [
+            "komi_41_stol_peregovorny_round",
+            "tz_stol_kofeyny_round"
+          ]
+        },
+        {
+          "parameter": "top_thickness",
+          "consumer": "src.generators.round_table.generate",
+          "fixture_evidence": [
+            "komi_41_stol_peregovorny_round",
+            "tz_stol_kofeyny_round"
+          ]
+        }
       ],
-      "observed_variant_evidence": {
-        "custom_diameters": [
-          "komi_41_stol_peregovorny_round",
-          "tz_stol_kofeyny_round"
-        ],
-        "pedestal_base": [
-          "komi_41_stol_peregovorny_round",
-          "tz_stol_kofeyny_round"
-        ]
-      },
-      "uncovered_variants": [
-        "no_base"
-      ]
+      "uncovered_variant_parameters": []
     },
     {
       "archetype": "shelving",
@@ -396,21 +904,42 @@
         "komi_59_tumba_prezidium",
         "shelf_800x300x1800"
       ],
+      "existing_panel_goldens": [
+        "shelf_800x300x1800"
+      ],
       "exact_panel_goldens": [
         "shelf_800x300x1800"
       ],
-      "supported_variants": [
-        "explicit_shelf_levels",
-        "shelf_count"
+      "mismatched_panel_goldens": [],
+      "variant_parameter_consumers": [
+        {
+          "parameter": "sections[].shelf_levels",
+          "consumer": "src.generators.shelving.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "sections[].shelves",
+          "consumer": "src.generators.shelving.generate",
+          "fixture_evidence": [
+            "komi_59_tumba_prezidium",
+            "shelf_800x300x1800"
+          ]
+        },
+        {
+          "parameter": "sides_over_top",
+          "consumer": "src.generators.shelving.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "socle_recess",
+          "consumer": "src.generators.shelving.generate",
+          "fixture_evidence": []
+        }
       ],
-      "observed_variant_evidence": {
-        "shelf_count": [
-          "komi_59_tumba_prezidium",
-          "shelf_800x300x1800"
-        ]
-      },
-      "uncovered_variants": [
-        "explicit_shelf_levels"
+      "uncovered_variant_parameters": [
+        "sections[].shelf_levels",
+        "sides_over_top",
+        "socle_recess"
       ]
     },
     {
@@ -420,29 +949,77 @@
       "paramspec_fixtures": [
         "tz_zhurnalny_stol"
       ],
+      "existing_panel_goldens": [
+        "tz_zhurnalny_stol"
+      ],
       "exact_panel_goldens": [
         "tz_zhurnalny_stol"
       ],
-      "supported_variants": [
-        "apron_disabled",
-        "apron_enabled",
-        "metal_frame",
-        "modesty_screen",
-        "panel_supports",
-        "top_overhang"
+      "mismatched_panel_goldens": [],
+      "variant_parameter_consumers": [
+        {
+          "parameter": "apron",
+          "consumer": "src.generators.desk.generate",
+          "fixture_evidence": [
+            "tz_zhurnalny_stol"
+          ]
+        },
+        {
+          "parameter": "apron_height",
+          "consumer": "src.generators.desk.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "frame",
+          "consumer": "src.generators.desk._is_metal",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "legs.type",
+          "consumer": "src.generators.desk._is_metal",
+          "fixture_evidence": [
+            "tz_zhurnalny_stol"
+          ]
+        },
+        {
+          "parameter": "screen",
+          "consumer": "src.generators.desk.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "screen_height",
+          "consumer": "src.generators.desk.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "screen_margin",
+          "consumer": "src.generators.desk.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "screen_thickness",
+          "consumer": "src.generators.desk.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "screen_z",
+          "consumer": "src.generators.desk.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "top_overhang",
+          "consumer": "src.generators.desk.generate",
+          "fixture_evidence": []
+        }
       ],
-      "observed_variant_evidence": {
-        "apron_disabled": [
-          "tz_zhurnalny_stol"
-        ],
-        "panel_supports": [
-          "tz_zhurnalny_stol"
-        ]
-      },
-      "uncovered_variants": [
-        "apron_enabled",
-        "metal_frame",
-        "modesty_screen",
+      "uncovered_variant_parameters": [
+        "apron_height",
+        "frame",
+        "screen",
+        "screen_height",
+        "screen_margin",
+        "screen_thickness",
+        "screen_z",
         "top_overhang"
       ]
     },
@@ -454,44 +1031,250 @@
         "tz_shkaf_kombinirovanny",
         "wardrobe_demo"
       ],
+      "existing_panel_goldens": [
+        "wardrobe_demo"
+      ],
       "exact_panel_goldens": [
         "wardrobe_demo"
       ],
-      "supported_variants": [
-        "door_section",
-        "drawers_section",
-        "mixed_sections",
-        "multi_column",
-        "open_section",
-        "rods",
-        "shelves_section",
-        "width_share"
+      "mismatched_panel_goldens": [],
+      "variant_parameter_consumers": [
+        {
+          "parameter": "carcass_z_front",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "facade_reveal",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "interior_z_front",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": [
+            "tz_shkaf_kombinirovanny",
+            "wardrobe_demo"
+          ]
+        },
+        {
+          "parameter": "sections[].box_back_mode",
+          "consumer": "src.generators.columns.drawer_stack",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "sections[].box_back_thickness",
+          "consumer": "src.generators.columns.drawer_stack",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "sections[].box_bottom_mode",
+          "consumer": "src.generators.columns.drawer_stack",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "sections[].box_bottom_thickness",
+          "consumer": "src.generators.columns.drawer_stack",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "sections[].box_depth",
+          "consumer": "src.generators.columns.drawer_stack",
+          "fixture_evidence": [
+            "wardrobe_demo"
+          ]
+        },
+        {
+          "parameter": "sections[].box_height",
+          "consumer": "src.generators.columns.drawer_stack",
+          "fixture_evidence": [
+            "wardrobe_demo"
+          ]
+        },
+        {
+          "parameter": "sections[].box_sides_on_bottom",
+          "consumer": "src.generators.columns.drawer_stack",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "sections[].box_y_offset",
+          "consumer": "src.generators.columns.drawer_stack",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "sections[].box_z1",
+          "consumer": "src.generators.columns.drawer_stack",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "sections[].boxes",
+          "consumer": "src.generators.columns.drawer_stack",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "sections[].cover_top",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "sections[].door",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": [
+            "tz_shkaf_kombinirovanny",
+            "wardrobe_demo"
+          ]
+        },
+        {
+          "parameter": "sections[].door_below_shelf",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "sections[].door_name",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": [
+            "tz_shkaf_kombinirovanny",
+            "wardrobe_demo"
+          ]
+        },
+        {
+          "parameter": "sections[].door_names",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "sections[].door_swing",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "sections[].door_z",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "sections[].drawer_heights",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": [
+            "wardrobe_demo"
+          ]
+        },
+        {
+          "parameter": "sections[].drawers",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": [
+            "wardrobe_demo"
+          ]
+        },
+        {
+          "parameter": "sections[].front_bottom",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": [
+            "wardrobe_demo"
+          ]
+        },
+        {
+          "parameter": "sections[].front_top",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "sections[].guide_gap",
+          "consumer": "src.generators.columns.drawer_stack",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "sections[].guide_type",
+          "consumer": "src.generators.columns.drawer_stack",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "sections[].niche_z_front",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "sections[].rod",
+          "consumer": "src.generators.columns.rod_in_column",
+          "fixture_evidence": [
+            "wardrobe_demo"
+          ]
+        },
+        {
+          "parameter": "sections[].shelf_label",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": [
+            "tz_shkaf_kombinirovanny",
+            "wardrobe_demo"
+          ]
+        },
+        {
+          "parameter": "sections[].shelf_levels",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": [
+            "tz_shkaf_kombinirovanny",
+            "wardrobe_demo"
+          ]
+        },
+        {
+          "parameter": "sections[].shelves",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": [
+            "tz_shkaf_kombinirovanny"
+          ]
+        },
+        {
+          "parameter": "sections[].width_share",
+          "consumer": "src.generators.columns.column_bounds",
+          "fixture_evidence": [
+            "wardrobe_demo"
+          ]
+        },
+        {
+          "parameter": "sides_over_top",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "socle_full",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "socle_recess",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": []
+        },
+        {
+          "parameter": "top_overhang",
+          "consumer": "src.generators.cabinet.generate",
+          "fixture_evidence": []
+        }
       ],
-      "observed_variant_evidence": {
-        "door_section": [
-          "tz_shkaf_kombinirovanny",
-          "wardrobe_demo"
-        ],
-        "drawers_section": [
-          "wardrobe_demo"
-        ],
-        "mixed_sections": [
-          "wardrobe_demo"
-        ],
-        "multi_column": [
-          "tz_shkaf_kombinirovanny",
-          "wardrobe_demo"
-        ],
-        "rods": [
-          "wardrobe_demo"
-        ],
-        "width_share": [
-          "wardrobe_demo"
-        ]
-      },
-      "uncovered_variants": [
-        "open_section",
-        "shelves_section"
+      "uncovered_variant_parameters": [
+        "carcass_z_front",
+        "facade_reveal",
+        "sections[].box_back_mode",
+        "sections[].box_back_thickness",
+        "sections[].box_bottom_mode",
+        "sections[].box_bottom_thickness",
+        "sections[].box_sides_on_bottom",
+        "sections[].box_y_offset",
+        "sections[].box_z1",
+        "sections[].boxes",
+        "sections[].cover_top",
+        "sections[].door_below_shelf",
+        "sections[].door_names",
+        "sections[].door_swing",
+        "sections[].door_z",
+        "sections[].front_top",
+        "sections[].guide_gap",
+        "sections[].guide_type",
+        "sections[].niche_z_front",
+        "sides_over_top",
+        "socle_full",
+        "socle_recess",
+        "top_overhang"
       ]
     }
   ],
@@ -595,8 +1378,8 @@
     {
       "id": "MEB-133-G02",
       "status": "open",
-      "title": "Variant branches do not all have ParamSpec evidence",
-      "evidence": "See archetypes[].uncovered_variants",
+      "title": "Consumed variant parameters do not all have ParamSpec evidence",
+      "evidence": "See archetypes[].uncovered_variant_parameters and variant_parameter_consumers",
       "next_scope": "Add focused fixtures and exact goldens per uncovered branch; do not change geometry in the audit task."
     },
     {

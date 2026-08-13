@@ -27,41 +27,124 @@ MODEL_BY_ARCHETYPE = {
     "wardrobe": "CabinetParamSpec",
 }
 
-# Branches advertised by rules/generators.md or implemented directly in generators/*.py.
-# The report subtracts observed fixture evidence from this inventory.
-SUPPORTED_VARIANTS = {
-    "corpus": ["plain_carcass", "sides_over_top", "socle_panel"],
-    "shelving": ["explicit_shelf_levels", "shelf_count"],
-    "drawer_unit": [
-        "boxes_disabled", "custom_box_geometry", "drawer_count",
-        "explicit_drawer_heights", "front_top_niche",
-    ],
-    "door_unit": [
-        "double_door", "explicit_door_swing", "explicit_shelf_levels",
-        "inset_door", "shelf_count", "single_door",
-    ],
-    "cabinet": [
-        "door_section", "drawers_section", "mixed_sections", "multi_column",
-        "open_section", "rods", "shelves_section", "width_share",
-    ],
-    "wardrobe": [
-        "door_section", "drawers_section", "mixed_sections", "multi_column",
-        "open_section", "rods", "shelves_section", "width_share",
-    ],
-    "desk": [
-        "apron_disabled", "apron_enabled", "metal_frame", "modesty_screen",
-        "panel_supports", "top_overhang",
-    ],
-    "table": [
-        "apron_disabled", "apron_enabled", "metal_frame", "modesty_screen",
-        "panel_supports", "top_overhang",
-    ],
-    "round_table": ["custom_diameters", "no_base", "pedestal_base"],
-    "composite": [
-        "horizontal_offsets", "mixed_block_archetypes", "single_level_blocks",
-        "vertical_offsets",
-    ],
+# ParamSpec paths that select optional generator behavior, mapped to the function
+# that actually consumes each value.  This intentionally does not repeat fields
+# that merely exist in the broad ParamSpec model but are ignored by a generator.
+VARIANT_PARAMETER_CONSUMERS = {
+    "corpus": {
+        "legs.as_panel": "src.generators.base.read_carcass",
+        "sides_over_top": "src.generators.corpus.generate",
+        "socle_recess": "src.generators.corpus.generate",
+    },
+    "shelving": {
+        "sections[].shelf_levels": "src.generators.shelving.generate",
+        "sections[].shelves": "src.generators.shelving.generate",
+        "sides_over_top": "src.generators.shelving.generate",
+        "socle_recess": "src.generators.shelving.generate",
+    },
+    "drawer_unit": {
+        "facade_reveal": "src.generators.drawer_unit.generate",
+        "sections[].box_back_thickness": "src.generators.drawer_unit.generate",
+        "sections[].box_bottom_thickness": "src.generators.drawer_unit.generate",
+        "sections[].box_depth": "src.generators.drawer_unit.generate",
+        "sections[].box_height": "src.generators.drawer_unit.generate",
+        "sections[].box_y_offset": "src.generators.drawer_unit.generate",
+        "sections[].box_z1": "src.generators.drawer_unit.generate",
+        "sections[].cover_top": "src.generators.drawer_unit.generate",
+        "sections[].drawer_heights": "src.generators.drawer_unit.generate",
+        "sections[].drawers": "src.generators.drawer_unit.generate",
+        "sections[].front_bottom": "src.generators.drawer_unit.generate",
+        "sections[].front_top": "src.generators.drawer_unit.generate",
+        "sections[].guide_gap": "src.generators.drawer_unit.generate",
+        "sections[].guide_type": "src.generators.drawer_unit.generate",
+        "sections[].niche_z_front": "src.generators.drawer_unit.generate",
+        "sides_over_top": "src.generators.drawer_unit.generate",
+        "socle_recess": "src.generators.drawer_unit.generate",
+        "top_overhang": "src.generators.drawer_unit.generate",
+    },
+    "door_unit": {
+        "sections[].door": "src.generators.door_unit.generate",
+        "sections[].door_swing": "src.generators.door_unit.generate",
+        "sections[].door_z": "src.generators.door_unit.generate",
+        "sections[].rod": "src.generators.columns.rod_in_column",
+        "sections[].shelf_levels": "src.generators.door_unit.generate",
+        "sections[].shelves": "src.generators.door_unit.generate",
+        "sides_over_top": "src.generators.door_unit.generate",
+        "socle_recess": "src.generators.door_unit.generate",
+    },
+    "cabinet": {},
+    "wardrobe": {},
+    "desk": {
+        "apron": "src.generators.desk.generate",
+        "apron_height": "src.generators.desk.generate",
+        "frame": "src.generators.desk._is_metal",
+        "legs.type": "src.generators.desk._is_metal",
+        "screen": "src.generators.desk.generate",
+        "screen_height": "src.generators.desk.generate",
+        "screen_margin": "src.generators.desk.generate",
+        "screen_thickness": "src.generators.desk.generate",
+        "screen_z": "src.generators.desk.generate",
+        "top_overhang": "src.generators.desk.generate",
+    },
+    "table": {},
+    "round_table": {
+        "base": "src.generators.round_table.generate",
+        "base_diameter": "src.generators.round_table.generate",
+        "base_thickness": "src.generators.round_table.generate",
+        "pedestal_diameter": "src.generators.round_table.generate",
+        "top_thickness": "src.generators.round_table.generate",
+    },
+    "composite": {
+        "blocks": "src.generators.composite.generate",
+        "blocks[].name": "src.generators.composite.generate",
+        "blocks[].origin.x": "src.generators.composite.generate",
+        "blocks[].origin.y": "src.generators.composite.generate",
+        "blocks[].origin.z": "src.generators.composite.generate",
+        "blocks[].spec": "src.generators.composite.generate",
+    },
 }
+
+_CABINET_CONSUMERS = {
+    "carcass_z_front": "src.generators.cabinet.generate",
+    "facade_reveal": "src.generators.cabinet.generate",
+    "interior_z_front": "src.generators.cabinet.generate",
+    "sections[].box_back_mode": "src.generators.columns.drawer_stack",
+    "sections[].box_back_thickness": "src.generators.columns.drawer_stack",
+    "sections[].box_bottom_mode": "src.generators.columns.drawer_stack",
+    "sections[].box_bottom_thickness": "src.generators.columns.drawer_stack",
+    "sections[].box_depth": "src.generators.columns.drawer_stack",
+    "sections[].box_height": "src.generators.columns.drawer_stack",
+    "sections[].box_sides_on_bottom": "src.generators.columns.drawer_stack",
+    "sections[].box_y_offset": "src.generators.columns.drawer_stack",
+    "sections[].box_z1": "src.generators.columns.drawer_stack",
+    "sections[].boxes": "src.generators.columns.drawer_stack",
+    "sections[].cover_top": "src.generators.cabinet.generate",
+    "sections[].door": "src.generators.cabinet.generate",
+    "sections[].door_below_shelf": "src.generators.cabinet.generate",
+    "sections[].door_name": "src.generators.cabinet.generate",
+    "sections[].door_names": "src.generators.cabinet.generate",
+    "sections[].door_swing": "src.generators.cabinet.generate",
+    "sections[].door_z": "src.generators.cabinet.generate",
+    "sections[].drawer_heights": "src.generators.cabinet.generate",
+    "sections[].drawers": "src.generators.cabinet.generate",
+    "sections[].front_bottom": "src.generators.cabinet.generate",
+    "sections[].front_top": "src.generators.cabinet.generate",
+    "sections[].guide_gap": "src.generators.columns.drawer_stack",
+    "sections[].guide_type": "src.generators.columns.drawer_stack",
+    "sections[].niche_z_front": "src.generators.cabinet.generate",
+    "sections[].rod": "src.generators.columns.rod_in_column",
+    "sections[].shelf_label": "src.generators.cabinet.generate",
+    "sections[].shelf_levels": "src.generators.cabinet.generate",
+    "sections[].shelves": "src.generators.cabinet.generate",
+    "sections[].width_share": "src.generators.columns.column_bounds",
+    "sides_over_top": "src.generators.cabinet.generate",
+    "socle_full": "src.generators.cabinet.generate",
+    "socle_recess": "src.generators.cabinet.generate",
+    "top_overhang": "src.generators.cabinet.generate",
+}
+VARIANT_PARAMETER_CONSUMERS["cabinet"] = dict(_CABINET_CONSUMERS)
+VARIANT_PARAMETER_CONSUMERS["wardrobe"] = dict(_CABINET_CONSUMERS)
+VARIANT_PARAMETER_CONSUMERS["table"] = dict(VARIANT_PARAMETER_CONSUMERS["desk"])
 
 
 def _spec_paths() -> list[Path]:
@@ -80,84 +163,25 @@ def _schema_archetypes() -> set[str]:
     return values
 
 
-def _variants(spec: dict[str, Any]) -> set[str]:
-    archetype = spec["archetype"]
-    sections = spec.get("sections") or []
-    variants: set[str] = set()
+def _path_present(value: Any, path: str) -> bool:
+    head, *tail = path.split(".", 1)
+    is_array = head.endswith("[]")
+    key = head[:-2] if is_array else head
+    if not isinstance(value, dict) or key not in value:
+        return False
+    child = value[key]
+    if is_array:
+        if not isinstance(child, list):
+            return False
+        return bool(child) if not tail else any(_path_present(item, tail[0]) for item in child)
+    return True if not tail else _path_present(child, tail[0])
 
-    if archetype == "corpus":
-        variants.add("plain_carcass")
-        if spec.get("sides_over_top"):
-            variants.add("sides_over_top")
-        if (spec.get("legs") or {}).get("as_panel"):
-            variants.add("socle_panel")
-    elif archetype == "shelving":
-        if any(section.get("shelves") is not None for section in sections):
-            variants.add("shelf_count")
-        if any(section.get("shelf_levels") for section in sections):
-            variants.add("explicit_shelf_levels")
-    elif archetype == "drawer_unit":
-        section = sections[0] if sections else {}
-        if section.get("drawers") is not None:
-            variants.add("drawer_count")
-        if section.get("drawer_heights"):
-            variants.add("explicit_drawer_heights")
-        if section.get("boxes") is False:
-            variants.add("boxes_disabled")
-        if section.get("front_top") is not None:
-            variants.add("front_top_niche")
-        if any(key in section for key in (
-            "guide_gap", "box_z1", "box_depth", "box_y_offset", "box_height",
-            "box_back_thickness", "box_bottom_thickness", "box_bottom_mode",
-            "box_back_mode", "box_sides_on_bottom",
-        )):
-            variants.add("custom_box_geometry")
-    elif archetype == "door_unit":
-        section = sections[0] if sections else {}
-        door_count = section.get("door", 1)
-        variants.add("double_door" if door_count == 2 else "single_door")
-        if section.get("shelves") is not None:
-            variants.add("shelf_count")
-        if section.get("shelf_levels"):
-            variants.add("explicit_shelf_levels")
-        if str(section.get("door_z", "")).lower() == "inset":
-            variants.add("inset_door")
-        if section.get("door_swing"):
-            variants.add("explicit_door_swing")
-    elif archetype in {"cabinet", "wardrobe"}:
-        if len(sections) > 1:
-            variants.add("multi_column")
-        kinds = {str(section.get("kind", "open")) for section in sections}
-        variants.update(f"{kind}_section" for kind in kinds)
-        if len(kinds) > 1:
-            variants.add("mixed_sections")
-        if any(section.get("width_share") is not None for section in sections):
-            variants.add("width_share")
-        if spec.get("rod") or any(section.get("rod") for section in sections):
-            variants.add("rods")
-    elif archetype in {"desk", "table"}:
-        variants.add("metal_frame" if spec.get("frame") == "metal" else "panel_supports")
-        if spec.get("screen"):
-            variants.add("modesty_screen")
-        variants.add("apron_enabled" if spec.get("apron", True) else "apron_disabled")
-        if spec.get("top_overhang"):
-            variants.add("top_overhang")
-    elif archetype == "round_table":
-        variants.add("pedestal_base" if spec.get("base") else "no_base")
-        if any(spec.get(key) is not None for key in (
-            "top_thickness", "pedestal_diameter", "base_thickness", "base_diameter",
-        )):
-            variants.add("custom_diameters")
-    elif archetype == "composite":
-        blocks = spec.get("blocks") or []
-        variants.add("single_level_blocks")
-        if any((block.get("origin") or {}).get("x", 0) for block in blocks):
-            variants.add("horizontal_offsets")
-        if any((block.get("origin") or {}).get("y", 0) for block in blocks):
-            variants.add("vertical_offsets")
-        if len({(block.get("spec") or {}).get("archetype") for block in blocks}) > 1:
-            variants.add("mixed_block_archetypes")
-    return variants
+
+def golden_exact(spec: dict[str, Any], golden_path: Path) -> bool:
+    from src.generators import generate_from_paramspec
+    from tests.regression import exact_match
+
+    return exact_match(generate_from_paramspec(spec), golden_path)[0]
 
 
 def build_report() -> dict[str, Any]:
@@ -165,34 +189,49 @@ def build_report() -> dict[str, Any]:
     from src.paramspec import _ARCHETYPE_TAGS
 
     specs_by_archetype: dict[str, list[str]] = defaultdict(list)
-    evidence: dict[str, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
+    specs_by_name: dict[str, dict[str, Any]] = {}
     for path in _spec_paths():
         spec = json.loads(path.read_text(encoding="utf-8"))
         archetype = spec.get("archetype")
         if archetype not in _ARCHETYPE_TAGS:
             continue
         specs_by_archetype[archetype].append(path.stem)
-        for variant in _variants(spec):
-            evidence[archetype][variant].append(path.stem)
+        specs_by_name[path.stem] = spec
 
     project_names = {path.name for path in (ROOT / "projects").glob("*.json")}
     rows = []
     for archetype in sorted(_ARCHETYPE_TAGS):
         fixtures = sorted(specs_by_archetype[archetype])
-        goldens = sorted(name for name in fixtures if f"{name}.json" in project_names)
-        observed = {
-            variant: sorted(names)
-            for variant, names in sorted(evidence[archetype].items())
-        }
+        existing_goldens = sorted(name for name in fixtures if f"{name}.json" in project_names)
+        exact_goldens = []
+        mismatched_goldens = []
+        for name in existing_goldens:
+            if golden_exact(specs_by_name[name], ROOT / "projects" / f"{name}.json"):
+                exact_goldens.append(name)
+            else:
+                mismatched_goldens.append(name)
+        consumers = []
+        for parameter, consumer in sorted(VARIANT_PARAMETER_CONSUMERS[archetype].items()):
+            fixture_evidence = sorted(
+                name for name in fixtures if _path_present(specs_by_name[name], parameter)
+            )
+            consumers.append({
+                "parameter": parameter,
+                "consumer": consumer,
+                "fixture_evidence": fixture_evidence,
+            })
         rows.append({
             "archetype": archetype,
             "paramspec_model": MODEL_BY_ARCHETYPE[archetype],
             "generator": f"{_REGISTRY[archetype].__module__}.{_REGISTRY[archetype].__name__}",
             "paramspec_fixtures": fixtures,
-            "exact_panel_goldens": goldens,
-            "supported_variants": SUPPORTED_VARIANTS[archetype],
-            "observed_variant_evidence": observed,
-            "uncovered_variants": sorted(set(SUPPORTED_VARIANTS[archetype]) - set(observed)),
+            "existing_panel_goldens": existing_goldens,
+            "exact_panel_goldens": exact_goldens,
+            "mismatched_panel_goldens": mismatched_goldens,
+            "variant_parameter_consumers": consumers,
+            "uncovered_variant_parameters": [
+                item["parameter"] for item in consumers if not item["fixture_evidence"]
+            ],
         })
 
     implementations: dict[str, dict[str, Any]] = {}
@@ -214,8 +253,14 @@ def build_report() -> dict[str, Any]:
     } & project_names
     schema_tags = _schema_archetypes()
     registry_tags = set(_REGISTRY)
+    exact_count = sum(len(row["exact_panel_goldens"]) for row in rows)
+    mismatch_count = sum(len(row["mismatched_panel_goldens"]) for row in rows)
+    archetypes_with_exact = sum(bool(row["exact_panel_goldens"]) for row in rows)
+    implementations_with_exact = sum(
+        bool(row["exact_panel_goldens"]) for row in implementation_rows
+    )
     return {
-        "schema_version": "archetype-coverage-v1",
+        "schema_version": "archetype-coverage-v2",
         "sources": [
             "src/paramspec.py", "schema/paramspec.schema.json",
             "src/generators/registry.py", "src/generators/*.py",
@@ -225,12 +270,12 @@ def build_report() -> dict[str, Any]:
             "public_archetype_count": len(_ARCHETYPE_TAGS),
             "generator_implementation_count": len(implementations),
             "paramspec_fixture_count": sum(len(names) for names in specs_by_archetype.values()),
-            "matched_exact_panel_golden_count": len(matched_projects),
+            "existing_panel_golden_count": len(matched_projects),
+            "matched_exact_panel_golden_count": exact_count,
+            "mismatched_panel_golden_count": mismatch_count,
             "archetypes_with_paramspec_fixture": sum(bool(row["paramspec_fixtures"]) for row in rows),
-            "archetypes_with_exact_panel_golden": sum(bool(row["exact_panel_goldens"]) for row in rows),
-            "implementations_with_exact_panel_golden": sum(
-                bool(row["exact_panel_goldens"]) for row in implementation_rows
-            ),
+            "archetypes_with_exact_panel_golden": archetypes_with_exact,
+            "implementations_with_exact_panel_golden": implementations_with_exact,
         },
         "contract_parity": {
             "paramspec_tags": sorted(_ARCHETYPE_TAGS),
@@ -248,15 +293,15 @@ def build_report() -> dict[str, Any]:
             "evidence": {
                 "public_archetypes": "10/10",
                 "generator_implementations": "8/8",
-                "regression_exact_goldens": "15/15",
+                "regression_exact_goldens": f"{exact_count}/{len(matched_projects)}",
             },
         },
         "remaining_gaps": [
             {
                 "id": "MEB-133-G02",
                 "status": "open",
-                "title": "Variant branches do not all have ParamSpec evidence",
-                "evidence": "See archetypes[].uncovered_variants",
+                "title": "Consumed variant parameters do not all have ParamSpec evidence",
+                "evidence": "See archetypes[].uncovered_variant_parameters and variant_parameter_consumers",
                 "next_scope": "Add focused fixtures and exact goldens per uncovered branch; do not change geometry in the audit task.",
             },
             {
