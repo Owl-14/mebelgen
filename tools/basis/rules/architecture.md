@@ -23,8 +23,10 @@ ParamSpec; координаты всегда считает детерминир
     ├── techview SVG (src/techview.py) — чертёж фронт+бок, деталировка
     ├── nesting (src/nesting.py) — раскрой по листам, estimate (src/estimate.py) — смета
     ├── delivery (src/delivery.py) — лист согласования (версии, PDF/PNG)
-    └── cfrn.py → .cfrn ──(облако БАЗИС, ПЛАТНО ~10₽)──► .b3d  (build_b3d.py)
-                                     └── b3d_verify.py — паритет .b3d ↔ Studio-модель
+    ├── cfrn.py → .cfrn ──(облако БАЗИС, ПЛАТНО ~10₽)──► .b3d  (build_b3d.py)
+    │                                └── b3d_verify.py — паритет .b3d ↔ Studio-модель
+    └── local_b3d.py → offline import-пакет → лицензированный desktop БАЗИС → .b3d
+                                     └── структура + базовый паритет; нативность требует real round-trip
 ```
 
 ## Модули src/ (что где лежит)
@@ -51,7 +53,7 @@ ParamSpec; координаты всегда считает детерминир
 | `completeness_check.py` | полнота: каждая деталь закреплена, заявленное (полки/штанги/опоры) построено |
 | `production_gate.py` | атомарный гейт AI/reducer-кандидата: Pydantic → JSON Schema → генерация → все производственные проверки → полнота/материалы; возвращает `CheckReport`, не применяя красную ревизию |
 | `cfrn.py` | project.json → `.cfrn` (родная ЛЕВОсторонняя конвенция БАЗИС, разворот фасадами к камере) + `check_cfrn_encoding` / `check_cfrn_holes` |
-| `b3d_format.py`, `b3d_verify.py` | чтение .b3d, паритет .b3d ↔ модель |
+| `b3d_format.py`, `b3d_verify.py`, `local_b3d.py` | чтение .b3d, offline hand-off и паритет; не подмена нативного builder |
 | `build_b3d.py`, `cloud_api.py`, `cloud_cutting.py` | облако БАЗИС (ПЛАТНО, только по явной просьбе) |
 | `webviewer.py` | `viewer_payload` + `SCENE_JS` (общий three.js-движок: панели, присадки, метизы, анимация открывания, ракурсы `setView`, снапшоты) |
 | `studio.py` | Studio: HTTP-сервер, страница редактора, каталог изделий (+SVG-аксонометрия карточек `/thumb/`), версии, экспорт-центр (rules/studio.md) |

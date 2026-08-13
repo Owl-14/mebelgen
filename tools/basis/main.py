@@ -135,6 +135,24 @@ def cmd_build_b3d(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_local_b3d(args: argparse.Namespace) -> int:
+    from src.local_b3d import prepare_local_b3d, verify_local_b3d
+
+    if args.local_b3d_op == "prepare":
+        result = prepare_local_b3d(args.input, args.out)
+        print(f"Offline import-пакет: {args.out}")
+        print(f"ZIP SHA-256: {result['package_zip_sha256']}")
+        print(".b3d ещё не создан: импортируйте пакет и сохраните модель в лицензированном БАЗИС.")
+        return 0
+
+    report_path = args.report or str(Path(args.package) / "verification.json")
+    result = verify_local_b3d(args.package, args.b3d, report_path)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    print(f"Отчёт: {report_path}")
+    print("Нативность БАЗИС не подтверждена автоматически; нужен реальный open/save/reopen или round-trip.")
+    return 0 if result["offline_verification_ok"] else 2
+
+
 def cmd_cloud(args: argparse.Namespace) -> int:
     from src.cloud_api import (CloudTasksClient, DRAWING_FORMAT, MODEL_CONVERT, api_overview)
 
@@ -544,6 +562,21 @@ def main() -> int:
     p_b3d.add_argument("input", help="ParamSpec или project.json")
     p_b3d.add_argument("-o", "--output", help="Путь к .b3d (по умолчанию рядом с входом)")
     p_b3d.set_defaults(func=cmd_build_b3d)
+
+    p_local_b3d = sub.add_parser(
+        "local-b3d",
+        help="offline-пакет для импорта/сохранения в desktop БАЗИС + проверка результата (без APIList)",
+    )
+    local_b3d_sub = p_local_b3d.add_subparsers(dest="local_b3d_op", required=True)
+    p_local_prepare = local_b3d_sub.add_parser("prepare", help="подготовить воспроизводимый import-пакет")
+    p_local_prepare.add_argument("input", help="ParamSpec или project.json")
+    p_local_prepare.add_argument("--out", required=True, help="новый каталог пакета")
+    p_local_prepare.set_defaults(func=cmd_local_b3d)
+    p_local_verify = local_b3d_sub.add_parser("verify", help="проверить сохранённый desktop БАЗИС .b3d")
+    p_local_verify.add_argument("package", help="каталог, созданный local-b3d prepare")
+    p_local_verify.add_argument("b3d", help=".b3d, сохранённый из БАЗИС")
+    p_local_verify.add_argument("--report", help="путь JSON-отчёта (по умолчанию <package>/verification.json)")
+    p_local_verify.set_defaults(func=cmd_local_b3d)
 
     p_cloud = sub.add_parser("cloud", help="БАЗИС-Облако Tasks API (env BAZIS_API_KEY; 'cloud info' без ключа)")
     p_cloud.add_argument("op", choices=["info", "list", "status", "poll", "download", "model-convert", "drawing-convert"])

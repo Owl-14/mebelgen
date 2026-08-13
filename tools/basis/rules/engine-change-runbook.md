@@ -68,7 +68,7 @@
 | Присадки/фурнитура | `src/hardware.py`, `src/hardware_geometry.py`, `src/fasteners3d.py` | система 32, отверстия, крепёж и его 3D-представление |
 | Материалы | `src/materials.py`, `src/materials_policy.py`, `materials/` | реальные материалы/артикулы, резолвинг и политика полноты |
 | Quality gates | `src/production_gate.py`, `src/*_check.py`, `src/validate.py` | единое решение, можно ли принять ревизию и производить изделие |
-| CFRN/B3D | `src/cfrn.py`, `src/b3d_*.py`, `src/build_b3d.py` | кодирование и проверка производственных файлов |
+| CFRN/B3D | `src/cfrn.py`, `src/b3d_*.py`, `src/build_b3d.py`, `src/local_b3d.py` | кодирование, offline hand-off и проверка производственных файлов; структурный BZ85 не выдавать за подтверждённый нативный |
 | Studio/API | `src/studio.py`, `rules/studio.md` | каталог, API, сохранение ревизий, UX ошибок и запуск pipeline |
 | 3D-viewer | `src/webviewer.py` | отображение уже рассчитанной модели; не источник геометрии |
 | Наблюдаемость | `src/telemetry.py` | privacy-safe spans, prompt/model/version, usage, error codes, trace id |
@@ -221,6 +221,11 @@ Live trace-тест не заменяет unit/regression. Он нужен дл�
 | drilling/hardware | hardware, hardware_geometry, drilling_check, CFRN holes parity |
 | Studio/viewer | API/contract-тесты, webviewer, ручной smoke текущего и соседнего сценария |
 | B3D/CFRN | encoding, verify, production reference; платный cloud только по разрешению |
+
+Offline-пакет `local-b3d prepare` не создаёт B3D: он передаёт проверенный проект
+лицензированному desktop БАЗИС. `local-b3d verify` доказывает структуру и базовый
+паритет, но не открываемость/нативность; для этого нужен фактический
+open/save/reopen либо B3D→CFRN round-trip. См. `rules/local_b3d_pipeline.md`.
 
 Критические негативные сценарии: provider недоступен; ответ не JSON; невалидная
 операция; попытка несвязанной мутации; красный gate; конфликт ревизии; старый
