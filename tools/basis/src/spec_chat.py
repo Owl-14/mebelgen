@@ -26,6 +26,7 @@ from .prompt_registry import (
     build_chat_prompt_request,
     build_prompt_request,
     classify_intent,
+    evaluate_request_policy,
 )
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -852,6 +853,16 @@ def chat_edit(spec: dict[str, Any], message: str,
             "check.outcome": "error" if payload.get("error") else "pass",
         }):
             return payload
+
+    request_policy = evaluate_request_policy(message)
+    if not request_policy["allowed"]:
+        reply = "Запрос отклонён политикой безопасности. Сформулируйте мебельную правку без инструкций по раскрытию или обходу системных правил."
+        return summarize({
+            "reply": reply, "error": reply, "code": request_policy["code"],
+            "spec": None, "changes": [], "operations": [],
+            "resolved_operations": [], "usage": None,
+            "trace": {"prompts": [], "policy": request_policy},
+        })
 
     build_name = resolve_provider_name(provider)
     routed_node = classify_intent(message, spec, context, has_images=bool(images))

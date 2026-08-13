@@ -26,5 +26,7 @@ jobs:
         run: python -m qa.engine_checks
       - name: unit tests
         run: python -m pytest tests/ -q
+      - name: offline trace replay eval
+        run: python main.py trace-eval
       - name: regression gate (goldens)
         run: python -m tests.regression
