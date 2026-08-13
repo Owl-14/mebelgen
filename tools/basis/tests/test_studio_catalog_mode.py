@@ -59,8 +59,10 @@ def test_catalog_has_its_own_accessible_context() -> None:
 
     inspector_tag, inspector = dom.by_id["catInspector"]
     assert inspector_tag == "aside"
-    assert inspector.get("aria-labelledby") == "catInspectName"
-    assert "hidden" in inspector
+    assert inspector.get("aria-label") == "Настройки изделия"
+    assert inspector.get("class") == "is-empty"
+    assert "hidden" not in inspector
+    assert dom.by_id["catInspectorEmptyKicker"][1].get("id") == "catInspectorEmptyKicker"
     assert dom.by_id["catGrid"][1].get("role") == "listbox"
     assert dom.by_id["catOpen"][1].get("type") == "button"
     assert dom.by_id["catScopes"][1].get("role") == "group"
@@ -140,11 +142,27 @@ def test_catalog_selection_does_not_open_model_context() -> None:
     assert "fetch('/api/open'" not in render
 
     inspector = PAGE[PAGE.index("function renderCatalogInspector(){") : PAGE.index("function syncCatalogSelection")]
-    assert "catWorkspace').classList.toggle('has-selection'" in inspector
+    assert "classList.toggle('is-empty',!item)" in inspector
+    assert "catInspectorEmpty').hidden=!!item" in inspector
+    assert "has-selection" not in inspector
     assert "catInspectResponsible" in inspector
     assert "catInspectAuthor" in inspector
     assert "catInspectUpdated" in inspector
     assert "catalogOwnerMarkup(p)" in render
+
+
+def test_catalog_uses_available_width_without_losing_inspector_slot() -> None:
+    css = _style()
+    assert re.search(
+        r"#catWorkspace\s*\{[^}]*grid-template-columns\s*:\s*minmax\(0,1fr\)",
+        css,
+        flags=re.DOTALL,
+    )
+    assert "#catGrid{display:grid" in css
+    assert "repeat(auto-fill,minmax(clamp(230px,19vw,290px),1fr))" in css
+    assert "#catInspector.is-empty #catInspectorEmpty{display:flex}" in css
+    assert "#app.catalog-mode #catalogInspectorSlot{display:block" in css
+    assert "catalogInspectorSlot').append($('catInspector'))" in PAGE
 
 
 def test_catalog_open_commits_only_a_prebuilt_candidate() -> None:
