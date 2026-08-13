@@ -77,7 +77,7 @@ def main() -> int:
     n_golden = sum(1 for s in SPECS if (ROOT / "projects" / s.name).exists())
     print("-" * (w + 40))
     print(f"valid: {n_valid}/{n_total} | exact vs golden: {n_exact}/{n_golden}")
-    return 0 if n_valid == n_total else 1
+    return 0 if n_valid == n_total and n_exact == n_golden else 1
 
 
 if __name__ == "__main__":
