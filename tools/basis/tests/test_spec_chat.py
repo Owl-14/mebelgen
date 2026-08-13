@@ -179,6 +179,7 @@ def test_kimi_k3_uses_strict_schema_fixed_parameters_and_cost(monkeypatch):
     assert captured["response_format"]["json_schema"]["strict"] is True
     assert "x-paramspec" not in json.dumps(captured["response_format"])
     assert captured["max_completion_tokens"] == 4096
+    assert "max_tokens" not in captured
     assert captured["model"] == "kimi-k3"
     assert captured["client"]["base_url"] == "https://api.moonshot.ai/v1"
     assert result["usage"]["cost_usd"] == pytest.approx(0.0045)
@@ -261,10 +262,11 @@ def test_glm_52_uses_json_mode_and_disabled_thinking(monkeypatch):
             )
 
     class FakeOpenAI:
-        def __init__(self, **_kwargs):
+        def __init__(self, **kwargs):
+            captured["client"] = kwargs
             self.chat = types.SimpleNamespace(completions=Completions())
 
-    monkeypatch.setenv("GLM_API_KEY", "test-key")
+    monkeypatch.setenv("ZAI_API_KEY", "test-key")
     monkeypatch.setenv("SPEC_CHAT_PAID_ENABLED", "1")
     monkeypatch.setenv("SPEC_CHAT_ALLOW_PAID_IN_CI", "1")
     monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(OpenAI=FakeOpenAI))
@@ -272,7 +274,10 @@ def test_glm_52_uses_json_mode_and_disabled_thinking(monkeypatch):
 
     assert captured["response_format"] == {"type": "json_object"}
     assert captured["extra_body"] == {"thinking": {"type": "disabled"}}
-    assert captured["max_completion_tokens"] == 4096
+    assert captured["max_tokens"] == 4096
+    assert "max_completion_tokens" not in captured
+    assert captured["model"] == "glm-5.2"
+    assert captured["client"]["base_url"] == "https://api.z.ai/api/paas/v4/"
 
 
 def test_result_regenerates():

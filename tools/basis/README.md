@@ -195,6 +195,7 @@ CfrnToB3d` → нативный `.b3d`. Команда `build-b3d`. Каждая
 | `VISION_EXTRACT_PROVIDER` | кто читает фото ТЗ в конвейере (напр. `gigachat`), сборку делает SPEC_CHAT_PROVIDER |
 | `GIGACHAT_AUTH_KEY` | GigaChat (Сбер): текст+vision, работает из РФ (+`GIGACHAT_SCOPE/MODEL/VISION_MODEL/VERIFY/CA`) |
 | `GLM_API_KEY` | GLM/Zhipu `glm-4.5-flash` (бесплатный, thinking отключён) |
+| `ZAI_API_KEY` | Z.AI `glm-5.2` на фиксированном `https://api.z.ai/api/paas/v4/`; требует paid feature flag |
 | `KIMI_API_KEY` / `MOONSHOT_API_KEY` | Kimi/Moonshot; новый `kimi-k3` требует paid feature flag |
 | `DEEPSEEK_API_KEY` | DeepSeek |
 | `OPENAI_API_KEY` | OpenAI `gpt-4o` (чат и `convert`) |

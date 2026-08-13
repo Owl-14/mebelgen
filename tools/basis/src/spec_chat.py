@@ -341,7 +341,7 @@ _OAI_PRESETS = {
                 "alternate_key": "MOONSHOT_API_KEY", "model": "kimi-k3",
                 "vision": "kimi-k3", "json_mode": True, "json_schema": True,
                 "temperature": None, "extra": {"reasoning_effort": "low"}},
-    "glm-5.2": {"base": "https://open.bigmodel.cn/api/paas/v4", "key": "GLM_API_KEY",
+    "glm-5.2": {"base": "https://api.z.ai/api/paas/v4/", "key": "ZAI_API_KEY",
                 "model": "glm-5.2", "vision": "glm-5v-turbo", "json_mode": True,
                 "extra": {"thinking": {"type": "disabled"}}},
 }
@@ -467,7 +467,7 @@ class OpenAICompatProvider:
         if self.preset in {"kimi-k3", "glm-5.2"}:
             from .llm_policy import request_budget
             budget = request_budget(self.preset, kw, modality="vision")
-            kw["max_completion_tokens"] = budget["max_completion_tokens"]
+            kw = budget["request_payload"]
             from .telemetry import add_current_attributes
             add_current_attributes({
                 "gen_ai.usage.cost_estimate_usd": budget["estimated_cost_usd"],
@@ -528,7 +528,7 @@ class OpenAICompatProvider:
             budget = request_budget(
                 self.preset, kw, modality="vision" if images else "text"
             )
-            kw["max_completion_tokens"] = budget["max_completion_tokens"]
+            kw = budget["request_payload"]
             from .telemetry import add_current_attributes
             add_current_attributes({
                 "gen_ai.usage.cost_estimate_usd": budget["estimated_cost_usd"],
@@ -1190,7 +1190,7 @@ _PROVIDER_META = {          # id → (человекочитаемое имя, e
     "gemini": ("Gemini (Google)", "GEMINI_API_KEY"),
     "openai": ("OpenAI", "OPENAI_API_KEY"),
     "kimi-k3": ("Kimi K3 (платный)", "KIMI_API_KEY"),
-    "glm-5.2": ("GLM-5.2 (платный)", "GLM_API_KEY"),
+    "glm-5.2": ("GLM-5.2 (платный, Z.AI)", "ZAI_API_KEY"),
 }
 
 

@@ -1,7 +1,7 @@
 # MEB-153: выбор платной LLM для Akeda Studio
 
-Статус на 2026-08-13: **live bake-off заблокирован, production-победитель не
-утверждён**. Этот документ фиксирует проверенные возможности, стоимость,
+Статус на 2026-08-13: **live bake-off заблокирован, выбор production-модели
+отложен**. Этот документ фиксирует проверенные возможности, стоимость,
 реализованный безопасный контур и точный оставшийся эксперимент. Он не выдаёт
 маркетинговые benchmark-данные вендоров за результат Akeda.
 
@@ -9,7 +9,8 @@
 
 | Критерий | Kimi K3 | GLM-5.2 |
 |---|---|---|
-| API model | `kimi-k3` | `glm-5.2` |
+| API model / endpoint | `kimi-k3` / `https://api.moonshot.ai/v1` | `glm-5.2` / `https://api.z.ai/api/paas/v4/` |
+| Output cap в официальном API | `max_completion_tokens` | `max_tokens` |
 | Vision | native K3 | отдельный `glm-5v-turbo` |
 | Контекст | 1M | 1M |
 | Structured output | strict JSON Schema и JSON mode | JSON mode; схема остаётся в prompt и валидируется Akeda |
@@ -28,6 +29,8 @@
   <https://platform.kimi.ai/docs/guide/response_format>
 - GLM-5.2 model/API:
   <https://docs.z.ai/guides/llm/glm-5.2>
+- GLM-5.2 OpenAI SDK contract (`api.z.ai`, `max_tokens`):
+  <https://docs.z.ai/guides/develop/openai/python>
 - GLM structured output:
   <https://docs.z.ai/guides/capabilities/struct-output>
 - GLM text/vision pricing:
@@ -48,9 +51,11 @@
 - выключение `SPEC_CHAT_PAID_ENABLED` блокирует явно выбранный paid ID;
 - в CI платные вызовы запрещены, пока отдельно не задан
   `SPEC_CHAT_ALLOW_PAID_IN_CI=1`;
-- text API-запрос ограничен 4096 completion tokens и worst-case оценкой $0.15;
+- text API-запрос ограничен 4096 output tokens через официальное поле кандидата
+  (`max_completion_tokens` у K3, `max_tokens` у GLM) и worst-case оценкой $0.15;
   input upper bound считается по UTF-8 byte length полного сериализованного
-  payload, включая history, messages, JSON Schema и request parameters;
+  окончательного wire payload, включая history, messages, JSON Schema,
+  provider-specific output cap и параметры из `extra_body`;
 - paid vision заблокирован до фиксации отдельного доказанного тарифа и правила
   token/image accounting для точной модели; text rate не подставляется;
 - K3 получает strict JSON Schema; GLM получает JSON mode; оба результата затем
@@ -61,16 +66,12 @@
 
 Offline mocks не доказывают точность модели, latency или repair rate.
 
-## Предварительное решение
+## Решение после live bake-off
 
-Если выбирать только по подтверждённому API-контракту и цене, **GLM-5.2 —
-предварительный лидер**: input дешевле примерно в 2.1 раза, output — в 3.4 раза,
-thinking можно отключить, а JSON mode официально поддержан. Kimi K3 имеет более
-сильный форматный контракт (strict JSON Schema) и native vision, поэтому его
-нельзя исключить без прогона на Akeda dataset.
-
-Production winner не выбран: отсутствует требуемое сравнительное evidence по
-русским ТЗ, фото, EditOperation/ParamSpec, injection, repair success и latency.
+До сравнительного прогона кандидаты не ранжируются и production-модель не
+выбирается. Цена и различия API-контрактов входят в будущую оценку вместе с
+evidence по русским ТЗ, фото, EditOperation/ParamSpec, injection, repair success
+и latency; ни один из этих факторов отдельно не объявляет результат.
 
 ## Обязательный live bake-off
 
@@ -87,7 +88,7 @@ Production winner не выбран: отсутствует требуемое �
 5. Сохранять только fixture id, provider/model, prompt version, schema/operation/
    gate outcomes, repair count, latency, tokens и cost. Текст/фото/ParamSpec не
    сохранять в traces.
-6. Победитель определяется сначала safety gates: injection escape или мутация
+6. Итоговый выбор начинается с safety gates: injection escape или мутация
    при красном gate дисквалифицирует. Затем: successful operations, schema
    success, repair success, median/P95 latency и стоимость успешной операции.
 
@@ -100,8 +101,9 @@ Production winner не выбран: отсутствует требуемое �
 
 После утверждения отчёта:
 
-1. Установить секрет победителя вне Git и оставить прежний provider секрет.
-2. Canary: явно задать `SPEC_CHAT_PROVIDER=<winner>`, затем разрешить его
+1. Установить секрет выбранного по отчёту provider вне Git и оставить прежний
+   provider секрет.
+2. Canary: явно задать `SPEC_CHAT_PROVIDER=<selected-provider>`, затем разрешить его
    `SPEC_CHAT_PAID_ENABLED=1` при текущих cost/token ceilings. Один flag без
    provider selection ничего не переключает.
 3. Проверить текстовое создание, photo create, typed edit, provider failure,

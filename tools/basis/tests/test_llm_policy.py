@@ -56,8 +56,10 @@ def test_request_budget_bounds_output_and_cost(monkeypatch):
     monkeypatch.setenv("SPEC_CHAT_MAX_REQUEST_USD", "0.15")
     payload = {"model": "kimi-k3", "messages": [{"role": "user", "content": "я" * 500}]}
     result = request_budget("kimi-k3", payload)
-    assert result["max_completion_tokens"] == 4_096
+    assert result["output_token_parameter"] == "max_completion_tokens"
+    assert result["output_tokens"] == 4_096
     priced_payload = {**payload, "max_completion_tokens": 4_096}
+    assert result["request_payload"] == priced_payload
     expected_upper = len(json.dumps(
         priced_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
     ).encode("utf-8"))
@@ -70,6 +72,54 @@ def test_request_budget_bounds_output_and_cost(monkeypatch):
     monkeypatch.setenv("SPEC_CHAT_MAX_REQUEST_USD", "0.01")
     with pytest.raises(RuntimeError, match="exceeds"):
         request_budget("kimi-k3", payload)
+
+
+@pytest.mark.parametrize(
+    ("provider_id", "expected_parameter", "unexpected_parameter"),
+    [
+        ("kimi-k3", "max_completion_tokens", "max_tokens"),
+        ("glm-5.2", "max_tokens", "max_completion_tokens"),
+    ],
+)
+def test_request_budget_prices_provider_specific_final_payload(
+    provider_id, expected_parameter, unexpected_parameter, monkeypatch
+):
+    monkeypatch.setenv("SPEC_CHAT_MAX_COMPLETION_TOKENS", "321")
+    monkeypatch.setenv("SPEC_CHAT_MAX_REQUEST_USD", "1")
+    payload = {
+        "model": provider_id,
+        "messages": [{"role": "user", "content": "hello"}],
+        "extra_body": {"thinking": {"type": "disabled"}},
+    }
+    result = request_budget(provider_id, payload)
+    assert result["request_payload"][expected_parameter] == 321
+    assert unexpected_parameter not in result["request_payload"]
+    wire_payload = {
+        "model": provider_id,
+        "messages": payload["messages"],
+        "thinking": {"type": "disabled"},
+        expected_parameter: 321,
+    }
+    expected_upper = len(json.dumps(
+        wire_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8"))
+    assert result["input_token_upper_bound"] == expected_upper
+
+
+def test_request_budget_rejects_wrong_provider_output_parameter(monkeypatch):
+    monkeypatch.setenv("SPEC_CHAT_MAX_REQUEST_USD", "1")
+    with pytest.raises(RuntimeError, match="Unexpected output token parameter"):
+        request_budget("glm-5.2", {
+            "model": "glm-5.2", "messages": [], "max_completion_tokens": 10,
+        })
+
+
+def test_request_budget_rejects_extra_body_collisions(monkeypatch):
+    monkeypatch.setenv("SPEC_CHAT_MAX_REQUEST_USD", "1")
+    with pytest.raises(RuntimeError, match="conflicts with request fields"):
+        request_budget("kimi-k3", {
+            "model": "kimi-k3", "messages": [], "extra_body": {"model": "other"},
+        })
 
 
 @pytest.mark.parametrize("provider_id", ["kimi-k3", "glm-5.2"])

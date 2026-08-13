@@ -24,6 +24,7 @@ class PaidModelPolicy:
     vision_input_usd_per_mtok: float | None = None
     vision_output_usd_per_mtok: float | None = None
     max_completion_tokens: int = 4_096
+    output_token_parameter: str = "max_completion_tokens"
 
     def estimated_cost_usd(self, input_tokens: int, output_tokens: int) -> float:
         return round(
@@ -43,6 +44,7 @@ PAID_MODELS: dict[str, PaidModelPolicy] = {
     "glm-5.2": PaidModelPolicy(
         provider_id="glm-5.2", model="glm-5.2", vision_model="glm-5v-turbo",
         input_usd_per_mtok=1.4, output_usd_per_mtok=4.4,
+        output_token_parameter="max_tokens",
     ),
 }
 
@@ -97,8 +99,27 @@ def request_budget(
         ceiling = float(os.environ.get("SPEC_CHAT_MAX_REQUEST_USD", "0.15"))
     except ValueError as error:
         raise ValueError("SPEC_CHAT_MAX_REQUEST_USD must be a number") from error
-    priced_payload = copy.deepcopy(request_payload)
-    priced_payload["max_completion_tokens"] = output_tokens
+    final_payload = copy.deepcopy(request_payload)
+    output_parameter = policy.output_token_parameter
+    for parameter in {"max_completion_tokens", "max_tokens"}:
+        if parameter in final_payload and parameter != output_parameter:
+            raise RuntimeError(
+                f"Unexpected output token parameter {parameter} for {provider_id}"
+            )
+    final_payload[output_parameter] = output_tokens
+
+    # OpenAI-compatible clients merge extra_body into the JSON body on the
+    # wire. Price that final shape, while returning the SDK kwargs unchanged.
+    priced_payload = copy.deepcopy(final_payload)
+    extra_body = priced_payload.pop("extra_body", None)
+    if extra_body is not None:
+        if not isinstance(extra_body, dict):
+            raise RuntimeError("extra_body must be an object for paid LLM requests")
+        overlap = set(priced_payload).intersection(extra_body)
+        if overlap:
+            names = ", ".join(sorted(overlap))
+            raise RuntimeError(f"extra_body conflicts with request fields: {names}")
+        priced_payload.update(extra_body)
     serialized = json.dumps(
         priced_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
     ).encode("utf-8")
@@ -113,7 +134,9 @@ def request_budget(
             f"Paid LLM request estimate ${estimate:.4f} exceeds ${max(0, ceiling):.4f} limit"
         )
     return {
-        "max_completion_tokens": output_tokens,
+        "request_payload": final_payload,
+        "output_token_parameter": output_parameter,
+        "output_tokens": output_tokens,
         "input_token_upper_bound": input_token_upper_bound,
         "estimated_cost_usd": estimate,
     }
