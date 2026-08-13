@@ -18,6 +18,7 @@ import json
 import hmac
 import base64
 import hashlib
+import logging
 import secrets
 import threading
 import unicodedata
@@ -28,6 +29,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, unquote, urlsplit
+
+
+AI_LOGGER = logging.getLogger("akeda.studio.ai")
 
 # ------------------------------------------------------------------ формы архетипов
 #
@@ -2186,8 +2190,41 @@ def make_handler(st: _Studio):
                         st.guard.add_tokens(int(((res.get("usage") or {}).get("total")) or 0))
                         new_spec = res.get("spec")
                         if not new_spec:
-                            self._json({"ok": False, "error":
-                                        res.get("reply") or "не удалось распознать ТЗ"})
+                            error_code = str(res.get("code") or "create_paramspec_failed")
+                            trace_id = current_trace_id()
+                            add_current_attributes({
+                                "check.outcome": "error",
+                                "error.codes": [error_code],
+                                "ai.workflow": "import_tz",
+                            })
+                            AI_LOGGER.warning(
+                                "import_tz_failed code=%s trace_id=%s provider=%s",
+                                error_code,
+                                trace_id or "unavailable",
+                                str(body.get("provider") or "default"),
+                            )
+                            status = 502 if error_code == "ai_provider_failed" else 422
+                            public_errors = {
+                                "ai_provider_failed": (
+                                    "Сервис AI временно недоступен. Повторите попытку."
+                                ),
+                                "invalid_provider_response": (
+                                    "Сервис AI вернул некорректный ответ."
+                                ),
+                            }
+                            payload = {
+                                "ok": False,
+                                "error": public_errors.get(error_code)
+                                or res.get("reply")
+                                or "Не удалось распознать ТЗ",
+                                "code": error_code,
+                                "error_code": error_code,
+                            }
+                            if isinstance(res.get("check_report"), dict):
+                                payload["check_report"] = res["check_report"]
+                            if isinstance(res.get("usage"), dict):
+                                payload["usage"] = res["usage"]
+                            self._json(payload, status)
                             return
                         if isinstance(current_spec, dict) and current_spec.get("draft"):
                             out = spec_path        # ТЗ в черновик — тот же файл
@@ -2218,8 +2255,27 @@ def make_handler(st: _Studio):
                         st.workspaces.set_current(auth, out)
                         self._json({"ok": True, "spec": new_spec, "file": out.name,
                                     "usage": res.get("usage")})
-                    except Exception as e:
-                        self._json({"ok": False, "error": str(e)[:300]})
+                    except Exception as error:
+                        error_code = "import_tz_internal_error"
+                        trace_id = current_trace_id()
+                        add_current_attributes({
+                            "check.outcome": "error",
+                            "error.codes": [error_code],
+                            "ai.workflow": "import_tz",
+                            "exception.type": type(error).__name__,
+                        })
+                        AI_LOGGER.warning(
+                            "import_tz_failed code=%s trace_id=%s exception_type=%s",
+                            error_code,
+                            trace_id or "unavailable",
+                            type(error).__name__,
+                        )
+                        self._json({
+                            "ok": False,
+                            "error": "Внутренняя ошибка обработки ТЗ",
+                            "code": error_code,
+                            "error_code": error_code,
+                        }, 500)
                 elif path == "/api/versions":    # версии спеки (D2)
                     self._json({"versions": _list_versions(spec_path)})
                 elif path == "/api/restore":     # восстановить версию (D2)
@@ -5673,7 +5729,12 @@ function importTzFile(f){
       const p=await r.json();
       done();
       if(p.ok){adoptSpec(p); toast('✅ ТЗ распознано → '+(p.spec&&p.spec.project_name||p.file));}
-      else toast('❌ Не удалось распознать ТЗ: '+(p.error||'нет ответа нейросети'),true);
+      else{
+        const ref=p.trace_id?' · trace '+p.trace_id:'';
+        const code=p.error_code||p.code;
+        toast('❌ Не удалось распознать ТЗ: '+(p.error||'нет ответа нейросети')+
+          (code?' ['+code+']':'')+ref,true);
+      }
     }catch(e){done(); toast('❌ Ошибка распознавания: '+e.message,true);}
   };
   rd.readAsDataURL(f);

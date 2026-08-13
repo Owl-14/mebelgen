@@ -72,6 +72,7 @@ def test_provider_failure_is_machine_readable(monkeypatch):
     r = sc.chat_edit(SPEC, "сделай глубину 600")
     assert r["spec"] is None
     assert r["error"] == r["reply"]
+    assert r["code"] == "ai_provider_failed"
     assert "offline" in r["error"]
 
 
@@ -164,6 +165,87 @@ def test_create_from_scratch():
     assert s["sections"][0] == {"kind": "drawers", "drawers": 3}
     from src.studio import build_payload
     assert build_payload(s)["ok"]                    # собирается и проходит проверки
+
+
+def test_create_route_accepts_full_valid_spec_without_provider_created_flag(monkeypatch):
+    """MEB-160: routing, not an optional LLM flag, defines the create contract."""
+    import copy
+    import src.spec_chat as sc
+
+    candidate = copy.deepcopy(SPEC)
+    candidate["project_name"] = "Из загруженного ТЗ"
+
+    class Provider:
+        def chat(self, *args, **kwargs):
+            return {"reply": "Изделие собрано", "spec": candidate}
+
+    monkeypatch.setattr(sc, "get_chat_provider", lambda name=None: Provider())
+    result = sc.chat_edit({}, "Собери изделие по ТЗ", images=[{
+        "mime": "image/png", "data": "QUJD",
+    }])
+
+    assert result["spec"]["project_name"] == "Из загруженного ТЗ"
+    assert result["created"] is True
+    assert result["check_report"]["ok"] is True
+
+
+def test_created_flag_cannot_bypass_edit_contract(monkeypatch):
+    """A provider cannot turn a regular edit into unrestricted full replacement."""
+    import copy
+    import src.spec_chat as sc
+
+    candidate = copy.deepcopy(SPEC)
+    candidate["project_name"] = "Несогласованная замена"
+    candidate["dimensions"]["depth"] = 600
+
+    class Provider:
+        def chat(self, *args, **kwargs):
+            return {
+                "reply": "Готово",
+                "created": True,
+                "spec": candidate,
+                "trace": {
+                    "router": {"kind": "provider", "node": "create_paramspec"},
+                    "prompts": [],
+                },
+            }
+
+    monkeypatch.setattr(sc, "get_chat_provider", lambda name=None: Provider())
+    result = sc.chat_edit(SPEC, "сделай глубину 600")
+
+    assert result["spec"] is None
+    assert result["code"] == "operation_validation_failed"
+    assert SPEC["project_name"] != "Несогласованная замена"
+
+
+def test_provider_operation_normalization_is_bounded_and_deterministic():
+    import src.spec_chat as sc
+
+    operations = sc._normalize_provider_operations([
+        {
+            "op": "SetDimension",
+            "target_id": "cabinet",
+            "preconditions": [{"kind": "value_equals", "path": "dimensions.width", "value": 1600}],
+            "dimension": "width",
+            "value": 1700,
+        },
+        {
+            "op": "AddSection",
+            "target_id": "section:right",
+            "preconditions": [{"kind": "target_missing", "target_id": "section:right"}],
+            "section": {"kind": "open"},
+        },
+        {
+            "op": "AddSection",
+            "target_id": "sections",
+            "preconditions": [{"kind": "target_missing", "target_id": "sections"}],
+            "section": {"kind": "open"},
+        },
+    ])
+
+    assert operations[0]["target_id"] == "dimensions.width"
+    assert operations[1]["section"]["id"] == "right"
+    assert "id" not in operations[2]["section"]
 
 
 def test_question_about_model():

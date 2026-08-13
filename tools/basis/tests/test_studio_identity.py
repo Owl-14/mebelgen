@@ -371,6 +371,48 @@ def test_authenticated_studio_scopes_catalog_and_renders_profile(tmp_path: Path)
                 {"role": "assistant", "text": "Ширина изменена"},
             ]
 
+        import_failure = {
+            "reply": "AI не вернул полное изделие",
+            "error": "AI не вернул полное изделие",
+            "code": "create_paramspec_missing",
+            "spec": None,
+            "changes": [],
+            "usage": {"model": "test-model", "total": 10},
+        }
+        with patch("src.spec_chat.chat_edit", return_value=import_failure):
+            status, _headers, import_body = browser.request(
+                "POST",
+                "/api/import-tz",
+                {"name": "tz.png", "data": "QUJD", "provider": "mock"},
+                csrf=True,
+            )
+        assert status == 422, import_body
+        import_error = json.loads(import_body)
+        assert import_error["ok"] is False
+        assert import_error["code"] == "create_paramspec_missing"
+        assert import_error["error_code"] == import_error["code"]
+        assert len(import_error["trace_id"]) == 32
+
+        provider_failure = {
+            "reply": "timeout at https://private-provider.invalid/account/secret",
+            "error": "timeout at https://private-provider.invalid/account/secret",
+            "code": "ai_provider_failed",
+            "spec": None,
+            "changes": [],
+        }
+        with patch("src.spec_chat.chat_edit", return_value=provider_failure):
+            status, _headers, provider_body = browser.request(
+                "POST",
+                "/api/import-tz",
+                {"name": "tz.png", "data": "QUJD", "provider": "mock"},
+                csrf=True,
+            )
+        assert status == 502, provider_body
+        provider_error = json.loads(provider_body)
+        assert provider_error["code"] == "ai_provider_failed"
+        assert "private-provider" not in provider_error["error"]
+        assert len(provider_error["trace_id"]) == 32
+
         status, _headers, history_body = browser.request(
             "POST", "/api/chat-history", {}, csrf=True
         )
