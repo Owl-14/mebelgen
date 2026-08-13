@@ -43,6 +43,31 @@ def _git(*args: str) -> str:
     ).strip()
 
 
+def _head_sha256(path: Path) -> str:
+    repo_root = Path(_git("rev-parse", "--show-toplevel"))
+    relative = path.resolve().relative_to(repo_root.resolve()).as_posix()
+    content = subprocess.check_output(
+        ["git", "cat-file", "blob", f"HEAD:{relative}"], cwd=ROOT
+    )
+    return hashlib.sha256(content).hexdigest()
+
+
+def _listen_for_diagnostics(page: Page, diagnostics: dict[str, list[str]]) -> None:
+    def on_console(message: object) -> None:
+        message_type = getattr(message, "type", "")
+        text = getattr(message, "text", str(message))
+        if message_type == "error":
+            diagnostics["console_errors"].append(text)
+        elif message_type == "warning":
+            diagnostics["console_warnings"].append(text)
+
+    page.on("console", on_console)
+    page.on(
+        "pageerror",
+        lambda error: diagnostics["page_errors"].append(str(error)),
+    )
+
+
 def _inject(page: Page, key: str, css_path: Path, expected_accent: str) -> dict[str, str]:
     page.add_style_tag(path=str(css_path))
     page.evaluate(
@@ -123,18 +148,25 @@ def capture(output_dir: Path, base_sha: str) -> dict[str, object]:
                 )
                 normal = browser.new_context(viewport={"width": 1440, "height": 900})
                 baseline = normal.new_page()
+                baseline_diagnostics = {
+                    "console_errors": [], "console_warnings": [], "page_errors": []
+                }
+                _listen_for_diagnostics(baseline, baseline_diagnostics)
                 baseline.goto(url, wait_until="domcontentloaded")
                 baseline.wait_for_function("() => viewportModelState === 'ready'")
                 baseline_path = output_dir / "origin-master-1440x900.jpg"
                 baseline.screenshot(path=str(baseline_path), type="jpeg", quality=90)
                 evidence["baseline_sha256"] = _sha256(baseline_path)
+                evidence["baseline_diagnostics"] = baseline_diagnostics
                 normal.close()
 
                 for key, (css_name, accent) in DIRECTIONS.items():
-                    errors: list[str] = []
+                    diagnostics: dict[str, list[str]] = {
+                        "console_errors": [], "console_warnings": [], "page_errors": []
+                    }
                     context = browser.new_context(viewport={"width": 1440, "height": 900})
                     page = context.new_page()
-                    page.on("pageerror", lambda error: errors.append(str(error)))
+                    _listen_for_diagnostics(page, diagnostics)
                     page.goto(url, wait_until="domcontentloaded")
                     page.wait_for_function("() => viewportModelState === 'ready'")
                     css_path = REVIEW / css_name
@@ -147,6 +179,7 @@ def capture(output_dir: Path, base_sha: str) -> dict[str, object]:
                         viewport={"width": 1440, "height": 900}, reduced_motion="reduce"
                     )
                     reduce_page = reduced.new_page()
+                    _listen_for_diagnostics(reduce_page, diagnostics)
                     reduce_page.goto(url, wait_until="domcontentloaded")
                     reduce_page.wait_for_function("() => viewportModelState === 'ready'")
                     _inject(reduce_page, key, css_path, accent)
@@ -157,11 +190,11 @@ def capture(output_dir: Path, base_sha: str) -> dict[str, object]:
 
                     evidence["directions"][key] = {
                         "css": css_name,
-                        "css_sha256": _sha256(css_path),
+                        "css_sha256": _head_sha256(css_path),
                         "screenshot": image_path.name,
                         "screenshot_sha256": _sha256(image_path),
                         "applied": applied,
-                        "console_errors": errors,
+                        **diagnostics,
                         "reduced_motion": motion,
                     }
                 browser.close()

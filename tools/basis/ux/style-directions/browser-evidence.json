@@ -9,7 +9,7 @@
   "directions": {
     "a": {
       "css": "direction-a-precision-light.css",
-      "css_sha256": "d5f335ae8955a81408568b89359d340561f7f0258780964e80140eb3d08ddc1d",
+      "css_sha256": "c969af64e9ac20dae4eec84db2f17972cb50ff01172f7969a145e31b92cb1c44",
       "screenshot": "direction-a-1440x900.jpg",
       "screenshot_sha256": "b530ca87e0e51124bca46f0eda4de81e5a38ff45c1282573b222305b1a374a10",
       "applied": {
@@ -18,6 +18,8 @@
         "workspaceBackground": "rgb(232, 237, 241)"
       },
       "console_errors": [],
+      "console_warnings": [],
+      "page_errors": [],
       "reduced_motion": {
         "mediaMatches": true,
         "maxAnimationMs": 0.01,
@@ -27,7 +29,7 @@
     },
     "b": {
       "css": "direction-b-warm-workshop.css",
-      "css_sha256": "5324a222bab9e9083e553c2a2ce9f5dde30ecb9862d192253e575cce93be66d1",
+      "css_sha256": "e26697f5f6bb9153304427fa022d467ff304ee933c102db29482068c0f74436f",
       "screenshot": "direction-b-1440x900.jpg",
       "screenshot_sha256": "7994ec6f7b67bc00f1765da58e0298ac79426fe051335ba779e0cfed78e08072",
       "applied": {
@@ -36,6 +38,8 @@
         "workspaceBackground": "rgb(235, 230, 220)"
       },
       "console_errors": [],
+      "console_warnings": [],
+      "page_errors": [],
       "reduced_motion": {
         "mediaMatches": true,
         "maxAnimationMs": 0.01,
@@ -45,7 +49,7 @@
     },
     "c": {
       "css": "direction-c-blueprint.css",
-      "css_sha256": "c2f5c3d1f2f9baf300d9e2083d21753c2bb0d3bc84203d334f44727a82baa953",
+      "css_sha256": "ffee9fe953414733a912930d9169d610d61eed8c5dc602f7ce113b1ba919a7ac",
       "screenshot": "direction-c-1440x900.jpg",
       "screenshot_sha256": "f9ea864857969d3fd48c436f66de5276f8bc5ffaa03067a2ae8d7fa0aa8eb560",
       "applied": {
@@ -54,6 +58,8 @@
         "workspaceBackground": "rgb(221, 232, 239)"
       },
       "console_errors": [],
+      "console_warnings": [],
+      "page_errors": [],
       "reduced_motion": {
         "mediaMatches": true,
         "maxAnimationMs": 0.01,
@@ -62,5 +68,10 @@
       }
     }
   },
-  "baseline_sha256": "4b8394b972da300f2733c09a096771b6fabf1e69b5d39a29a3af1a9676010660"
+  "baseline_sha256": "4b8394b972da300f2733c09a096771b6fabf1e69b5d39a29a3af1a9676010660",
+  "baseline_diagnostics": {
+    "console_errors": [],
+    "console_warnings": [],
+    "page_errors": []
+  }
 }

@@ -2,15 +2,26 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
-import sys
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from src.studio import PAGE  # noqa: E402
+
+
+def _head_sha256(path: Path) -> str:
+    repo_root = ROOT.parent.parent
+    relative = path.relative_to(repo_root).as_posix()
+    content = subprocess.check_output(
+        ["git", "cat-file", "blob", f"HEAD:{relative}"], cwd=repo_root
+    )
+    return hashlib.sha256(content).hexdigest()
 
 
 def _relative_luminance(hex_color: str) -> float:
@@ -92,6 +103,12 @@ def test_review_evidence_covers_components_contrast_and_motion() -> None:
     assert evidence["capture"] == "real local Studio with Playwright-injected review CSS"
     assert set(evidence["directions"]) == {"a", "b", "c"}
     assert (review / "capture_live_studio.py").is_file()
+    for direction in evidence["directions"].values():
+        css_path = review / direction["css"]
+        assert direction["css_sha256"] == _head_sha256(css_path)
+        assert direction["console_errors"] == []
+        assert direction["console_warnings"] == []
+        assert direction["page_errors"] == []
     for asset in (
         "origin-master-1440x900.jpg",
         "direction-a-1440x900.jpg",
