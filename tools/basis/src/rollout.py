@@ -268,7 +268,13 @@ class RolloutStateStore:
 
     @staticmethod
     def _empty() -> dict[str, Any]:
-        return {"version": 2, "events": [], "stops": {}, "updated_at": 0}
+        return {
+            "version": 2,
+            "events": [],
+            "evidence_ids": {},
+            "stops": {},
+            "updated_at": 0,
+        }
 
     def read(self) -> dict[str, Any]:
         with self._lock:
@@ -290,6 +296,7 @@ class RolloutStateStore:
                         "updated_at": int(payload.get("updated_at") or 0),
                     }
                 payload.setdefault("events", [])
+                payload.setdefault("evidence_ids", {})
                 payload.setdefault("stops", {})
                 return payload
             except (OSError, ValueError, TypeError, json.JSONDecodeError) as error:
@@ -327,6 +334,29 @@ class RolloutStateStore:
             payload["updated_at"] = int(time.time())
             self.write(payload)
             return payload
+
+    def append_unique_evidence(
+        self, event: Mapping[str, Any], *, evidence_id: str, scope_key: str
+    ) -> tuple[dict[str, Any], bool]:
+        """Atomically append one privacy-safe evidence identity per scope."""
+        with self._lock:
+            payload = self.read()
+            dedupe_key = _evidence_digest({
+                "scope_key": scope_key, "evidence_id": evidence_id
+            })
+            evidence_ids = payload.setdefault("evidence_ids", {})
+            if dedupe_key in evidence_ids:
+                return payload, False
+            evidence_ids[dedupe_key] = int(time.time())
+            payload["evidence_ids"] = dict(
+                list(evidence_ids.items())[-self.max_events :]
+            )
+            payload["events"] = [
+                *list(payload.get("events") or []), dict(event)
+            ][-self.max_events :]
+            payload["updated_at"] = int(time.time())
+            self.write(payload)
+            return payload, True
 
     def stop(
         self,
@@ -489,6 +519,7 @@ class RolloutController:
         tenant_id: str | None,
         user_id: str | None,
         plan: RolloutPlan,
+        evidence_id: str | None = None,
     ) -> dict[str, Any]:
         event = {
             "at": int(time.time()),
@@ -502,8 +533,15 @@ class RolloutController:
             "canary": plan.canary,
             **asdict(metric),
         }
+        if evidence_id is not None:
+            event["evidence_id"] = evidence_id
         try:
-            state = self.store.append(event)
+            if evidence_id is None:
+                state = self.store.append(event)
+            else:
+                state, _ = self.store.append_unique_evidence(
+                    event, evidence_id=evidence_id, scope_key=plan.scope_key
+                )
         except RuntimeError as error:
             self._degraded_reason = str(error)
             return {"stopped": True, "reasons": [str(error)], "samples": 0}
@@ -600,13 +638,27 @@ class RolloutController:
         case_id = case.get("id")
         approved_cases = approval.get("cases")
         approved_case = approved_cases.get(case_id) if isinstance(approved_cases, Mapping) else None
+        evaluation_run_id = case.get("evaluation_run_id")
+        approved_runs = approval.get("runs")
+        approved_run = (
+            approved_runs.get(evaluation_run_id)
+            if isinstance(approved_runs, Mapping)
+            else None
+        )
         if (
             approval.get("schema_version") != "meb151-approved-evidence-v1"
+            or not isinstance(approval.get("manifest_version"), str)
+            or not isinstance(approval.get("report_version"), str)
             or not isinstance(case_id, str)
             or not case_id
             or not isinstance(approved_case, Mapping)
+            or not isinstance(evaluation_run_id, str)
+            or not evaluation_run_id
+            or not isinstance(approved_run, Mapping)
             or case.get("dataset_digest") != approval.get("dataset_digest")
-            or case.get("report_digest") != approval.get("report_digest")
+            or case.get("report_version") != approval.get("report_version")
+            or case.get("report_digest") != approved_run.get("report_digest")
+            or case.get("candidate_digest") != approved_run.get("candidate_digest")
         ):
             return inconclusive("eval_provenance_unapproved")
         decision = case.get("decision")
@@ -653,6 +705,17 @@ class RolloutController:
         value = expected_status in {"accepted", "replied"} and candidate_status == "rejected"
         if label.get("false_rejection") is not value:
             return inconclusive("eval_false_rejection_invalid")
+        evidence_id = _evidence_digest({
+            "schema_version": _EVAL_CASE_SCHEMA,
+            "manifest_version": approval["manifest_version"],
+            "manifest_digest": _evidence_digest(approval),
+            "report_version": approval["report_version"],
+            "evaluation_run_id": evaluation_run_id,
+            "dataset_digest": approval["dataset_digest"],
+            "report_digest": approved_run["report_digest"],
+            "candidate_digest": approved_run["candidate_digest"],
+            "case_id": case_id,
+        })
         return self._record(
             RolloutMetric(
                 latency_ms=0,
@@ -666,6 +729,7 @@ class RolloutController:
             tenant_id=tenant_id,
             user_id=user_id,
             plan=plan,
+            evidence_id=evidence_id,
         )
 
     def _write_dashboard(self, payload: Mapping[str, Any]) -> None:

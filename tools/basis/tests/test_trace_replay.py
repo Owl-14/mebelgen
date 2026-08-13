@@ -51,6 +51,9 @@ def test_versioned_dataset_replays_every_scenario_offline() -> None:
     assert all(
         case["dataset_digest"] == report["dataset_digest"]
         and case["report_digest"] == report["report_digest"]
+        and case["report_version"] == report["dataset_version"]
+        and case["evaluation_run_id"] == "meb151-offline-baseline-v1"
+        and len(case["candidate_digest"]) == 64
         for case in report["cases"]
     )
     assert all(

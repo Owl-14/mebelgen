@@ -195,7 +195,10 @@ Provider обязан поддерживать общий внутренний �
    учитываются отдельным inconclusive counter. Самосогласованные caller hashes
    недостаточны: case id, dataset/report, node-output и verdict digests должны
    совпасть с immutable checked-in MEB-151 approval manifest; общий telemetry
-   `record()` не принимает false-rejection поля или eval marker strings. Превышение
+   `record()` не принимает false-rejection поля или eval marker strings. Eval
+   evidence дедуплицируется по privacy-safe digest manifest/report version,
+   trusted run identity, candidate digest и case id; отдельный run учитывается
+   только при явной привязке в approval manifest. Превышение
    автоматически останавливает candidate и переключает следующие запросы на
    legacy; это не должно отключать production gate.
 5. Checkpoints имеют bounded retention. Недоступность/переполнение storage

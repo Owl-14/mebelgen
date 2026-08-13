@@ -35,6 +35,7 @@ DATASET_SCHEMA = "trace-eval-v1"
 CASE_SCHEMA = "trace-eval-case-v1"
 DEFAULT_DATASET = Path(__file__).resolve().parent.parent / "qa" / "trace_eval" / "v1" / "scenarios.json"
 APPROVED_EVIDENCE = DEFAULT_DATASET.with_name("approved-evidence.json")
+DEFAULT_EVALUATION_RUN_ID = "meb151-offline-baseline-v1"
 _APPROVED_VISION_ANNOTATIONS = {
     "cabinet-reference-v1": "25610da2655c0b34cb6d583496b1fb9e75ab66338d17f67f3e7509bb7ef6ebb0",
 }
@@ -668,6 +669,10 @@ def run_dataset(path: Path | str = DEFAULT_DATASET) -> dict[str, Any]:
         raise TraceReplayError("dataset provider_policies must be a non-empty object")
     results = [replay_case(case, dataset_path.parent, profiles, policies) for case in cases]
     dataset_digest = _digest(dataset)
+    profile_ids = sorted({
+        f"{case['prompt_id']}@{case['prompt_version']} / {case['model']}"
+        for case in results
+    })
     report = {
         "schema_version": DATASET_SCHEMA,
         "dataset_version": dataset.get("dataset_version"),
@@ -675,13 +680,11 @@ def run_dataset(path: Path | str = DEFAULT_DATASET) -> dict[str, Any]:
         "case_count": len(results),
         "passed": sum(case["ok"] for case in results),
         "failed": sum(not case["ok"] for case in results),
-        "profiles": sorted({
-            f"{case['prompt_id']}@{case['prompt_version']} / {case['model']}"
-            for case in results
-        }),
+        "profiles": profile_ids,
         "cases": results,
     }
     report_digest = _digest(report)
+    candidate_digest = _digest({"profiles": profile_ids})
     if dataset_path == DEFAULT_DATASET.resolve():
         try:
             approval = json.loads(APPROVED_EVIDENCE.read_text(encoding="utf-8"))
@@ -690,10 +693,19 @@ def run_dataset(path: Path | str = DEFAULT_DATASET) -> dict[str, Any]:
         if not isinstance(approval, Mapping):
             raise TraceReplayError("approved MEB-151 evidence manifest is invalid")
         approved_cases = approval.get("cases")
+        approved_runs = approval.get("runs")
+        approved_run = (
+            approved_runs.get(DEFAULT_EVALUATION_RUN_ID)
+            if isinstance(approved_runs, Mapping)
+            else None
+        )
         if (
             approval.get("schema_version") != "meb151-approved-evidence-v1"
+            or approval.get("report_version") != dataset.get("dataset_version")
             or approval.get("dataset_digest") != dataset_digest
-            or approval.get("report_digest") != report_digest
+            or not isinstance(approved_run, Mapping)
+            or approved_run.get("report_digest") != report_digest
+            or approved_run.get("candidate_digest") != candidate_digest
             or not isinstance(approved_cases, Mapping)
             or set(approved_cases) != {case["id"] for case in results}
             or any(
@@ -706,8 +718,11 @@ def run_dataset(path: Path | str = DEFAULT_DATASET) -> dict[str, Any]:
         ):
             raise TraceReplayError("replay output is not approved by the MEB-151 manifest")
     for case in results:
+        case["evaluation_run_id"] = DEFAULT_EVALUATION_RUN_ID
         case["dataset_digest"] = dataset_digest
+        case["report_version"] = dataset.get("dataset_version")
         case["report_digest"] = report_digest
+        case["candidate_digest"] = candidate_digest
     report["report_digest"] = report_digest
     return report
 

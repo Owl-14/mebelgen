@@ -79,6 +79,11 @@ timeout, unknown, failed и inconclusive не считаются успешны�
 `case_id`, dataset/report digests, node-output digest и полный verdict digest.
 Публичный `record()` отвергает false-rejection поля и eval marker strings;
 denominator пополняет только приватный verified path `record_eval_case`.
+Один case внутри одного trusted evaluation run учитывается один раз: state
+атомарно хранит только privacy-safe SHA-256 `evidence_id`, связанный с manifest
+и report versions/digests, run id, candidate digest и case id. Повторная
+доставка не меняет denominator. Другой run считается отдельно только если его
+run id и report/candidate digests заранее внесены в approval manifest.
 
 ## Checkpoints и деградация хранилища
 

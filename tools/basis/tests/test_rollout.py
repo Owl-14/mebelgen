@@ -572,6 +572,66 @@ def test_meb151_security_refusal_is_not_a_false_rejection(tmp_path: Path) -> Non
     assert dashboard["stopped"] is False
 
 
+def test_same_approved_eval_case_submitted_twenty_times_counts_once(
+    tmp_path: Path,
+) -> None:
+    from src.trace_replay import run_dataset
+
+    case = next(
+        item for item in run_dataset()["cases"]
+        if item["id"] == "prompt-injection-refusal"
+    )
+    controller = RolloutController(
+        tmp_path, config=_config(), budgets=_strict_budgets(minimum_samples=1)
+    )
+    plan = controller.plan(None, None)
+    for _ in range(20):
+        dashboard = controller.record_eval_case(
+            case, tenant_id=None, user_id=None, plan=plan
+        )
+    assert dashboard["summary"]["false_rejection_samples"] == 1
+    assert dashboard["summary"]["false_rejection_rate"] == 0
+    state = controller.store.read()
+    eval_events = [
+        event for event in state["events"] if event.get("metric_kind") == "eval"
+    ]
+    assert len(eval_events) == 1
+    assert len(state["evidence_ids"]) == 1
+    assert len(eval_events[0]["evidence_id"]) == 64
+    assert "prompt-injection-refusal" not in json.dumps(state)
+    assert "meb151-offline-baseline-v1" not in json.dumps(state)
+
+
+def test_two_distinct_manifest_approved_evaluation_runs_count_separately(
+    tmp_path: Path,
+) -> None:
+    from src.trace_replay import run_dataset
+
+    first = next(
+        item for item in run_dataset()["cases"]
+        if item["id"] == "prompt-injection-refusal"
+    )
+    second = copy.deepcopy(first)
+    second["evaluation_run_id"] = "meb151-offline-repeat-v1"
+    controller = RolloutController(
+        tmp_path, config=_config(), budgets=_strict_budgets(minimum_samples=1)
+    )
+    plan = controller.plan(None, None)
+    controller.record_eval_case(first, tenant_id=None, user_id=None, plan=plan)
+    dashboard = controller.record_eval_case(
+        second, tenant_id=None, user_id=None, plan=plan
+    )
+    assert dashboard["summary"]["false_rejection_samples"] == 2
+    state = controller.store.read()
+    evidence_ids = [
+        event["evidence_id"] for event in state["events"]
+        if event.get("metric_kind") == "eval"
+    ]
+    assert len(evidence_ids) == 2
+    assert len(set(evidence_ids)) == 2
+    assert len(state["evidence_ids"]) == 2
+
+
 @pytest.mark.parametrize(
     ("candidate_status", "include_candidate_status"),
     [
