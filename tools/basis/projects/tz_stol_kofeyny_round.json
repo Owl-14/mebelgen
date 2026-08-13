@@ -1,0 +1,238 @@
+{
+  "project_name": "Стол кофейный тип 1 (Ø500×420)",
+  "furniture_type": "стол",
+  "overall_dimensions": {
+    "width": 500,
+    "depth": 500,
+    "height": 420,
+    "tolerance": 10
+  },
+  "materials": {
+    "board_material": "МДФ",
+    "board_thickness": 25,
+    "back_wall_material": "ДВП",
+    "edge_band_thickness": 2,
+    "color": "Белый",
+    "color_code": ""
+  },
+  "sections": [
+    {
+      "id": "main",
+      "type": "round_table",
+      "dimensions": {
+        "width": 500,
+        "height": 420,
+        "depth": 500,
+        "estimated": false
+      },
+      "elements": [
+        "Основание (диск)",
+        "Пьедестал",
+        "Столешница"
+      ]
+    }
+  ],
+  "panels": [
+    {
+      "name": "Основание (диск)",
+      "type": "bottom",
+      "basis_orientation": "horizont",
+      "material": "МДФ",
+      "thickness": 25,
+      "dimensions": {
+        "width": 360,
+        "height": 360
+      },
+      "placement": {
+        "x1": 70,
+        "x2": 430,
+        "y1": 0,
+        "y2": 25,
+        "z1": 70,
+        "z2": 430
+      },
+      "position": {
+        "x": 70,
+        "y": 0,
+        "z": 70
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0.5,
+        "right": 0.5
+      },
+      "estimated": false,
+      "shape": "circle",
+      "radius": 180
+    },
+    {
+      "name": "Пьедестал",
+      "type": "vertical_partition",
+      "basis_orientation": "vertical",
+      "material": "МДФ",
+      "thickness": 280,
+      "dimensions": {
+        "width": 280,
+        "height": 345
+      },
+      "placement": {
+        "x1": 110,
+        "x2": 390,
+        "y1": 25,
+        "y2": 370,
+        "z1": 110,
+        "z2": 390
+      },
+      "position": {
+        "x": 110,
+        "y": 25,
+        "z": 110
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
+      },
+      "estimated": true,
+      "shape": "cylinder",
+      "radius": 140
+    },
+    {
+      "name": "Столешница",
+      "type": "top",
+      "basis_orientation": "horizont",
+      "material": "МДФ",
+      "thickness": 50,
+      "dimensions": {
+        "width": 500,
+        "height": 500
+      },
+      "placement": {
+        "x1": 0,
+        "x2": 500,
+        "y1": 370,
+        "y2": 420,
+        "z1": 0,
+        "z2": 500
+      },
+      "position": {
+        "x": 0,
+        "y": 370,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "edge_banding": {
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0.5,
+        "right": 0.5
+      },
+      "estimated": false,
+      "shape": "circle",
+      "radius": 250
+    }
+  ],
+  "drawers": [],
+  "doors": [],
+  "hardware": {
+    "handles": {
+      "type": "нет",
+      "material": "—",
+      "color": "—",
+      "size": 0,
+      "count": 0,
+      "offset_from_top": 0,
+      "furniture_encoded": ""
+    },
+    "legs": {
+      "type": "пьедестал",
+      "adjustable": false,
+      "color": "—",
+      "height": 0,
+      "count": 0
+    }
+  },
+  "constraints": {
+    "default_gap": 2,
+    "drawer_gap": 2,
+    "door_gap": 2,
+    "back_wall_offset": 3,
+    "construction": "top_bottom_over_sides"
+  },
+  "basis_mapping": {
+    "coordinate_system": "basis_mebelshik",
+    "units": "mm",
+    "ready_for_import": true,
+    "placement_required": true
+  },
+  "warnings": [
+    "Круглая столешница Ø500, толщина 50; цилиндрический пьедестал Ø280 на диске-основании Ø360.",
+    "Прозрачный матовый лак, фетровые подпятники.",
+    "Импортёр БАЗИС строит прямоугольные панели — круг/цилиндр требуют поддержки контура (AKD-42).",
+    "Задняя стенка в ТЗ не указана — принята ДВП 3 мм (стандарт).",
+    "Цвет/декор в ТЗ не указан — принят дефолт «Белый» (ЛДСП), подтвердить с заказчиком."
+  ],
+  "estimated_values": [
+    "pedestal_diameter",
+    "base_diameter",
+    "color"
+  ],
+  "carcass_calculation": {
+    "diameter": 500,
+    "H": 420,
+    "top_thickness": 50,
+    "pedestal_diameter": 280,
+    "construction": "round_pedestal"
+  },
+  "material_refs": {
+    "back": {
+      "resolved": true,
+      "id": "2001",
+      "article": "2001",
+      "name": "ХДФ, 3 мм, Белый лак., Kronostar",
+      "cost": 245,
+      "unit": "кв.м.",
+      "group": "01 Листовой материал/ДВП,ХДФ",
+      "match": "задник ДВП/ХДФ",
+      "confidence": "medium"
+    },
+    "board": {
+      "resolved": true,
+      "id": "W980 ST2",
+      "article": "W980 ST2",
+      "name": "ЛДСП, 16 мм, Белый платиновый, Egger",
+      "cost": 290,
+      "unit": "кв.м.",
+      "group": "01 Листовой материал/ЛДСП/16мм",
+      "match": "толщина + цвет",
+      "confidence": "high"
+    },
+    "edge": {
+      "resolved": true,
+      "id": "1759",
+      "article": "1759",
+      "name": "Кромка ПВХ, 19/2 мм, Белый, 91470-14, Rehau",
+      "cost": 20,
+      "unit": "пог. м",
+      "group": "02 Кромочные материалы/Кромка 19мм/2/19",
+      "match": "толщина + цвет",
+      "confidence": "high"
+    }
+  }
+}
