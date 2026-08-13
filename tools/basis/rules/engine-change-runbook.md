@@ -222,6 +222,12 @@ diff, число деталей/присадок и статусы всех пр
 делает сценарий красным и запрещает исполнение сохранённых операций; иначе replay
 будет self-fulfilling проверкой fixture, а не решения AI-конвейера.
 
+Production-decision trace rule: the offline boundary excludes provider calls,
+not production decisions. Replay must call the production router and request
+policy, validate each saved AI node through `capability_schema`, enforce the
+production repair-attempt limit, bind vision facts to create, and privacy-scan
+all transitively referenced dataset content before reducer execution.
+
 ## 8. Минимальная матрица проверки
 
 Для любого изменения движка выбери профильные тесты, затем всегда выполни оба

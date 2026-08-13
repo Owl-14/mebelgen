@@ -1,9 +1,10 @@
 """Offline replay and comparison for versioned Studio AI trace datasets.
 
 The dataset stores provider outputs, never provider credentials or raw user
-payloads. Replay starts after the paid/model boundary and sends the recorded
-ParamSpec or typed operations through the same reducer and production gate as
-Studio.
+payloads. Replay makes no provider calls, but it does execute the production
+router and request policy, validates recorded outputs with production
+capability schemas, and sends accepted ParamSpec or typed operations through
+the same reducer and production gate as Studio.
 """
 
 from __future__ import annotations
@@ -11,16 +12,23 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any, Mapping
 
+from jsonschema import Draft202012Validator
 from pydantic import ValidationError
 
 from .edit_operations import EditApplicationError, apply_edit_operations
 from .production_gate import GateDecision, evaluate_production_gate
-from .prompt_registry import prompt_manifest
+from .prompt_registry import (
+    capability_schema,
+    classify_intent,
+    evaluate_request_policy,
+    prompt_manifest,
+)
 from .spec_chat import spec_diff
-from .studio_graph import spec_revision
+from .studio_graph import MAX_REPAIR_ITERATIONS, spec_revision
 
 
 DATASET_SCHEMA = "trace-eval-v1"
@@ -63,16 +71,48 @@ def _nodes(case: Mapping[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _capability_node(name: str) -> str | None:
+    if name == "intent.classify":
+        return "intent_routing"
+    if name.startswith("repair."):
+        return "repair"
+    if name in prompt_manifest():
+        return name
+    return None
+
+
+def _materialize_payload(name: str, output: Any, dataset_dir: Path) -> Any:
+    if name == "create_paramspec" and isinstance(output, Mapping) and output.get("spec_ref"):
+        return {
+            "reply": output.get("reply"),
+            "spec": _load_ref(dataset_dir, str(output["spec_ref"])),
+        }
+    return output
+
+
+def _validate_capabilities(
+    case: Mapping[str, Any], nodes: Mapping[str, Any], dataset_dir: Path,
+) -> tuple[dict[str, Any], list[str]]:
+    materialized: dict[str, Any] = {}
+    errors: list[str] = []
+    for name, output in nodes.items():
+        payload = _materialize_payload(name, output, dataset_dir)
+        materialized[name] = payload
+        capability = _capability_node(name)
+        if capability is None:
+            continue
+        for error in Draft202012Validator(capability_schema(capability)).iter_errors(payload):
+            location = ".".join(str(part) for part in error.absolute_path)
+            errors.append(f"capability.{name}{'.' + location if location else ''}: {error.message}")
+    return materialized, errors
+
+
 def _operation_types(nodes: Mapping[str, Any]) -> list[str]:
     result: list[str] = []
     for output in nodes.values():
         if not isinstance(output, Mapping):
             continue
-        batches = output.get("operation_batches")
-        operation_lists = (
-            batches if isinstance(batches, list) else [output.get("operations")]
-        )
-        for operations in operation_lists:
+        for operations in [output.get("operations")]:
             if not isinstance(operations, list):
                 continue
             for operation in operations:
@@ -84,7 +124,9 @@ def _operation_types(nodes: Mapping[str, Any]) -> list[str]:
 def _decision_evidence(
     case: Mapping[str, Any],
     nodes: Mapping[str, Any],
+    materialized_nodes: Mapping[str, Any],
     provider_policies: Mapping[str, Any],
+    production_route: str,
 ) -> tuple[dict[str, Any], list[str]]:
     """Validate the saved AI decision before replaying its operations.
 
@@ -98,7 +140,7 @@ def _decision_evidence(
     command = str(case.get("command") or "")
     command_hash = hashlib.sha256(command.encode("utf-8")).hexdigest()
     router = nodes.get("intent.classify")
-    routed = router.get("route") if isinstance(router, Mapping) else None
+    recorded_route = router.get("intent") if isinstance(router, Mapping) else None
     prompt_node = envelope.get("prompt_node")
     manifest = prompt_manifest().get(str(prompt_node)) if prompt_node else None
     policy_name = envelope.get("provider_policy")
@@ -127,7 +169,8 @@ def _decision_evidence(
     evidence = {
         "command_hash": command_hash,
         "command_class": envelope.get("command_class"),
-        "route": routed,
+        "route": production_route,
+        "recorded_route": recorded_route,
         "prompt_node": prompt_node,
         "prompt_id": recorded.get("prompt_id"),
         "prompt_version": recorded.get("prompt_version"),
@@ -135,10 +178,19 @@ def _decision_evidence(
         "model": model,
         "provider_policy": policy_name,
         "vision_stage_present": "vision_facts" in nodes,
+        "vision_facts_digest": (
+            _digest(materialized_nodes["vision_facts"])
+            if "vision_facts" in materialized_nodes else None
+        ),
+        "create_result_digest": (
+            _digest(materialized_nodes["create_paramspec"])
+            if "vision_facts" in materialized_nodes
+            and "create_paramspec" in materialized_nodes else None
+        ),
         "operation_types": _operation_types(nodes),
         "checks": {
             "command_hash_match": envelope.get("command_hash") == command_hash,
-            "case_route_match": routed == case.get("route"),
+            "recorded_router_match": recorded_route == production_route,
             "prompt_manifest_match": prompt_manifest_match,
             "provider_policy_match": provider_allowed,
         },
@@ -238,9 +290,25 @@ def replay_case(
     route = str(case.get("route") or "")
     nodes = _nodes(case)
     source = _source(case, dataset_dir)
-    decision_evidence, decision_mismatches = _decision_evidence(
-        case, nodes, provider_policies or {}
+    materialized_nodes, capability_errors = _validate_capabilities(case, nodes, dataset_dir)
+    has_images = "vision_facts" in nodes
+    production_route = classify_intent(
+        str(case.get("command") or ""), source, {}, has_images=has_images
     )
+    decision_evidence, decision_mismatches = _decision_evidence(
+        case, nodes, materialized_nodes, provider_policies or {}, production_route
+    )
+    decision_mismatches.extend(capability_errors)
+    if has_images:
+        links = case.get("recorded", {}).get("links") or []
+        expected_link = {
+            "from": "vision_facts",
+            "to": "create_paramspec",
+            "payload_digest": _digest(materialized_nodes.get("vision_facts")),
+            "result_digest": _digest(materialized_nodes.get("create_paramspec")),
+        }
+        if expected_link not in links:
+            decision_mismatches.append("decision.vision_create_link: missing or stale")
     actual: dict[str, Any] = {
         "status": "rejected",
         "diff": [],
@@ -253,10 +321,10 @@ def replay_case(
             actual.update(code="decision.invalid_envelope")
             raise DecisionEnvelopeError(f"{case_id}: decision envelope rejected")
         if route in {"create_paramspec", "vision_create_paramspec"}:
-            output = nodes.get("create_paramspec")
-            if not isinstance(output, Mapping) or not output.get("spec_ref"):
-                raise TraceReplayError(f"{case_id}: create_paramspec.spec_ref is required")
-            candidate = _load_ref(dataset_dir, str(output["spec_ref"]))
+            output = materialized_nodes.get("create_paramspec")
+            if not isinstance(output, Mapping) or not isinstance(output.get("spec"), Mapping):
+                raise TraceReplayError(f"{case_id}: create_paramspec.spec is required")
+            candidate = copy.deepcopy(dict(output["spec"]))
             decision = evaluate_production_gate(candidate)
             actual.update(_gate_output(decision))
             actual.update(
@@ -264,28 +332,38 @@ def replay_case(
                 diff=[f"created {candidate.get('project_name', 'ParamSpec')}"],
                 spec_hash=spec_revision(candidate),
             )
-        elif route in {"edit_operations", "diagnosis"}:
+        elif route == "edit_operations":
             if source is None:
                 raise TraceReplayError(f"{case_id}: source_ref is required")
-            output = nodes.get(route)
+            output = materialized_nodes.get(route)
             if not isinstance(output, Mapping) or not isinstance(output.get("operations"), list):
                 raise TraceReplayError(f"{case_id}: {route}.operations is required")
             reduced = _apply(source, output["operations"])
             decision = evaluate_production_gate(reduced)
             actual.update(_gate_output(decision))
             actual.update(
-                status=("replied" if route == "diagnosis" else
-                        "accepted" if decision.report.ok else "rejected"),
+                status="accepted" if decision.report.ok else "rejected",
                 diff=spec_diff(source, reduced["spec"]),
                 replies=reduced["replies"],
                 spec_hash=spec_revision(reduced["spec"]),
             )
+        elif route == "diagnosis":
+            if source is None:
+                raise TraceReplayError(f"{case_id}: source_ref is required")
+            output = materialized_nodes.get("diagnosis")
+            if not isinstance(output, Mapping):
+                raise TraceReplayError(f"{case_id}: diagnosis payload is required")
+            decision = evaluate_production_gate(source)
+            actual.update(_gate_output(decision))
+            actual.update(
+                status="replied", diff=[], replies=[str(output.get("reply") or "")],
+                spec_hash=spec_revision(source),
+            )
         elif route == "refusal":
-            output = nodes.get("policy")
-            code = output.get("code") if isinstance(output, Mapping) else None
-            if not code:
-                raise TraceReplayError(f"{case_id}: policy.code is required")
-            actual.update(code=code, source_unchanged=True)
+            policy = evaluate_request_policy(str(case.get("command") or ""))
+            if policy["allowed"]:
+                raise TraceReplayError(f"{case_id}: production policy did not refuse request")
+            actual.update(code=policy["code"], source_unchanged=True)
         elif route == "revision_conflict":
             if source is None:
                 raise TraceReplayError(f"{case_id}: source_ref is required")
@@ -300,15 +378,18 @@ def replay_case(
         elif route == "repair_loop":
             if source is None:
                 raise TraceReplayError(f"{case_id}: source_ref is required")
-            output = nodes.get("repair")
-            batches = output.get("operation_batches") if isinstance(output, Mapping) else None
-            if not isinstance(batches, list) or not batches:
-                raise TraceReplayError(f"{case_id}: repair.operation_batches is required")
+            batches = [
+                materialized_nodes[name].get("operations")
+                for name in sorted(materialized_nodes)
+                if name.startswith("repair.") and isinstance(materialized_nodes[name], Mapping)
+            ]
+            if not batches:
+                raise TraceReplayError(f"{case_id}: repair attempts are required")
             working = copy.deepcopy(source)
             outcomes: list[bool] = []
             decision: GateDecision | None = None
             attempts = 0
-            for attempts, operations in enumerate(batches[:3], start=1):
+            for attempts, operations in enumerate(batches[:MAX_REPAIR_ITERATIONS], start=1):
                 reduced = _apply(working, operations)
                 working = reduced["spec"]
                 decision = evaluate_production_gate(reduced)
@@ -366,9 +447,85 @@ def replay_case(
     }
 
 
+_PRIVATE_KEYS = {
+    "authorization", "api_key", "apikey", "access_token", "refresh_token",
+    "password", "secret", "system_prompt", "developer_prompt", "raw_prompt",
+    "image_base64", "base64", "email", "phone",
+}
+_EMAIL = re.compile(r"(?<![\w.-])[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}(?![\w.-])")
+_PHONE = re.compile(r"(?<!\d)(?:\+?\d[\s().-]*){10,15}(?!\d)")
+_SECRET = re.compile(r"(?:bearer\s+[A-Za-z0-9._~+/=-]{12,}|\bsk-[A-Za-z0-9_-]{12,})", re.I)
+_BASE64 = re.compile(r"^[A-Za-z0-9+/]{40,}={0,2}$")
+
+
+def _privacy_errors(value: Any, path: str = "dataset") -> list[str]:
+    errors: list[str] = []
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            child = f"{path}.{key}"
+            if str(key).lower() in _PRIVATE_KEYS:
+                errors.append(f"{child}: private field is forbidden")
+            errors.extend(_privacy_errors(item, child))
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            errors.extend(_privacy_errors(item, f"{path}[{index}]"))
+    elif isinstance(value, str):
+        compact = "".join(value.split())
+        if re.fullmatch(r"[0-9a-fA-F]{40,}", compact):
+            return errors
+        if value.lower().startswith("data:") or ";base64," in value.lower():
+            errors.append(f"{path}: inline data/base64 is forbidden")
+        elif _EMAIL.search(value) or _PHONE.search(value):
+            errors.append(f"{path}: PII is forbidden")
+        elif _SECRET.search(value):
+            errors.append(f"{path}: secret is forbidden")
+        elif _BASE64.fullmatch(compact) and not re.fullmatch(r"[0-9a-fA-F]{40,}", compact):
+            errors.append(f"{path}: encoded payload is forbidden")
+    return errors
+
+
+def _reachable_dataset(dataset: Mapping[str, Any], dataset_dir: Path) -> list[tuple[str, Any]]:
+    reachable: list[tuple[str, Any]] = [("dataset", dataset)]
+    seen: set[Path] = set()
+
+    def visit(value: Any, location: str) -> None:
+        if isinstance(value, Mapping):
+            for key, item in value.items():
+                if str(key).endswith("_ref") and isinstance(item, str):
+                    target = (dataset_dir / item).resolve()
+                    if dataset_dir.resolve() not in target.parents:
+                        raise TraceReplayError(f"dataset reference escapes its directory: {item}")
+                    if target in seen:
+                        continue
+                    seen.add(target)
+                    try:
+                        loaded = json.loads(target.read_text(encoding="utf-8"))
+                    except (OSError, json.JSONDecodeError) as error:
+                        raise TraceReplayError(f"unreadable dataset reference: {item}") from error
+                    reachable.append((f"ref:{item}", loaded))
+                    visit(loaded, f"ref:{item}")
+                else:
+                    visit(item, f"{location}.{key}")
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                visit(item, f"{location}[{index}]")
+
+    visit(dataset, "dataset")
+    return reachable
+
+
+def _enforce_privacy(dataset: Mapping[str, Any], dataset_dir: Path) -> None:
+    errors: list[str] = []
+    for location, value in _reachable_dataset(dataset, dataset_dir):
+        errors.extend(_privacy_errors(value, location))
+    if errors:
+        raise TraceReplayError("privacy scan failed: " + "; ".join(errors[:10]))
+
+
 def run_dataset(path: Path | str = DEFAULT_DATASET) -> dict[str, Any]:
     dataset_path = Path(path).resolve()
     dataset = json.loads(dataset_path.read_text(encoding="utf-8"))
+    _enforce_privacy(dataset, dataset_path.parent)
     if dataset.get("schema_version") != DATASET_SCHEMA:
         raise TraceReplayError(f"unsupported dataset schema: {dataset.get('schema_version')!r}")
     cases = dataset.get("cases")

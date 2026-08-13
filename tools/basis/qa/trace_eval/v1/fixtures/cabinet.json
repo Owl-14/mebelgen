@@ -23,8 +23,7 @@
     "height": 60
   },
   "gaps": {
-    "facade": 2,
-    "default": 2
+    "facade": 2
   },
   "interior_z_front": 16,
   "sections": [

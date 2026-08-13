@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 from pathlib import Path
 
@@ -16,6 +17,8 @@ from src.trace_replay import (
     run_dataset,
     write_report,
 )
+from src.prompt_registry import evaluate_request_policy
+from src.spec_chat import chat_edit
 
 
 def _dataset() -> dict:
@@ -35,7 +38,7 @@ def _replay(case: dict) -> dict:
 def test_versioned_dataset_replays_every_scenario_offline() -> None:
     report = run_dataset()
 
-    assert report["dataset_version"] == "2026-08-13.2"
+    assert report["dataset_version"] == "2026-08-14.3"
     assert report["case_count"] == 12
     assert report["passed"] == 12
     assert report["failed"] == 0
@@ -57,7 +60,7 @@ def test_dataset_covers_editor_success_safety_and_recovery_matrix() -> None:
         expected = case["expected"]
         assert expected["decision"]
         assert expected["node_outputs"]
-        assert "diff" in expected["output"] or expected["profile"] == "rejected-before-gate"
+        assert "status" in expected["output"]
 
 
 def test_report_is_comparable_across_prompt_and_model_versions(tmp_path: Path) -> None:
@@ -92,7 +95,7 @@ def test_saved_node_output_drift_fails_the_case() -> None:
         ("command", 2, lambda case: case.__setitem__("command", "другая команда")),
         ("command_hash", 2, lambda case: case["recorded"]["decision"].__setitem__("command_hash", "0" * 64)),
         ("command_class", 2, lambda case: case["recorded"]["decision"].__setitem__("command_class", "query")),
-        ("route", 2, lambda case: case["recorded"]["nodes"][0]["output"].__setitem__("route", "answer_query")),
+        ("route", 2, lambda case: case["recorded"]["nodes"][0]["output"].__setitem__("intent", "answer_query")),
         ("prompt_id", 2, lambda case: case["recorded"].__setitem__("prompt_id", "furniture.wrong")),
         ("prompt_version", 2, lambda case: case["recorded"].__setitem__("prompt_version", "999.0.0")),
         ("provider", 2, lambda case: case["recorded"].__setitem__("provider", "live-forbidden")),
@@ -129,6 +132,148 @@ def test_dataset_references_cannot_escape_version_directory(tmp_path: Path) -> N
     }
     with pytest.raises(TraceReplayError, match="escapes"):
         replay_case(case, tmp_path / "dataset", {}, {"offline": {}})
+
+
+def test_synchronized_command_and_hash_tamper_is_caught_by_production_router() -> None:
+    case = copy.deepcopy(_dataset()["cases"][2])
+    case["command"] = "Почему модель зелёная?"
+    command_hash = hashlib.sha256(case["command"].encode("utf-8")).hexdigest()
+    case["recorded"]["decision"]["command_hash"] = command_hash
+    case["expected"]["decision"]["command_hash"] = command_hash
+
+    result = _replay(case)
+
+    assert result["ok"] is False
+    assert result["decision"]["route"] == "answer_query"
+    assert result["decision"]["recorded_route"] == "edit_operations"
+    assert result["output"]["code"] == "decision.invalid_envelope"
+
+
+def test_refusal_uses_production_policy_before_provider_selection() -> None:
+    command = _dataset()["cases"][8]["command"]
+
+    assert evaluate_request_policy(command) == {
+        "allowed": False, "code": "prompt_injection",
+    }
+    response = chat_edit({}, command, provider="forbidden-live-provider")
+    assert response["code"] == "prompt_injection"
+    assert response["trace"]["policy"]["allowed"] is False
+
+
+@pytest.mark.parametrize(
+    ("case_index", "node_name", "mutate"),
+    [
+        (0, "create_paramspec", lambda output: output.pop("reply")),
+        (0, "create_paramspec", lambda output: output.pop("spec_ref")),
+        (1, "vision_facts", lambda output: output.__setitem__("facts", [])),
+        (2, "edit_operations", lambda output: output.pop("reply")),
+        (11, "repair.1", lambda output: output.pop("reply")),
+    ],
+)
+def test_every_ai_node_payload_is_checked_by_production_capability_schema(
+    case_index: int, node_name: str, mutate,
+) -> None:
+    case = copy.deepcopy(_dataset()["cases"][case_index])
+    node = next(item for item in case["recorded"]["nodes"] if item["name"] == node_name)
+    mutate(node["output"])
+
+    result = _replay(case)
+
+    assert result["ok"] is False
+    assert result["output"]["code"] == "decision.invalid_envelope"
+    assert any(f"capability.{node_name}" in mismatch for mismatch in result["mismatches"])
+
+
+def test_vision_payload_must_be_linked_to_the_create_node() -> None:
+    case = copy.deepcopy(_dataset()["cases"][1])
+    vision = next(node for node in case["recorded"]["nodes"] if node["name"] == "vision_facts")
+    vision["output"]["reply"] = "Подменённые факты."
+    case["expected"]["node_outputs"]["vision_facts"] = copy.deepcopy(vision["output"])
+
+    result = _replay(case)
+
+    assert result["ok"] is False
+    assert result["output"]["code"] == "decision.invalid_envelope"
+    assert "decision.vision_create_link: missing or stale" in result["mismatches"]
+
+
+def test_vision_link_binds_the_exact_create_result() -> None:
+    case = copy.deepcopy(_dataset()["cases"][1])
+    create = next(node for node in case["recorded"]["nodes"] if node["name"] == "create_paramspec")
+    create["output"]["spec_ref"] = "fixtures/desk.json"
+    case["expected"]["node_outputs"]["create_paramspec"] = copy.deepcopy(create["output"])
+
+    result = _replay(case)
+
+    assert result["ok"] is False
+    assert result["output"]["code"] == "decision.invalid_envelope"
+    assert "decision.vision_create_link: missing or stale" in result["mismatches"]
+
+
+def test_repair_never_consumes_a_third_green_attempt() -> None:
+    case = copy.deepcopy(_dataset()["cases"][11])
+    attempts = [node for node in case["recorded"]["nodes"] if node["name"].startswith("repair.")]
+    attempts[1]["output"]["operations"][0]["value"] = "EVAL-STILL-NOT-IN-BASE"
+    third = copy.deepcopy(attempts[1])
+    third["name"] = "repair.3"
+    third["output"]["operations"][0]["preconditions"][0]["value"] = "EVAL-STILL-NOT-IN-BASE"
+    third["output"]["operations"][0]["value"] = "H1344 ST33"
+    case["recorded"]["nodes"].append(third)
+    case["expected"]["node_outputs"] = {
+        node["name"]: copy.deepcopy(node["output"])
+        for node in case["recorded"]["nodes"]
+    }
+    case["expected"]["profile"] = "red-material-desk"
+    case["expected"]["output"] = {
+        "status": "rejected", "repair_attempts": 2,
+        "intermediate_gate_ok": [False, False],
+    }
+
+    result = _replay(case)
+
+    assert result["ok"] is True
+    assert result["output"]["status"] == "rejected"
+    assert result["output"]["repair_attempts"] == 2
+
+
+def _write_dataset_tree(tmp_path: Path, dataset: dict) -> Path:
+    root = tmp_path / "v1"
+    fixtures = root / "fixtures"
+    fixtures.mkdir(parents=True)
+    for source in (DEFAULT_DATASET.parent / "fixtures").glob("*.json"):
+        (fixtures / source.name).write_bytes(source.read_bytes())
+    target = root / "scenarios.json"
+    target.write_text(json.dumps(dataset, ensure_ascii=False), encoding="utf-8")
+    return target
+
+
+@pytest.mark.parametrize(
+    "inject",
+    [
+        lambda data: data["cases"][0].__setitem__("command", "contact me at eval@example.test"),
+        lambda data: data["cases"][0]["recorded"].__setitem__("raw_prompt", "private instructions"),
+        lambda data: data["cases"][0]["expected"].__setitem__("image_base64", "QUJD" * 20),
+        lambda data: data["provider_policies"]["offline-recorded"].__setitem__("authorization", "Bearer abcdefghijklmnop"),
+    ],
+)
+def test_privacy_scan_fails_closed_across_dataset_regions(tmp_path: Path, inject) -> None:
+    dataset = _dataset()
+    inject(dataset)
+    path = _write_dataset_tree(tmp_path, dataset)
+
+    with pytest.raises(TraceReplayError, match="privacy scan failed"):
+        run_dataset(path)
+
+
+def test_privacy_scan_includes_referenced_fixtures(tmp_path: Path) -> None:
+    path = _write_dataset_tree(tmp_path, _dataset())
+    fixture = path.parent / "fixtures" / "desk.json"
+    payload = json.loads(fixture.read_text(encoding="utf-8"))
+    payload["api_key"] = "sk-eval-secret-value"
+    fixture.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+    with pytest.raises(TraceReplayError, match="privacy scan failed"):
+        run_dataset(path)
 
 
 def test_recorded_traces_are_privacy_safe_references_not_raw_payloads() -> None:

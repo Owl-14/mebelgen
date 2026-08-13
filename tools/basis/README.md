@@ -230,6 +230,13 @@ python main.py studio paramspecs/wardrobe_demo.json --no-open
 
 ## Offline trace replay и eval
 
+Replay does not call a model, but it is not an operation-only fixture replay.
+Every case executes the production intent router and request policy. Recorded
+intent/create/vision/edit/repair replies are validated with the production
+capability schemas; a vision reply must be digest-linked to its create node,
+and repair consumes at most `MAX_REPAIR_ITERATIONS` attempts. Before execution,
+a fail-closed privacy pass scans the dataset and every referenced fixture.
+
 Версионируемый dataset `qa/trace_eval/v1/scenarios.json` хранит неперсональные
 команды, ссылки на fixture ParamSpec, сохранённые выходы AI-узлов и ожидаемые
 diff/число деталей/присадок/production checks. Replay начинается после границы
