@@ -154,7 +154,7 @@ def test_open_validates_and_builds_before_switching_current_product(tmp_path: Pa
         thread.join(timeout=2)
 
 
-def test_save_is_strict_and_does_not_overwrite_on_unknown_fields(tmp_path: Path) -> None:
+def test_all_catalog_writes_are_strict_for_unknown_fields(tmp_path: Path) -> None:
     spec = json.loads(
         (ROOT / "paramspecs" / "komi_72_tumba_podkatnaya.json").read_text(
             encoding="utf-8"
@@ -165,6 +165,10 @@ def test_save_is_strict_and_does_not_overwrite_on_unknown_fields(tmp_path: Path)
     spec_path.write_text(original, encoding="utf-8")
     candidate = json.loads(json.dumps(spec))
     candidate["future_top_level"] = True
+    duplicate_source = tmp_path / "duplicate_source.json"
+    duplicate_source.write_text(
+        json.dumps(candidate, ensure_ascii=False), encoding="utf-8"
+    )
 
     studio = _Studio(spec_path, tmp_path / "out")
     server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(studio))
@@ -179,6 +183,55 @@ def test_save_is_strict_and_does_not_overwrite_on_unknown_fields(tmp_path: Path)
         assert rejected["code"] == "invalid_paramspec"
         assert any("future_top_level" in item for item in rejected["details"])
         assert spec_path.read_text(encoding="utf-8") == original
+
+        status, raw = _request(
+            server.server_port,
+            "POST",
+            "/api/rename",
+            {"file": "duplicate_source.json", "name": "Каноническая запись"},
+        )
+        assert status == 200, raw
+        renamed = json.loads(duplicate_source.read_text(encoding="utf-8"))
+        assert renamed["project_name"] == "Каноническая запись"
+        assert "future_top_level" not in renamed
+        revisions = json.loads(
+            (tmp_path / "duplicate_source.versions.json").read_text(encoding="utf-8")
+        )
+        assert revisions
+        assert all("future_top_level" not in item["spec"] for item in revisions)
+
+        candidate["catalog"] = {
+            "creator_user_id": "owner-1",
+            "responsible_user_id": "owner-1",
+        }
+        duplicate_source.write_text(
+            json.dumps(candidate, ensure_ascii=False), encoding="utf-8"
+        )
+        status, raw = _request(
+            server.server_port,
+            "POST",
+            "/api/catalog/assign",
+            {"file": "duplicate_source.json", "responsible_user_id": ""},
+        )
+        assert status == 200, raw
+        assigned = json.loads(duplicate_source.read_text(encoding="utf-8"))
+        assert "future_top_level" not in assigned
+        assert assigned["catalog"].get("responsible_user_id") == ""
+
+        duplicate_source.write_text(
+            json.dumps(candidate, ensure_ascii=False), encoding="utf-8"
+        )
+        status, raw = _request(
+            server.server_port,
+            "POST",
+            "/api/duplicate",
+            {"file": "duplicate_source.json", "stay_catalog": True},
+        )
+        assert status == 200, raw
+        duplicate = json.loads(
+            (tmp_path / "duplicate_source_copy.json").read_text(encoding="utf-8")
+        )
+        assert "future_top_level" not in duplicate
     finally:
         server.shutdown()
         server.server_close()

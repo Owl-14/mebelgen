@@ -139,10 +139,19 @@ class TenantWorkspaceManager:
             else:
                 selected = (workspace.spec_dir / "new_product.json").resolve()
                 if not selected.exists():
-                    selected.write_text(
-                        json.dumps(self._blank_spec(), ensure_ascii=False, indent=2),
-                        encoding="utf-8",
-                    )
+                    from .paramspec_versioning import strict_paramspec_v1_for_write
+
+                    blank = strict_paramspec_v1_for_write(self._blank_spec())
+                    temporary = selected.with_suffix(".json.tmp")
+                    try:
+                        temporary.write_text(
+                            json.dumps(blank, ensure_ascii=False, indent=2),
+                            encoding="utf-8",
+                        )
+                        temporary.replace(selected)
+                    finally:
+                        if temporary.exists():
+                            temporary.unlink()
             self._current[key] = selected
             return selected
 

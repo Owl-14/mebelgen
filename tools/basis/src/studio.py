@@ -611,6 +611,7 @@ def _migrate_catalog_identity(spec_dir: Path, owner: dict[str, str] | None) -> N
         try:
             stat = path.stat()
             spec = json.loads(path.read_text(encoding="utf-8"))
+            spec, _read_metrics = _read_paramspec_document(spec)
         except (OSError, ValueError, TypeError):
             continue
         if not isinstance(spec, dict) or spec.get("schemaVersion") != "paramspec-v1":
@@ -624,7 +625,8 @@ def _migrate_catalog_identity(spec_dir: Path, owner: dict[str, str] | None) -> N
         if catalog == before:
             continue
         spec["catalog"] = catalog
-        path.write_text(json.dumps(spec, ensure_ascii=False, indent=2), encoding="utf-8")
+        spec = _strict_paramspec_document_for_write(spec)
+        _write_json_atomic(path, spec)
         _os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns))
 
 
@@ -759,7 +761,7 @@ def _safe_spec_file(spec_dir: Path, fname: str) -> Path:
     return p
 
 
-def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
+def _write_json_atomic(path: Path, payload: Any) -> None:
     temporary = path.with_name(f".{path.name}.{secrets.token_hex(6)}.tmp")
     try:
         temporary.write_text(
@@ -779,6 +781,14 @@ def _read_paramspec_document(value: Any) -> tuple[dict[str, Any], dict[str, Any]
 
     envelope = read_paramspec_v1(value)
     return envelope.canonical_document(), envelope.metrics()
+
+
+def _strict_paramspec_document_for_write(value: Any) -> dict[str, Any]:
+    """Apply the strict v1 boundary before every persisted ParamSpec write."""
+
+    from .paramspec_versioning import strict_paramspec_v1_for_write
+
+    return strict_paramspec_v1_for_write(value)
 
 
 def _spec_revision(spec: dict[str, Any]) -> str:
@@ -869,12 +879,12 @@ def _read_versions(spec_path: Path) -> list[dict[str, Any]]:
 
 def _snapshot_version(spec_path: Path, spec: dict[str, Any], keep: int = 30) -> None:
     from datetime import datetime
+    spec = _strict_paramspec_document_for_write(spec)
     vs = _read_versions(spec_path)
     if vs and vs[-1]["spec"] == spec:                 # без дублей подряд
         return
     vs.append({"ts": datetime.now().isoformat(timespec="seconds"), "spec": spec})
-    _versions_file(spec_path).write_text(
-        json.dumps(vs[-keep:], ensure_ascii=False), encoding="utf-8")
+    _write_json_atomic(_versions_file(spec_path), vs[-keep:])
 
 
 def _list_versions(spec_path: Path) -> list[dict[str, Any]]:
@@ -2277,13 +2287,13 @@ def make_handler(st: _Studio):
                             while out.exists():
                                 out = workspace.spec_dir / f"{_slugify(title)}_{i}.json"
                                 i += 1
+                        new_spec = _strict_paramspec_document_for_write(new_spec)
                         from .telemetry import span
                         with span("revision.persist", {
                             "project.hash": hash_payload({"project_file": out.name}),
                             "revision.hash": hash_payload(new_spec),
                         }) as persist_span:
-                            out.write_text(json.dumps(new_spec, ensure_ascii=False, indent=2),
-                                           encoding="utf-8")
+                            _write_json_atomic(out, new_spec)
                             persist_span.set_attributes({"revision.persisted": True,
                                                          "check.outcome": "pass"})
                         st.workspaces.set_current(auth, out)
@@ -2424,7 +2434,9 @@ def make_handler(st: _Studio):
                         self._json({"ok": False, "error":
                                     "демо-режим: исходное изделие защищено"}, 403)
                         return
-                    renamed = json.loads(p.read_text(encoding="utf-8"))
+                    renamed, _read_metrics = _read_paramspec_document(
+                        json.loads(p.read_text(encoding="utf-8"))
+                    )
                     if not _catalog_can_manage(auth, _catalog_spec_permissions(renamed)):
                         self._json({
                             "ok": False,
@@ -2444,6 +2456,7 @@ def make_handler(st: _Studio):
                     previous_name = str(renamed.get("project_name") or p.stem)
                     _snapshot_version(p, renamed)
                     renamed["project_name"] = name
+                    renamed = _strict_paramspec_document_for_write(renamed)
                     _write_json_atomic(p, renamed)
                     _snapshot_version(p, renamed)
                     self._audit_product_action(
@@ -2466,7 +2479,9 @@ def make_handler(st: _Studio):
                     if workspace.mode == "demo":
                         self._json({"ok": False, "error": "Демо-каталог неизменяем"}, 403)
                         return
-                    assigned = json.loads(p.read_text(encoding="utf-8"))
+                    assigned, _read_metrics = _read_paramspec_document(
+                        json.loads(p.read_text(encoding="utf-8"))
+                    )
                     if not _catalog_can_manage(auth, _catalog_spec_permissions(assigned)):
                         self._json({
                             "ok": False,
@@ -2498,6 +2513,7 @@ def make_handler(st: _Studio):
                     catalog["responsible_user_id"] = responsible_user_id
                     catalog["responsible"] = str((responsible or {}).get("display_name") or "")
                     assigned["catalog"] = catalog
+                    assigned = _strict_paramspec_document_for_write(assigned)
                     _write_json_atomic(p, assigned)
                     _snapshot_version(p, assigned)
                     self._audit_product_action(
@@ -2624,13 +2640,13 @@ def make_handler(st: _Studio):
                          "project_name": name},
                         _catalog_actor(auth),
                     )
+                    new_spec = _strict_paramspec_document_for_write(new_spec)
                     p = workspace.spec_dir / f"{_slugify(name)}.json"
                     i = 2
                     while p.exists():
                         p = workspace.spec_dir / f"{_slugify(name)}_{i}.json"
                         i += 1
-                    p.write_text(json.dumps(new_spec, ensure_ascii=False, indent=2),
-                                 encoding="utf-8")
+                    _write_json_atomic(p, new_spec)
                     st.workspaces.set_current(auth, p)
                     self._json({"ok": True, "spec": new_spec, "file": p.name})
                 elif path == "/api/duplicate":   # дубликат текущего (D1)
@@ -2640,6 +2656,7 @@ def make_handler(st: _Studio):
                             workspace.spec_dir, str(body.get("file", "")))
                     source_spec = (json.loads(source_path.read_text(encoding="utf-8"))
                                    if body.get("file") else (spec or current_spec))
+                    source_spec, _read_metrics = _read_paramspec_document(source_spec)
                     dup = json.loads(json.dumps(source_spec))
                     dup["project_name"] = str(dup.get("project_name", "модель")) + " (копия)"
                     actor = _catalog_actor(auth)
@@ -2649,13 +2666,13 @@ def make_handler(st: _Studio):
                             if key not in _CATALOG_IDENTITY_FIELDS
                         }
                         _stamp_catalog_identity(dup, actor)
+                    dup = _strict_paramspec_document_for_write(dup)
                     p = workspace.spec_dir / f"{source_path.stem}_copy.json"
                     i = 2
                     while p.exists():
                         p = workspace.spec_dir / f"{source_path.stem}_copy{i}.json"
                         i += 1
-                    p.write_text(json.dumps(dup, ensure_ascii=False, indent=2),
-                                 encoding="utf-8")
+                    _write_json_atomic(p, dup)
                     if not body.get("stay_catalog"):
                         st.workspaces.set_current(auth, p)
                     self._audit_product_action(
@@ -2852,8 +2869,6 @@ def make_handler(st: _Studio):
                         dict(spec), _catalog_actor(auth), preserved=current_spec
                     )
                     from .paramspec import validate_paramspec
-                    from .paramspec_versioning import strict_paramspec_v1_for_write
-
                     write_errors = validate_paramspec(spec)
                     if write_errors:
                         self._json({
@@ -2863,7 +2878,7 @@ def make_handler(st: _Studio):
                             "details": write_errors[:12],
                         }, 422)
                         return
-                    spec = strict_paramspec_v1_for_write(spec)
+                    spec = _strict_paramspec_document_for_write(spec)
                     _write_json_atomic(spec_path, spec)
                     add_current_attributes({
                         "revision.hash": hash_payload(spec),

@@ -12,7 +12,7 @@ from src.paramspec_versioning import (
     read_paramspec_v1,
     strict_paramspec_v1_for_write,
 )
-from src.studio import _production_gate_error, build_payload
+from src.studio import _migrate_catalog_identity, _production_gate_error, build_payload
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -146,3 +146,25 @@ def test_dry_run_audits_fixture_tenant_and_revisions_without_writes(
     assert {
         path: path.read_bytes() for path in (legacy_path, tenant_path, versions_path)
     } == before
+
+
+def test_catalog_identity_migration_uses_canonical_strict_write(tmp_path: Path) -> None:
+    raw = _fixture()
+    raw["future_top_level"] = "tolerated on read, forbidden on write"
+    path = tmp_path / "wardrobe.json"
+    path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+
+    _migrate_catalog_identity(
+        tmp_path,
+        {"user_id": "owner-1", "display_name": "Владелец"},
+    )
+
+    persisted = json.loads(path.read_text(encoding="utf-8"))
+    assert "future_top_level" not in persisted
+    assert persisted["catalog"] == {
+        "creator_user_id": "owner-1",
+        "responsible_user_id": "owner-1",
+        "author": "Владелец",
+        "responsible": "Владелец",
+    }
+    assert strict_paramspec_v1_for_write(persisted) == persisted
