@@ -261,11 +261,11 @@ def test_regeneration_restores_selection_only_on_the_current_payload() -> None:
     apply = _compact(_function("apply"))
     commit = _compact(_function("commitGeneratedPayload"))
     assert "requestId!==generateRequestSeq||JSON.stringify(SPEC)!==requestSpecJson" in apply
-    assert "returncommitGeneratedPayload(p,requestSpecJson)" in apply
+    assert "returncommitGeneratedPayload(p,requestSpecJson,opts)" in apply
     assert "restorePartName=" in commit
     assert "p.viewer.panels.findIndex(panel=>panel.name===restorePartName)" in commit
     assert "if(restoreIndex>=0)scene3d.select(restoreIndex)" in commit
-    assert commit.index("paint(p)") < commit.index("scene3d.select(restoreIndex)")
+    assert commit.index("paint(p,opts)") < commit.index("scene3d.select(restoreIndex)")
 
 
 def test_detail_drawing_uses_a_workspace_request_token() -> None:
