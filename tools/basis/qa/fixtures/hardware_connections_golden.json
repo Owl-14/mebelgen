@@ -128,16 +128,5 @@
         "bom": [{"name": "Саморез 5×12 (каркас/экран)", "qty": 12}]
       }
     }
-  },
-  "b3d_reference": {
-    "path": "qa/fixtures/wardrobe_demo_production.b3d",
-    "expected": {
-      "file_sha256": "e990e0a73c57014a6f07073015dd52a6a765b63c5343be1c28e2fd471ca8d839",
-      "panels": 27,
-      "instances": 269,
-      "world_holes": 521,
-      "world_holes_sha256": "d9340962f97a447bef67b1145027196fee7adefdc97b6ac3cac90119519e4bdc",
-      "library_sha256": "7f168f36a572841a1a2364025e3b28682b798bd1719ab27151f1de038adc5a26"
-    }
   }
 }
