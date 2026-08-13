@@ -10,6 +10,13 @@ ParamSpec — единственный вход конвейера (`paramspecs/
 включены в типизированный контракт. Минимальный валидный пример — в
 `src/studio.py::_default_spec`.
 
+Политика версий, inventory сохранённых полей и граница domain payload/catalog
+metadata зафиксированы в [paramspec-versioning.md](paramspec-versioning.md).
+Каноническая версия данных — `paramspec-v1`; Pydantic v2 означает только major
+version библиотеки. Чтение через version adapter допускает и метрит неизвестные
+extension-поля, но известные поля остаются строго типизированными, а запись
+всегда выполняется strict-write без неизвестных полей.
+
 ## Верхний уровень
 
 | Поле | Тип | Смысл |

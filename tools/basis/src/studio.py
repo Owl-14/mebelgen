@@ -83,8 +83,22 @@ SECTION_ARCHETYPES = ["cabinet", "wardrobe", "shelving", "drawer_unit", "door_un
 def build_payload(spec: dict[str, Any]) -> dict[str, Any]:
     """ParamSpec → всё для редактора: модель, проверки, BOM. Ошибки не бросают."""
     from .telemetry import hash_payload, span
-    revision = _spec_revision(spec)
-    trace_attrs = {"revision.hash": hash_payload(spec)}
+    read_metrics: dict[str, Any] | None = None
+    revision_spec = spec
+    try:
+        from .paramspec_versioning import read_paramspec_v1
+
+        envelope = read_paramspec_v1(spec)
+        read_metrics = envelope.metrics()
+        # Catalog/ownership metadata is not generator input.  Unknown extension
+        # fields are reported by the adapter but cannot reach geometry.
+        spec = envelope.payload_dict()
+    except (TypeError, ValueError):
+        # The production gate below remains the authoritative source of stable
+        # validation errors for malformed known fields and unsupported versions.
+        pass
+    revision = _spec_revision(revision_spec)
+    trace_attrs = {"revision.hash": hash_payload(revision_spec)}
     issues: dict[str, list[str]] = {"schema": [], "consistency": [], "geometry": [],
                                     "cfrn": [], "holes": [], "drilling": [],
                                     "completeness": [], "materials": []}
@@ -140,8 +154,11 @@ def build_payload(spec: dict[str, Any]) -> dict[str, Any]:
         }):
             pass
     if project is None:
-        return {"ok": False, "issues": issues, "revision": revision,
-                "check_report": decision.report.to_dict()}
+        result = {"ok": False, "issues": issues, "revision": revision,
+                  "check_report": decision.report.to_dict()}
+        if read_metrics is not None:
+            result["paramspec_read"] = read_metrics
+        return result
 
     from .webviewer import viewer_payload
     from .delivery import _hardware_bom, spec_summary
@@ -158,6 +175,8 @@ def build_payload(spec: dict[str, Any]) -> dict[str, Any]:
         "bom": _hardware_bom(project),
         "refs": project.get("material_refs") or {},   # слоты фурнитуры для выбора (A4)
     }
+    if read_metrics is not None:
+        payload["paramspec_read"] = read_metrics
     try:
         from .estimate import estimate_project
         payload["estimate"] = estimate_project(project)   # смета live (C1)
@@ -751,6 +770,15 @@ def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
     finally:
         if temporary.exists():
             temporary.unlink()
+
+
+def _read_paramspec_document(value: Any) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Apply the tolerant v1 read boundary used by persisted Studio files."""
+
+    from .paramspec_versioning import read_paramspec_v1
+
+    envelope = read_paramspec_v1(value)
+    return envelope.canonical_document(), envelope.metrics()
 
 
 def _spec_revision(spec: dict[str, Any]) -> str:
@@ -1622,6 +1650,12 @@ def make_handler(st: _Studio):
                     return
                 spec_path = st.workspaces.current_spec_path(auth)
                 spec = json.loads(spec_path.read_text(encoding="utf-8"))
+                try:
+                    spec, _read_metrics = _read_paramspec_document(spec)
+                except (TypeError, ValueError):
+                    # Keep malformed legacy data visible to the existing UI;
+                    # generation will return the normal schema error report.
+                    pass
                 from .webviewer import SCENE_JS
                 page = (PAGE
                         .replace("__SCENE_JS__", SCENE_JS)
@@ -2349,6 +2383,18 @@ def make_handler(st: _Studio):
                             "error": "Изделие не открыто: ParamSpec должен быть объектом",
                         }, 422)
                         return
+                    try:
+                        opened, paramspec_read = _read_paramspec_document(opened)
+                    except (TypeError, ValueError):
+                        from .paramspec import validate_paramspec
+
+                        self._json({
+                            "ok": False,
+                            "code": "invalid_paramspec",
+                            "error": "Изделие не открыто: ParamSpec не прошёл проверку схемы",
+                            "details": validate_paramspec(opened)[:8],
+                        }, 422)
+                        return
                     payload = None
                     if not opened.get("draft"):
                         payload = build_payload(opened)
@@ -2368,6 +2414,7 @@ def make_handler(st: _Studio):
                         "spec": opened,
                         "file": p.name,
                         "payload": payload,
+                        "paramspec_read": paramspec_read,
                     })
                 elif path == "/api/rename":      # переименовать из каталога без открытия
                     p = _safe_spec_file(workspace.spec_dir, str(body.get("file", "")))
@@ -2804,8 +2851,20 @@ def make_handler(st: _Studio):
                     spec = _stamp_catalog_identity(
                         dict(spec), _catalog_actor(auth), preserved=current_spec
                     )
-                    spec_path.write_text(json.dumps(spec, ensure_ascii=False, indent=2),
-                                         encoding="utf-8")
+                    from .paramspec import validate_paramspec
+                    from .paramspec_versioning import strict_paramspec_v1_for_write
+
+                    write_errors = validate_paramspec(spec)
+                    if write_errors:
+                        self._json({
+                            "ok": False,
+                            "code": "invalid_paramspec",
+                            "error": "Изделие не сохранено: ParamSpec не прошёл строгую проверку",
+                            "details": write_errors[:12],
+                        }, 422)
+                        return
+                    spec = strict_paramspec_v1_for_write(spec)
+                    _write_json_atomic(spec_path, spec)
                     add_current_attributes({
                         "revision.hash": hash_payload(spec),
                         "revision.persisted": True,
