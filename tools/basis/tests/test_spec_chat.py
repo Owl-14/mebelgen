@@ -164,6 +164,9 @@ def test_kimi_k3_uses_strict_schema_fixed_parameters_and_cost(monkeypatch):
 
     monkeypatch.setenv("KIMI_API_KEY", "test-key")
     monkeypatch.setenv("SPEC_CHAT_PAID_ENABLED", "1")
+    # The client is fully replaced below; permit this offline contract test
+    # while keeping real paid calls fail-closed in CI.
+    monkeypatch.setenv("SPEC_CHAT_ALLOW_PAID_IN_CI", "1")
     monkeypatch.setenv("LLM_MODEL", "unpriced-model-must-not-win")
     monkeypatch.setenv("LLM_BASE_URL", "https://unpriced.invalid/v1")
     monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(OpenAI=FakeOpenAI))
@@ -201,6 +204,7 @@ def test_glm_52_uses_json_mode_and_disabled_thinking(monkeypatch):
 
     monkeypatch.setenv("GLM_API_KEY", "test-key")
     monkeypatch.setenv("SPEC_CHAT_PAID_ENABLED", "1")
+    monkeypatch.setenv("SPEC_CHAT_ALLOW_PAID_IN_CI", "1")
     monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(OpenAI=FakeOpenAI))
     sc.OpenAICompatProvider("glm-5.2").chat(SPEC, "измени ширину")
 
