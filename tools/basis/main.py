@@ -158,36 +158,63 @@ def cmd_cloud(args: argparse.Namespace) -> int:
 
 
 def cmd_cutting(args: argparse.Namespace) -> int:
-    from src.cloud_cutting import CuttingClient, api_overview
+    from src.cloud_cutting import CuttingClient, CuttingError, api_overview
 
     if args.op == "info":
         print(api_overview())
         return 0
-    c = CuttingClient()
+    c = CuttingClient(
+        allow_live=args.allow_live,
+        allow_mutations=args.allow_mutations,
+        max_mutations=args.max_mutations,
+    )
     a = args.args
     out = None
-    if args.op == "orders":
-        out = c.list_orders()
-    elif args.op == "order":
-        out = c.get_order(int(a[0]))
-    elif args.op == "details":
-        out = c.order_details(int(a[0]))
-    elif args.op == "specification":
-        out = c.order_specification(int(a[0]))
-    elif args.op == "cad-models":
-        out = c.list_cad_models(int(a[0]))
-    elif args.op == "upload":
-        out = c.upload_cad_model(int(a[0]), a[1])
-    elif args.op == "materials":
-        out = c.cad_model_materials(int(a[0]))
-    elif args.op == "run-production":
-        out = c.run_production_files(int(a[0]))
-    elif args.op == "production-url":
-        out = c.production_files_url(int(a[0]))
-    elif args.op == "long-tasks":
-        out = c.list_long_tasks()
-    elif args.op == "long-task":
-        out = c.long_task(int(a[0]))
+    try:
+        if args.op == "orders":
+            out = c.list_orders()
+        elif args.op == "create-order":
+            out = c.create_order(
+                json.loads(Path(a[0]).read_text(encoding="utf-8")),
+                idempotency_key=args.idempotency_key,
+            )
+        elif args.op == "order":
+            out = c.get_order(int(a[0]))
+        elif args.op == "details":
+            out = c.order_details(int(a[0]))
+        elif args.op == "specification":
+            out = c.order_specification(int(a[0]))
+        elif args.op == "cad-models":
+            out = c.list_cad_models(int(a[0]))
+        elif args.op == "upload":
+            out = c.upload_cad_model(
+                int(a[0]), a[1], idempotency_key=args.idempotency_key,
+            )
+        elif args.op == "materials":
+            out = c.cad_model_materials(int(a[0]))
+        elif args.op == "link-materials":
+            out = c.set_link_materials(
+                int(a[0]),
+                json.loads(Path(a[1]).read_text(encoding="utf-8")),
+                idempotency_key=args.idempotency_key,
+            )
+        elif args.op == "run-cutting":
+            out = c.run_cutting(int(a[0]), idempotency_key=args.idempotency_key)
+        elif args.op == "run-production":
+            out = c.run_production_files(
+                int(a[0]), idempotency_key=args.idempotency_key,
+            )
+        elif args.op == "production-url":
+            out = c.production_files_url(int(a[0]))
+            if isinstance(out, str) and not args.show_sensitive_url:
+                out = {"available": bool(out), "trace_id": c.trace_id}
+        elif args.op == "long-tasks":
+            out = c.list_long_tasks()
+        elif args.op == "long-task":
+            out = c.long_task(int(a[0]))
+    except CuttingError as exc:
+        print(json.dumps(exc.as_dict(), ensure_ascii=False, indent=2), file=sys.stderr)
+        return 2
     print(json.dumps(out, ensure_ascii=False, indent=2) if not isinstance(out, str) else out)
     return 0
 
@@ -553,10 +580,16 @@ def main() -> int:
     p_cloud.add_argument("--format", choices=["pdf", "jpeg", "wmf", "svg"], help="для drawing-convert")
     p_cloud.set_defaults(func=cmd_cloud)
 
-    p_cut = sub.add_parser("cutting", help="БАЗИС-Облако Cutting API раскрой/производство ('cutting info' без ключа)")
-    p_cut.add_argument("op", choices=["info", "orders", "order", "details", "specification", "cad-models",
-                                      "upload", "materials", "run-production", "production-url", "long-tasks", "long-task"])
-    p_cut.add_argument("args", nargs="*", help="id заказа/модели; для upload: orderId file")
+    p_cut = sub.add_parser("cutting", help="БАЗИС-Облако Cutting API; сеть и мутации по умолчанию запрещены")
+    p_cut.add_argument("op", choices=["info", "orders", "create-order", "order", "details", "specification",
+                                      "cad-models", "upload", "materials", "link-materials", "run-cutting",
+                                      "run-production", "production-url", "long-tasks", "long-task"])
+    p_cut.add_argument("args", nargs="*", help="id/файл; upload: orderId model.b3d; link-materials: modelId links.json")
+    p_cut.add_argument("--allow-live", action="store_true", help="явно разрешить сетевой Cutting-запрос")
+    p_cut.add_argument("--allow-mutations", action="store_true", help="явно разрешить внешние мутации")
+    p_cut.add_argument("--max-mutations", type=int, default=0, help="жёсткий бюджет POST-запросов")
+    p_cut.add_argument("--idempotency-key", default="", help="обязательный уникальный ключ одной мутации")
+    p_cut.add_argument("--show-sensitive-url", action="store_true", help="явно вывести signed production URL")
     p_cut.set_defaults(func=cmd_cutting)
 
     p_mat = sub.add_parser("materials", help="Каталог + база производства; --search поиск, --check сверка проекта")

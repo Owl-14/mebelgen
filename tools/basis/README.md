@@ -107,7 +107,9 @@ python main.py deliver   paramspecs/<spec>.json [--status draft] # лист со
 # Сборка нативной модели .b3d через облако БАЗИС (device-independent, ПЛАТНО ~10₽/операция)
 python main.py build-b3d         projects/<project>.json -o out.b3d
 python main.py cloud info | list | model-convert … | drawing-convert …
-python main.py cutting …                                          # раскрой (облако, платно)
+python main.py cutting info                                       # контракт без сети/ключа
+python qa/cutting_contract_harness.py                             # полный offline contract flow
+# live Cutting — только отдельное разрешение; guards/команда: rules/cutting-api.md
 ```
 
 ## Тесты

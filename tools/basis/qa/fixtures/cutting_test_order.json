@@ -1,0 +1,41 @@
+{
+  "contractVersion": "cutting-public-openapi-2026-06-30",
+  "order": {
+    "managerId": null,
+    "clientId": null,
+    "note": "MEB-140 non-personal contract fixture",
+    "factoryOrderId": "${IDEMPOTENCY_PREFIX}",
+    "factoryId": null,
+    "uid1C": null
+  },
+  "model": {
+    "path": "wardrobe_demo_production.b3d",
+    "count": 1,
+    "cutModels": true
+  },
+  "expectedSourceMaterials": [
+    "MEB-140 FIXTURE BOARD",
+    "MEB-140 FIXTURE EDGE"
+  ],
+  "materialLinks": [
+    {
+      "originalMaterialFullName": "MEB-140 FIXTURE BOARD",
+      "materialType": 0,
+      "linkedMaterialFullName": "MEB-140 APPROVED BOARD"
+    },
+    {
+      "originalMaterialFullName": "MEB-140 FIXTURE EDGE",
+      "materialType": 2,
+      "linkedMaterialFullName": "MEB-140 APPROVED EDGE"
+    }
+  ],
+  "expectedOrder": [
+    "POST /orders",
+    "POST /cad-models",
+    "GET /cad-models/140002/materials",
+    "POST /cad-models/140002/set-link-materials",
+    "POST /orders/140001/run-cutting",
+    "POST /orders/140001/run-generation-production-files",
+    "GET /orders/140001/production-files-url"
+  ]
+}
