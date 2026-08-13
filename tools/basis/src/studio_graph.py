@@ -14,8 +14,9 @@ import os
 import re
 import sqlite3
 import threading
+import time
 import uuid
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterator, Mapping, Protocol, TypedDict
@@ -64,6 +65,7 @@ class GraphState(TypedDict, total=False):
     usage: dict[str, Any]
     created: bool
     node_history: list[str]
+    shadow: bool
 
 
 class IntentClassifier(Protocol):
@@ -125,6 +127,10 @@ class GraphRevisionError(RuntimeError):
     """A request or resumed checkpoint references a different ParamSpec."""
 
 
+class CheckpointStorageError(RuntimeError):
+    """Durable checkpoint storage is unavailable or outside its budget."""
+
+
 def spec_revision(spec: Mapping[str, Any]) -> str:
     payload = json.dumps(
         spec, ensure_ascii=False, sort_keys=True, separators=(",", ":")
@@ -166,26 +172,42 @@ class JsonRevisionStore:
         self._lock = threading.RLock()
 
     def persist(self, project_key: str, revision: Mapping[str, Any]) -> None:
+        self.persist_many([(project_key, revision)])
+
+    def persist_many(
+        self, rows_to_add: list[tuple[str, Mapping[str, Any]]]
+    ) -> None:
         with self._lock:
             try:
                 data = json.loads(self.path.read_text(encoding="utf-8"))
-            except (OSError, ValueError, TypeError):
+            except FileNotFoundError:
                 data = {}
-            rows = list(data.get(project_key) or [])
-            rows.append(dict(revision))
-            data[project_key] = rows[-100:]
-            self.path.parent.mkdir(parents=True, exist_ok=True)
+            except (OSError, ValueError, TypeError) as error:
+                raise CheckpointStorageError(
+                    f"revision_storage:{type(error).__name__}"
+                ) from error
+            if not isinstance(data, dict):
+                raise CheckpointStorageError("revision_storage:invalid_root")
+            for project_key, revision in rows_to_add:
+                rows = list(data.get(project_key) or [])
+                rows.append(dict(revision))
+                data[project_key] = rows[-100:]
             temporary = self.path.with_name(
                 f".{self.path.name}.{uuid.uuid4().hex[:10]}.tmp"
             )
             try:
+                self.path.parent.mkdir(parents=True, exist_ok=True)
                 temporary.write_text(
                     json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
                 )
                 temporary.replace(self.path)
+            except (OSError, ValueError, TypeError) as error:
+                raise CheckpointStorageError(
+                    f"revision_storage:{type(error).__name__}"
+                ) from error
             finally:
-                if temporary.exists():
-                    temporary.unlink()
+                with suppress(OSError):
+                    temporary.unlink(missing_ok=True)
 
 
 class MemoryRevisionStore:
@@ -196,6 +218,302 @@ class MemoryRevisionStore:
     def persist(self, project_key: str, revision: Mapping[str, Any]) -> None:
         with self._lock:
             self.rows.setdefault(project_key, []).append(dict(revision))
+
+
+class NullRevisionStore:
+    """Explicit non-persistent sink used by shadow executions."""
+
+    def persist(self, project_key: str, revision: Mapping[str, Any]) -> None:
+        return None
+
+
+class BufferedRevisionStore:
+    """Commit revision audit only after the matching checkpoint is durable."""
+
+    def __init__(self, backing: JsonRevisionStore) -> None:
+        self.backing = backing
+        self._pending: list[tuple[str, dict[str, Any]]] = []
+        self._lock = threading.RLock()
+
+    def persist(self, project_key: str, revision: Mapping[str, Any]) -> None:
+        with self._lock:
+            self._pending.append((project_key, copy.deepcopy(dict(revision))))
+
+    def flush(self, generation: str) -> None:
+        with self._lock:
+            selected = [
+                row for row in self._pending
+                if str(row[1].get("generation") or "") == generation
+            ]
+            if not selected:
+                return
+            try:
+                self.backing.persist_many(selected)
+            except (CheckpointStorageError, OSError, ValueError) as error:
+                self._pending = [row for row in self._pending if row not in selected]
+                if isinstance(error, CheckpointStorageError):
+                    raise
+                raise CheckpointStorageError(
+                    f"revision_storage:{type(error).__name__}"
+                ) from error
+            self._pending = [row for row in self._pending if row not in selected]
+
+    def discard(self, generation: str) -> None:
+        with self._lock:
+            self._pending = [
+                row for row in self._pending
+                if str(row[1].get("generation") or "") != generation
+            ]
+
+
+class CheckpointRetention:
+    """Bound LangGraph SQLite rows and provide fail-closed storage health."""
+
+    def __init__(self, connection: sqlite3.Connection, path: Path) -> None:
+        self.connection = connection
+        self.path = Path(path)
+        self.max_threads = max(1, int(os.environ.get("AKEDA_CHECKPOINT_MAX_THREADS", "100")))
+        self.max_per_thread = max(
+            4, int(os.environ.get("AKEDA_CHECKPOINT_MAX_PER_THREAD", "64"))
+        )
+        self.retention_days = max(
+            1, int(os.environ.get("AKEDA_CHECKPOINT_RETENTION_DAYS", "7"))
+        )
+        self.max_bytes = max(
+            1024 * 1024,
+            int(os.environ.get("AKEDA_SLO_CHECKPOINT_BYTES", str(64 * 1024 * 1024))),
+        )
+        self.lease_seconds = max(
+            30, int(os.environ.get("AKEDA_CHECKPOINT_LEASE_SECONDS", "3600"))
+        )
+        self.orphan_grace_seconds = max(
+            0, int(os.environ.get("AKEDA_CHECKPOINT_ORPHAN_GRACE_SECONDS", "300"))
+        )
+        self._lock = threading.RLock()
+        self.connection.execute(
+            """CREATE TABLE IF NOT EXISTS akeda_checkpoint_threads (
+                   thread_id TEXT PRIMARY KEY,
+                   touched_at INTEGER NOT NULL,
+                   completed INTEGER NOT NULL DEFAULT 0
+               )"""
+        )
+        columns = {
+            row[1] for row in self.connection.execute("PRAGMA table_info(akeda_checkpoint_threads)")
+        }
+        if "lease_until" not in columns:
+            self.connection.execute(
+                "ALTER TABLE akeda_checkpoint_threads ADD COLUMN lease_until INTEGER NOT NULL DEFAULT 0"
+            )
+        self.connection.execute(
+            """CREATE TABLE IF NOT EXISTS akeda_checkpoint_orphans (
+                   thread_id TEXT PRIMARY KEY,
+                   first_seen_at INTEGER NOT NULL
+               )"""
+        )
+        self.connection.commit()
+
+    def acquire(self, thread_id: str) -> None:
+        """Commit an active lease before LangGraph can write a checkpoint."""
+        with self._lock:
+            try:
+                now = int(time.time())
+                self.connection.execute("BEGIN IMMEDIATE")
+                self.connection.execute(
+                    """INSERT INTO akeda_checkpoint_threads(
+                           thread_id,touched_at,completed,lease_until
+                       ) VALUES(?,?,0,?)
+                       ON CONFLICT(thread_id) DO UPDATE SET
+                         touched_at=excluded.touched_at,
+                         lease_until=excluded.lease_until""",
+                    (thread_id, now, now + self.lease_seconds),
+                )
+                self.connection.execute(
+                    "DELETE FROM akeda_checkpoint_orphans WHERE thread_id=?", (thread_id,)
+                )
+                self.connection.commit()
+            except (sqlite3.Error, OSError, ValueError) as error:
+                with suppress(sqlite3.Error):
+                    self.connection.rollback()
+                raise CheckpointStorageError(
+                    f"checkpoint_storage:{type(error).__name__}"
+                ) from error
+
+    def touch(self, thread_id: str, *, completed: bool) -> dict[str, Any]:
+        with self._lock:
+            try:
+                now = int(time.time())
+                self.connection.execute("BEGIN IMMEDIATE")
+                self.connection.execute(
+                    """INSERT INTO akeda_checkpoint_threads(
+                           thread_id,touched_at,completed,lease_until
+                       ) VALUES(?,?,?,0)
+                       ON CONFLICT(thread_id) DO UPDATE SET
+                         touched_at=excluded.touched_at,
+                         completed=MAX(completed, excluded.completed),
+                         lease_until=0""",
+                    (thread_id, now, int(completed)),
+                )
+                self.connection.commit()
+                return self.prune()
+            except (sqlite3.Error, OSError, ValueError) as error:
+                with suppress(sqlite3.Error):
+                    self.connection.rollback()
+                raise CheckpointStorageError(
+                    f"checkpoint_storage:{type(error).__name__}"
+                ) from error
+
+    def release(self, thread_id: str) -> None:
+        """Drop a lease after an aborted request without deleting its recovery state."""
+        with self._lock:
+            try:
+                self.connection.execute(
+                    "UPDATE akeda_checkpoint_threads SET touched_at=?, lease_until=0 WHERE thread_id=?",
+                    (int(time.time()), thread_id),
+                )
+                self.connection.commit()
+            except (sqlite3.Error, OSError, ValueError) as error:
+                with suppress(sqlite3.Error):
+                    self.connection.rollback()
+                raise CheckpointStorageError(
+                    f"checkpoint_storage:{type(error).__name__}"
+                ) from error
+
+    def _delete_threads(self, thread_ids: list[str]) -> int:
+        deleted = 0
+        for thread_id in thread_ids:
+            self.connection.execute("DELETE FROM writes WHERE thread_id=?", (thread_id,))
+            deleted += self.connection.execute(
+                "DELETE FROM checkpoints WHERE thread_id=?", (thread_id,)
+            ).rowcount
+            self.connection.execute(
+                "DELETE FROM akeda_checkpoint_threads WHERE thread_id=?", (thread_id,)
+            )
+            self.connection.execute(
+                "DELETE FROM akeda_checkpoint_orphans WHERE thread_id=?", (thread_id,)
+            )
+        return deleted
+
+    def prune(self) -> dict[str, Any]:
+        with self._lock:
+          try:
+            now = int(time.time())
+            self.connection.execute("BEGIN IMMEDIATE")
+            deleted = 0
+            registered = {
+                row[0]
+                for row in self.connection.execute(
+                    "SELECT thread_id FROM akeda_checkpoint_threads"
+                )
+            }
+            checkpoint_threads = {
+                row[0]
+                for row in self.connection.execute(
+                    "SELECT DISTINCT thread_id FROM checkpoints"
+                )
+            }
+            write_threads = {
+                row[0]
+                for row in self.connection.execute(
+                    "SELECT DISTINCT thread_id FROM writes"
+                )
+            }
+            orphan_threads = sorted((checkpoint_threads | write_threads) - registered)
+            for thread_id in orphan_threads:
+                self.connection.execute(
+                    "INSERT OR IGNORE INTO akeda_checkpoint_orphans(thread_id,first_seen_at) VALUES(?,?)",
+                    (thread_id, now),
+                )
+            self.connection.execute(
+                "DELETE FROM akeda_checkpoint_orphans WHERE thread_id IN (SELECT thread_id FROM akeda_checkpoint_threads)"
+            )
+            expired_orphans = [
+                row[0] for row in self.connection.execute(
+                    "SELECT thread_id FROM akeda_checkpoint_orphans WHERE first_seen_at <= ?",
+                    (now - self.orphan_grace_seconds,),
+                )
+                if row[0] in (checkpoint_threads | write_threads)
+            ]
+            deleted += self._delete_threads(expired_orphans)
+            self.connection.execute(
+                """DELETE FROM akeda_checkpoint_orphans
+                   WHERE thread_id NOT IN (SELECT thread_id FROM checkpoints)
+                     AND thread_id NOT IN (SELECT thread_id FROM writes)"""
+            )
+            cutoff = now - self.retention_days * 86400
+            stale = [
+                row[0]
+                for row in self.connection.execute(
+                    """SELECT thread_id FROM akeda_checkpoint_threads
+                       WHERE completed=1 AND touched_at < ? AND lease_until <= ?
+                       ORDER BY touched_at""",
+                    (cutoff, now),
+                )
+            ]
+            deleted += self._delete_threads(stale)
+            rows = list(self.connection.execute(
+                """SELECT thread_id, lease_until FROM akeda_checkpoint_threads
+                   ORDER BY touched_at DESC"""
+            ))
+            overflow = max(0, len(rows) - self.max_threads)
+            evictable = [row[0] for row in reversed(rows) if int(row[1]) <= now]
+            deleted += self._delete_threads(evictable[:overflow])
+            thread_ids = [row[0] for row in self.connection.execute(
+                "SELECT thread_id FROM akeda_checkpoint_threads WHERE lease_until <= ?",
+                (now,),
+            )]
+            for thread_id in thread_ids:
+                checkpoint_ids = [
+                    row[0]
+                    for row in self.connection.execute(
+                        """SELECT checkpoint_id FROM checkpoints WHERE thread_id=?
+                           ORDER BY checkpoint_id DESC""",
+                        (thread_id,),
+                    )
+                ]
+                for checkpoint_id in checkpoint_ids[self.max_per_thread :]:
+                    self.connection.execute(
+                        "DELETE FROM writes WHERE thread_id=? AND checkpoint_id=?",
+                        (thread_id, checkpoint_id),
+                    )
+                    deleted += self.connection.execute(
+                        "DELETE FROM checkpoints WHERE thread_id=? AND checkpoint_id=?",
+                        (thread_id, checkpoint_id),
+                    ).rowcount
+            self.connection.commit()
+            size = self.path.stat().st_size if self.path.exists() else 0
+            if size > self.max_bytes:
+                raise CheckpointStorageError(
+                    f"checkpoint_budget_exceeded:{size}>{self.max_bytes}"
+                )
+            total_threads = self.connection.execute(
+                "SELECT COUNT(*) FROM akeda_checkpoint_threads"
+            ).fetchone()[0]
+            return {
+                "path": str(self.path),
+                "bytes": size,
+                "threads": total_threads,
+                "deleted": deleted,
+                "orphan_threads_seen": len(orphan_threads),
+                "orphan_threads_deleted": len(expired_orphans),
+                "active_leases": self.connection.execute(
+                    "SELECT COUNT(*) FROM akeda_checkpoint_threads WHERE lease_until > ?",
+                    (now,),
+                ).fetchone()[0],
+                "lease_seconds": self.lease_seconds,
+                "orphan_grace_seconds": self.orphan_grace_seconds,
+                "retention_days": self.retention_days,
+                "max_threads": self.max_threads,
+                "max_per_thread": self.max_per_thread,
+                "max_bytes": self.max_bytes,
+            }
+          except (sqlite3.Error, OSError, ValueError) as error:
+            with suppress(sqlite3.Error):
+                self.connection.rollback()
+            if isinstance(error, CheckpointStorageError):
+                raise
+            raise CheckpointStorageError(
+                f"checkpoint_storage:{type(error).__name__}"
+            ) from error
 
 
 _DIMENSION_PATTERNS = {
@@ -451,7 +769,40 @@ class StudioGraphOrchestrator:
         self.cancellation_probe = cancellation_probe or (lambda generation: False)
         self.generation_guard = generation_guard or GenerationGuard()
         self.checkpointer = checkpointer or InMemorySaver()
+        self.storage_degraded = False
+        self.storage_error = ""
+        self.checkpoint_retention: CheckpointRetention | None = None
+        self.buffered_revisions: BufferedRevisionStore | None = None
         self.graph = self._build().compile(checkpointer=self.checkpointer)
+
+    def _latch_storage_failure(self, error: BaseException) -> CheckpointStorageError:
+        if isinstance(error, CheckpointStorageError):
+            reason = str(error) or "checkpoint_storage:CheckpointStorageError"
+        else:
+            reason = f"checkpoint_storage:{type(error).__name__}"
+        self.storage_degraded = True
+        self.storage_error = reason
+        return CheckpointStorageError(reason)
+
+    def _finalize_storage(
+        self,
+        response: dict[str, Any],
+        *,
+        thread_id: str,
+        generation: str,
+    ) -> dict[str, Any]:
+        try:
+            if self.checkpoint_retention is not None:
+                response["checkpoint"] = self.checkpoint_retention.touch(
+                    thread_id, completed=not bool(response.get("paused"))
+                )
+            if self.buffered_revisions is not None:
+                self.buffered_revisions.flush(generation)
+        except (CheckpointStorageError, sqlite3.Error, OSError, ValueError) as error:
+            if self.buffered_revisions is not None:
+                self.buffered_revisions.discard(generation)
+            raise self._latch_storage_failure(error) from error
+        return response
 
     @classmethod
     def durable(
@@ -463,20 +814,35 @@ class StudioGraphOrchestrator:
         from langgraph.checkpoint.sqlite import SqliteSaver
 
         root = Path(root)
-        root.mkdir(parents=True, exist_ok=True)
-        connection = sqlite3.connect(
-            root / "checkpoints.sqlite3", check_same_thread=False
-        )
-        saver = SqliteSaver(connection)
-        saver.setup()
-        revisions = JsonRevisionStore(root / "revisions.json")
-        instance = cls(
-            GraphAdapters.defaults(revisions),
-            checkpointer=saver,
-            cancellation_probe=cancellation_probe,
-        )
-        instance._sqlite_connection = connection
-        return instance
+        connection: sqlite3.Connection | None = None
+        try:
+            root.mkdir(parents=True, exist_ok=True)
+            path = root / "checkpoints.sqlite3"
+            connection = sqlite3.connect(path, check_same_thread=False)
+            saver = SqliteSaver(connection)
+            saver.setup()
+            retention = CheckpointRetention(connection, path)
+            retention.prune()
+            revisions = BufferedRevisionStore(JsonRevisionStore(root / "revisions.json"))
+            instance = cls(
+                GraphAdapters.defaults(revisions),
+                checkpointer=saver,
+                cancellation_probe=cancellation_probe,
+            )
+            instance._sqlite_connection = connection
+            instance.checkpoint_retention = retention
+            instance.buffered_revisions = revisions
+            return instance
+        except (sqlite3.Error, OSError, ValueError, CheckpointStorageError) as error:
+            if connection is not None:
+                connection.close()
+            instance = cls(
+                GraphAdapters.defaults(NullRevisionStore()),
+                cancellation_probe=cancellation_probe,
+            )
+            instance.storage_degraded = True
+            instance.storage_error = f"checkpoint_storage:{type(error).__name__}"
+            return instance
 
     def _build(self) -> StateGraph:
         builder = StateGraph(GraphState)
@@ -692,7 +1058,9 @@ class StudioGraphOrchestrator:
         if blockers:
             update.update(approved=False, status="rejected")
             return update
-        if state.get("approval_required"):
+        if state.get("shadow"):
+            approved = True
+        elif state.get("approval_required"):
             decision = interrupt(
                 {
                     "generation": state.get("generation"),
@@ -721,8 +1089,12 @@ class StudioGraphOrchestrator:
             "operations": copy.deepcopy(state.get("operations") or []),
             "checks": copy.deepcopy(state.get("check_results") or {}),
         }
-        self.adapters.revisions.persist(state.get("project_key", ""), revision)
-        update.update(revisions=[*state.get("revisions", []), revision], status="persisted")
+        if not state.get("shadow"):
+            self.adapters.revisions.persist(state.get("project_key", ""), revision)
+        update.update(
+            revisions=[*state.get("revisions", []), revision],
+            status="shadow_evaluated" if state.get("shadow") else "persisted",
+        )
         return update
 
     def _summarize(self, state: GraphState) -> dict[str, Any]:
@@ -764,6 +1136,7 @@ class StudioGraphOrchestrator:
         expected_revision: str | None = None,
         approval_required: bool = False,
         max_repairs: int = MAX_REPAIR_ITERATIONS,
+        shadow: bool = False,
     ) -> dict[str, Any]:
         generation = generation or uuid.uuid4().hex
         actual_revision = spec_revision(spec)
@@ -784,53 +1157,92 @@ class StudioGraphOrchestrator:
             "prompt_version": PROMPT_VERSION,
             "approval_required": bool(approval_required),
             "max_repairs": min(MAX_REPAIR_ITERATIONS, max(0, int(max_repairs))),
+            "shadow": bool(shadow),
         }
         config = {"configurable": {"thread_id": thread_id}}
-        with self.generation_guard.acquire(project_key, generation, actual_revision):
-            snapshot = self.graph.get_state(config)
-            existing = dict(snapshot.values or {})
-            if existing:
-                if (
-                    existing.get("project_key") != project_key
-                    or existing.get("generation") != generation
-                    or existing.get("input_revision") != actual_revision
-                ):
-                    raise GraphRevisionError(
-                        "Generation уже связан с другой редакцией изделия"
-                    )
-                if snapshot.next:
-                    pending = [
-                        getattr(item, "value", item)
-                        for task in snapshot.tasks
-                        for item in getattr(task, "interrupts", ())
-                    ]
-                    return {
-                        "ok": True,
-                        "paused": True,
-                        "thread_id": thread_id,
-                        "interrupts": pending,
-                        "prompt_version": existing.get("prompt_version"),
-                    }
-                return self._response(existing)
-            result = self.graph.invoke(initial, config=config)
-        return self._response(result)
+        leased = False
+        try:
+            if self.checkpoint_retention is not None:
+                self.checkpoint_retention.acquire(thread_id)
+                leased = True
+            with self.generation_guard.acquire(project_key, generation, actual_revision):
+                snapshot = self.graph.get_state(config)
+                existing = dict(snapshot.values or {})
+                if existing:
+                    if (
+                        existing.get("project_key") != project_key
+                        or existing.get("generation") != generation
+                        or existing.get("input_revision") != actual_revision
+                    ):
+                        raise GraphRevisionError(
+                            "Generation уже связан с другой редакцией изделия"
+                        )
+                    if snapshot.next:
+                        pending = [
+                            getattr(item, "value", item)
+                            for task in snapshot.tasks
+                            for item in getattr(task, "interrupts", ())
+                        ]
+                        response = {
+                            "ok": True,
+                            "paused": True,
+                            "thread_id": thread_id,
+                            "interrupts": pending,
+                            "prompt_version": existing.get("prompt_version"),
+                        }
+                    else:
+                        response = self._response(existing)
+                else:
+                    result = self.graph.invoke(initial, config=config)
+                    response = self._response(result)
+            result_response = self._finalize_storage(
+                response, thread_id=thread_id, generation=generation
+            )
+            leased = False
+            return result_response
+        except (CheckpointStorageError, sqlite3.Error, OSError) as error:
+            raise self._latch_storage_failure(error) from error
+        finally:
+            if leased and self.checkpoint_retention is not None:
+                try:
+                    self.checkpoint_retention.release(thread_id)
+                except CheckpointStorageError as error:
+                    self._latch_storage_failure(error)
 
     def resume(self, thread_id: str, *, approved: bool) -> dict[str, Any]:
         config = {"configurable": {"thread_id": thread_id}}
-        snapshot = self.graph.get_state(config)
-        state = dict(snapshot.values or {})
-        if not state or state.get("thread_id") != thread_id:
-            raise GraphRevisionError("Checkpoint для безопасного возобновления не найден")
-        project_key = str(state.get("project_key") or "")
-        generation = str(state.get("generation") or "")
-        expected = str(state.get("input_revision") or "")
-        if spec_revision(state.get("source_spec") or {}) != expected:
-            raise GraphRevisionError("Checkpoint относится к другой редакции")
-        with self.generation_guard.acquire(project_key, generation, expected):
-            result = self.graph.invoke(
-                Command(resume={"approved": bool(approved)}), config=config
+        leased = False
+        try:
+            if self.checkpoint_retention is not None:
+                self.checkpoint_retention.acquire(thread_id)
+                leased = True
+            snapshot = self.graph.get_state(config)
+            state = dict(snapshot.values or {})
+            if not state or state.get("thread_id") != thread_id:
+                raise GraphRevisionError("Checkpoint для безопасного возобновления не найден")
+            project_key = str(state.get("project_key") or "")
+            generation = str(state.get("generation") or "")
+            expected = str(state.get("input_revision") or "")
+            if spec_revision(state.get("source_spec") or {}) != expected:
+                raise GraphRevisionError("Checkpoint относится к другой редакции")
+            with self.generation_guard.acquire(project_key, generation, expected):
+                result = self.graph.invoke(
+                    Command(resume={"approved": bool(approved)}), config=config
+                )
+            response = self._response(result)
+            result_response = self._finalize_storage(
+                response, thread_id=thread_id, generation=generation
             )
-        return self._response(result)
+            leased = False
+            return result_response
+        except (CheckpointStorageError, sqlite3.Error, OSError) as error:
+            raise self._latch_storage_failure(error) from error
+        finally:
+            if leased and self.checkpoint_retention is not None:
+                try:
+                    self.checkpoint_retention.release(thread_id)
+                except CheckpointStorageError as error:
+                    self._latch_storage_failure(error)
 
     @staticmethod
     def _response(state: Mapping[str, Any]) -> dict[str, Any]:
@@ -863,6 +1275,7 @@ class StudioGraphOrchestrator:
                 "revisions": copy.deepcopy(state.get("revisions") or []),
                 "repair_count": state.get("repair_count", 0),
                 "nodes": list(state.get("node_history") or []),
+                "shadow": bool(state.get("shadow")),
             },
             **(
                 {"error": "Команда остановлена", "code": "operation_cancelled"}
