@@ -214,10 +214,12 @@ endpoint требует явного allowlist и отдельного test key.
 
 Material links проходят единый строгий MEB-139 контракт: article/sheet
 проверки, подтверждённые исключения, запрет конфликтующих дубликатов и
-обязательный post-audit. Fuzzy/LLM-подбор запрещён. Общий deadline положителен,
-а каждый request получает timeout не больше оставшегося времени. Offline
-contract harness использует тот же поток, но injected/test transport никогда
-не может создать live E2E evidence. Live entrypoint отделён от обычного CLI/CI
+обязательный post-audit. Fuzzy/LLM-подбор запрещён. Общий deadline положителен;
+connect+read budgets каждого request вместе не превышают остаток, а ответ на
+границе deadline или позже отклоняется. Offline contract harness использует тот
+же поток, но injected/test transport никогда не может создать live E2E evidence.
+Transport sealed после construction: подмена `client.session.request` запрещена,
+а live evidence требует operator-owned transport proof. Live entrypoint отделён от обычного CLI/CI
 и до первой mutation повторно читает canonical machine approval: caller не
 выбирает fixture/ledger/run ID, ledger path выводится из config+fixture digest,
 а run ID генерируется как opaque token. Transport/session immutable, production

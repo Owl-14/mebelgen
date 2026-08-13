@@ -28,6 +28,26 @@ _ORDER_FIELDS = {"managerId", "clientId", "note", "factoryOrderId", "factoryId",
 _OPERATOR_TRUST_TOKEN = object()
 
 
+class _SealedTransport:
+    """Minimal immutable transport surface, with construction-time operator proof."""
+
+    __slots__ = ("__request", "__operator_proven")
+
+    def __init__(self, request: Callable[..., Any], *, operator_proven: bool) -> None:
+        object.__setattr__(self, "_SealedTransport__request", request)
+        object.__setattr__(self, "_SealedTransport__operator_proven", operator_proven)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise AttributeError("Cutting transport is sealed after construction")
+
+    @property
+    def operator_proven(self) -> bool:
+        return self.__operator_proven
+
+    def request(self, method: str, url: str, **kwargs: Any) -> Any:
+        return self.__request(method, url, **kwargs)
+
+
 class CuttingError(RuntimeError):
     """Stable, privacy-safe integration error."""
 
@@ -194,7 +214,10 @@ class CuttingClient:
         self._approval_revalidator = _approval_revalidator
         self.max_upload_bytes = max_upload_bytes
         self.timeouts = timeouts or CuttingTimeouts()
-        self.session = session or requests.Session()
+        raw_session = session or requests.Session()
+        self.session = _SealedTransport(
+            raw_session.request, operator_proven=self._operator_trusted and not injected,
+        )
         self.trace_sink = trace_sink
         self._trace_id = uuid.uuid4().hex
         self.clock = clock
@@ -235,6 +258,7 @@ class CuttingClient:
         return (
             self.transport_kind == "pinned_https"
             and self._operator_trusted
+            and self.session.operator_proven
             and self._approval_revalidator is not None
             and self._ledger_run is not None
             and self._ledger_run.mode == "live"
@@ -303,7 +327,9 @@ class CuttingClient:
             raise self._error(
                 "cutting.live_guard.required", "Cutting access requires explicit authorization",
             )
-        if self.transport_kind == "pinned_https" and not self._operator_trusted:
+        if self.transport_kind == "pinned_https" and (
+            not self._operator_trusted or not self.session.operator_proven
+        ):
             raise self._error(
                 "cutting.transport.attestation",
                 "pinned live transport is available only inside the operator trust boundary",
@@ -324,7 +350,11 @@ class CuttingClient:
     def _request_timeout(self, mutation: bool) -> tuple[float, float]:
         remaining = self.remaining_seconds()
         read_limit = self.timeouts.mutation_read if mutation else self.timeouts.read
-        return min(self.timeouts.connect, remaining), min(read_limit, remaining)
+        # Requests applies connect and read timeouts sequentially. Allocate from one
+        # remaining budget so their combined worst case cannot exceed the deadline.
+        connect = min(self.timeouts.connect, remaining / 2)
+        read = min(read_limit, remaining - connect)
+        return connect, read
 
     def _prepare_mutation(
         self,
@@ -435,7 +465,7 @@ class CuttingClient:
                 retryable=not mutation,
             ) from exc
 
-        if self.clock() > self._deadline:  # type: ignore[operator]
+        if self.clock() >= self._deadline:  # type: ignore[operator]
             raise self._error(
                 "cutting.transport.ambiguous" if mutation else "cutting.deadline.exceeded",
                 "request returned after the overall deadline; mutation requires reconciliation"

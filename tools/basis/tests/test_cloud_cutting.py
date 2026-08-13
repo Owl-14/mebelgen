@@ -124,10 +124,11 @@ def test_live_guard_and_overall_deadline_fail_before_http(tmp_path: Path) -> Non
 
 
 def test_allowlisted_test_transport_never_attests_live(tmp_path: Path) -> None:
-    c = client(Session(Response(payload=[])), tmp_path)
+    session = Session(Response(payload=[]))
+    c = client(session, tmp_path)
     assert c.live_evidence_allowed is False
     assert c.list_orders() == []
-    call = c.session.calls[0]
+    call = session.calls[0]
     assert call["headers"] == {"apiKey": "offline-test-key"}
     assert call["verify"] is True
     assert call["allow_redirects"] is False
@@ -159,7 +160,24 @@ def test_transport_and_session_are_immutable_after_construction(tmp_path: Path) 
     ):
         with pytest.raises(AttributeError, match="immutable"):
             setattr(c, name, value)
-    assert c.session is original_session
+    with pytest.raises(AttributeError, match="sealed"):
+        c.session.request = Session(Response(payload=[])).request  # type: ignore[method-assign]
+    assert c.list_orders() == []
+    assert len(original_session.calls) == 1
+
+
+def test_scripted_request_mutation_cannot_forge_live_transport() -> None:
+    scripted = Session(Response(payload=[]))
+    c = CuttingClient(api_key="not-a-real-key", allow_live=True, overall_timeout=30)
+
+    with pytest.raises(AttributeError, match="sealed"):
+        c.session.request = scripted.request  # type: ignore[method-assign]
+
+    assert c.live_evidence_allowed is False
+    with pytest.raises(CuttingError) as caught:
+        c.list_orders()
+    assert caught.value.code == "cutting.transport.attestation"
+    assert scripted.calls == []
 
 
 def test_caller_cannot_supply_pii_run_id() -> None:
@@ -236,11 +254,12 @@ def test_overall_timeout_must_be_positive(value: Any) -> None:
 
 
 def test_mutation_requires_registered_durable_ledger(tmp_path: Path) -> None:
-    c = client(Session(Response()), tmp_path, allow_mutations=True)
+    session = Session(Response())
+    c = client(session, tmp_path, allow_mutations=True)
     with pytest.raises(CuttingError) as caught:
         c.run_cutting(1, idempotency_key="MEB-140:no-ledger")
     assert caught.value.code == "cutting.ledger.required"
-    assert c.session.calls == []
+    assert session.calls == []
 
 
 def test_successful_mutation_transitions_durable_state(tmp_path: Path) -> None:
@@ -340,14 +359,39 @@ def test_request_timeouts_use_positive_remaining_overall_deadline(tmp_path: Path
         timeouts=CuttingTimeouts(connect=10, read=20, mutation_read=30),
     )
     c.list_orders()
-    assert session.calls[0]["timeout"] == (5.0, 5.0)
+    assert session.calls[0]["timeout"] == (2.5, 2.5)
+    assert sum(session.calls[0]["timeout"]) <= 5.0
     now[0] = 14.5
     c.list_orders()
-    assert session.calls[1]["timeout"] == (0.5, 0.5)
+    assert session.calls[1]["timeout"] == (0.25, 0.25)
+    assert sum(session.calls[1]["timeout"]) <= 0.5
     now[0] = 15.0
     with pytest.raises(CuttingError) as caught:
         c.list_orders()
     assert caught.value.code == "cutting.deadline.exceeded"
+
+
+def test_response_exactly_at_overall_deadline_is_rejected(tmp_path: Path) -> None:
+    now = [10.0]
+
+    class BoundarySession(Session):
+        def request(self, method: str, url: str, **kwargs: Any) -> Response:
+            response = super().request(method, url, **kwargs)
+            now[0] = 15.0
+            return response
+
+    session = BoundarySession(Response(payload=[]))
+    c = CuttingClient(
+        base_url=TEST_ORIGIN, test_api_key="test", test_endpoint_allowlist=[TEST_ORIGIN],
+        allow_live=True, overall_timeout=5, session=session, clock=lambda: now[0],
+        timeouts=CuttingTimeouts(connect=10, read=20, mutation_read=30),
+    )
+
+    with pytest.raises(CuttingError) as caught:
+        c.list_orders()
+    assert caught.value.code == "cutting.deadline.exceeded"
+    assert session.calls[0]["timeout"] == (2.5, 2.5)
+    assert sum(session.calls[0]["timeout"]) <= 5.0
 
 
 @pytest.mark.parametrize("value", [
