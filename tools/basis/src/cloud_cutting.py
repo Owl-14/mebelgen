@@ -79,7 +79,9 @@ class CuttingClient:
         """Post only the documented ``CuttingMaterialLinkDTO`` array.
 
         Target MatBase names must already be confirmed.  This method validates
-        transport shape; it does not infer names from local articles.
+        transport shape; it does not infer names from local articles.  The
+        remote POST is not assumed idempotent and is deliberately attempted
+        once; callers must reconcile state before any manually approved retry.
         """
         return self._post(
             f"/cad-models/{model_id}/set-link-materials",

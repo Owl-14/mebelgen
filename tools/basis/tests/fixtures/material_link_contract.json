@@ -22,7 +22,10 @@
     {
       "originalMaterialFullName": "__FIXTURE_CAD_SHEET__",
       "linkedMaterialFullName": "__FIXTURE_CONFIRMED_MATBASE_TARGET__",
-      "article": "__FIXTURE_LOCAL_ARTICLE__"
+      "article": "__FIXTURE_LOCAL_ARTICLE__",
+      "sheets": [
+        {"height": 2800, "width": 2070, "count": 1, "production": true, "materialType": 1}
+      ]
     }
   ],
   "cuttingMaterials": [
@@ -39,7 +42,10 @@
     {
       "name": "__FIXTURE_CONFIRMED_MATBASE_TARGET__",
       "article": "__FIXTURE_LOCAL_ARTICLE__",
+      "type": 0,
       "inMaterialBaseId": 1,
+      "height": 2800,
+      "width": 2070,
       "statistic": {"boardsCount": 1, "countPlate": 1}
     }
   ]

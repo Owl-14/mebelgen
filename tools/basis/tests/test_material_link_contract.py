@@ -65,6 +65,7 @@ def test_confirmed_name_article_sheet_mapping_builds_exact_openapi_payload():
         "linkedMaterialFullName": "__FIXTURE_CONFIRMED_MATBASE_TARGET__",
     }]
     assert plan["decisions"][0]["article"] == "__FIXTURE_LOCAL_ARTICLE__"
+    assert plan["decisions"][0]["expected_sheets"] == FIXTURE["confirmations"][0]["sheets"]
 
 
 def test_unique_normalized_source_name_is_the_only_fallback():
@@ -89,6 +90,40 @@ def test_article_mismatch_blocks_mapping():
     plan = plan_sheet_links(FIXTURE["cadModelMaterials"], FIXTURE["cfrn"], [confirmation])
     assert plan["payload"] == []
     assert "article differs" in plan["decisions"][0]["reason"]
+
+
+def test_duplicate_exact_cfrn_names_with_different_articles_are_ambiguous():
+    cfrn = json.loads(json.dumps(FIXTURE["cfrn"]))
+    cfrn["table"]["materials"].append({
+        "name": "__FIXTURE_CAD_SHEET__",
+        "art": "__OTHER_FIXTURE_ARTICLE__",
+    })
+    cfrn["table"]["objects"].append({
+        "objType": 2,
+        "materialIndex": 1,
+        "thickness": 16,
+        "contour": {"size": {"x": 400, "y": 300}},
+    })
+    plan = plan_sheet_links(FIXTURE["cadModelMaterials"], cfrn, FIXTURE["confirmations"])
+    assert plan["ready"] is False
+    assert plan["payload"] == []
+    assert plan["decisions"] == [{
+        "source_name": "__FIXTURE_CAD_SHEET__",
+        "status": "unresolved",
+        "reason": "no unique exact/normalized sheet material in exported CFRN",
+    }]
+
+
+@pytest.mark.parametrize("field,value", [
+    ("article", None),
+    ("sheets", []),
+    ("sheets", [{"height": "2800", "width": 2070, "count": 1,
+                  "production": True, "materialType": 1}]),
+])
+def test_confirmation_requires_strict_article_and_expected_sheet_schema(field, value):
+    confirmation = dict(FIXTURE["confirmations"][0], **{field: value})
+    with pytest.raises(MaterialLinkContractError):
+        plan_sheet_links(FIXTURE["cadModelMaterials"], FIXTURE["cfrn"], [confirmation])
 
 
 def test_transport_rejects_articles_extra_keys_and_invalid_types():
@@ -120,6 +155,24 @@ def test_cutting_client_posts_only_validated_payload(monkeypatch):
     }]})]
 
 
+def test_cutting_client_does_not_retry_remote_post_without_live_idempotency_evidence(monkeypatch):
+    calls = []
+    client = CuttingClient(api_key="offline-fixture", base_url="https://fixture.invalid")
+
+    def fail_once(suffix, **kwargs):
+        calls.append((suffix, kwargs))
+        raise TimeoutError("synthetic timeout with unknown remote outcome")
+
+    monkeypatch.setattr(client, "_post", fail_once)
+    with pytest.raises(TimeoutError, match="unknown remote outcome"):
+        client.set_link_materials(17, [{
+            "originalMaterialFullName": "source",
+            "materialType": 0,
+            "linkedMaterialFullName": "target",
+        }])
+    assert len(calls) == 1
+
+
 def test_cutting_client_exposes_result_evidence_endpoints(monkeypatch):
     calls = []
     client = CuttingClient(api_key="offline-fixture", base_url="https://fixture.invalid")
@@ -147,10 +200,27 @@ def test_offline_result_audit_checks_matbase_sheet_and_production_but_keeps_bloc
         "linked_name": "__FIXTURE_CONFIRMED_MATBASE_TARGET__",
         "unique_result": True,
         "matbase_reference_present": True,
-        "sheet_mapping_present": True,
-        "production_enabled": True,
+        "article_matches": True,
+        "sheet_mapping_matches": True,
         "cutting_result_present": True,
     }]
+
+
+def test_result_audit_cannot_pass_when_plan_is_not_fully_ready():
+    ready_plan = plan_sheet_links(
+        FIXTURE["cadModelMaterials"], FIXTURE["cfrn"], FIXTURE["confirmations"]
+    )
+    for broken_plan in (
+        {**ready_plan, "ready": False},
+        {**ready_plan, "decisions": ready_plan["decisions"] + [{
+            "source_name": "unlinked", "status": "blocked", "reason": "fixture",
+        }]},
+        {**ready_plan, "decisions": []},
+    ):
+        audit = audit_sheet_link_result(
+            broken_plan, FIXTURE["cuttingMaterials"], FIXTURE["cuttedMaterials"]
+        )
+        assert audit["offline_contract_passed"] is False
 
 
 @pytest.mark.parametrize("field,value", [
@@ -175,5 +245,28 @@ def test_result_audit_fails_closed_on_malformed_numeric_evidence():
     cutted = json.loads(json.dumps(FIXTURE["cuttedMaterials"]))
     cutted[0]["statistic"]["boardsCount"] = None
     cutted[0]["statistic"]["countPlate"] = "not-a-number"
+    audit = audit_sheet_link_result(plan, [material], cutted)
+    assert audit["offline_contract_passed"] is False
+
+
+@pytest.mark.parametrize("mutation", [
+    lambda material, cutted: material.update(article="__OTHER_FIXTURE_ARTICLE__"),
+    lambda material, cutted: material.update(inMaterialBaseId="1"),
+    lambda material, cutted: material["items"][0].update(height="2800"),
+    lambda material, cutted: material["items"][0].update(height=2440),
+    lambda material, cutted: material["items"][0].update(production=1),
+    lambda material, cutted: material["items"][0].update(materialType="1"),
+    lambda material, cutted: cutted[0].update(article="__OTHER_FIXTURE_ARTICLE__"),
+    lambda material, cutted: cutted[0].update(inMaterialBaseId="1"),
+    lambda material, cutted: cutted[0].update(height=2440),
+    lambda material, cutted: cutted[0]["statistic"].update(boardsCount="1", countPlate=0),
+])
+def test_result_audit_requires_exact_article_sheet_mapping_and_strict_dto_types(mutation):
+    plan = plan_sheet_links(
+        FIXTURE["cadModelMaterials"], FIXTURE["cfrn"], FIXTURE["confirmations"]
+    )
+    material = json.loads(json.dumps(FIXTURE["cuttingMaterials"][0]))
+    cutted = json.loads(json.dumps(FIXTURE["cuttedMaterials"]))
+    mutation(material, cutted)
     audit = audit_sheet_link_result(plan, [material], cutted)
     assert audit["offline_contract_passed"] is False
