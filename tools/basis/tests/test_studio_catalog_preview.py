@@ -9,6 +9,9 @@ import sys
 import threading
 from http.server import ThreadingHTTPServer
 from pathlib import Path
+from unittest.mock import patch
+
+import pytest
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -200,6 +203,61 @@ def test_version_restore_canonicalizes_before_browser_activation(tmp_path: Path)
         )
         assert status == 422, raw
         assert json.loads(raw)["code"] == "invalid_paramspec"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+@pytest.mark.parametrize("failure", ["unknown", "invalid_known"])
+def test_import_tz_rejects_invalid_ai_paramspec_without_overwrite(
+    tmp_path: Path,
+    failure: str,
+) -> None:
+    current = {
+        "schemaVersion": "paramspec-v1",
+        "draft": True,
+        "project_name": "Исходный черновик",
+    }
+    spec_path = tmp_path / "draft.json"
+    original = json.dumps(current, ensure_ascii=False, indent=2).encode("utf-8")
+    spec_path.write_bytes(original)
+    candidate = json.loads(
+        (ROOT / "paramspecs" / "wardrobe_demo.json").read_text(encoding="utf-8")
+    )
+    if failure == "unknown":
+        candidate["future_top_level"] = True
+    else:
+        candidate["dimensions"]["width"] = 10
+    ai_result = {
+        "spec": candidate,
+        "reply": "Готово",
+        "changes": [],
+        "usage": {"model": "test-model", "total": 7},
+    }
+
+    studio = _Studio(spec_path, tmp_path / "out")
+    server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(studio))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with patch("src.spec_chat.chat_edit", return_value=ai_result):
+            status, raw = _request(
+                server.server_port,
+                "POST",
+                "/api/import-tz",
+                {"name": "tz.png", "data": "QUJD", "provider": "mock"},
+            )
+
+        rejected = json.loads(raw)
+        assert status == 422, raw
+        assert rejected["ok"] is False
+        assert rejected["code"] == "invalid_paramspec"
+        assert rejected["error_code"] == rejected["code"]
+        assert rejected["details"]
+        assert spec_path.read_bytes() == original
+        assert studio.workspaces.current_spec_path(None) == spec_path.resolve()
+        assert sorted(path.name for path in tmp_path.glob("*.json")) == ["draft.json"]
     finally:
         server.shutdown()
         server.server_close()

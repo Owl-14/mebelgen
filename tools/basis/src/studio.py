@@ -2298,7 +2298,28 @@ def make_handler(st: _Studio):
                             while out.exists():
                                 out = workspace.spec_dir / f"{_slugify(title)}_{i}.json"
                                 i += 1
-                        new_spec = _strict_paramspec_document_for_write(new_spec)
+                        from pydantic import ValidationError
+
+                        try:
+                            new_spec = _strict_paramspec_document_for_write(new_spec)
+                        except (ValidationError, ValueError) as error:
+                            from .paramspec import validate_paramspec
+
+                            error_code = "invalid_paramspec"
+                            add_current_attributes({
+                                "check.outcome": "error",
+                                "error.codes": [error_code],
+                                "ai.workflow": "import_tz",
+                                "exception.type": type(error).__name__,
+                            })
+                            self._json({
+                                "ok": False,
+                                "error": "Изделие не создано: ParamSpec не прошёл проверку",
+                                "code": error_code,
+                                "error_code": error_code,
+                                "details": validate_paramspec(new_spec)[:12],
+                            }, 422)
+                            return
                         from .telemetry import span
                         with span("revision.persist", {
                             "project.hash": hash_payload({"project_file": out.name}),
