@@ -189,6 +189,9 @@ def test_catalog_open_commits_only_a_prebuilt_candidate() -> None:
     ]
     assert "p.payload&&p.payload.viewer" in adopt
     assert "commitGeneratedPayload" in adopt
+    assert "cameraReset={resetView:true,view:'persp'}" in adopt
+    assert "commitGeneratedPayload(p.payload,JSON.stringify(SPEC),cameraReset)" in adopt
+    assert "apply(cameraReset)" in adopt
     assert "if(r.ok&&p.ok)" in open_item
     assert "e.target.value=previousFile" in selector
 

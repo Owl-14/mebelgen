@@ -133,7 +133,7 @@ def test_model_state_api_names_every_user_decision_state() -> None:
 def test_generation_token_prevents_stale_response_from_overwriting_status() -> None:
     apply = _compact(_function("apply", length=3600))
     stale = apply.index("requestId!==generateRequestSeq")
-    painted = apply.index("paint(p)")
+    painted = apply.index("paint(p,opts)")
     terminal = apply.index("setViewportModelState(!p.viewer?")
     assert stale < painted < terminal
     assert "setViewportModelState('recalculating')" in apply
