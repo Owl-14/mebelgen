@@ -1,0 +1,13 @@
+{
+  "schema_version": "vision-annotation-v1",
+  "annotation_id": "cabinet-reference-v1",
+  "status": "approved",
+  "provenance": {
+    "kind": "human-reviewed-fixture",
+    "source_ref": "fixtures/cabinet.json",
+    "reviewed_at": "2026-08-13"
+  },
+  "expected": {
+    "reply": "Две секции; дверь; три ящика."
+  }
+}

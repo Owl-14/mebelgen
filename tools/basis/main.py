@@ -141,6 +141,14 @@ def cmd_cloud(args: argparse.Namespace) -> int:
     if args.op == "info":
         print(api_overview())
         return 0
+    if args.op == "model-convert" and args.type == "cfrn-to-b3d":
+        print(
+            "Raw CFRN→B3D отключён: произвольный CFRN нельзя доказуемо связать "
+            "с прошедшим production gate. Используйте `main.py build-b3d "
+            "<paramspec-or-project.json>`, который выполняет полный offline preflight.",
+            file=sys.stderr,
+        )
+        return 2
     c = CloudTasksClient()
     if args.op == "list":
         print(json.dumps(c.list_tasks(), ensure_ascii=False, indent=2))
@@ -485,6 +493,43 @@ def cmd_finish(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_trace_eval(args: argparse.Namespace) -> int:
+    """Replay recorded AI node outputs without calling an LLM or cloud API."""
+
+    from src.trace_replay import (
+        DEFAULT_DATASET,
+        compare_reports,
+        run_dataset,
+        write_report,
+    )
+
+    report = run_dataset(Path(args.dataset) if args.dataset else DEFAULT_DATASET)
+    print(
+        f"trace-eval {report['dataset_version']}: "
+        f"{report['passed']}/{report['case_count']} сценариев прошли"
+    )
+    for case in report["cases"]:
+        marker = "OK" if case["ok"] else "FAIL"
+        print(f"  {marker} {case['id']} [{case['prompt_version']} / {case['model']}]")
+        for mismatch in case["mismatches"]:
+            print(f"    - {mismatch}")
+    if args.output:
+        write_report(report, args.output)
+        print(f"Отчёт: {args.output}")
+
+    comparison = None
+    if args.compare:
+        baseline = json.loads(Path(args.compare).read_text(encoding="utf-8"))
+        comparison = compare_reports(baseline, report)
+        print(
+            f"Сравнение: {comparison['comparable_cases']} общих сценариев, "
+            f"изменено {len(comparison['changed'])}"
+        )
+        for change in comparison["changed"]:
+            print(f"  CHANGED {change['id']}")
+    return 0 if report["failed"] == 0 and (comparison is None or comparison["ok"]) else 2
+
+
 def main() -> int:
     load_dotenv()
     parser = argparse.ArgumentParser(
@@ -651,6 +696,20 @@ def main() -> int:
     p_ing.add_argument("--tz", help="Текст исходного ТЗ (опционально)")
     p_ing.set_defaults(func=cmd_ingest)
 
+    p_eval = sub.add_parser(
+        "trace-eval",
+        help="Offline replay сохранённых AI node outputs через reducer и production gate",
+    )
+    p_eval.add_argument(
+        "--dataset",
+        help="Версионированный scenarios.json (по умолчанию qa/trace_eval/v1)",
+    )
+    p_eval.add_argument("-o", "--output", help="Записать сравнимый JSON-отчёт")
+    p_eval.add_argument(
+        "--compare",
+        help="Сравнить результат с ранее сохранённым JSON-отчётом prompt/model",
+    )
+    p_eval.set_defaults(func=cmd_trace_eval)
     p_ft = sub.add_parser(
         "finetune-readiness",
         help="Offline dry-run gate данных ТЗ→ParamSpec; fine-tune и LLM не запускаются",
