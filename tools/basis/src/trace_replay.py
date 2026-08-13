@@ -33,6 +33,9 @@ from .studio_graph import MAX_REPAIR_ITERATIONS, spec_revision
 
 DATASET_SCHEMA = "trace-eval-v1"
 DEFAULT_DATASET = Path(__file__).resolve().parent.parent / "qa" / "trace_eval" / "v1" / "scenarios.json"
+_APPROVED_VISION_ANNOTATIONS = {
+    "cabinet-reference-v1": "25610da2655c0b34cb6d583496b1fb9e75ab66338d17f67f3e7509bb7ef6ebb0",
+}
 
 
 class TraceReplayError(ValueError):
@@ -126,7 +129,9 @@ def _decision_evidence(
     nodes: Mapping[str, Any],
     materialized_nodes: Mapping[str, Any],
     provider_policies: Mapping[str, Any],
-    production_route: str,
+    production_route: str | None,
+    request_policy: Mapping[str, Any],
+    vision_semantics: Mapping[str, Any],
 ) -> tuple[dict[str, Any], list[str]]:
     """Validate the saved AI decision before replaying its operations.
 
@@ -177,6 +182,7 @@ def _decision_evidence(
         "provider": provider,
         "model": model,
         "provider_policy": policy_name,
+        "request_policy": copy.deepcopy(dict(request_policy)),
         "vision_stage_present": "vision_facts" in nodes,
         "vision_facts_digest": (
             _digest(materialized_nodes["vision_facts"])
@@ -187,6 +193,7 @@ def _decision_evidence(
             if "vision_facts" in materialized_nodes
             and "create_paramspec" in materialized_nodes else None
         ),
+        "vision_semantics": copy.deepcopy(dict(vision_semantics)),
         "operation_types": _operation_types(nodes),
         "checks": {
             "command_hash_match": envelope.get("command_hash") == command_hash,
@@ -207,9 +214,76 @@ def _decision_evidence(
     return evidence, errors
 
 
+def _vision_semantic_evidence(
+    case: Mapping[str, Any], nodes: Mapping[str, Any], dataset_dir: Path,
+) -> tuple[dict[str, Any], list[str]]:
+    if "vision_facts" not in nodes:
+        return {"status": "not_applicable", "annotation_id": None}, []
+    ref = case.get("vision_annotation_ref")
+    if not ref:
+        return {"status": "unverified", "annotation_id": None}, []
+    annotation = _load_ref(dataset_dir, str(ref))
+    annotation_id = str(annotation.get("annotation_id") or "")
+    approved_digest = _APPROVED_VISION_ANNOTATIONS.get(annotation_id)
+    evidence = {"status": "verified", "annotation_id": annotation_id}
+    errors: list[str] = []
+    if annotation.get("status") != "approved" or _digest(annotation) != approved_digest:
+        errors.append("decision.vision_semantics: annotation provenance is not approved")
+    expected = annotation.get("expected") or {}
+    vision = nodes.get("vision_facts") or {}
+    if not isinstance(expected, Mapping) or vision.get("reply") != expected.get("reply"):
+        errors.append("decision.vision_semantics: recorded facts differ from approved annotation")
+    provenance = annotation.get("provenance") or {}
+    create = nodes.get("create_paramspec") or {}
+    if (
+        not isinstance(provenance, Mapping)
+        or provenance.get("kind") != "human-reviewed-fixture"
+        or provenance.get("source_ref") != create.get("spec_ref")
+    ):
+        errors.append("decision.vision_semantics: annotation is not linked to create fixture")
+    return evidence, errors
+
+
 def _source(case: Mapping[str, Any], dataset_dir: Path) -> dict[str, Any] | None:
     ref = case.get("source_ref")
     return _load_ref(dataset_dir, str(ref)) if ref else None
+
+
+def _policy_denial_evidence(
+    case: Mapping[str, Any], request_policy: Mapping[str, Any],
+) -> tuple[dict[str, Any], list[str]]:
+    recorded = case.get("recorded") or {}
+    envelope = recorded.get("decision") or {}
+    command = str(case.get("command") or "")
+    command_hash = hashlib.sha256(command.encode("utf-8")).hexdigest()
+    evidence = {
+        "command_hash": command_hash,
+        "command_class": envelope.get("command_class"),
+        "route": None,
+        "recorded_route": None,
+        "prompt_node": None,
+        "prompt_id": None,
+        "prompt_version": None,
+        "provider": None,
+        "model": None,
+        "provider_policy": None,
+        "request_policy": copy.deepcopy(dict(request_policy)),
+        "vision_stage_present": False,
+        "vision_facts_digest": None,
+        "create_result_digest": None,
+        "vision_semantics": {"status": "not_applicable", "annotation_id": None},
+        "operation_types": [],
+        "checks": {"command_hash_match": envelope.get("command_hash") == command_hash},
+    }
+    errors: list[str] = []
+    expected = case.get("expected", {}).get("decision")
+    if not isinstance(expected, Mapping):
+        errors.append("expected.decision: missing decision contract")
+    else:
+        errors.extend(_subset_errors(expected, evidence, "expected.decision"))
+    if not evidence["checks"]["command_hash_match"]:
+        errors.append("decision.checks.command_hash_match: failed")
+    return evidence, errors
 
 
 def _context_for(spec: Mapping[str, Any]) -> dict[str, Any]:
@@ -288,17 +362,33 @@ def replay_case(
 
     case_id = str(case.get("id") or "")
     route = str(case.get("route") or "")
-    nodes = _nodes(case)
-    source = _source(case, dataset_dir)
-    materialized_nodes, capability_errors = _validate_capabilities(case, nodes, dataset_dir)
-    has_images = "vision_facts" in nodes
-    production_route = classify_intent(
-        str(case.get("command") or ""), source, {}, has_images=has_images
-    )
-    decision_evidence, decision_mismatches = _decision_evidence(
-        case, nodes, materialized_nodes, provider_policies or {}, production_route
-    )
-    decision_mismatches.extend(capability_errors)
+    command = str(case.get("command") or "")
+    # This is intentionally the first production decision. A denied request
+    # never reaches router, provider metadata validation or saved replay.
+    request_policy = evaluate_request_policy(command)
+    if not request_policy["allowed"]:
+        nodes: dict[str, Any] = {}
+        source = None
+        materialized_nodes: dict[str, Any] = {}
+        has_images = False
+        decision_evidence, decision_mismatches = _policy_denial_evidence(
+            case, request_policy
+        )
+    else:
+        nodes = _nodes(case)
+        source = _source(case, dataset_dir)
+        materialized_nodes, capability_errors = _validate_capabilities(case, nodes, dataset_dir)
+        has_images = "vision_facts" in nodes
+        production_route = classify_intent(command, source, {}, has_images=has_images)
+        vision_semantics, semantic_errors = _vision_semantic_evidence(
+            case, nodes, dataset_dir
+        )
+        decision_evidence, decision_mismatches = _decision_evidence(
+            case, nodes, materialized_nodes, provider_policies or {}, production_route,
+            request_policy, vision_semantics,
+        )
+        decision_mismatches.extend(capability_errors)
+        decision_mismatches.extend(semantic_errors)
     if has_images:
         links = case.get("recorded", {}).get("links") or []
         expected_link = {
@@ -317,6 +407,9 @@ def replay_case(
         "gate": None,
     }
     try:
+        if not request_policy["allowed"]:
+            actual.update(code=request_policy["code"], source_unchanged=True)
+            raise DecisionEnvelopeError(f"{case_id}: request rejected by production policy")
         if decision_mismatches:
             actual.update(code="decision.invalid_envelope")
             raise DecisionEnvelopeError(f"{case_id}: decision envelope rejected")
@@ -360,10 +453,7 @@ def replay_case(
                 spec_hash=spec_revision(source),
             )
         elif route == "refusal":
-            policy = evaluate_request_policy(str(case.get("command") or ""))
-            if policy["allowed"]:
-                raise TraceReplayError(f"{case_id}: production policy did not refuse request")
-            actual.update(code=policy["code"], source_unchanged=True)
+            raise TraceReplayError(f"{case_id}: refusal route requires a denied production policy")
         elif route == "revision_conflict":
             if source is None:
                 raise TraceReplayError(f"{case_id}: source_ref is required")
@@ -452,6 +542,15 @@ _PRIVATE_KEYS = {
     "password", "secret", "system_prompt", "developer_prompt", "raw_prompt",
     "image_base64", "base64", "email", "phone",
 }
+_IDENTITY_KEYS = {
+    "author", "responsible", "customer", "customer_name", "client",
+    "client_name", "contact", "contact_name", "created_by", "approved_by",
+    "reviewed_by", "full_name", "fio", "фио",
+}
+_RUSSIAN_FULL_NAME = re.compile(
+    r"(?<![А-ЯЁа-яё-])[А-ЯЁ][а-яё]{2,}(?:-[А-ЯЁ][а-яё]{2,})?\s+"
+    r"[А-ЯЁ][а-яё]{2,}(?:-[А-ЯЁ][а-яё]{2,})?(?![А-ЯЁа-яё-])"
+)
 _EMAIL = re.compile(r"(?<![\w.-])[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}(?![\w.-])")
 _PHONE = re.compile(r"(?<!\d)(?:\+?\d[\s().-]*){10,15}(?!\d)")
 _SECRET = re.compile(r"(?:bearer\s+[A-Za-z0-9._~+/=-]{12,}|\bsk-[A-Za-z0-9_-]{12,})", re.I)
@@ -463,8 +562,16 @@ def _privacy_errors(value: Any, path: str = "dataset") -> list[str]:
     if isinstance(value, Mapping):
         for key, item in value.items():
             child = f"{path}.{key}"
-            if str(key).lower() in _PRIVATE_KEYS:
+            lowered = str(key).lower()
+            if lowered in _PRIVATE_KEYS:
                 errors.append(f"{child}: private field is forbidden")
+            if isinstance(item, str) and lowered in _IDENTITY_KEYS and item.strip():
+                errors.append(f"{child}: identity field is forbidden")
+            if (
+                isinstance(item, str) and lowered == "project_name"
+                and _RUSSIAN_FULL_NAME.search(item)
+            ):
+                errors.append(f"{child}: probable full name is forbidden")
             errors.extend(_privacy_errors(item, child))
     elif isinstance(value, list):
         for index, item in enumerate(value):

@@ -240,6 +240,11 @@ not production decisions. Replay must call the production router and request
 policy, validate each saved AI node through `capability_schema`, enforce the
 production repair-attempt limit, bind vision facts to create, and privacy-scan
 all transitively referenced dataset content before reducer execution.
+The request policy is evaluated for every scenario before routing and must
+short-circuit denied requests. A vision digest proves integrity only; semantic
+credit requires independent approved annotation provenance. Privacy scanning
+must reject identity-bearing schema fields and conservative full-name patterns
+inside referenced fixtures, not only secrets in the top-level trace.
 
 ## 8. Минимальная матрица проверки
 
