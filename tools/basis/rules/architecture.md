@@ -32,6 +32,7 @@ ParamSpec; координаты всегда считает детерминир
 | Модуль | Ответственность |
 |---|---|
 | `paramspec.py` | схема/валидация ParamSpec (`validate_paramspec`) |
+| `paramspec_versioning.py`, `paramspec_migration.py` | v1 envelope: отделение domain/catalog metadata, tolerant-read/strict-write и read-only dry-run equivalence без фиктивного v2 |
 | `generators/registry.py` | `generate_from_paramspec` — диспетчер архетипов |
 | `generators/{corpus,cabinet,shelving,drawer_unit,door_unit,desk,round_table,composite}.py` | генераторы архетипов (см. rules/generators.md) |
 | `generators/helpers.py` | фасадная полоса, колонки, общие расчёты |

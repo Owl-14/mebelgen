@@ -118,9 +118,10 @@ def test_open_validates_and_builds_before_switching_current_product(tmp_path: Pa
         "responsible": "Автор",
     }
     valid.setdefault("hardware", {}).setdefault("drawer_guides", {})["with_closer"] = True
+    valid["future_top_level"] = "tolerant read must not feed this to geometry"
     valid_path.write_text(json.dumps(valid, ensure_ascii=False), encoding="utf-8")
     broken = json.loads(json.dumps(valid))
-    broken["catalog"]["unexpected"] = True
+    broken["dimensions"]["width"] = 10
     broken_path.write_text(json.dumps(broken, ensure_ascii=False), encoding="utf-8")
 
     studio = _Studio(current_path, tmp_path / "out")
@@ -144,7 +145,40 @@ def test_open_validates_and_builds_before_switching_current_product(tmp_path: Pa
         assert status == 200, raw
         assert opened["ok"] is True
         assert opened["payload"]["viewer"]["panels"]
+        assert opened["paramspec_read"]["unknown_fields"] == ["future_top_level"]
+        assert "future_top_level" not in opened["spec"]
         assert studio.workspaces.current_spec_path(None).name == "valid.json"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_save_is_strict_and_does_not_overwrite_on_unknown_fields(tmp_path: Path) -> None:
+    spec = json.loads(
+        (ROOT / "paramspecs" / "komi_72_tumba_podkatnaya.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    spec_path = tmp_path / "item.json"
+    original = json.dumps(spec, ensure_ascii=False)
+    spec_path.write_text(original, encoding="utf-8")
+    candidate = json.loads(json.dumps(spec))
+    candidate["future_top_level"] = True
+
+    studio = _Studio(spec_path, tmp_path / "out")
+    server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(studio))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        status, raw = _request(
+            server.server_port, "POST", "/api/save", {"spec": candidate}
+        )
+        rejected = json.loads(raw)
+        assert status == 422
+        assert rejected["code"] == "invalid_paramspec"
+        assert any("future_top_level" in item for item in rejected["details"])
+        assert spec_path.read_text(encoding="utf-8") == original
     finally:
         server.shutdown()
         server.server_close()
