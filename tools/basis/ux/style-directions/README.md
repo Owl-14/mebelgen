@@ -1,8 +1,8 @@
 # MEB-094 — направления визуального языка Studio
 
 Статус: `REVIEW READY / USER SELECTION REQUIRED`
-База: `origin/master` @ `7543c85415503bb4e3651a1a954bca54c4991db8`
-Сцена: настоящий локальный Studio, `paramspecs/tumba_moderatora.json`, `1440×900`.
+База: `origin/master` @ `bbe3b4bb43003b17dc45d6ec8967da0946963dca`
+Сцена: настоящий локальный Studio, `paramspecs/komi_72_tumba_podkatnaya.json`, `1440×900`.
 
 Это три равноправных кандидата, а не выбранный дизайн. CSS-файлы в этом
 каталоге — изолированные review-overrides: они подставлялись в запущенную
@@ -47,10 +47,10 @@ Browser provenance и SHA-256 кадров: [BROWSER_EVIDENCE.md](BROWSER_EVIDEN
 
 ## Как воспроизвести
 
-1. Запустить Studio из этой ветки на `paramspecs/tumba_moderatora.json`.
-2. В DevTools добавить один CSS-файл после штатных стилей.
-3. Установить на `<html>` только один атрибут: `data-meb094-direction="a"`, `b` или `c`.
-4. Проверить `1440×900`, одну и ту же камеру/изделие и отсутствие ошибок console.
+1. Из `tools/basis` выполнить `python ux/style-directions/capture_live_studio.py --base-sha bbe3b4bb43003b17dc45d6ec8967da0946963dca`.
+2. Скрипт поднимет локальный Studio, дождётся `viewportModelState === 'ready'` и для каждого кадра внедрит ровно один CSS через Playwright `page.add_style_tag()`.
+3. Скрипт установит на `<html>` только один атрибут: `data-meb094-direction="a"`, `b` или `c`, проверит фактический accent и сделает live screenshot `1440×900`.
+4. Машиночитаемый provenance, SHA-256, console errors и reduced-motion probe будут записаны в `browser-evidence.json`.
 
 Следующее действие принадлежит пользователю: выбрать `A`, `B`, `C` либо запросить
 конкретную комбинацию. До этого production CSS/HTML не меняется.

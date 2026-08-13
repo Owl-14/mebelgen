@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 import re
 from pathlib import Path
@@ -77,12 +78,20 @@ def test_review_evidence_covers_components_contrast_and_motion() -> None:
 
     for component in ("Input", "Button", "Tab", "Select", "Toggle/checkbox", "Menu/popover", "Tooltip"):
         assert f"| {component} |" in states
-    for state in ("Default", "Hover", "Focus", "Selected", "Disabled", "Busy", "Warning", "Error"):
+    for state in (
+        "Default", "Empty", "Hover", "Focus", "Selected", "Open/expanded",
+        "Disabled", "Busy", "Warning", "Error",
+    ):
         assert state in states
     assert contrast.count("| PASS |") == 18
     assert "prefers-reduced-motion" in motion
 
     browser = (review / "BROWSER_EVIDENCE.md").read_text(encoding="utf-8")
+    evidence = json.loads((review / "browser-evidence.json").read_text(encoding="utf-8"))
+    assert evidence["base_sha"] == "bbe3b4bb43003b17dc45d6ec8967da0946963dca"
+    assert evidence["capture"] == "real local Studio with Playwright-injected review CSS"
+    assert set(evidence["directions"]) == {"a", "b", "c"}
+    assert (review / "capture_live_studio.py").is_file()
     for asset in (
         "origin-master-1440x900.jpg",
         "direction-a-1440x900.jpg",

@@ -1,24 +1,18 @@
-# MEB-094 — reduced-motion evidence
+# MEB-094 — reduced-motion browser evidence
 
-## Production baseline
+Это не только статический CSS-контракт. `capture_live_studio.py` запускает настоящий локальный Studio в Chromium для каждой A/B/C direction, создаёт browser context с `reduced_motion="reduce"`, внедряет review CSS через `page.add_style_tag()` и проверяет:
 
-`src/studio.py::PAGE` уже содержит глобальный
-`@media (prefers-reduced-motion:reduce)`: scroll-behavior отключается, длительности
-animation/transition сводятся к `0.01ms`, iteration count — к `1`. Контракт
-проверяет `tests/test_studio_visual_system_contract.py`.
+- `matchMedia('(prefers-reduced-motion: reduce)').matches === true`;
+- вычисленные `animation-duration` и `transition-duration` каждого DOM-элемента не превышают `0.011ms`;
+- список нарушителей пуст.
 
-## Review directions
+Машиночитаемый результат хранится в `browser-evidence.json` в секции `directions.*.reduced_motion`. Тот же сценарий является частью CI browser gate в `tests/test_studio_browser_state.py::test_review_direction_is_live_and_reduced_motion_is_effective`.
 
-- Ни один из трёх review CSS не добавляет `animation`, `transition`, parallax,
-  hover-lift, bounce или page-load motion.
-- Hover меняет только цвет/background/border и наследует production reduce-rule.
-- Busy/warning/error выражаются текстом, атрибутом/состоянием и статическим marker;
-  motion не является обязательным сигналом.
-- Реальная анимация мебели принадлежит `MebelScene` и этими assets не меняется.
+Воспроизведение из `tools/basis`:
 
-## Browser evidence
+```powershell
+python ux/style-directions/capture_live_studio.py --base-sha bbe3b4bb43003b17dc45d6ec8967da0946963dca
+python -m pytest tests/test_studio_browser_state.py -q
+```
 
-Для каждой direction проверяется одна и та же страница при обычной media setting
-и `reduce`: production media query присутствует, direction stylesheet не создаёт
-анимаций, UI остаётся читаемым. Скриншоты не доказывают тайминг сами по себе;
-машиночитаемый контракт ниже запрещает motion declarations в review CSS.
+Review CSS не добавляет собственных `animation` или `transition`; production media query остаётся источником поведения reduced motion. Это доказательство не означает пользовательский выбор A, B или C.

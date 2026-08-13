@@ -1,29 +1,22 @@
-# MEB-094 — browser screenshot evidence
+# MEB-094 — live Studio browser evidence
 
 Дата: 2026-08-14
-Browser viewport: `1440×900`
-Source: локальный Studio из worktree MEB-094, base `7543c85`, без production diff.
-Изделие: `Тумба для модератора · cabinet 1000×400×750`.
 
-## Фиксации
+Exact base / merge-base: `bbe3b4bb43003b17dc45d6ec8967da0946963dca`
 
-| Asset | Размер | SHA-256 | Что подтверждает |
+Viewport: `1440×900`
+
+Source: `paramspecs/komi_72_tumba_podkatnaya.json`
+
+Все A/B/C assets ниже — полные screenshots настоящей локальной страницы Studio после достижения `viewportModelState === 'ready'`. Для каждого кадра Playwright временно добавил соответствующий review-only CSS через `page.add_style_tag()` и `data-meb094-direction`; production HTML/CSS не импортирует overrides и не изменялся.
+
+| Asset | Размер | SHA-256 | Фактически применено |
 |---|---:|---|---|
-| `origin-master-1440x900.jpg` | 1440×900 | `45a48fb6ff476b3d099eff5eab289ae178ad8ddea5d5b68de19e1a42b5eab003` | Свежий текущий Studio и настоящая MebelScene |
-| `direction-a-1440x900.jpg` | 1440×900 | `018c7836f7253d85e949cfadaeb9460125b73672257d64fb7b840e09e3bfe777` | A + palette/component specimen |
-| `direction-b-1440x900.jpg` | 1440×900 | `56c202d2f14a842dd799597926a9bfcca5a94526cd19de050be1841fd8230402` | B + palette/component specimen |
-| `direction-c-1440x900.jpg` | 1440×900 | `b6e8b9fe188a6f501c141219749f4a9d37228e5fefb35ec81b7939cc58762ee9` | C + palette/component specimen |
+| `origin-master-1440x900.jpg` | 1440×900 | `4b8394b972da300f2733c09a096771b6fabf1e69b5d39a29a3af1a9676010660` | Studio без review override |
+| `direction-a-1440x900.jpg` | 1440×900 | `b530ca87e0e51124bca46f0eda4de81e5a38ff45c1282573b222305b1a374a10` | `data-meb094-direction=a`, accent `#1f5faf`, workspace `rgb(232, 237, 241)` |
+| `direction-b-1440x900.jpg` | 1440×900 | `7994ec6f7b67bc00f1765da58e0298ac79426fe051335ba779e0cfed78e08072` | `data-meb094-direction=b`, accent `#8a4b16`, workspace `rgb(235, 230, 220)` |
+| `direction-c-1440x900.jpg` | 1440×900 | `f9ea864857969d3fd48c436f66de5276f8bc5ffaa03067a2ae8d7fa0aa8eb560` | `data-meb094-direction=c`, accent `#0b5d78`, workspace `rgb(221, 232, 239)` |
 
-## Проверено в Browser
+`browser-evidence.json` хранит CSS/screenshot SHA-256, вычисленные token/background значения, пустые списки console errors и результаты reduced-motion browser probe для каждого направления. `capture_live_studio.py` полностью воспроизводит эти артефакты и отказывает, если `git merge-base HEAD origin/master` не равен переданному exact base.
 
-- локальный Studio загрузился, нужное реальное изделие выбрано штатным select;
-- baseline screenshot снят с exact-base worktree, не с production;
-- каждый `review-board.html?direction=a|b|c` показал правильный title и видимую
-  baseline image;
-- все четыре JPEG имеют фактический размер `1440×900`;
-- console current Studio и review boards: новых `error`/`warn` не обнаружено;
-- review HTML содержит `prefers-reduced-motion: reduce`, а direction CSS не
-  содержит animation/transition declarations.
-
-Скриншоты доказывают визуальный review asset, но не являются пользовательским
-выбором направления и не разрешают production implementation.
+Удалён прежний `review-board.html`: составные boards больше не используются и не выдаются за live Studio. Эти screenshots подтверждают только три равноправных review-направления; пользовательский выбор и разрешение production implementation отсутствуют.
