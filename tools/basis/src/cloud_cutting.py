@@ -22,6 +22,7 @@ from typing import Any, Callable, Mapping, Sequence
 import requests
 
 from .cloud_api import BASE_URL
+from .material_link_contract import serialize_link_payload
 
 PREFIX = "/api-cutting-public"
 SUPPORTED_MODEL_EXTENSIONS = {
@@ -529,12 +530,28 @@ class CuttingClient:
         idempotency_key: str,
     ) -> Any:
         model_id = _positive_id(model_id, "model_id")
-        body = self._validate_material_links(links)
+        body = serialize_link_payload(links)
         return self._request(
             "POST", f"/cad-models/{model_id}/set-link-materials",
             route="/cad-models/{id}/set-link-materials", operation="set_link_materials",
             json_body=body, idempotency_key=idempotency_key,
             fingerprint_meta={"model_ref": _resource_ref(model_id), "link_count": len(body)},
+        )
+
+    def cutting_materials(self, order_id: int) -> Any:
+        """Read linked MatBase ids, articles and configured sheet items."""
+        order_id = _positive_id(order_id, "order_id")
+        return self._request(
+            "GET", "/cutting-materials", route="/cutting-materials",
+            operation="cutting_materials", params={"orderId": order_id},
+        )
+
+    def cutted_materials(self, order_id: int) -> Any:
+        """Read post-cut material statistics used as production evidence."""
+        order_id = _positive_id(order_id, "order_id")
+        return self._request(
+            "GET", f"/orders/{order_id}/cutted-materials",
+            route="/orders/{id}/cutted-materials", operation="cutted_materials",
         )
 
     # Production
@@ -631,5 +648,6 @@ def api_overview() -> str:
         "and a unique idempotency prefix. Never retry an ambiguous mutation.",
         "Flow: create order -> upload .b3d -> read/link materials -> run-cutting",
         "      -> generation-production-files -> production-files-url.",
+        "Evidence: cutting-materials (article/sheets) -> cutted-materials (post-cut audit).",
         "Key: env BAZIS_API_KEY (header apiKey).",
     ])
