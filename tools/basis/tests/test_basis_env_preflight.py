@@ -8,6 +8,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,7 @@ SCRIPT = ROOT / "scripts" / "basis_env_preflight.ps1"
 IMPORTER = ROOT / "scripts" / "ImportFurnitureFromJSON.js"
 MATERIAL_BASE = ROOT / "materials" / "baza_materiala.json"
 FIXTURE = ROOT / "projects" / "moderator_cabinet.json"
+REAL_B3D = ROOT / "qa" / "fixtures" / "wardrobe_demo_production.b3d"
 RUNBOOK = ROOT.parent.parent / "docs" / "BASIS_ENV_PREFLIGHT.md"
 
 
@@ -97,10 +99,15 @@ def test_preflight_requires_signed_identity_and_consistent_manifest():
         "script_sha256",
         "fixture_sha256",
         "output_model_sha256",
-        "basis-verification-v1",
+        "basis-verification-v2",
         "executable_evidence_mismatch",
         "install_path_mismatch",
         "scripts_path_mismatch",
+        "material_import_result_invalid",
+        "material_slot_invalid",
+        "material_thickness_invalid",
+        "checked_at_stale",
+        "output_model_magic_invalid",
     ):
         assert evidence in text
 
@@ -125,15 +132,33 @@ def test_renamed_cmd_and_nonempty_manifest_never_become_ready(tmp_path: Path):
             fake_executable = fake_install / "mebel.exe"
             shutil.copy2(Path(os.environ.get("COMSPEC", r"C:\Windows\System32\cmd.exe")), fake_executable)
 
-            output_model = tmp_path / "synthetic-output.b3d"
-            output_model.write_bytes(b"synthetic evidence; never executed")
+            output_model = REAL_B3D
+            import_evidence = tmp_path / "material-import-report.txt"
+            import_evidence.write_text("synthetic material import evidence", encoding="utf-8")
             manifest = {
-                "schemaVersion": "basis-verification-v1",
+                "schemaVersion": "basis-verification-v2",
                 "basis_version": "2026.5.6.0",
                 "basis_install_path": str(fake_install),
                 "basis_executable_sha256": _sha256(fake_executable),
                 "scripts_path": str(fake_scripts),
                 "material_base_sha256": _sha256(MATERIAL_BASE),
+                "material_import": {
+                    "method": "basis-material-import",
+                    "result": "pass",
+                    "outcome": "completed",
+                    "basis_version": "2026.5.6.0",
+                    "basis_install_path": str(fake_install),
+                    "input_path": str(MATERIAL_BASE),
+                    "input_sha256": _sha256(MATERIAL_BASE),
+                    "input_count": 5047,
+                    "imported_count": 5047,
+                    "rejected_count": 0,
+                    "board_count": 963,
+                    "edge_count": 325,
+                    "evidence_type": "basis-material-import-report",
+                    "evidence_path": str(import_evidence),
+                    "evidence_sha256": _sha256(import_evidence),
+                },
                 "materials": [
                     {"slot": "board", "basisName": "synthetic", "article": "FAKE-1", "thickness_mm": 16}
                 ],
@@ -147,8 +172,19 @@ def test_renamed_cmd_and_nonempty_manifest_never_become_ready(tmp_path: Path):
                     "result": "pass",
                     "output_model": str(output_model),
                     "output_model_sha256": _sha256(output_model),
+                    "model_type": "BZ85",
+                    "magic_hex": "425A3835",
+                    "section_marker_hex": "010000FF",
+                    "file_size_bytes": output_model.stat().st_size,
+                    "header_root_name": "Header",
+                    "document_root_name": "Document",
+                    "parser_result": "pass",
+                    "model_node_found": True,
+                    "document_section_found": True,
+                    "document_compressed": True,
+                    "trailer_bytes": 0,
                 },
-                "checked_at": "2026-08-13T00:00:00Z",
+                "checked_at": datetime.now(timezone.utc).isoformat(),
             }
             manifest_path = tmp_path / "basis-verification.json"
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
@@ -175,6 +211,16 @@ def test_renamed_cmd_and_nonempty_manifest_never_become_ready(tmp_path: Path):
     assert "Microsoft" in report["basis"]["executableEvidence"][0]["companyName"]
     assert report["basis"]["trustedExecutables"] == []
     assert "executable_evidence_mismatch" in report["operatorVerification"]["errors"]
+    assert not any(
+        error.startswith("output_model_") or error.startswith("material_import_")
+        for error in report["operatorVerification"]["errors"]
+    )
+    assert report["operatorVerification"]["outputModel"]["structureValid"] is True
+    assert report["operatorVerification"]["outputModel"]["headerRootName"] == "Header"
+    assert report["operatorVerification"]["outputModel"]["documentRootName"] == "Document"
+    assert report["operatorVerification"]["outputModel"]["modelNodeFound"] is True
+    assert report["operatorVerification"]["outputModel"]["adler32Valid"] is True
+    assert report["operatorVerification"]["outputModel"]["trailerBytes"] == 0
 
 
 @pytest.mark.skipif(_powershell_51() is None, reason="requires Windows PowerShell 5.1")
@@ -197,14 +243,106 @@ def test_arbitrary_install_root_is_rejected_before_any_traversal(tmp_path: Path)
     assert any(row["reason"] == "outside_trusted_scope" for row in report["basis"]["rejectedRoots"])
 
 
+@pytest.mark.skipif(_powershell_51() is None, reason="requires Windows PowerShell 5.1")
+def test_manifest_rejects_import_slot_thickness_age_and_json_output_counterexample(tmp_path: Path):
+    powershell = _powershell_51()
+    assert powershell is not None
+    fake_install = tmp_path / "BazisFake"
+    fake_scripts = tmp_path / "BazisN" / "Scripts"
+    fake_install.mkdir()
+    fake_scripts.mkdir(parents=True)
+    fake_executable = fake_install / "mebel.exe"
+    shutil.copy2(Path(os.environ.get("COMSPEC", r"C:\Windows\System32\cmd.exe")), fake_executable)
+    import_evidence = tmp_path / "material-import-report.txt"
+    import_evidence.write_text("counterexample without import result", encoding="utf-8")
+
+    manifest = {
+        "schemaVersion": "basis-verification-v2",
+        "basis_version": "2026.5.6.0",
+        "basis_install_path": str(fake_install),
+        "basis_executable_sha256": _sha256(fake_executable),
+        "scripts_path": str(fake_scripts),
+        "material_base_sha256": _sha256(MATERIAL_BASE),
+        "material_import": {
+            "method": "basis-material-import",
+            "outcome": "completed",
+            "basis_version": "2026.5.6.0",
+            "basis_install_path": str(fake_install),
+            "input_path": str(MATERIAL_BASE),
+            "input_sha256": _sha256(MATERIAL_BASE),
+            "input_count": 5047,
+            "imported_count": 5047,
+            "rejected_count": 0,
+            "board_count": 963,
+            "edge_count": 325,
+            "evidence_type": "basis-material-import-report",
+            "evidence_path": str(import_evidence),
+            "evidence_sha256": _sha256(import_evidence),
+        },
+        "materials": [
+            {"slot": "not-board", "basisName": "synthetic", "article": "FAKE-1", "thickness_mm": -16}
+        ],
+        "edges": [
+            {"basisName": "synthetic edge", "article": "FAKE-E", "thickness_mm": -2.0}
+        ],
+        "js_smoke": {
+            "script_sha256": _sha256(IMPORTER),
+            "fixture": str(FIXTURE),
+            "fixture_sha256": _sha256(FIXTURE),
+            "result": "pass",
+            "output_model": str(FIXTURE),
+            "output_model_sha256": _sha256(FIXTURE),
+            "model_type": "BZ85",
+            "magic_hex": "425A3835",
+            "section_marker_hex": "010000FF",
+            "file_size_bytes": FIXTURE.stat().st_size,
+            "header_root_name": "Header",
+            "parser_result": "pass",
+            "model_node_found": True,
+            "document_section_found": True,
+            "document_compressed": True,
+            "trailer_bytes": 64,
+        },
+        "checked_at": "2020-01-01T00:00:00Z",
+    }
+    manifest_path = tmp_path / "counterexample.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    result = _run_preflight(
+        powershell,
+        "-BasisInstallPath",
+        str(fake_install),
+        "-ScriptsPath",
+        str(fake_scripts),
+        "-VerificationManifestPath",
+        str(manifest_path),
+    )
+
+    assert result.returncode == 2, result.stderr
+    report = json.loads(result.stdout)
+    errors = set(report["operatorVerification"]["errors"])
+    assert {
+        "material_import_result_invalid",
+        "material_slot_invalid",
+        "material_thickness_invalid",
+        "edge_thickness_invalid",
+        "checked_at_stale",
+        "output_model_extension_invalid",
+        "output_model_magic_invalid",
+        "output_model_evidence_invalid",
+    } <= errors
+    assert report["status"] == "blocked"
+
+
 def test_runbook_documents_identity_manifest_and_no_binary_execution():
     text = RUNBOOK.read_text(encoding="utf-8")
     for required in (
         "Authenticode",
         "ProductName",
         "CompanyName",
-        "basis-verification-v1",
+        "basis-verification-v2",
         "basis_executable_sha256",
+        "material_import",
         "fixture_sha256",
         "output_model_sha256",
         "ImportFurnitureFromJSON.js",
