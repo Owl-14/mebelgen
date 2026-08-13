@@ -742,7 +742,13 @@ _MISSING = object()
 
 
 def _normalize_provider_operations(operations: list[Any]) -> list[Any]:
-    """Translate the MEB-144 rolling format into the typed MEB-143 contract."""
+    """Translate provider output into the typed operation contract.
+
+    Only deterministic, lossless repairs are allowed here.  In particular, the
+    target of a dimension/material/archetype operation is fully determined by
+    another typed field.  Section ids are copied only when the provider already
+    supplied the same id in ``target_id``; this function never invents ids.
+    """
     normalized: list[Any] = []
     aliases = {
         "add_panel": "AddPanel",
@@ -755,8 +761,34 @@ def _normalize_provider_operations(operations: list[Any]) -> list[Any]:
         "align_front", "align_back", "delta_mm",
     }
     for raw in operations:
-        if not isinstance(raw, dict) or "op" in raw:
+        if not isinstance(raw, dict):
             normalized.append(raw)
+            continue
+        if "op" in raw:
+            item = copy.deepcopy(raw)
+            op_name = item.get("op")
+            if op_name == "SetDimension" and item.get("dimension") in {
+                "width", "depth", "height",
+            }:
+                item["target_id"] = f"dimensions.{item['dimension']}"
+            elif op_name == "SetMaterial" and isinstance(item.get("field"), str):
+                item["target_id"] = f"materials.{item['field']}"
+            elif op_name == "ChangeArchetype":
+                item["target_id"] = "archetype"
+            elif op_name == "AddSection" and isinstance(item.get("section"), dict):
+                section = item["section"]
+                target_id = str(item.get("target_id") or "")
+                supplied_id = target_id.removeprefix("section:")
+                explicit_section_target = target_id.startswith("section:")
+                plain_section_target = (
+                    bool(target_id)
+                    and ":" not in target_id
+                    and target_id not in {"section", "sections"}
+                )
+                if (not section.get("id") and supplied_id
+                        and (explicit_section_target or plain_section_target)):
+                    section["id"] = supplied_id
+            normalized.append(item)
             continue
         kind = str(raw.get("kind") or raw.get("operation") or raw.get("action") or "")
         op = aliases.get(kind)
@@ -891,7 +923,8 @@ def chat_edit(spec: dict[str, Any], message: str,
         node = classify_intent(message, spec, context, has_images=bool(images))
         request = build_prompt_request(node, message=message, spec=spec,
                                        history=history, context=context)
-        return summarize({"reply": error_message, "error": error_message, "spec": None,
+        return summarize({"reply": error_message, "error": error_message,
+                "code": "ai_provider_failed", "spec": None,
                 "changes": [], "trace": {"prompts": [request.trace], "router": {
                     "kind": "deterministic", "node": node,
                 }}})
@@ -904,7 +937,9 @@ def chat_edit(spec: dict[str, Any], message: str,
                 "check.outcome": "fail", "error.codes": ["invalid_response"],
             })
             return summarize({"reply": "Сервис AI вернул некорректный ответ.",
-                              "error": "invalid_response", "spec": None, "changes": []})
+                              "error": "Сервис AI вернул некорректный ответ.",
+                              "code": "invalid_provider_response",
+                              "spec": None, "changes": []})
         response_span.set_attributes({"check.outcome": "pass"})
 
     usage = res.get("usage")                          # расход токенов (для счётчика)
@@ -914,9 +949,11 @@ def chat_edit(spec: dict[str, Any], message: str,
         trace["prompts"] = [vision_trace, *(trace.get("prompts") or [])]
     if two_stage and isinstance(res, dict):           # пометка конвейера в ответе
         res["reply"] = "📷 Фото распознано → " + str(res.get("reply") or "готово")
-    node = str((trace.get("router") or {}).get("node")
-               or classify_intent(message, spec, context, has_images=bool(images)))
-    created = bool(res.get("created"))
+    # The provider may echo trace metadata, but it cannot choose its own
+    # capability.  Only the deterministic route computed before the call is
+    # authoritative; otherwise a crafted response could escalate an edit into
+    # unrestricted create_paramspec.
+    node = routed_node
     legacy_spec = res.get("spec") if isinstance(res.get("spec"), dict) else None
     raw_operations = (list(res.get("operations"))
                       if isinstance(res.get("operations"), list) else [])
@@ -924,22 +961,13 @@ def chat_edit(spec: dict[str, Any], message: str,
         return summarize({"reply": res.get("reply", ""), "spec": None, "changes": [],
                 "operations": [], "resolved_operations": [], "usage": usage,
                 "trace": trace})
-    if node == "part_edit":
-        if legacy_spec is not None:
-            reply = "Правка отклонена — узел детали принимает только типизированные операции."
-            return {"reply": reply, "error": reply, "spec": None, "changes": [],
-                    "operations": [], "resolved_operations": [], "usage": usage,
-                    "trace": trace}
-        normalized_for_scope = _normalize_provider_operations(raw_operations)
-        allowed_part_ops = {"AddPanel", "MovePanel", "DeletePart"}
-        if any(not isinstance(item, dict) or item.get("op") not in allowed_part_ops
-               for item in normalized_for_scope):
-            reply = "Правка отклонена — узел детали может выполнять только AddPanel/MovePanel/DeletePart."
-            return {"reply": reply, "error": reply, "spec": None, "changes": [],
-                    "operations": [], "resolved_operations": [], "usage": usage,
-                    "trace": trace}
-        raw_operations = normalized_for_scope
-    if created and legacy_spec is not None:
+    if node == "create_paramspec":
+        if legacy_spec is None:
+            reply = "Не удалось собрать новый ParamSpec: AI не вернул полное изделие."
+            return summarize({"reply": reply, "error": reply,
+                    "code": "create_paramspec_missing", "spec": None,
+                    "changes": [], "operations": [], "resolved_operations": [],
+                    "usage": usage, "trace": trace})
         if _coordinate_overrides(legacy_spec):
             return _coordinate_refusal(usage, trace)
         from .production_gate import evaluate_production_gate
@@ -949,16 +977,35 @@ def chat_edit(spec: dict[str, Any], message: str,
             return _production_gate_refusal(decision, usage, trace=trace)
         accepted = decision.accepted_spec
         assert accepted is not None
-        return {"reply": res.get("reply", "Создано."), "spec": accepted,
+        return summarize({"reply": res.get("reply", "Создано."), "spec": accepted,
                 "changes": ["новое изделие с нуля"], "created": True,
                 "operations": [], "resolved_operations": [], "usage": usage,
-                "check_report": decision.report.to_dict(), "trace": trace}
+                "check_report": decision.report.to_dict(), "trace": trace})
+    if node == "part_edit":
+        if legacy_spec is not None:
+            reply = "Правка отклонена — узел детали принимает только типизированные операции."
+            return {"reply": reply, "error": reply,
+                    "code": "part_edit_contract_violation",
+                    "spec": None, "changes": [],
+                    "operations": [], "resolved_operations": [], "usage": usage,
+                    "trace": trace}
+        normalized_for_scope = _normalize_provider_operations(raw_operations)
+        allowed_part_ops = {"AddPanel", "MovePanel", "DeletePart"}
+        if any(not isinstance(item, dict) or item.get("op") not in allowed_part_ops
+               for item in normalized_for_scope):
+            reply = "Правка отклонена — узел детали может выполнять только AddPanel/MovePanel/DeletePart."
+            return {"reply": reply, "error": reply,
+                    "code": "part_edit_operation_forbidden",
+                    "spec": None, "changes": [],
+                    "operations": [], "resolved_operations": [], "usage": usage,
+                    "trace": trace}
+        raw_operations = normalized_for_scope
 
     compatibility = (res.get("compatibility_patches")
                      if isinstance(res.get("compatibility_patches"), list) else [])
     try:
         if legacy_spec is not None:
-            expected_geometry = [] if created else _coordinate_overrides(spec)
+            expected_geometry = _coordinate_overrides(spec)
             if _coordinate_overrides(legacy_spec) != expected_geometry:
                 return _coordinate_refusal(usage, trace)
             for key in PROTECTED_KEYS:
@@ -985,7 +1032,8 @@ def chat_edit(spec: dict[str, Any], message: str,
             new = _apply_compatibility_patches(applied["spec"], compatibility)
     except Exception as error:
         reply = f"Правка отклонена — операции не применены: {error}"
-        return {"reply": reply, "error": reply, "spec": None,
+        return {"reply": reply, "error": reply,
+                "code": "operation_validation_failed", "spec": None,
                 "changes": [], "operations": [], "resolved_operations": [],
                 "usage": usage, "trace": trace}
 
