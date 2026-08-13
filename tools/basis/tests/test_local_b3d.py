@@ -117,6 +117,8 @@ def test_prepare_package_is_reproducible_and_contains_no_b3d(tmp_path: Path):
     project = json.loads((first / "project.json").read_text(encoding="utf-8"))
     assert project["_local_b3d_handoff"]["requires_new_empty_document"] is True
     importer = (first / "ImportFurnitureFromJSON.js").read_text(encoding="utf-8")
+    assert "handoff !== undefined" in importer
+    assert "handoff.requires_new_empty_document !== true" in importer
     assert "НОВЫЙ ПУСТОЙ документ БАЗИС" in importer
     assert one["package_zip_sha256"] == two["package_zip_sha256"]
     assert _sha(first / "local-b3d-package.zip") == _sha(second / "local-b3d-package.zip")
