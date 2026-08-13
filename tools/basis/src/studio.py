@@ -2923,14 +2923,16 @@ PAGE = r"""<!DOCTYPE html>
     stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
   #rightside #verRestore{display:grid;place-items:center;flex:0 0 32px;width:32px;height:32px;padding:0}
   #side .icon-button{display:grid;place-items:center;flex:0 0 32px;width:32px;height:32px;padding:0}
-  #side h1.studio-brand{display:grid;gap:1px;margin:0 0 13px;font-size:13px;
-    line-height:1;letter-spacing:0}
-  #side .studio-brand-lockup{display:flex;align-items:center;gap:8px;min-width:0;height:30px}
+  #side h1.studio-brand{margin:0 0 13px;font-size:13px;line-height:1;letter-spacing:0}
+  #side .studio-brand-home{display:flex;align-items:center;gap:8px;width:max-content;
+    max-width:100%;height:34px;
+    min-width:0;margin:0;padding:2px 1px;border:0;border-radius:5px;background:transparent;
+    color:inherit;text-align:left}
+  #side .studio-brand-home:hover{background:transparent}
+  #side .studio-brand-home:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   #side .studio-brand-wordmark{display:block;width:158px;max-width:calc(100% - 72px);
     height:auto;object-fit:contain}
   #side .studio-brand-mark{display:block;width:64px;height:auto;object-fit:contain}
-  #side .studio-brand-tagline{display:block;margin-left:1px;color:#687180;
-    font-size:9.5px;line-height:13px;font-weight:400;letter-spacing:.015em}
   .profile-shell{position:relative;margin:0 0 12px}
   #profileChip{display:grid;grid-template-columns:32px minmax(0,1fr) 14px;align-items:center;
     gap:9px;width:100%;min-height:48px;padding:7px 9px;border:1px solid #e0e5eb;border-radius:11px;
@@ -2966,6 +2968,13 @@ PAGE = r"""<!DOCTYPE html>
     font-size:10.5px;font-variant-numeric:tabular-nums}
   #catalogContextCount::before{content:"";width:6px;height:6px;border-radius:50%;
     background:var(--accent)}
+  #catalogInspectorSlot{display:none}
+  #app.catalog-mode #sideScroll{flex:1 1 auto;overflow-y:auto;overscroll-behavior:contain;
+    scrollbar-gutter:stable}
+  #app.catalog-mode #catalogInspectorSlot{display:block;margin-top:12px}
+  #app.catalog-mode #catInspector{margin:0;border:0;border-top:1px solid var(--line)}
+  #app.catalog-mode #catInspectorEmpty{min-height:150px}
+  #app.catalog-mode #catInspectPreview{height:150px;flex-basis:150px}
   #side fieldset{border:0;border-radius:0;margin:0;padding:0}
   #side legend{font-size:12px;line-height:18px;font-weight:600;text-transform:none;
     color:var(--ink);padding:0;margin-bottom:6px}
@@ -3306,9 +3315,11 @@ PAGE = r"""<!DOCTYPE html>
   #catClose{display:flex;align-items:center;gap:5px}
   #catClose svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.8;
     stroke-linecap:round}
+  /* Каталог держит постоянную рабочую сетку: выбор не должен сдвигать карточки
+     и ломать зрительную память человека. Инспектор живёт в левой панели,
+     а до выбора показывает короткое направление. */
   #catWorkspace{display:grid;grid-template-columns:minmax(0,1fr);flex:1;min-height:0;
     border-top:1px solid var(--line);overflow:hidden}
-  #catWorkspace.has-selection{grid-template-columns:minmax(0,1fr) 304px}
   #catBrowser{display:flex;flex-direction:column;min-width:0;min-height:0;padding-top:10px}
   #catFilterbar{display:flex;align-items:center;gap:10px;min-height:38px;margin-bottom:8px;
     border-bottom:1px solid #dfe3e8}
@@ -3332,8 +3343,11 @@ PAGE = r"""<!DOCTYPE html>
   .catchip:focus-visible,.cat-scope:focus-visible,.cat-filter-select:focus-visible,
     #catClose:focus-visible,#catInspectorClose:focus-visible,
     #catInspectorActions button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  /* Широкий каталог использует свободное место под карточки, но не мельчит их:
+     обычно 5 на большом экране, 4–3 на более компактном desktop. */
   #catGrid{display:grid;flex:1;min-height:0;align-content:start;
-    grid-template-columns:repeat(auto-fill,minmax(200px,1fr));grid-auto-rows:max-content;gap:12px;
+    grid-template-columns:repeat(auto-fill,minmax(clamp(230px,19vw,290px),1fr));
+    grid-auto-rows:max-content;gap:12px;
     overflow-y:auto;padding:1px 14px 20px 1px;scrollbar-gutter:stable}
   #catalogPreviewRenderer{position:fixed;left:-10000px;top:0;width:420px;height:315px;
     overflow:hidden;opacity:0;pointer-events:none;z-index:-1}
@@ -3365,7 +3379,16 @@ PAGE = r"""<!DOCTYPE html>
   .catEmpty{padding:24px 4px;color:var(--mut);font-size:12px}
   #catInspector{display:flex;flex-direction:column;min-width:0;min-height:0;margin-left:14px;
     border-left:1px solid var(--line);background:#fff}
-  #catInspector[hidden]{display:none!important}
+  #catInspectorEmpty{display:none;flex:1;align-items:center;justify-content:center;padding:28px;
+    text-align:center;color:#687180}
+  #catInspectorEmptyInner{max-width:210px}
+  #catInspectorEmptyKicker{display:block;margin-bottom:8px;color:#778190;font-size:10px;
+    font-weight:600;letter-spacing:.05em;text-transform:uppercase}
+  #catInspectorEmpty h3{margin:0;color:#35404d;font-size:14px;line-height:20px}
+  #catInspectorEmpty p{margin:7px 0 0;font-size:11.5px;line-height:17px}
+  #catInspector.is-empty #catInspectorEmpty{display:flex}
+  #catInspector.is-empty>#catInspectorHead,#catInspector.is-empty>#catInspectPreview,
+  #catInspector.is-empty>#catInspectorBody,#catInspector.is-empty>#catInspectorActions{display:none}
   #catInspectorHead{display:flex;align-items:flex-start;gap:10px;padding:13px 14px 10px;
     border-bottom:1px solid var(--line)}
   #catInspectorHeadCopy{min-width:0;flex:1}
@@ -3412,7 +3435,6 @@ PAGE = r"""<!DOCTYPE html>
   #catArchive:hover{border-color:#d49497;background:#fff0f0;color:#88252a}
   #catRestore{border-color:#9db9e6;background:#eef4ff;color:#245eae;font-weight:600}
   @media (max-width:1200px){
-    #catWorkspace.has-selection{grid-template-columns:minmax(0,1fr) 268px}
     #catInspectPreview{height:150px;flex-basis:150px}
     #catFilterbar{align-items:flex-start;flex-direction:column;gap:4px;padding-bottom:7px}
     #catScopes{height:34px}
@@ -3804,15 +3826,15 @@ PAGE = r"""<!DOCTYPE html>
 <div id="sideScroll">
 <div id="sidePinned">
   <h1 id="studioBrand" class="studio-brand">
-    <span class="studio-brand-lockup">
+    <button id="studioBrandHome" class="studio-brand-home" type="button"
+      aria-label="Обновить Akeda Studio" title="Обновить страницу">
       <img id="studioBrandWordmark" class="studio-brand-wordmark"
         src="/assets/studio/akeda-studio-wordmark.png" width="520" height="84"
         decoding="async" alt="Akeda Studio">
       <img id="studioBrandMark" class="studio-brand-mark"
         src="/assets/studio/akeda-studio-mark.png" width="216" height="98"
         decoding="async" alt="" aria-hidden="true">
-    </span>
-    <span class="studio-brand-tagline">от ТЗ до производства</span>
+    </button>
   </h1>
   <div id="profileShell" class="profile-shell" hidden>
     <button id="profileChip" type="button" aria-expanded="false" aria-controls="profileMenu">
@@ -3835,6 +3857,7 @@ PAGE = r"""<!DOCTYPE html>
     <p id="catalogContextHint">Выберите изделие, чтобы открыть его в Studio.</p>
     <span id="catalogContextCount" aria-live="polite">Загрузка изделий…</span>
   </section>
+  <div id="catalogInspectorSlot"></div>
 
   <fieldset id="fs_project"><legend>Проект</legend>
     <div class="row project-select"><label for="projSel">Изделие</label><select id="projSel"></select>
@@ -4266,7 +4289,14 @@ PAGE = r"""<!DOCTYPE html>
         <div id="catCats" role="group" aria-label="Категории изделий"></div>
         <div id="catGrid" role="listbox" aria-label="Изделия каталога"></div>
       </div>
-      <aside id="catInspector" aria-labelledby="catInspectName" hidden>
+      <aside id="catInspector" class="is-empty" aria-label="Настройки изделия">
+        <div id="catInspectorEmpty">
+          <div id="catInspectorEmptyInner">
+            <span id="catInspectorEmptyKicker">Каталог компании</span>
+            <h3>Выберите изделие</h3>
+            <p>Нажмите на карточку — здесь появятся параметры, ответственный и действия с изделием.</p>
+          </div>
+        </div>
         <div id="catInspectorHead">
           <div id="catInspectorHeadCopy">
             <span id="catInspectorKicker">Выбрано в каталоге</span>
@@ -4500,6 +4530,10 @@ let SPEC = __SPEC__;
 const FIELDS = __FIELDS__;                 // archetype -> [{key,label,type,...}]
 const SECTION_ARCHS = __SECTION_ARCHS__;   // архетипы с секциями
 const $ = id => document.getElementById(id);
+$('studioBrandHome').onclick=()=>location.reload();
+/* В режиме каталога инспектор принадлежит общей навигационной панели слева:
+   она уже закреплена и не оставляет отдельную пустую правую колонку. */
+$('catalogInspectorSlot').append($('catInspector'));
 /* Значимые системные сообщения не должны перетирать друг друга. Текущее
    показываем по одному, а последние остаются доступными в компактной истории. */
 const NOTICE_HISTORY_LIMIT=8,NOTICE_QUEUE_LIMIT=6;
@@ -5889,8 +5923,8 @@ function selectedCatalogItem(){
 }
 function renderCatalogInspector(){
   const item=selectedCatalogItem(),inspector=$('catInspector');
-  $('catWorkspace').classList.toggle('has-selection',!!item);
-  inspector.hidden=!item;
+  inspector.classList.toggle('is-empty',!item);
+  $('catInspectorEmpty').hidden=!!item;
   if(!item)return;
   $('catInspectName').textContent=item.name||'Без названия';
   $('catInspectPreview').innerHTML=catalogThumbMarkup(item);

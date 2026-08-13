@@ -41,7 +41,9 @@ def test_brand_crops_are_small_exact_png_assets() -> None:
 
 def test_brand_dom_uses_local_assets_with_intrinsic_dimensions() -> None:
     assert '<h1 id="studioBrand" class="studio-brand">' in PAGE
-    assert '<span class="studio-brand-tagline">от ТЗ до производства</span>' in PAGE
+    assert 'id="studioBrandHome"' in PAGE
+    assert 'aria-label="Обновить Akeda Studio"' in PAGE
+    assert "от ТЗ до производства" not in PAGE
     for element_id, (name, dimensions, alt) in ASSETS.items():
         match = re.search(rf'<img\s+id="{element_id}".*?>', PAGE, flags=re.DOTALL)
         assert match, f"Не найден #{element_id}"
@@ -52,6 +54,17 @@ def test_brand_dom_uses_local_assets_with_intrinsic_dimensions() -> None:
         assert f'alt="{alt}"' in tag
         assert "data:" not in tag
     assert 'id="studioBrandMark"' in PAGE and 'aria-hidden="true"' in PAGE
+
+
+def test_brand_home_refreshes_without_motion() -> None:
+    assert "studioBrandShine" not in PAGE
+    assert ".studio-brand-home::after" not in PAGE
+    assert ".studio-brand-home.is-reloading" not in PAGE
+    handler = PAGE[PAGE.index("$('studioBrandHome').onclick") : PAGE.index(
+        "/* В режиме каталога инспектор"
+    )]
+    assert "onclick=()=>location.reload()" in handler
+    assert "setTimeout" not in handler
 
 
 def test_brand_routes_are_exact_and_return_tracked_bytes(tmp_path: Path) -> None:
