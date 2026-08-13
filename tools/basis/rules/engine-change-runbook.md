@@ -207,6 +207,9 @@ API ошибки должны иметь корректный HTTP status, ст�
 consistency/geometry, CFRN encoding и holes parity, drilling, materials и
 пробная сборка CFRN-архива. Параметр совместимости не может отключить этот
 барьер. Красный отчёт означает ноль вызовов `model_convert`.
+Raw `cloud model-convert --type cfrn-to-b3d` запрещён: у отдельного CFRN нет
+проверяемой связи с ParamSpec/project и его gate. Поддерживаемый путь создания
+B3D — только `build-b3d <paramspec-or-project.json>`.
 
 ## 7. Trace, логи и приватность
 

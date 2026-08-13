@@ -172,6 +172,9 @@ CfrnToB3d` → нативный `.b3d`. Команда `build-b3d`. Каждая
 preflight: schema/mapping, геометрию, CFRN encoding и holes parity, присадки,
 материалы и сборку CFRN-архива. Для входного ParamSpec сначала выполняется весь
 `production_gate`. При красном отчёте платный `model_convert` не вызывается.
+Raw `cloud model-convert --type cfrn-to-b3d` отключён, потому что произвольный
+CFRN нельзя доказуемо связать с прошедшей проверку исходной моделью. Для
+CFRN→B3D всегда используйте `build-b3d` с ParamSpec или project JSON.
 
 Сводный offline readiness MEB-132 без внешних вызовов:
 `python qa/meb132_readiness.py`. Статусы реальной БАЗИС/MatBase/Cutting-среды в

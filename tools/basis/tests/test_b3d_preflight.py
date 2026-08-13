@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT))
 from src.b3d_preflight import B3DPreflightError, evaluate_b3d_project_preflight  # noqa: E402
 from src.build_b3d import build_b3d, build_b3d_from_paramspec  # noqa: E402
 from src.generators import generate_from_paramspec  # noqa: E402
+import main as basis_cli  # noqa: E402
 
 
 SPEC = json.loads(
@@ -101,3 +102,35 @@ def test_project_preflight_does_not_mutate_caller_data() -> None:
     assert project == before
     assert "material_refs" not in project
     assert result.project["material_refs"]
+
+
+def test_raw_cfrn_to_b3d_cli_never_constructs_paid_client(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import src.cloud_api as cloud_api
+
+    calls = {"constructor": 0, "model_convert": 0}
+
+    class PaidClientMustNotExist:
+        def __init__(self) -> None:
+            calls["constructor"] += 1
+
+        def model_convert(self, files: list[str], convert_type: int) -> int:
+            calls["model_convert"] += 1
+            return 1
+
+    monkeypatch.setattr(cloud_api, "CloudTasksClient", PaidClientMustNotExist)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["main.py", "cloud", "model-convert", "red-or-unvalidated.cfrn",
+         "--type", "cfrn-to-b3d"],
+    )
+
+    rc = basis_cli.main()
+
+    assert rc == 2
+    assert calls == {"constructor": 0, "model_convert": 0}
+    error = capsys.readouterr().err
+    assert "Raw CFRN→B3D отключён" in error
+    assert "main.py build-b3d" in error
