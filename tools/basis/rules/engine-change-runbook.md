@@ -174,6 +174,26 @@ Provider обязан поддерживать общий внутренний �
 стоимости и без сохранения пользовательского содержимого. Переключение модели
 не должно менять полномочия узла.
 
+### Shadow/canary rollout AI-конвейера
+
+1. Feature flags и kill switches независимы по компонентам, но частичный новый
+   execution path не допускается: при выключенном typed ops/EditEngine/full
+   gate/split prompts/LangGraph весь запрос возвращается на проверенный path.
+2. Shadow не пишет domain state, revisions, catalog, AI history или audit.
+   Разрешены только in-memory candidate state и privacy-safe агрегаты сравнения
+   ParamSpec/geometry/drilling.
+3. Canary выбирается только по server-owned tenant/user identity. Идентификатор
+   из body/header/query не может включить canary.
+4. До rollout утверждаются budgets latency, token/reported cost, invalid-op,
+   false-rejection, edit-success и checkpoint retention/size. Превышение
+   автоматически останавливает candidate и переключает следующие запросы на
+   legacy; это не должно отключать production gate.
+5. Checkpoints имеют bounded retention. Недоступность/переполнение storage
+   fail-closed возвращает legacy path и не сохраняет candidate revision.
+6. Rollout evidence связывается с engine matrix (MEB-149), replay/evals
+   (MEB-151) и ручным cost-bounded provider bake-off (MEB-153). Непринятый
+   evidence блокирует production rollout, но не offline разработку.
+
 ### Новый вид присадки/фурнитуры
 
 Одновременно обновить расчёт в `hardware.py`, геометрический контроль,

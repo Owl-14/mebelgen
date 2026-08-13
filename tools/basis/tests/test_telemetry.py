@@ -19,6 +19,7 @@ from src.telemetry import (  # noqa: E402
     current_trace_id,
     force_flush,
     safe_attributes,
+    set_rollout_context,
     span,
     traced_http_request,
 )
@@ -30,9 +31,11 @@ SPEC = json.loads(
 
 @pytest.fixture(autouse=True)
 def _reset_telemetry(monkeypatch: pytest.MonkeyPatch):
+    set_rollout_context(primary="legacy", shadow=False, canary=False)
     yield
     monkeypatch.setenv("AKEDA_TELEMETRY_BACKEND", "none")
     configure(force=True)
+    set_rollout_context(primary="legacy", shadow=False, canary=False)
 
 
 def _file_backend(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
@@ -185,3 +188,38 @@ def test_finish_project_exports_each_repair_iteration(
     assert repair_rows
     assert repair_rows[0]["attributes"]["repair.iteration"] == 1
     assert repair_rows[0]["attributes"]["repair.applied"] is True
+
+
+def test_exporter_kill_switch_disables_export_but_keeps_trace_id(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    target = tmp_path / "killed.jsonl"
+    monkeypatch.setenv("AKEDA_TELEMETRY_BACKEND", "file")
+    monkeypatch.setenv("AKEDA_TELEMETRY_SAMPLE_RATE", "1")
+    monkeypatch.setenv("AKEDA_TELEMETRY_FILE", str(target))
+    monkeypatch.setenv("AKEDA_KILL_SWITCH_TRACING_EXPORTERS", "1")
+    configure(force=True)
+    with span("chat.request"):
+        assert len(current_trace_id()) == 32
+    assert not target.exists()
+
+
+def test_canary_exporter_only_writes_selected_request(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    target = tmp_path / "canary.jsonl"
+    monkeypatch.setenv("AKEDA_TELEMETRY_BACKEND", "file")
+    monkeypatch.setenv("AKEDA_TELEMETRY_SAMPLE_RATE", "1")
+    monkeypatch.setenv("AKEDA_TELEMETRY_FILE", str(target))
+    monkeypatch.setenv("AKEDA_ROLLOUT_TRACING_EXPORTERS", "canary")
+    configure(force=True)
+    set_rollout_context(primary="legacy", shadow=False, canary=False)
+    with span("chat.request"):
+        pass
+    assert not target.exists()
+    set_rollout_context(primary="graph", shadow=False, canary=True)
+    with span("chat.request"):
+        pass
+    rows = _rows(target)
+    assert len(rows) == 1
+    assert rows[0]["attributes"]["rollout.canary"] is True

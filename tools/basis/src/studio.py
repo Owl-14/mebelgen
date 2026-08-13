@@ -1065,16 +1065,37 @@ class _Studio:
         self.guard = _ChatGuard(self.out_dir)
         self._cancelled_chat_operations: dict[str, float] = {}
         self._cancelled_chat_lock = threading.RLock()
+        from .rollout import RolloutController
+
+        self.rollout = RolloutController(self.out_dir / ".rollout")
         self.ai_graph = None
-        graph_enabled = (
-            _os.environ.get("STUDIO_LANGGRAPH_ORCHESTRATION", "").strip().lower()
-            in {"1", "true", "yes", "on"}
-        )
-        if graph_enabled:
+        self.ai_shadow_graph = None
+        graph_mode = self.rollout.config.modes.get("langgraph", "off")
+        graph_killed = "langgraph" in self.rollout.config.killed
+        if graph_mode in {"on", "canary"} and not graph_killed:
             from .studio_graph import StudioGraphOrchestrator
 
             self.ai_graph = StudioGraphOrchestrator.durable(
                 self.out_dir / ".studio_graph",
+                cancellation_probe=self.is_chat_operation_cancelled,
+            )
+        candidate_modes = [
+            self.rollout.config.modes.get(name, "off")
+            for name in ("typed_ops", "edit_engine", "full_gate", "split_prompts", "langgraph")
+        ]
+        if (
+            not graph_killed
+            and all(mode in {"shadow", "on", "canary"} for mode in candidate_modes)
+            and any(mode == "shadow" for mode in candidate_modes)
+        ):
+            from .studio_graph import (
+                GraphAdapters,
+                NullRevisionStore,
+                StudioGraphOrchestrator,
+            )
+
+            self.ai_shadow_graph = StudioGraphOrchestrator(
+                GraphAdapters.defaults(NullRevisionStore()),
                 cancellation_probe=self.is_chat_operation_cancelled,
             )
         self.started = _time.time()               # /healthz, /version (AKD-264)
@@ -2116,8 +2137,40 @@ def make_handler(st: _Studio):
                                if auth is not None else body.get("history") or [])
                     from .spec_chat import chat_edit
 
-                    if st.ai_graph is not None:
-                        from .studio_graph import GraphConflict, GraphRevisionError
+                    auth_context = (auth or {}).get("context") or {}
+                    tenant_id = str(
+                        (auth_context.get("organization") or {}).get("id")
+                        or workspace.organization_id
+                        or ""
+                    ) or None
+                    user_id = str(
+                        (auth_context.get("user") or {}).get("id") or ""
+                    ) or None
+                    rollout_plan = st.rollout.plan(tenant_id, user_id)
+                    from .telemetry import set_rollout_context
+
+                    set_rollout_context(
+                        primary=rollout_plan.primary,
+                        shadow=rollout_plan.shadow,
+                        canary=rollout_plan.canary,
+                    )
+                    rollout_started = _time.perf_counter()
+                    shadow_report = None
+                    checkpoint_degraded = bool(
+                        st.ai_graph is not None and st.ai_graph.storage_degraded
+                    )
+                    use_graph = (
+                        rollout_plan.primary == "graph"
+                        and st.ai_graph is not None
+                        and not checkpoint_degraded
+                    )
+
+                    if use_graph:
+                        from .studio_graph import (
+                            CheckpointStorageError,
+                            GraphConflict,
+                            GraphRevisionError,
+                        )
 
                         operation_id = (
                             st._valid_chat_operation_id(body.get("operation_id"))
@@ -2134,6 +2187,12 @@ def make_handler(st: _Studio):
                                 provider=provider,
                                 generation=operation_id,
                                 expected_revision=_spec_revision(spec),
+                            )
+                        except CheckpointStorageError:
+                            checkpoint_degraded = True
+                            res = chat_edit(
+                                spec, message, history, ctx,
+                                body.get("images") or None, provider,
                             )
                         except GraphConflict as error:
                             self._json({
@@ -2155,9 +2214,112 @@ def make_handler(st: _Studio):
                                         ctx,
                                         body.get("images") or None,
                                         provider)
+                        if rollout_plan.shadow and st.ai_shadow_graph is not None:
+                            from .rollout import compare_shadow_results
+
+                            try:
+                                candidate = st.ai_shadow_graph.run(
+                                    project_key=str(spec_path.resolve()),
+                                    spec=spec,
+                                    message=message,
+                                    history=history,
+                                    context=ctx,
+                                    images=body.get("images") or None,
+                                    provider=provider,
+                                    generation=secrets.token_hex(16),
+                                    expected_revision=_spec_revision(spec),
+                                    shadow=True,
+                                )
+                                shadow_report = compare_shadow_results(res, candidate)
+                            except Exception as error:
+                                shadow_report = {
+                                    "equal": False,
+                                    "comparison_error": type(error).__name__,
+                                }
                     _trace_engineering_result(
                         res.get("spec") if isinstance(res, dict) else None
                     )
+                    from .rollout import RolloutMetric
+
+                    usage = res.get("usage") if isinstance(res.get("usage"), dict) else {}
+                    checkpoint = res.get("checkpoint") if isinstance(res.get("checkpoint"), dict) else {}
+                    code = str(res.get("code") or "")
+                    trace = res.get("trace") if isinstance(res.get("trace"), dict) else {}
+                    router = trace.get("router") if isinstance(trace.get("router"), dict) else {}
+                    routed_node = str(router.get("node") or "")
+                    graph_meta = res.get("graph") if isinstance(res.get("graph"), dict) else {}
+                    edit_attempted = (
+                        routed_node in {"create_paramspec", "edit_operations", "part_edit"}
+                        or isinstance(res.get("spec"), dict)
+                        or bool(graph_meta.get("operations"))
+                        or code in {
+                            "invalid_operation", "operation_validation_failed",
+                            "part_edit_contract_violation", "production_gate_failed",
+                        }
+                    )
+                    rollout_dashboard = st.rollout.record(
+                        RolloutMetric(
+                            latency_ms=(_time.perf_counter() - rollout_started) * 1000,
+                            total_tokens=int(usage.get("total") or 0),
+                            cost_usd=float(usage.get("cost_usd") or usage.get("cost") or 0),
+                            invalid_operation=code in {
+                                "invalid_operation", "operation_validation_failed",
+                                "part_edit_contract_violation",
+                            },
+                            false_rejection=False,
+                            edit_attempted=edit_attempted,
+                            edit_success=isinstance(res.get("spec"), dict),
+                            checkpoint_bytes=int(checkpoint.get("bytes") or 0),
+                            shadow_equal=(
+                                bool(shadow_report.get("equal"))
+                                if isinstance(shadow_report, dict) else None
+                            ),
+                        ),
+                        tenant_id=tenant_id,
+                        user_id=user_id,
+                        plan=rollout_plan,
+                    )
+                    add_current_attributes({
+                        "rollout.primary": rollout_plan.primary,
+                        "rollout.shadow": rollout_plan.shadow,
+                        "rollout.canary": rollout_plan.canary,
+                        "rollout.stopped": bool(rollout_dashboard.get("stopped")),
+                        "shadow.equal": (
+                            shadow_report.get("equal")
+                            if isinstance(shadow_report, dict) else None
+                        ),
+                        "shadow.spec_equal": (
+                            shadow_report.get("spec_equal")
+                            if isinstance(shadow_report, dict) else None
+                        ),
+                        "shadow.geometry_equal": (
+                            shadow_report.get("geometry_equal")
+                            if isinstance(shadow_report, dict) else None
+                        ),
+                        "shadow.drilling_equal": (
+                            shadow_report.get("drilling_equal")
+                            if isinstance(shadow_report, dict) else None
+                        ),
+                        "checkpoint.bytes": int(checkpoint.get("bytes") or 0),
+                        "checkpoint.degraded": checkpoint_degraded,
+                    })
+                    res = dict(res)
+                    res["rollout"] = {
+                        **rollout_plan.public_dict(),
+                        "checkpoint_degraded": checkpoint_degraded,
+                        "slo": {
+                            "stopped": bool(rollout_dashboard.get("stopped")),
+                            "reasons": list(rollout_dashboard.get("reasons") or []),
+                            "samples": int(
+                                (rollout_dashboard.get("summary") or {}).get("samples")
+                                or rollout_dashboard.get("samples") or 0
+                            ),
+                        },
+                        **(
+                            {"shadow_comparison": shadow_report}
+                            if shadow_report is not None else {}
+                        ),
+                    }
                     st.guard.add_tokens(int(((res.get("usage") or {}).get("total")) or 0))
                     if st.consume_chat_cancellation(body.get("operation_id")):
                         self._json({

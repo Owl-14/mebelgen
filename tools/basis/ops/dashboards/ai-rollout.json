@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "title": "Akeda AI rollout SLO",
+  "source": "<studio-out>/.rollout/dashboard.json",
+  "refresh_seconds": 30,
+  "privacy": "tenant/user identifiers are SHA-256 prefixes; prompts, images and ParamSpec are forbidden",
+  "panels": [
+    {"id": "latency", "title": "Latency p50 / p95", "metrics": ["latency_p50_ms", "latency_p95_ms"], "budget_keys": ["latency_p50_ms", "latency_p95_ms"]},
+    {"id": "usage", "title": "Token and reported cost p95", "metrics": ["tokens_p95", "cost_usd_p95"], "budget_keys": ["tokens_p95", "cost_usd_p95"]},
+    {"id": "quality", "title": "Invalid ops / false rejection / edit success", "metrics": ["invalid_op_rate", "false_rejection_rate", "edit_success_rate"], "budget_keys": ["invalid_op_rate", "false_rejection_rate", "edit_success_rate"]},
+    {"id": "shadow", "title": "Shadow parity", "metrics": ["shadow_match_rate"], "dimensions": ["ParamSpec", "geometry", "drilling"]},
+    {"id": "checkpoints", "title": "Checkpoint storage", "metrics": ["checkpoint_bytes_max"], "budget_keys": ["checkpoint_bytes", "checkpoint_retention_days"]},
+    {"id": "stop", "title": "Automatic stop / rollback", "metrics": ["stopped", "reasons"], "severity": "critical"}
+  ],
+  "evidence_links": {
+    "MEB-149": "python -m qa.engine_checks",
+    "MEB-151": "python main.py trace-eval",
+    "MEB-153": "manual paid-provider bake-off only; never CI",
+    "rollback_drill": "python -m qa.rollout_drill"
+  }
+}

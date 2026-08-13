@@ -191,6 +191,11 @@ CfrnToB3d` → нативный `.b3d`. Команда `build-b3d`. Каждая
 | `AKEDA_TELEMETRY_FILE` | JSONL-файл локального backend (по умолчанию `out/traces.jsonl`) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_EXPORTER_OTLP_HEADERS` | стандартные endpoint и заголовки OTLP/HTTP; значения заголовков не попадают в spans |
 | `LANGSMITH_API_KEY` / `LANGSMITH_PROJECT` / `LANGSMITH_OTEL_ENDPOINT` | опциональный LangSmith OTLP backend; endpoint по умолчанию `https://api.smith.langchain.com/otel/v1/traces` |
+| `AKEDA_ROLLOUT_<COMPONENT>` | независимый режим `off`/`shadow`/`canary`/`on` для `TYPED_OPS`, `EDIT_ENGINE`, `FULL_GATE`, `SPLIT_PROMPTS`, `TRACING_EXPORTERS`, `LANGGRAPH` |
+| `AKEDA_KILL_SWITCH_<COMPONENT>` | мгновенно отключает компонент и возвращает execution path на legacy; exporter отключается независимо |
+| `AKEDA_CANARY_TENANTS` / `AKEDA_CANARY_USERS` / `AKEDA_CANARY_PERCENT` | server-identity canary без доверия body/header идентификаторам |
+| `AKEDA_SLO_*` | budgets latency/tokens/reported-cost/invalid-op/false-rejection/edit-success/checkpoint; полный список в `ops/ai-rollout-runbook.md` |
+| `AKEDA_CHECKPOINT_MAX_THREADS` / `AKEDA_CHECKPOINT_MAX_PER_THREAD` / `AKEDA_CHECKPOINT_RETENTION_DAYS` | bounded retention LangGraph SQLite; storage failure fail-closed переключает на legacy |
 
 ## OpenTelemetry
 
@@ -214,3 +219,7 @@ python main.py studio paramspecs/wardrobe_demo.json --no-open
 стандартные `OTEL_EXPORTER_OTLP_*`. Для LangSmith достаточно backend `langsmith`,
 `LANGSMITH_API_KEY` и, при необходимости, `LANGSMITH_PROJECT`; ключ хранится только
 в окружении и не сериализуется.
+
+Shadow/canary, автоматические SLO stop conditions, dashboard и offline rollback
+drill описаны в [`ops/ai-rollout-runbook.md`](ops/ai-rollout-runbook.md). Быстрая
+проверка механизма без provider/production вызовов: `python -m qa.rollout_drill`.
