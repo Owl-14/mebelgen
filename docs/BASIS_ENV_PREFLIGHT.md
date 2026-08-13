@@ -18,23 +18,32 @@ production.
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\basis\scripts\basis_env_preflight.ps1 -Json
 ```
 
-Скрипт только читает uninstall registry, имена стандартных каталогов,
-file-version обнаруженных executable, репозиторную базу материалов и переданный
-verification manifest. Он не запускает executable БАЗИС, не пишет в registry и
-каталоги БАЗИС, не проверяет лицензию обходными способами и не обращается в сеть.
+Скрипт только читает HKLM uninstall registry, ограниченный набор стандартных
+каталогов, Authenticode/file-version metadata обнаруженных executable,
+репозиторную базу материалов и переданный verification manifest. Он не запускает
+executable БАЗИС, не пишет в registry и каталоги БАЗИС, не проверяет лицензию
+обходными способами и не обращается в сеть.
 
-При нестандартной установке пути передаются явно:
+Executable считается evidence только одновременно при валидной Authenticode-
+подписи поставщика БАЗИС и согласованных `ProductName`, `CompanyName`,
+`ProductVersion`. Имя файла (`mebel.exe`) само по себе ничего не доказывает.
+Поиск выполняется без `-Recurse`: только canonical install root и фиксированные
+одноуровневые `Bin`/`Program`. Reparse points и пути вне `Program Files`,
+`LocalAppData\Programs` либо доверенного HKLM `InstallLocation` отклоняются.
+
+Явный путь — только уточняющая подсказка, а не расширение доверенной области:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\basis\scripts\basis_env_preflight.ps1 `
-  -BasisInstallPath 'D:\Programs\Bazis' `
+  -BasisInstallPath 'C:\Program Files\Bazis' `
   -ScriptsPath "$HOME\Documents\BazisN\Scripts" `
   -VerificationManifestPath 'D:\MEB-137\basis-verification.json' `
   -Json
 ```
 
-Код выхода `0` означает, что обязательные evidence заполнены; `2` — перечислены
-blocker-коды. Отчёт сам по себе ничего не устанавливает и не лицензирует.
+Код выхода `0` означает, что все обнаруженные evidence и manifest взаимно
+согласованы; `2` — перечислены blocker-коды. Отчёт сам по себе ничего не
+устанавливает и не лицензирует.
 
 ## Что уже можно подтвердить без БАЗИС
 
@@ -55,8 +64,10 @@ blocker-коды. Отчёт сам по себе ничего не устана
 ## Операторский чеклист снятия blocker
 
 1. Предоставить Windows-машину с легальной лицензией или официальной trial-версией.
-2. Запустить preflight и записать точные `DisplayVersion`/`ProductVersion` и
-   install path. Не копировать license-файлы, ключи или machine identifiers.
+2. Запустить preflight и записать точные `ProductVersion`, canonical install
+   path, SHA-256 executable и Authenticode subject. Не копировать license-файлы,
+   ключи или machine identifiers. Если подпись невалидна или поставщик не
+   совпадает, остановиться и запросить официальный дистрибутив.
 3. В UI БАЗИС подтвердить фактический каталог пользовательских JS-скриптов.
    Скопировать туда `ImportFurnitureFromJSON.js` вручную; исходник в репозитории
    не менять на машине оператора.
@@ -83,9 +94,12 @@ Manifest хранится вне репозитория, если содержи
 
 ```json
 {
-  "basis_version": "2026.5.6.0 (64-bit)",
+  "schemaVersion": "basis-verification-v1",
+  "basis_version": "2026.5.6.0",
+  "basis_install_path": "C:\\Program Files\\Bazis",
+  "basis_executable_sha256": "<SHA-256 подписанного executable БАЗИС>",
   "scripts_path": "C:\\Users\\operator\\Documents\\BazisN\\Scripts",
-  "material_base_sha256": "<SHA-256 импортированного файла>",
+  "material_base_sha256": "<SHA-256 tools/basis/materials/baza_materiala.json>",
   "materials": [
     {
       "slot": "board",
@@ -102,14 +116,21 @@ Manifest хранится вне репозитория, если содержи
     }
   ],
   "js_smoke": {
-    "script": "ImportFurnitureFromJSON.js",
-    "fixture": "moderator_cabinet.json",
+    "script_sha256": "<SHA-256 ImportFurnitureFromJSON.js>",
+    "fixture": "C:\\MEB-137\\moderator_cabinet.json",
+    "fixture_sha256": "<SHA-256 fixture>",
     "result": "pass",
-    "output_model": "<локальный путь или имя сохранённой модели>",
-    "checked_at": "<RFC3339>"
-  }
+    "output_model": "C:\\MEB-137\\smoke-result.b3d",
+    "output_model_sha256": "<SHA-256 сохранённой модели>"
+  },
+  "checked_at": "<RFC3339>"
 }
 ```
+
+Preflight принимает только `schemaVersion=basis-verification-v1` и требует,
+чтобы версия, install/scripts paths и SHA-256 совпадали с evidence, найденными в
+этом же запуске. Fixture и output model должны существовать локально и совпадать
+по хэшам; произвольный непустой JSON не снимает blocker.
 
 Manifest не должен содержать license keys, токены, содержимое license-файлов,
 пароли, machine identifiers или пользовательские ТЗ.
