@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "paramspec-v1", "project_name": "Engine matrix: door up overlay", "furniture_type": "шкаф", "archetype": "door_unit",
+  "dimensions": {"width": 700, "depth": 400, "height": 500, "tolerance": 5},
+  "materials": {"board_thickness": 16, "back_thickness": 16, "board_material": "ЛДСП", "back_material": "ЛДСП", "edge_band_thickness": 0.4, "color": "по согласованию", "color_code": ""},
+  "legs": {"type": "нет", "height": 0}, "gaps": {"facade": 2, "default": 2},
+  "sections": [{"id": "main", "kind": "door", "shelves": 2, "door": 1, "door_swing": "up"}],
+  "hardware": {"handles": {"type": "ручка", "material": "металл", "color": "по согласованию", "size": 128, "count": 1, "offset_from_top": 32, "furniture_encoded": ""}},
+  "warnings": [], "estimated_values": []
+}

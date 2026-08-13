@@ -46,6 +46,21 @@ _PURPOSE_KIND = {
     "каркас (саморез)": ("screw", _RED),
     # шканты собираются парой торец+пласть → отдельная ветка
 }
+
+_PAIRED_PURPOSES = frozenset({
+    "задник (прокол Ø3)",
+    "шкант 8×30 (торец)",
+    "шкант 8×30 (пласть)",
+    "эксцентрик (шток)",
+    "эксцентрик (канал Ø8)",
+    "евровинт (проход Ø8)",
+})
+
+
+def registered_fastener_purposes() -> frozenset[str]:
+    """Purposes represented directly or as one paired CFRN fastener body."""
+
+    return frozenset(_PURPOSE_KIND) | _PAIRED_PURPOSES
 _BOM_NAME = {
     "confirmat": "Конфирмат 7×50", "screw": "Саморез 3,5×16",
     "hscrew": "Винт М4×16", "nail": "Гвоздь 1.6×25",
