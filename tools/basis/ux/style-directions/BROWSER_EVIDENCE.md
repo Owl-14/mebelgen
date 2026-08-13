@@ -2,7 +2,7 @@
 
 Дата: 2026-08-14
 Browser viewport: `1440×900`
-Source: локальный Studio из worktree MEB-094, base `288a02d`, без production diff.
+Source: локальный Studio из worktree MEB-094, base `7543c85`, без production diff.
 Изделие: `Тумба для модератора · cabinet 1000×400×750`.
 
 ## Фиксации

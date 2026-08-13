@@ -1,7 +1,7 @@
 # MEB-094 — направления визуального языка Studio
 
 Статус: `REVIEW READY / USER SELECTION REQUIRED`
-База: `origin/master` @ `288a02d45551e8bc840880bd77d969dfcafe9a82`
+База: `origin/master` @ `7543c85415503bb4e3651a1a954bca54c4991db8`
 Сцена: настоящий локальный Studio, `paramspecs/tumba_moderatora.json`, `1440×900`.
 
 Это три равноправных кандидата, а не выбранный дизайн. CSS-файлы в этом
