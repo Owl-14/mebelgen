@@ -1,7 +1,19 @@
 {
   "schema_version": "trace-eval-v1",
-  "dataset_version": "2026-08-13.1",
+  "dataset_version": "2026-08-13.2",
   "description": "Неперсональные offline traces редактора: сохранённые выходы AI-узлов повторяются без LLM и проходят production gate.",
+  "provider_policies": {
+    "offline-recorded": {
+      "providers": ["recorded"],
+      "model_prefixes": ["recorded/offline-"],
+      "prompt_required": true
+    },
+    "deterministic": {
+      "providers": ["deterministic"],
+      "model_prefixes": ["deterministic/"],
+      "prompt_required": false
+    }
+  },
   "output_profiles": {
     "green-desk": {
       "part_count": 4,
@@ -93,9 +105,16 @@
       "command": "Создай офисный стол 1500×700×750 на боковинах",
       "route": "create_paramspec",
       "recorded": {
-        "prompt_id": "furniture.create",
+        "prompt_id": "furniture.create-paramspec",
         "prompt_version": "1.0.0",
+        "provider": "recorded",
         "model": "recorded/offline-v1",
+        "decision": {
+          "command_hash": "3810c86ae94be62e4d48200e30c9dbb67ad16b435da19e13fceb3b6c42b5df1d",
+          "command_class": "create.text",
+          "prompt_node": "create_paramspec",
+          "provider_policy": "offline-recorded"
+        },
         "nodes": [
           {"name": "intent.classify", "output": {"route": "create_paramspec"}},
           {"name": "create_paramspec", "output": {"spec_ref": "fixtures/desk.json"}}
@@ -103,6 +122,20 @@
       },
       "expected": {
         "profile": "green-desk",
+        "decision": {
+          "command_hash": "3810c86ae94be62e4d48200e30c9dbb67ad16b435da19e13fceb3b6c42b5df1d",
+          "command_class": "create.text",
+          "route": "create_paramspec",
+          "prompt_node": "create_paramspec",
+          "prompt_id": "furniture.create-paramspec",
+          "prompt_version": "1.0.0",
+          "provider": "recorded",
+          "model": "recorded/offline-v1",
+          "provider_policy": "offline-recorded",
+          "vision_stage_present": false,
+          "operation_types": [],
+          "checks": {"command_hash_match": true, "case_route_match": true, "prompt_manifest_match": true, "provider_policy_match": true}
+        },
         "node_outputs": {
           "intent.classify": {"route": "create_paramspec"},
           "create_paramspec": {"spec_ref": "fixtures/desk.json"}
@@ -116,9 +149,16 @@
       "command": "Создай шкаф по приложенному референсу",
       "route": "vision_create_paramspec",
       "recorded": {
-        "prompt_id": "furniture.create",
+        "prompt_id": "furniture.create-paramspec",
         "prompt_version": "1.0.0",
+        "provider": "recorded",
         "model": "recorded/offline-vision-v1",
+        "decision": {
+          "command_hash": "1d2068557bf3e700b2b0897cd7bbf45a67d3b7a09b7ef3b114ab339545e708d0",
+          "command_class": "create.vision",
+          "prompt_node": "create_paramspec",
+          "provider_policy": "offline-recorded"
+        },
         "nodes": [
           {"name": "intent.classify", "output": {"route": "vision_create_paramspec"}},
           {"name": "vision_facts", "output": {"image_count": 1, "facts": ["две секции", "левая дверь", "три ящика справа"]}},
@@ -127,6 +167,20 @@
       },
       "expected": {
         "profile": "green-cabinet",
+        "decision": {
+          "command_hash": "1d2068557bf3e700b2b0897cd7bbf45a67d3b7a09b7ef3b114ab339545e708d0",
+          "command_class": "create.vision",
+          "route": "vision_create_paramspec",
+          "prompt_node": "create_paramspec",
+          "prompt_id": "furniture.create-paramspec",
+          "prompt_version": "1.0.0",
+          "provider": "recorded",
+          "model": "recorded/offline-vision-v1",
+          "provider_policy": "offline-recorded",
+          "vision_stage_present": true,
+          "operation_types": [],
+          "checks": {"command_hash_match": true, "case_route_match": true, "prompt_manifest_match": true, "provider_policy_match": true}
+        },
         "node_outputs": {
           "intent.classify": {"route": "vision_create_paramspec"},
           "vision_facts": {"image_count": 1, "facts": ["две секции", "левая дверь", "три ящика справа"]},
@@ -142,9 +196,16 @@
       "route": "edit_operations",
       "source_ref": "fixtures/desk.json",
       "recorded": {
-        "prompt_id": "furniture.edit",
+        "prompt_id": "furniture.edit-operations",
         "prompt_version": "1.0.0",
+        "provider": "recorded",
         "model": "recorded/offline-v1",
+        "decision": {
+          "command_hash": "6f559f4792462925fad4d7c972efa292117ef9e4e3578d0d74ca8fef8fce6f5e",
+          "command_class": "edit.dimension",
+          "prompt_node": "edit_operations",
+          "provider_policy": "offline-recorded"
+        },
         "nodes": [
           {"name": "intent.classify", "output": {"route": "edit_operations"}},
           {"name": "edit_operations", "output": {"operations": [
@@ -154,6 +215,14 @@
       },
       "expected": {
         "profile": "green-desk",
+        "decision": {
+          "command_hash": "6f559f4792462925fad4d7c972efa292117ef9e4e3578d0d74ca8fef8fce6f5e",
+          "command_class": "edit.dimension", "route": "edit_operations",
+          "prompt_node": "edit_operations", "prompt_id": "furniture.edit-operations", "prompt_version": "1.0.0",
+          "provider": "recorded", "model": "recorded/offline-v1", "provider_policy": "offline-recorded",
+          "vision_stage_present": false, "operation_types": ["SetDimension"],
+          "checks": {"command_hash_match": true, "case_route_match": true, "prompt_manifest_match": true, "provider_policy_match": true}
+        },
         "node_outputs": {
           "intent.classify": {"route": "edit_operations"},
           "edit_operations": {"operations": [
@@ -170,9 +239,16 @@
       "route": "edit_operations",
       "source_ref": "fixtures/cabinet.json",
       "recorded": {
-        "prompt_id": "furniture.edit",
+        "prompt_id": "furniture.edit-operations",
         "prompt_version": "1.0.0",
+        "provider": "recorded",
         "model": "recorded/offline-v1",
+        "decision": {
+          "command_hash": "6e2d5bacfc1df753cec2ea01bc1ca18c9ff25d2077e5c7a4b46f99a2acd5cee2",
+          "command_class": "edit.add_part",
+          "prompt_node": "edit_operations",
+          "provider_policy": "offline-recorded"
+        },
         "nodes": [
           {"name": "intent.classify", "output": {"route": "edit_operations"}},
           {"name": "edit_operations", "output": {"operations": [
@@ -182,6 +258,14 @@
       },
       "expected": {
         "profile": "green-cabinet-plus-shelf",
+        "decision": {
+          "command_hash": "6e2d5bacfc1df753cec2ea01bc1ca18c9ff25d2077e5c7a4b46f99a2acd5cee2",
+          "command_class": "edit.add_part", "route": "edit_operations",
+          "prompt_node": "edit_operations", "prompt_id": "furniture.edit-operations", "prompt_version": "1.0.0",
+          "provider": "recorded", "model": "recorded/offline-v1", "provider_policy": "offline-recorded",
+          "vision_stage_present": false, "operation_types": ["AddShelf"],
+          "checks": {"command_hash_match": true, "case_route_match": true, "prompt_manifest_match": true, "provider_policy_match": true}
+        },
         "node_outputs": {"edit_operations": {"operations": [
           {"op": "AddShelf", "target_id": "section:left", "preconditions": [{"kind": "target_exists", "target_id": "section:left"}], "level": 1700, "count": 1}
         ]}},
@@ -199,10 +283,18 @@
       "route": "edit_operations",
       "source_ref": "fixtures/cabinet.json",
       "recorded": {
-        "prompt_id": "furniture.edit",
+        "prompt_id": "furniture.edit-operations",
         "prompt_version": "1.0.0",
+        "provider": "recorded",
         "model": "recorded/offline-v1",
+        "decision": {
+          "command_hash": "672e14ab123d5bbc4eed1a7203677aff7c012fd04141a713780b858cbca35112",
+          "command_class": "edit.reorder_sections",
+          "prompt_node": "edit_operations",
+          "provider_policy": "offline-recorded"
+        },
         "nodes": [
+          {"name": "intent.classify", "output": {"route": "edit_operations"}},
           {"name": "edit_operations", "output": {"operations": [
             {"op": "DeleteSection", "target_id": "section:right", "preconditions": [{"kind": "target_exists", "target_id": "section:right"}]},
             {"op": "AddSection", "target_id": "section:right", "preconditions": [{"kind": "target_missing", "target_id": "section:right"}], "position": 0, "section": {"id": "right", "kind": "drawers", "width_share": 1, "drawers": 3, "front_bottom": 76, "drawer_heights": [200, 200, 200], "box_depth": 520, "box_height": 160, "rod": {"height": 1900}}}
@@ -211,6 +303,14 @@
       },
       "expected": {
         "profile": "green-cabinet",
+        "decision": {
+          "command_hash": "672e14ab123d5bbc4eed1a7203677aff7c012fd04141a713780b858cbca35112",
+          "command_class": "edit.reorder_sections", "route": "edit_operations",
+          "prompt_node": "edit_operations", "prompt_id": "furniture.edit-operations", "prompt_version": "1.0.0",
+          "provider": "recorded", "model": "recorded/offline-v1", "provider_policy": "offline-recorded",
+          "vision_stage_present": false, "operation_types": ["AddSection", "DeleteSection"],
+          "checks": {"command_hash_match": true, "case_route_match": true, "prompt_manifest_match": true, "provider_policy_match": true}
+        },
         "node_outputs": {"edit_operations": {"operations": [
           {"op": "DeleteSection", "target_id": "section:right", "preconditions": [{"kind": "target_exists", "target_id": "section:right"}]},
           {"op": "AddSection", "target_id": "section:right", "preconditions": [{"kind": "target_missing", "target_id": "section:right"}], "position": 0, "section": {"id": "right", "kind": "drawers", "width_share": 1, "drawers": 3, "front_bottom": 76, "drawer_heights": [200, 200, 200], "box_depth": 520, "box_height": 160, "rod": {"height": 1900}}}
@@ -260,10 +360,18 @@
       "route": "edit_operations",
       "source_ref": "fixtures/desk.json",
       "recorded": {
-        "prompt_id": "furniture.edit",
+        "prompt_id": "furniture.edit-operations",
         "prompt_version": "1.0.0",
+        "provider": "recorded",
         "model": "recorded/offline-v1",
+        "decision": {
+          "command_hash": "0164693676eb338814bf3ee57df6b39d934077de85d8d11cbdf59c4cc95d1c97",
+          "command_class": "edit.material",
+          "prompt_node": "edit_operations",
+          "provider_policy": "offline-recorded"
+        },
         "nodes": [
+          {"name": "intent.classify", "output": {"route": "edit_operations"}},
           {"name": "edit_operations", "output": {"operations": [
             {"op": "SetMaterial", "target_id": "materials.board_article", "preconditions": [{"kind": "target_missing", "target_id": "materials.board_article"}], "field": "board_article", "value": "H1344 ST33"}
           ]}}
@@ -271,6 +379,14 @@
       },
       "expected": {
         "profile": "green-desk",
+        "decision": {
+          "command_hash": "0164693676eb338814bf3ee57df6b39d934077de85d8d11cbdf59c4cc95d1c97",
+          "command_class": "edit.material", "route": "edit_operations",
+          "prompt_node": "edit_operations", "prompt_id": "furniture.edit-operations", "prompt_version": "1.0.0",
+          "provider": "recorded", "model": "recorded/offline-v1", "provider_policy": "offline-recorded",
+          "vision_stage_present": false, "operation_types": ["SetMaterial"],
+          "checks": {"command_hash_match": true, "case_route_match": true, "prompt_manifest_match": true, "provider_policy_match": true}
+        },
         "node_outputs": {"edit_operations": {"operations": [
           {"op": "SetMaterial", "target_id": "materials.board_article", "preconditions": [{"kind": "target_missing", "target_id": "materials.board_article"}], "field": "board_article", "value": "H1344 ST33"}
         ]}},
@@ -286,8 +402,16 @@
       "recorded": {
         "prompt_id": "furniture.diagnosis",
         "prompt_version": "1.0.0",
+        "provider": "recorded",
         "model": "recorded/offline-v1",
+        "decision": {
+          "command_hash": "7fa8107531990303e181509bd695bd4771ac776f1311a9e8a49c5a190c243bc9",
+          "command_class": "diagnosis.green",
+          "prompt_node": "diagnosis",
+          "provider_policy": "offline-recorded"
+        },
         "nodes": [
+          {"name": "intent.classify", "output": {"route": "diagnosis"}},
           {"name": "diagnosis", "output": {"operations": [
             {"op": "DiagnoseModel", "target_id": "model", "preconditions": [{"kind": "target_exists", "target_id": "model"}], "scope": "all"}
           ]}}
@@ -295,6 +419,14 @@
       },
       "expected": {
         "profile": "green-desk",
+        "decision": {
+          "command_hash": "7fa8107531990303e181509bd695bd4771ac776f1311a9e8a49c5a190c243bc9",
+          "command_class": "diagnosis.green", "route": "diagnosis",
+          "prompt_node": "diagnosis", "prompt_id": "furniture.diagnosis", "prompt_version": "1.0.0",
+          "provider": "recorded", "model": "recorded/offline-v1", "provider_policy": "offline-recorded",
+          "vision_stage_present": false, "operation_types": ["DiagnoseModel"],
+          "checks": {"command_hash_match": true, "case_route_match": true, "prompt_manifest_match": true, "provider_policy_match": true}
+        },
         "node_outputs": {"diagnosis": {"operations": [
           {"op": "DiagnoseModel", "target_id": "model", "preconditions": [{"kind": "target_exists", "target_id": "model"}], "scope": "all"}
         ]}},
@@ -310,8 +442,16 @@
       "recorded": {
         "prompt_id": "furniture.diagnosis",
         "prompt_version": "1.0.0",
+        "provider": "recorded",
         "model": "recorded/offline-v1",
+        "decision": {
+          "command_hash": "e255dc4da32b69e36a3ce4a29f60b1d90f27a76c84b03f19309c83734af8fe2b",
+          "command_class": "diagnosis.red",
+          "prompt_node": "diagnosis",
+          "provider_policy": "offline-recorded"
+        },
         "nodes": [
+          {"name": "intent.classify", "output": {"route": "diagnosis"}},
           {"name": "diagnosis", "output": {"operations": [
             {"op": "DiagnoseModel", "target_id": "model", "preconditions": [{"kind": "target_exists", "target_id": "model"}], "scope": "all"}
           ]}}
@@ -319,6 +459,14 @@
       },
       "expected": {
         "profile": "red-material-desk",
+        "decision": {
+          "command_hash": "e255dc4da32b69e36a3ce4a29f60b1d90f27a76c84b03f19309c83734af8fe2b",
+          "command_class": "diagnosis.red", "route": "diagnosis",
+          "prompt_node": "diagnosis", "prompt_id": "furniture.diagnosis", "prompt_version": "1.0.0",
+          "provider": "recorded", "model": "recorded/offline-v1", "provider_policy": "offline-recorded",
+          "vision_stage_present": false, "operation_types": ["DiagnoseModel"],
+          "checks": {"command_hash_match": true, "case_route_match": true, "prompt_manifest_match": true, "provider_policy_match": true}
+        },
         "node_outputs": {"diagnosis": {"operations": [
           {"op": "DiagnoseModel", "target_id": "model", "preconditions": [{"kind": "target_exists", "target_id": "model"}], "scope": "all"}
         ]}},
@@ -336,15 +484,31 @@
       "route": "refusal",
       "source_ref": "fixtures/desk.json",
       "recorded": {
-        "prompt_id": "furniture.edit",
+        "prompt_id": "furniture.edit-operations",
         "prompt_version": "1.0.0",
+        "provider": "recorded",
         "model": "recorded/offline-v1",
+        "decision": {
+          "command_hash": "36cd3999684c147684fc7a6c93b49707cb1d65727ea8dfad5b274ff6b31e3209",
+          "command_class": "security.prompt_injection",
+          "prompt_node": "edit_operations",
+          "provider_policy": "offline-recorded"
+        },
         "nodes": [
+          {"name": "intent.classify", "output": {"route": "refusal"}},
           {"name": "policy", "output": {"code": "prompt_injection", "operations": []}}
         ]
       },
       "expected": {
         "profile": "rejected-before-gate",
+        "decision": {
+          "command_hash": "36cd3999684c147684fc7a6c93b49707cb1d65727ea8dfad5b274ff6b31e3209",
+          "command_class": "security.prompt_injection", "route": "refusal",
+          "prompt_node": "edit_operations", "prompt_id": "furniture.edit-operations", "prompt_version": "1.0.0",
+          "provider": "recorded", "model": "recorded/offline-v1", "provider_policy": "offline-recorded",
+          "vision_stage_present": false, "operation_types": [],
+          "checks": {"command_hash_match": true, "case_route_match": true, "prompt_manifest_match": true, "provider_policy_match": true}
+        },
         "node_outputs": {"policy": {"code": "prompt_injection", "operations": []}},
         "output": {"status": "rejected", "code": "prompt_injection", "source_unchanged": true}
       }
@@ -356,10 +520,18 @@
       "route": "edit_operations",
       "source_ref": "fixtures/desk.json",
       "recorded": {
-        "prompt_id": "furniture.edit",
+        "prompt_id": "furniture.edit-operations",
         "prompt_version": "1.0.0",
+        "provider": "recorded",
         "model": "recorded/offline-v1",
+        "decision": {
+          "command_hash": "1f1a69a7bc9c1046559ab0981cc90a8843099a781da319ddb4d449f501c3ffdb",
+          "command_class": "edit.dimension.invalid",
+          "prompt_node": "edit_operations",
+          "provider_policy": "offline-recorded"
+        },
         "nodes": [
+          {"name": "intent.classify", "output": {"route": "edit_operations"}},
           {"name": "edit_operations", "output": {"operations": [
             {"op": "SetDimension", "target_id": "dimensions.width", "preconditions": [{"kind": "value_equals", "path": "dimensions.width", "value": 1500}], "dimension": "width", "value": 20}
           ]}}
@@ -367,6 +539,14 @@
       },
       "expected": {
         "profile": "rejected-before-gate",
+        "decision": {
+          "command_hash": "1f1a69a7bc9c1046559ab0981cc90a8843099a781da319ddb4d449f501c3ffdb",
+          "command_class": "edit.dimension.invalid", "route": "edit_operations",
+          "prompt_node": "edit_operations", "prompt_id": "furniture.edit-operations", "prompt_version": "1.0.0",
+          "provider": "recorded", "model": "recorded/offline-v1", "provider_policy": "offline-recorded",
+          "vision_stage_present": false, "operation_types": ["SetDimension"],
+          "checks": {"command_hash_match": true, "case_route_match": true, "prompt_manifest_match": true, "provider_policy_match": true}
+        },
         "node_outputs": {"edit_operations": {"operations": [
           {"op": "SetDimension", "target_id": "dimensions.width", "preconditions": [{"kind": "value_equals", "path": "dimensions.width", "value": 1500}], "dimension": "width", "value": 20}
         ]}},
@@ -380,15 +560,31 @@
       "route": "revision_conflict",
       "source_ref": "fixtures/desk.json",
       "recorded": {
-        "prompt_id": "studio.revision-guard",
-        "prompt_version": "1.0.0",
-        "model": "deterministic",
+        "prompt_id": null,
+        "prompt_version": null,
+        "provider": "deterministic",
+        "model": "deterministic/revision-guard-v1",
+        "decision": {
+          "command_hash": "84d8f9a281140857f617bd50287e8178ed61acd0dffc157ce571eeccd1fd449e",
+          "command_class": "concurrency.revision",
+          "prompt_node": null,
+          "provider_policy": "deterministic"
+        },
         "nodes": [
+          {"name": "intent.classify", "output": {"route": "revision_conflict"}},
           {"name": "revision_guard", "output": {"expected_revision": "0000000000000000000000000000000000000000000000000000000000000000"}}
         ]
       },
       "expected": {
         "profile": "rejected-before-gate",
+        "decision": {
+          "command_hash": "84d8f9a281140857f617bd50287e8178ed61acd0dffc157ce571eeccd1fd449e",
+          "command_class": "concurrency.revision", "route": "revision_conflict",
+          "prompt_node": null, "prompt_id": null, "prompt_version": null,
+          "provider": "deterministic", "model": "deterministic/revision-guard-v1", "provider_policy": "deterministic",
+          "vision_stage_present": false, "operation_types": [],
+          "checks": {"command_hash_match": true, "case_route_match": true, "prompt_manifest_match": true, "provider_policy_match": true}
+        },
         "node_outputs": {"revision_guard": {"expected_revision": "0000000000000000000000000000000000000000000000000000000000000000"}},
         "output": {"status": "rejected", "code": "revision.conflict", "source_unchanged": true}
       }
@@ -402,8 +598,16 @@
       "recorded": {
         "prompt_id": "furniture.repair",
         "prompt_version": "1.0.0",
+        "provider": "recorded",
         "model": "recorded/offline-v1",
+        "decision": {
+          "command_hash": "b1b514f15b64c5e9a53c6835a5949bb03e67eccd509e0a4fa7efab7f3994a5a1",
+          "command_class": "repair.material",
+          "prompt_node": "repair",
+          "provider_policy": "offline-recorded"
+        },
         "nodes": [
+          {"name": "intent.classify", "output": {"route": "repair_loop"}},
           {"name": "repair", "output": {"operation_batches": [
             [{"op": "SetMaterial", "target_id": "materials.board_article", "preconditions": [{"kind": "target_missing", "target_id": "materials.board_article"}], "field": "board_article", "value": "EVAL-NOT-IN-BASE"}],
             [{"op": "SetMaterial", "target_id": "materials.board_article", "preconditions": [{"kind": "value_equals", "path": "materials.board_article", "value": "EVAL-NOT-IN-BASE"}], "field": "board_article", "value": "H1344 ST33"}]
@@ -412,6 +616,14 @@
       },
       "expected": {
         "profile": "green-desk",
+        "decision": {
+          "command_hash": "b1b514f15b64c5e9a53c6835a5949bb03e67eccd509e0a4fa7efab7f3994a5a1",
+          "command_class": "repair.material", "route": "repair_loop",
+          "prompt_node": "repair", "prompt_id": "furniture.repair", "prompt_version": "1.0.0",
+          "provider": "recorded", "model": "recorded/offline-v1", "provider_policy": "offline-recorded",
+          "vision_stage_present": false, "operation_types": ["SetMaterial"],
+          "checks": {"command_hash_match": true, "case_route_match": true, "prompt_manifest_match": true, "provider_policy_match": true}
+        },
         "node_outputs": {"repair": {"operation_batches": [
           [{"op": "SetMaterial", "target_id": "materials.board_article", "preconditions": [{"kind": "target_missing", "target_id": "materials.board_article"}], "field": "board_article", "value": "EVAL-NOT-IN-BASE"}],
           [{"op": "SetMaterial", "target_id": "materials.board_article", "preconditions": [{"kind": "value_equals", "path": "materials.board_article", "value": "EVAL-NOT-IN-BASE"}], "field": "board_article", "value": "H1344 ST33"}]

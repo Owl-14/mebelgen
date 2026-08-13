@@ -18,6 +18,7 @@ from pydantic import ValidationError
 
 from .edit_operations import EditApplicationError, apply_edit_operations
 from .production_gate import GateDecision, evaluate_production_gate
+from .prompt_registry import prompt_manifest
 from .spec_chat import spec_diff
 from .studio_graph import spec_revision
 
@@ -28,6 +29,10 @@ DEFAULT_DATASET = Path(__file__).resolve().parent.parent / "qa" / "trace_eval" /
 
 class TraceReplayError(ValueError):
     """The replay dataset is malformed or does not match its expectations."""
+
+
+class DecisionEnvelopeError(TraceReplayError):
+    """A saved decision failed policy checks and must not reach the reducer."""
 
 
 def _canonical(value: Any) -> str:
@@ -56,6 +61,98 @@ def _nodes(case: Mapping[str, Any]) -> dict[str, Any]:
             raise TraceReplayError(f"{case.get('id')}: node names must be unique and non-empty")
         result[name] = item.get("output")
     return result
+
+
+def _operation_types(nodes: Mapping[str, Any]) -> list[str]:
+    result: list[str] = []
+    for output in nodes.values():
+        if not isinstance(output, Mapping):
+            continue
+        batches = output.get("operation_batches")
+        operation_lists = (
+            batches if isinstance(batches, list) else [output.get("operations")]
+        )
+        for operations in operation_lists:
+            if not isinstance(operations, list):
+                continue
+            for operation in operations:
+                if isinstance(operation, Mapping) and operation.get("op"):
+                    result.append(str(operation["op"]))
+    return sorted(set(result))
+
+
+def _decision_evidence(
+    case: Mapping[str, Any],
+    nodes: Mapping[str, Any],
+    provider_policies: Mapping[str, Any],
+) -> tuple[dict[str, Any], list[str]]:
+    """Validate the saved AI decision before replaying its operations.
+
+    The envelope binds a command to a router result, current prompt manifest,
+    an allowlisted offline provider/model policy, the vision boundary and the
+    operation capability actually present in saved node outputs.
+    """
+
+    recorded = case.get("recorded") or {}
+    envelope = recorded.get("decision") or {}
+    command = str(case.get("command") or "")
+    command_hash = hashlib.sha256(command.encode("utf-8")).hexdigest()
+    router = nodes.get("intent.classify")
+    routed = router.get("route") if isinstance(router, Mapping) else None
+    prompt_node = envelope.get("prompt_node")
+    manifest = prompt_manifest().get(str(prompt_node)) if prompt_node else None
+    policy_name = envelope.get("provider_policy")
+    policy = provider_policies.get(str(policy_name)) if policy_name else None
+    provider = recorded.get("provider")
+    model = recorded.get("model")
+    provider_allowed = bool(
+        isinstance(policy, Mapping)
+        and provider in (policy.get("providers") or [])
+        and any(
+            str(model or "").startswith(str(prefix))
+            for prefix in policy.get("model_prefixes") or []
+        )
+    )
+    prompt_required = (
+        not isinstance(policy, Mapping) or policy.get("prompt_required", True)
+    )
+    prompt_manifest_match = bool(
+        (manifest
+         and recorded.get("prompt_id") == manifest.get("prompt_id")
+         and recorded.get("prompt_version") == manifest.get("prompt_version"))
+        or (not prompt_required and prompt_node is None
+            and recorded.get("prompt_id") is None
+            and recorded.get("prompt_version") is None)
+    )
+    evidence = {
+        "command_hash": command_hash,
+        "command_class": envelope.get("command_class"),
+        "route": routed,
+        "prompt_node": prompt_node,
+        "prompt_id": recorded.get("prompt_id"),
+        "prompt_version": recorded.get("prompt_version"),
+        "provider": provider,
+        "model": model,
+        "provider_policy": policy_name,
+        "vision_stage_present": "vision_facts" in nodes,
+        "operation_types": _operation_types(nodes),
+        "checks": {
+            "command_hash_match": envelope.get("command_hash") == command_hash,
+            "case_route_match": routed == case.get("route"),
+            "prompt_manifest_match": prompt_manifest_match,
+            "provider_policy_match": provider_allowed,
+        },
+    }
+    errors: list[str] = []
+    expected = case.get("expected", {}).get("decision")
+    if not isinstance(expected, Mapping):
+        errors.append("expected.decision: missing decision contract")
+    else:
+        errors.extend(_subset_errors(expected, evidence, "expected.decision"))
+    for name, passed in evidence["checks"].items():
+        if not passed:
+            errors.append(f"decision.checks.{name}: failed")
+    return evidence, errors
 
 
 def _source(case: Mapping[str, Any], dataset_dir: Path) -> dict[str, Any] | None:
@@ -133,6 +230,7 @@ def replay_case(
     case: Mapping[str, Any],
     dataset_dir: Path,
     output_profiles: Mapping[str, Any] | None = None,
+    provider_policies: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Replay one saved model boundary and return deterministic evidence."""
 
@@ -140,6 +238,9 @@ def replay_case(
     route = str(case.get("route") or "")
     nodes = _nodes(case)
     source = _source(case, dataset_dir)
+    decision_evidence, decision_mismatches = _decision_evidence(
+        case, nodes, provider_policies or {}
+    )
     actual: dict[str, Any] = {
         "status": "rejected",
         "diff": [],
@@ -148,6 +249,9 @@ def replay_case(
         "gate": None,
     }
     try:
+        if decision_mismatches:
+            actual.update(code="decision.invalid_envelope")
+            raise DecisionEnvelopeError(f"{case_id}: decision envelope rejected")
         if route in {"create_paramspec", "vision_create_paramspec"}:
             output = nodes.get("create_paramspec")
             if not isinstance(output, Mapping) or not output.get("spec_ref"):
@@ -224,6 +328,8 @@ def replay_case(
             raise TraceReplayError(f"{case_id}: unsupported route {route!r}")
     except (EditApplicationError, ValidationError) as error:
         actual.update(code="operations.invalid_result", error_type=type(error).__name__)
+    except DecisionEnvelopeError:
+        pass
 
     expectation = case.get("expected", {})
     expected_nodes = expectation.get("node_outputs", {})
@@ -232,18 +338,30 @@ def replay_case(
     if profile_name and not profile:
         raise TraceReplayError(f"{case_id}: unknown output profile {profile_name!r}")
     expected_output = _deep_merge(profile, expectation.get("output", {}))
-    mismatches = _subset_errors(expected_nodes, nodes, "expected.node_outputs")
+    mismatches = list(decision_mismatches)
+    mismatches.extend(_subset_errors(expected_nodes, nodes, "expected.node_outputs"))
     mismatches.extend(_subset_errors(expected_output, actual, "expected.output"))
+    ok = not mismatches
+    decision_digest = _digest(decision_evidence)
+    output_digest = _digest(actual)
     return {
         "id": case_id,
         "tags": list(case.get("tags") or []),
         "prompt_id": case.get("recorded", {}).get("prompt_id"),
         "prompt_version": case.get("recorded", {}).get("prompt_version"),
         "model": case.get("recorded", {}).get("model"),
+        "provider": case.get("recorded", {}).get("provider"),
+        "decision": decision_evidence,
+        "decision_digest": decision_digest,
         "node_outputs_digest": _digest(nodes),
         "output": actual,
-        "output_digest": _digest(actual),
-        "ok": not mismatches,
+        "output_digest": output_digest,
+        "verdict_digest": _digest({
+            "decision": decision_digest,
+            "output": output_digest,
+            "ok": ok,
+        }),
+        "ok": ok,
         "mismatches": mismatches,
     }
 
@@ -262,7 +380,10 @@ def run_dataset(path: Path | str = DEFAULT_DATASET) -> dict[str, Any]:
     profiles = dataset.get("output_profiles") or {}
     if not isinstance(profiles, Mapping):
         raise TraceReplayError("dataset output_profiles must be an object")
-    results = [replay_case(case, dataset_path.parent, profiles) for case in cases]
+    policies = dataset.get("provider_policies") or {}
+    if not isinstance(policies, Mapping) or not policies:
+        raise TraceReplayError("dataset provider_policies must be a non-empty object")
+    results = [replay_case(case, dataset_path.parent, profiles, policies) for case in cases]
     return {
         "schema_version": DATASET_SCHEMA,
         "dataset_version": dataset.get("dataset_version"),
@@ -287,7 +408,7 @@ def compare_reports(baseline: Mapping[str, Any], candidate: Mapping[str, Any]) -
     for case_id in sorted(set(left) | set(right)):
         before = left.get(case_id)
         after = right.get(case_id)
-        if before is None or after is None or before.get("output_digest") != after.get("output_digest"):
+        if before is None or after is None or before.get("verdict_digest") != after.get("verdict_digest"):
             changes.append({
                 "id": case_id,
                 "baseline": before.get("output") if before else None,

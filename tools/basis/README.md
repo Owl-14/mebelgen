@@ -229,9 +229,14 @@ python main.py trace-eval -o out/trace-eval.json
 python main.py trace-eval --compare out/trace-eval-baseline.json
 ```
 
+До operation replay проверяется decision envelope: hash/class команды, результат
+router, актуальные prompt id/version из registry, allowlist provider/model,
+наличие vision stage и фактические типы операций. Подмена любого поля отклоняет
+trace до reducer/gate.
+
 JSON-отчёт детерминирован и содержит dataset digest, prompt/model profiles,
-node-output digest и итог каждого сценария. `--compare` показывает поведенческие
-различия между отчётами разных prompt/model версий; смена только метаданных
-модели не считается регрессией. Добавление сценария требует отдельного ожидаемого
-node output и output profile; raw prompt, полный пользовательский ParamSpec,
+decision/node/output/verdict digests и итог каждого сценария. `--compare`
+показывает изменения решения или производственного результата между отчётами
+разных prompt/model версий. Добавление сценария требует ожидаемых decision и
+node outputs плюс output profile; raw prompt, полный пользовательский ParamSpec,
 base64 изображения и секреты в trace-файл не помещаются.
