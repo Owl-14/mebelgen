@@ -28,6 +28,7 @@ REQUIRED_FEATURES = frozenset(
     {"thin_back", "thick_back", "overlay", "inset", "legs", "door_left",
      "door_right", "door_up", "door_down", "drawer_shallow", "drawer_deep"}
 )
+DRAWER_DEEP_THRESHOLD_MM = 420.0
 
 
 @dataclass(frozen=True)
@@ -71,6 +72,42 @@ def coverage_errors(cases: list[MatrixCase]) -> list[str]:
     return errors
 
 
+def derive_features(spec: dict[str, Any], project: dict[str, Any]) -> frozenset[str]:
+    """Derive matrix traits from generated production data, never manifest labels."""
+
+    features: set[str] = set()
+    panels = [panel for panel in project.get("panels") or [] if isinstance(panel, dict)]
+    backs = [panel for panel in panels if str(panel.get("type") or "").lower() == "back"]
+    for panel in backs:
+        thickness = panel.get("thickness")
+        if isinstance(thickness, (int, float)):
+            features.add("thin_back" if float(thickness) <= 6.0 else "thick_back")
+
+    facade_types = {"door_front", "drawer_front", "facade", "front_panel", "front"}
+    facades = [panel for panel in panels
+               if str(panel.get("type") or "").lower() in facade_types]
+    for panel in facades:
+        placement = panel.get("placement") or {}
+        z1 = placement.get("z1")
+        if isinstance(z1, (int, float)):
+            features.add("overlay" if float(z1) < -0.5 else "inset")
+        swing = panel.get("swing")
+        if swing in {"left", "right", "up", "down"}:
+            features.add(f"door_{swing}")
+
+    legs = (project.get("hardware") or {}).get("legs") or {}
+    if isinstance(legs.get("count"), (int, float)) and float(legs["count"]) > 0:
+        features.add("legs")
+
+    depths = [drawer.get("dimensions", {}).get("depth")
+              for drawer in project.get("drawers") or [] if isinstance(drawer, dict)]
+    numeric_depths = [float(depth) for depth in depths if isinstance(depth, (int, float))]
+    if numeric_depths:
+        features.add("drawer_deep" if max(numeric_depths) > DRAWER_DEEP_THRESHOLD_MM
+                     else "drawer_shallow")
+    return frozenset(features & REQUIRED_FEATURES)
+
+
 def _step_row(case: MatrixCase, step: CheckStep) -> MatrixRow:
     return MatrixRow(case.archetype, case.fixture, step.name, step.status,
                      tuple(issue.detail for issue in step.issues))
@@ -85,7 +122,20 @@ def run_case(case: MatrixCase) -> list[MatrixRow]:
     if actual != case.archetype:
         return [MatrixRow(case.archetype, case.fixture, "fixture_contract", "error",
                           (f"manifest archetype={case.archetype}, ParamSpec archetype={actual}",))]
-    return [_step_row(case, step) for step in evaluate_production_gate(spec).report.checks]
+    decision = evaluate_production_gate(spec)
+    rows = [_step_row(case, step) for step in decision.report.checks]
+    if decision.project is not None:
+        declared = frozenset(case.features)
+        derived = derive_features(spec, decision.project)
+        if declared != derived:
+            details = []
+            if declared - derived:
+                details.append(f"не подтверждены: {', '.join(sorted(declared - derived))}")
+            if derived - declared:
+                details.append(f"не задекларированы: {', '.join(sorted(derived - declared))}")
+            rows.append(MatrixRow(case.archetype, case.fixture, "feature_contract", "error",
+                                  tuple(details)))
+    return rows
 
 
 def run_matrix(cases: list[MatrixCase] | None = None) -> list[MatrixRow]:
@@ -115,7 +165,8 @@ def format_report(rows: list[MatrixRow]) -> str:
     errors = sum(row.status == "error" for row in rows)
     warnings = sum(row.status == "warning" for row in rows)
     fixtures = len({row.fixture for row in rows if row.archetype != "matrix"})
-    gates = len({row.gate for row in rows if row.gate not in {"fixture", "fixture_contract"}})
+    gates = len({row.gate for row in rows
+                 if row.gate not in {"fixture", "fixture_contract", "feature_contract"}})
     lines.append("-" * (sum(widths) + 6))
     lines.append(f"fixtures: {fixtures} | gates: {gates} | errors: {errors} | warnings: {warnings}")
     return "\n".join(lines)

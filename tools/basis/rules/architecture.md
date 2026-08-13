@@ -50,7 +50,7 @@ ParamSpec; координаты всегда считает детерминир
 | `drilling_check.py` | сверловка: отверстие в теле панели, шаг 32, планки на уровне полок |
 | `completeness_check.py` | полнота: каждая деталь закреплена, заявленное (полки/штанги/опоры) построено |
 | `production_gate.py` | атомарный гейт AI/reducer-кандидата: Pydantic → JSON Schema → генерация → consistency/geometry/bounds → CFRN → drilling/system 32/purpose registry → completeness/materials; возвращает `CheckReport`, не применяя красную ревизию |
-| `bounds_check.py` | структурные панели внутри заявленного W×D×H; overlay-фасады и front-декор исключены осознанно |
+| `bounds_check.py` | структурные панели внутри заявленного W×D×H; overlay-фасад/задник может выйти только по Z и не дальше своей заявленной толщины |
 | `cfrn.py` | project.json → `.cfrn` (родная ЛЕВОсторонняя конвенция БАЗИС, разворот фасадами к камере) + `check_cfrn_encoding` / `check_cfrn_holes` |
 | `b3d_format.py`, `b3d_verify.py` | чтение .b3d, паритет .b3d ↔ модель |
 | `build_b3d.py`, `cloud_api.py`, `cloud_cutting.py` | облако БАЗИС (ПЛАТНО, только по явной просьбе) |
@@ -111,7 +111,8 @@ python -m tests.regression          # ГЕЙТ перед merge: 37 спек val
 
 Manifest матрицы: `qa/fixtures/engine_checks/manifest.json`. Команда полностью
 offline, не обновляет goldens и возвращает ненулевой exit code при красном gate
-или неполном покрытии обязательных архетипов/вариантов.
+или неполном покрытии обязательных архетипов/вариантов. Features manifest
+проверяются точным сравнением с признаками, выведенными из generated project.
 
 - Goldens (`tests/goldens/`) — эталонные panels. Обновлять ЗАМЕНОЙ блока `panels`
   из свежей генерации (не руками), только когда изменение геометрии осознанное.

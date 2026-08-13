@@ -126,8 +126,10 @@ ParamSpec → геометрия → присадки → CFRN. Она не вы
 corpus, cabinet/wardrobe, drawer_unit, door_unit, shelving, desk/table,
 round_table, composite; тонкий/толстый задник, overlay/inset, опоры, двери
 left/right/up/down и ящики разной глубины. Fixtures и их признаки перечислены в
-`qa/fixtures/engine_checks/manifest.json`; production-решения делегируются
-`src.production_gate`, а не реализуются повторно в harness.
+`qa/fixtures/engine_checks/manifest.json`, но меткам manifest не доверяют:
+features повторно выводятся из сгенерированного project и должны совпасть точно.
+Production-решения делегируются `src.production_gate`, а не реализуются повторно
+в harness.
 
 ## Структура
 

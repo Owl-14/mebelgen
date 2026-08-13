@@ -52,22 +52,63 @@ def test_manifest_contract_rejects_missing_matrix_variants():
     assert any("нет вариантов" in error for error in errors)
 
 
+def test_feature_contract_rejects_door_label_not_proven_by_generated_model(tmp_path: Path):
+    source = next(case for case in load_cases() if case.fixture == "door_up_overlay")
+    spec = json.loads(source.path.read_text(encoding="utf-8"))
+    spec["sections"][0]["door_swing"] = "left"
+    path = tmp_path / "door_claims_up_but_is_left.json"
+    path.write_text(json.dumps(spec), encoding="utf-8")
+
+    rows = run_case(MatrixCase("door_claims_up", path, "door_unit", source.features))
+
+    production_rows = [row for row in rows if row.gate != "feature_contract"]
+    assert production_rows and all(row.status != "error" for row in production_rows)
+    contract = next(row for row in rows if row.gate == "feature_contract")
+    assert contract.status == "error"
+    assert any("door_up" in detail for detail in contract.details)
+    assert any("door_left" in detail for detail in contract.details)
+
+
 def test_ci_runs_the_single_engine_matrix_command():
     workflow = (ROOT.parent.parent / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     assert "run: python -m qa.engine_checks" in workflow
 
 
-def test_bounds_gate_checks_structural_front_panel_but_allows_overlay_facade():
-    project = {"overall_dimensions": {"width": 100, "depth": 80, "height": 70}, "panels": [
+def test_bounds_gate_checks_structural_front_panel_but_allows_bounded_overlay_facade():
+    project = {"overall_dimensions": {"width": 100, "depth": 80, "height": 70},
+               "materials": {"board_thickness": 16}, "panels": [
         {"name": "outside", "type": "shelf", "basis_orientation": "horizont",
          "placement": {"x1": 0, "x2": 120, "y1": 10, "y2": 26, "z1": 0, "z2": 80}},
         {"name": "back outside", "type": "back", "basis_orientation": "front",
          "placement": {"x1": 0, "x2": 100, "y1": 0, "y2": 90, "z1": 77, "z2": 80}},
         {"name": "overlay", "type": "door_front", "basis_orientation": "front",
-         "placement": {"x1": -5, "x2": 105, "y1": 0, "y2": 70, "z1": -16, "z2": 0}},
+         "thickness": 16,
+         "placement": {"x1": 0, "x2": 100, "y1": 0, "y2": 70, "z1": -16, "z2": 0}},
     ]}
     assert check_model_bounds(project) == [
         "outside: x=[0,120] вне [0,100]", "back outside: y=[0,90] вне [0,70]"]
+
+
+def test_bounds_gate_does_not_exempt_inset_facade_outside_envelope():
+    project = {"overall_dimensions": {"width": 100, "depth": 80, "height": 70}, "panels": [
+        {"name": "bad inset", "type": "door_front", "basis_orientation": "front",
+         "thickness": 16,
+         "placement": {"x1": 0, "x2": 100, "y1": 0, "y2": 70, "z1": 70, "z2": 86}},
+    ]}
+    assert check_model_bounds(project) == ["bad inset: z=[70,86] вне [0,80]"]
+
+
+def test_bounds_gate_limits_overlay_back_to_declared_thickness():
+    project = {"overall_dimensions": {"width": 100, "depth": 80, "height": 70},
+               "materials": {"board_thickness": 16}, "panels": [
+        {"name": "bounded back", "type": "back", "basis_orientation": "front",
+         "thickness": 3,
+         "placement": {"x1": 0, "x2": 100, "y1": 0, "y2": 70, "z1": 80, "z2": 83}},
+        {"name": "unbounded back", "type": "back", "basis_orientation": "front",
+         "thickness": 100,
+         "placement": {"x1": 0, "x2": 100, "y1": 0, "y2": 70, "z1": 80, "z2": 180}},
+    ]}
+    assert check_model_bounds(project) == ["unbounded back: z=[80,180] вне [0,80]"]
 
 
 def test_gate_rejects_placement_dimensions_mismatch(monkeypatch):
