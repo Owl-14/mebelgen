@@ -1,0 +1,624 @@
+{
+  "schema_version": "archetype-coverage-v1",
+  "sources": [
+    "src/paramspec.py",
+    "schema/paramspec.schema.json",
+    "src/generators/registry.py",
+    "src/generators/*.py",
+    "paramspecs/*.json",
+    "projects/*.json",
+    "tests/regression.py"
+  ],
+  "summary": {
+    "public_archetype_count": 10,
+    "generator_implementation_count": 8,
+    "paramspec_fixture_count": 38,
+    "matched_exact_panel_golden_count": 15,
+    "archetypes_with_paramspec_fixture": 10,
+    "archetypes_with_exact_panel_golden": 10,
+    "implementations_with_exact_panel_golden": 8
+  },
+  "contract_parity": {
+    "paramspec_tags": [
+      "cabinet",
+      "composite",
+      "corpus",
+      "desk",
+      "door_unit",
+      "drawer_unit",
+      "round_table",
+      "shelving",
+      "table",
+      "wardrobe"
+    ],
+    "json_schema_tags": [
+      "cabinet",
+      "composite",
+      "corpus",
+      "desk",
+      "door_unit",
+      "drawer_unit",
+      "round_table",
+      "shelving",
+      "table",
+      "wardrobe"
+    ],
+    "registry_tags": [
+      "cabinet",
+      "composite",
+      "corpus",
+      "desk",
+      "door_unit",
+      "drawer_unit",
+      "round_table",
+      "shelving",
+      "table",
+      "wardrobe"
+    ],
+    "all_match": true
+  },
+  "archetypes": [
+    {
+      "archetype": "cabinet",
+      "paramspec_model": "CabinetParamSpec",
+      "generator": "src.generators.cabinet.generate",
+      "paramspec_fixtures": [
+        "kashpo",
+        "komi_39_tumba_pristavnaya",
+        "komi_46_shkaf_dokumenty",
+        "komi_48_shkaf_kombinirovanny",
+        "komi_50_sistema_garderobnyh",
+        "komi_55_sistema_referentov",
+        "moderator_cabinet",
+        "office_equipment_cabinet",
+        "tumba_moderatora",
+        "tumba_tv_1600x450x600",
+        "tv_stand_1600x450x600",
+        "tz_shkaf_dokumenty"
+      ],
+      "exact_panel_goldens": [
+        "kashpo",
+        "moderator_cabinet",
+        "office_equipment_cabinet",
+        "tumba_moderatora",
+        "tumba_tv_1600x450x600",
+        "tv_stand_1600x450x600"
+      ],
+      "supported_variants": [
+        "door_section",
+        "drawers_section",
+        "mixed_sections",
+        "multi_column",
+        "open_section",
+        "rods",
+        "shelves_section",
+        "width_share"
+      ],
+      "observed_variant_evidence": {
+        "door_section": [
+          "komi_39_tumba_pristavnaya",
+          "komi_46_shkaf_dokumenty",
+          "komi_48_shkaf_kombinirovanny",
+          "komi_50_sistema_garderobnyh",
+          "komi_55_sistema_referentov",
+          "moderator_cabinet",
+          "office_equipment_cabinet",
+          "tumba_moderatora",
+          "tumba_tv_1600x450x600",
+          "tv_stand_1600x450x600",
+          "tz_shkaf_dokumenty"
+        ],
+        "drawers_section": [
+          "komi_39_tumba_pristavnaya",
+          "moderator_cabinet",
+          "tumba_moderatora",
+          "tumba_tv_1600x450x600",
+          "tv_stand_1600x450x600"
+        ],
+        "mixed_sections": [
+          "komi_39_tumba_pristavnaya",
+          "moderator_cabinet",
+          "tumba_moderatora",
+          "tumba_tv_1600x450x600",
+          "tv_stand_1600x450x600"
+        ],
+        "multi_column": [
+          "kashpo",
+          "komi_39_tumba_pristavnaya",
+          "komi_46_shkaf_dokumenty",
+          "komi_48_shkaf_kombinirovanny",
+          "komi_50_sistema_garderobnyh",
+          "komi_55_sistema_referentov",
+          "moderator_cabinet",
+          "office_equipment_cabinet",
+          "tumba_moderatora",
+          "tumba_tv_1600x450x600",
+          "tv_stand_1600x450x600",
+          "tz_shkaf_dokumenty"
+        ],
+        "open_section": [
+          "komi_39_tumba_pristavnaya",
+          "moderator_cabinet"
+        ],
+        "shelves_section": [
+          "kashpo",
+          "tumba_moderatora"
+        ],
+        "width_share": [
+          "moderator_cabinet",
+          "office_equipment_cabinet",
+          "tumba_tv_1600x450x600",
+          "tv_stand_1600x450x600"
+        ]
+      },
+      "uncovered_variants": [
+        "rods"
+      ]
+    },
+    {
+      "archetype": "composite",
+      "paramspec_model": "CompositeParamSpec",
+      "generator": "src.generators.composite.generate",
+      "paramspec_fixtures": [
+        "kitchen_1860x630x2400",
+        "lunit_demo"
+      ],
+      "exact_panel_goldens": [
+        "kitchen_1860x630x2400"
+      ],
+      "supported_variants": [
+        "horizontal_offsets",
+        "mixed_block_archetypes",
+        "single_level_blocks",
+        "vertical_offsets"
+      ],
+      "observed_variant_evidence": {
+        "horizontal_offsets": [
+          "kitchen_1860x630x2400",
+          "lunit_demo"
+        ],
+        "mixed_block_archetypes": [
+          "kitchen_1860x630x2400",
+          "lunit_demo"
+        ],
+        "single_level_blocks": [
+          "kitchen_1860x630x2400",
+          "lunit_demo"
+        ],
+        "vertical_offsets": [
+          "kitchen_1860x630x2400"
+        ]
+      },
+      "uncovered_variants": []
+    },
+    {
+      "archetype": "corpus",
+      "paramspec_model": "CorpusParamSpec",
+      "generator": "src.generators.corpus.generate",
+      "paramspec_fixtures": [
+        "tz_stol_kofeyny_cube"
+      ],
+      "exact_panel_goldens": [
+        "tz_stol_kofeyny_cube"
+      ],
+      "supported_variants": [
+        "plain_carcass",
+        "sides_over_top",
+        "socle_panel"
+      ],
+      "observed_variant_evidence": {
+        "plain_carcass": [
+          "tz_stol_kofeyny_cube"
+        ]
+      },
+      "uncovered_variants": [
+        "sides_over_top",
+        "socle_panel"
+      ]
+    },
+    {
+      "archetype": "desk",
+      "paramspec_model": "DeskParamSpec",
+      "generator": "src.generators.desk.generate",
+      "paramspec_fixtures": [
+        "desk_demo",
+        "komi_38_stol_direktora",
+        "komi_43_stol_zam",
+        "komi_44_brifing_pristavka",
+        "komi_52_stol_bolshaya_peregovornaya",
+        "komi_69_stol_korrespondencii",
+        "komi_71_stol_ohrannika",
+        "stol_ofisny_foto",
+        "tz_stol_rabochiy"
+      ],
+      "exact_panel_goldens": [
+        "desk_demo"
+      ],
+      "supported_variants": [
+        "apron_disabled",
+        "apron_enabled",
+        "metal_frame",
+        "modesty_screen",
+        "panel_supports",
+        "top_overhang"
+      ],
+      "observed_variant_evidence": {
+        "apron_enabled": [
+          "desk_demo",
+          "komi_38_stol_direktora",
+          "komi_43_stol_zam",
+          "komi_44_brifing_pristavka",
+          "komi_52_stol_bolshaya_peregovornaya",
+          "komi_69_stol_korrespondencii",
+          "komi_71_stol_ohrannika",
+          "stol_ofisny_foto",
+          "tz_stol_rabochiy"
+        ],
+        "metal_frame": [
+          "komi_38_stol_direktora",
+          "komi_43_stol_zam",
+          "komi_44_brifing_pristavka",
+          "komi_52_stol_bolshaya_peregovornaya",
+          "komi_69_stol_korrespondencii",
+          "komi_71_stol_ohrannika"
+        ],
+        "modesty_screen": [
+          "komi_38_stol_direktora",
+          "komi_43_stol_zam"
+        ],
+        "panel_supports": [
+          "desk_demo",
+          "stol_ofisny_foto",
+          "tz_stol_rabochiy"
+        ]
+      },
+      "uncovered_variants": [
+        "apron_disabled",
+        "top_overhang"
+      ]
+    },
+    {
+      "archetype": "door_unit",
+      "paramspec_model": "DoorUnitParamSpec",
+      "generator": "src.generators.door_unit.generate",
+      "paramspec_fixtures": [
+        "cabinet_700x400x500",
+        "komi_47_shkaf_garderobny",
+        "komi_53_tumba_peregovornaya",
+        "tz_srednyaya_tumba2"
+      ],
+      "exact_panel_goldens": [
+        "cabinet_700x400x500"
+      ],
+      "supported_variants": [
+        "double_door",
+        "explicit_door_swing",
+        "explicit_shelf_levels",
+        "inset_door",
+        "shelf_count",
+        "single_door"
+      ],
+      "observed_variant_evidence": {
+        "double_door": [
+          "komi_47_shkaf_garderobny",
+          "komi_53_tumba_peregovornaya",
+          "tz_srednyaya_tumba2"
+        ],
+        "explicit_shelf_levels": [
+          "komi_47_shkaf_garderobny"
+        ],
+        "shelf_count": [
+          "cabinet_700x400x500",
+          "komi_53_tumba_peregovornaya",
+          "tz_srednyaya_tumba2"
+        ],
+        "single_door": [
+          "cabinet_700x400x500"
+        ]
+      },
+      "uncovered_variants": [
+        "explicit_door_swing",
+        "inset_door"
+      ]
+    },
+    {
+      "archetype": "drawer_unit",
+      "paramspec_model": "DrawerUnitParamSpec",
+      "generator": "src.generators.drawer_unit.generate",
+      "paramspec_fixtures": [
+        "komi_72_tumba_podkatnaya",
+        "tumba_404x490x674_drawers",
+        "tz_tumba_dokumenty"
+      ],
+      "exact_panel_goldens": [
+        "tumba_404x490x674_drawers"
+      ],
+      "supported_variants": [
+        "boxes_disabled",
+        "custom_box_geometry",
+        "drawer_count",
+        "explicit_drawer_heights",
+        "front_top_niche"
+      ],
+      "observed_variant_evidence": {
+        "custom_box_geometry": [
+          "tumba_404x490x674_drawers"
+        ],
+        "drawer_count": [
+          "komi_72_tumba_podkatnaya",
+          "tumba_404x490x674_drawers",
+          "tz_tumba_dokumenty"
+        ],
+        "explicit_drawer_heights": [
+          "tumba_404x490x674_drawers"
+        ]
+      },
+      "uncovered_variants": [
+        "boxes_disabled",
+        "front_top_niche"
+      ]
+    },
+    {
+      "archetype": "round_table",
+      "paramspec_model": "RoundTableParamSpec",
+      "generator": "src.generators.round_table.generate",
+      "paramspec_fixtures": [
+        "komi_41_stol_peregovorny_round",
+        "tz_stol_kofeyny_round"
+      ],
+      "exact_panel_goldens": [
+        "tz_stol_kofeyny_round"
+      ],
+      "supported_variants": [
+        "custom_diameters",
+        "no_base",
+        "pedestal_base"
+      ],
+      "observed_variant_evidence": {
+        "custom_diameters": [
+          "komi_41_stol_peregovorny_round",
+          "tz_stol_kofeyny_round"
+        ],
+        "pedestal_base": [
+          "komi_41_stol_peregovorny_round",
+          "tz_stol_kofeyny_round"
+        ]
+      },
+      "uncovered_variants": [
+        "no_base"
+      ]
+    },
+    {
+      "archetype": "shelving",
+      "paramspec_model": "ShelvingParamSpec",
+      "generator": "src.generators.shelving.generate",
+      "paramspec_fixtures": [
+        "komi_59_tumba_prezidium",
+        "shelf_800x300x1800"
+      ],
+      "exact_panel_goldens": [
+        "shelf_800x300x1800"
+      ],
+      "supported_variants": [
+        "explicit_shelf_levels",
+        "shelf_count"
+      ],
+      "observed_variant_evidence": {
+        "shelf_count": [
+          "komi_59_tumba_prezidium",
+          "shelf_800x300x1800"
+        ]
+      },
+      "uncovered_variants": [
+        "explicit_shelf_levels"
+      ]
+    },
+    {
+      "archetype": "table",
+      "paramspec_model": "DeskParamSpec",
+      "generator": "src.generators.desk.generate",
+      "paramspec_fixtures": [
+        "tz_zhurnalny_stol"
+      ],
+      "exact_panel_goldens": [
+        "tz_zhurnalny_stol"
+      ],
+      "supported_variants": [
+        "apron_disabled",
+        "apron_enabled",
+        "metal_frame",
+        "modesty_screen",
+        "panel_supports",
+        "top_overhang"
+      ],
+      "observed_variant_evidence": {
+        "apron_disabled": [
+          "tz_zhurnalny_stol"
+        ],
+        "panel_supports": [
+          "tz_zhurnalny_stol"
+        ]
+      },
+      "uncovered_variants": [
+        "apron_enabled",
+        "metal_frame",
+        "modesty_screen",
+        "top_overhang"
+      ]
+    },
+    {
+      "archetype": "wardrobe",
+      "paramspec_model": "CabinetParamSpec",
+      "generator": "src.generators.cabinet.generate",
+      "paramspec_fixtures": [
+        "tz_shkaf_kombinirovanny",
+        "wardrobe_demo"
+      ],
+      "exact_panel_goldens": [
+        "wardrobe_demo"
+      ],
+      "supported_variants": [
+        "door_section",
+        "drawers_section",
+        "mixed_sections",
+        "multi_column",
+        "open_section",
+        "rods",
+        "shelves_section",
+        "width_share"
+      ],
+      "observed_variant_evidence": {
+        "door_section": [
+          "tz_shkaf_kombinirovanny",
+          "wardrobe_demo"
+        ],
+        "drawers_section": [
+          "wardrobe_demo"
+        ],
+        "mixed_sections": [
+          "wardrobe_demo"
+        ],
+        "multi_column": [
+          "tz_shkaf_kombinirovanny",
+          "wardrobe_demo"
+        ],
+        "rods": [
+          "wardrobe_demo"
+        ],
+        "width_share": [
+          "wardrobe_demo"
+        ]
+      },
+      "uncovered_variants": [
+        "open_section",
+        "shelves_section"
+      ]
+    }
+  ],
+  "generator_implementations": [
+    {
+      "generator": "src.generators.cabinet.generate",
+      "archetypes": [
+        "cabinet",
+        "wardrobe"
+      ],
+      "exact_panel_goldens": [
+        "kashpo",
+        "moderator_cabinet",
+        "office_equipment_cabinet",
+        "tumba_moderatora",
+        "tumba_tv_1600x450x600",
+        "tv_stand_1600x450x600",
+        "wardrobe_demo"
+      ]
+    },
+    {
+      "generator": "src.generators.composite.generate",
+      "archetypes": [
+        "composite"
+      ],
+      "exact_panel_goldens": [
+        "kitchen_1860x630x2400"
+      ]
+    },
+    {
+      "generator": "src.generators.corpus.generate",
+      "archetypes": [
+        "corpus"
+      ],
+      "exact_panel_goldens": [
+        "tz_stol_kofeyny_cube"
+      ]
+    },
+    {
+      "generator": "src.generators.desk.generate",
+      "archetypes": [
+        "desk",
+        "table"
+      ],
+      "exact_panel_goldens": [
+        "desk_demo",
+        "tz_zhurnalny_stol"
+      ]
+    },
+    {
+      "generator": "src.generators.door_unit.generate",
+      "archetypes": [
+        "door_unit"
+      ],
+      "exact_panel_goldens": [
+        "cabinet_700x400x500"
+      ]
+    },
+    {
+      "generator": "src.generators.drawer_unit.generate",
+      "archetypes": [
+        "drawer_unit"
+      ],
+      "exact_panel_goldens": [
+        "tumba_404x490x674_drawers"
+      ]
+    },
+    {
+      "generator": "src.generators.round_table.generate",
+      "archetypes": [
+        "round_table"
+      ],
+      "exact_panel_goldens": [
+        "tz_stol_kofeyny_round"
+      ]
+    },
+    {
+      "generator": "src.generators.shelving.generate",
+      "archetypes": [
+        "shelving"
+      ],
+      "exact_panel_goldens": [
+        "shelf_800x300x1800"
+      ]
+    }
+  ],
+  "unmatched_project_files": [
+    "security_desk.json"
+  ],
+  "completed_package": {
+    "id": "MEB-133-G01",
+    "status": "closed",
+    "title": "Every public archetype and generator implementation has an exact-panel baseline",
+    "evidence": {
+      "public_archetypes": "10/10",
+      "generator_implementations": "8/8",
+      "regression_exact_goldens": "15/15"
+    }
+  },
+  "remaining_gaps": [
+    {
+      "id": "MEB-133-G02",
+      "status": "open",
+      "title": "Variant branches do not all have ParamSpec evidence",
+      "evidence": "See archetypes[].uncovered_variants",
+      "next_scope": "Add focused fixtures and exact goldens per uncovered branch; do not change geometry in the audit task."
+    },
+    {
+      "id": "MEB-133-G03",
+      "status": "open",
+      "title": "Exact goldens compare panels only",
+      "evidence": "tests/regression.py::exact_match compares panel names and placement",
+      "next_scope": "Add per-archetype production-gate, CFRN encoding/holes and drilling matrix without cloud calls."
+    },
+    {
+      "id": "MEB-133-G04",
+      "status": "blocked_external",
+      "title": "Round-table production contour is not proven in real Basis",
+      "evidence": "rules/generators.md documents missing importer contour support (AKD-42)",
+      "next_scope": "Keep local shape/placement regression; validate real B3D only in a separately licensed environment."
+    },
+    {
+      "id": "MEB-133-G05",
+      "status": "open",
+      "title": "Minimum and boundary dimensions are not matrixed per archetype",
+      "evidence": "Current paramspecs are representative products, not a min/typical/max matrix",
+      "next_scope": "Add deterministic min/typical/max fixtures and negative schema cases per generator family."
+    }
+  ]
+}
