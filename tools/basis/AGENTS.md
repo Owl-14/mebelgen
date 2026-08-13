@@ -29,6 +29,7 @@ Python-код; координаты деталей ВСЕГДА считает �
 |---|---|
 | Обязательный порядок любого изменения движка, границы и release-checklist | [rules/engine-change-runbook.md](rules/engine-change-runbook.md) |
 | Как устроен проект, где какой модуль, поток данных | [rules/architecture.md](rules/architecture.md) |
+| Когда допустим условный fine-tune и как доказать готовность данных | [rules/finetune-data-readiness.md](rules/finetune-data-readiness.md) |
 | Как читать ТЗ, поля ParamSpec, создать изделие | [rules/paramspec.md](rules/paramspec.md) |
 | Координаты, корпус, зазоры, фасады (законы геометрии) | [rules/core.md](rules/core.md) |
 | Поля генераторов по архетипам | [rules/generators.md](rules/generators.md) |
