@@ -24,6 +24,8 @@ jobs:
         run: pip install -r requirements.txt -r requirements-dev.txt
       - name: engine check matrix
         run: python -m qa.engine_checks
+      - name: offline HTTP rollback drill
+        run: python -m qa.rollout_drill --output out/rollout-drill.json
       - name: unit tests
         run: python -m pytest tests/ -q
       - name: offline trace replay eval

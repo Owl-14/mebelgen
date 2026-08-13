@@ -1,0 +1,21 @@
+{
+  "schema_version": 2,
+  "title": "Akeda AI rollout SLO",
+  "source": "<studio-out>/.rollout/dashboard.json",
+  "refresh_seconds": 30,
+  "privacy": "tenant/user identifiers are SHA-256 prefixes; prompts, images and ParamSpec are forbidden",
+  "panels": [
+    {"id": "latency", "title": "Latency p50 / p95", "metrics": ["latency_p50_ms", "latency_p95_ms"], "budget_keys": ["latency_p50_ms", "latency_p95_ms"]},
+    {"id": "usage", "title": "Token and reported cost p95", "metrics": ["tokens_p95", "cost_usd_p95", "cost_samples", "cost_sample_status"], "budget_keys": ["tokens_p95", "cost_usd_p95"]},
+    {"id": "quality", "title": "Invalid ops / labelled false rejection / edit success", "metrics": ["invalid_op_rate", "false_rejection_rate", "false_rejection_samples", "false_rejection_inconclusive_samples", "false_rejection_sample_status", "edit_success_rate"], "budget_keys": ["invalid_op_rate", "false_rejection_rate", "edit_success_rate"], "false_rejection_source": "deduplicated MEB-151 run/case evidence verified against qa/trace_eval/v1/approved-evidence.json only"},
+    {"id": "shadow", "title": "Live divergence and shadow parity", "metrics": ["live_divergence_rate", "live_divergence_samples", "paramspec_match_rate", "paramspec_samples", "geometry_match_rate", "geometry_samples", "drilling_match_rate", "drilling_samples"], "dimensions": ["mode", "tenant_hash", "cohort"]},
+    {"id": "checkpoints", "title": "Checkpoint storage", "metrics": ["checkpoint_bytes_max"], "budget_keys": ["checkpoint_bytes", "checkpoint_retention_days"]},
+    {"id": "stop", "title": "Persistent automatic stop / rollback", "metrics": ["stopped", "reasons"], "dimensions": ["mode", "tenant_hash", "cohort"], "source_of_truth": "state.stops[scope]", "severity": "critical"}
+  ],
+  "evidence_links": {
+    "MEB-149": "python -m qa.engine_checks",
+    "MEB-151": "python main.py trace-eval",
+    "MEB-153": "manual paid-provider bake-off only; never CI",
+    "rollback_drill": "python -m qa.rollout_drill"
+  }
+}
