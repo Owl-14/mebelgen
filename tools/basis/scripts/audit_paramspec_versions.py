@@ -21,7 +21,13 @@ def main() -> int:
     args = parser.parse_args()
     report = audit_paramspec_v1_catalogs(args.legacy_root, args.tenant_root)
     print(json.dumps(report, ensure_ascii=False, indent=2))
-    return 1 if report["invalid"] or report["equivalence_failed"] else 0
+    return (
+        1
+        if report["invalid"]
+        or report["equivalence_failed"]
+        or report["canonical_idempotence_failed"]
+        else 0
+    )
 
 
 if __name__ == "__main__":

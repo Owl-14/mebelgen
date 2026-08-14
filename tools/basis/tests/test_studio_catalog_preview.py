@@ -9,6 +9,9 @@ import sys
 import threading
 from http.server import ThreadingHTTPServer
 from pathlib import Path
+from unittest.mock import patch
+
+import pytest
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -154,7 +157,114 @@ def test_open_validates_and_builds_before_switching_current_product(tmp_path: Pa
         thread.join(timeout=2)
 
 
-def test_save_is_strict_and_does_not_overwrite_on_unknown_fields(tmp_path: Path) -> None:
+def test_version_restore_canonicalizes_before_browser_activation(tmp_path: Path) -> None:
+    current = json.loads(
+        (ROOT / "paramspecs" / "wardrobe_demo.json").read_text(encoding="utf-8")
+    )
+    spec_path = tmp_path / "wardrobe.json"
+    spec_path.write_text(json.dumps(current, ensure_ascii=False), encoding="utf-8")
+    historical = json.loads(json.dumps(current))
+    historical["catalog"] = {
+        "creator_user_id": "owner-1",
+        "responsible_user_id": "designer-1",
+    }
+    historical["future_history_field"] = "must not become active"
+    invalid = json.loads(json.dumps(current))
+    invalid["dimensions"]["width"] = 10
+    spec_path.with_suffix(".versions.json").write_text(
+        json.dumps(
+            [
+                {"ts": "2026-08-13T12:00:00", "spec": historical},
+                {"ts": "2026-08-13T12:01:00", "spec": invalid},
+            ],
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    studio = _Studio(spec_path, tmp_path / "out")
+    server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(studio))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        status, raw = _request(
+            server.server_port, "POST", "/api/restore", {"index": 0}
+        )
+        assert status == 200, raw
+        restored = json.loads(raw)
+        assert "future_history_field" not in restored["spec"]
+        assert restored["spec"]["catalog"] == historical["catalog"]
+        assert restored["paramspec_read"]["unknown_fields"] == [
+            "future_history_field"
+        ]
+
+        status, raw = _request(
+            server.server_port, "POST", "/api/restore", {"index": 1}
+        )
+        assert status == 422, raw
+        assert json.loads(raw)["code"] == "invalid_paramspec"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+@pytest.mark.parametrize("failure", ["unknown", "invalid_known"])
+def test_import_tz_rejects_invalid_ai_paramspec_without_overwrite(
+    tmp_path: Path,
+    failure: str,
+) -> None:
+    current = {
+        "schemaVersion": "paramspec-v1",
+        "draft": True,
+        "project_name": "Исходный черновик",
+    }
+    spec_path = tmp_path / "draft.json"
+    original = json.dumps(current, ensure_ascii=False, indent=2).encode("utf-8")
+    spec_path.write_bytes(original)
+    candidate = json.loads(
+        (ROOT / "paramspecs" / "wardrobe_demo.json").read_text(encoding="utf-8")
+    )
+    if failure == "unknown":
+        candidate["future_top_level"] = True
+    else:
+        candidate["dimensions"]["width"] = 10
+    ai_result = {
+        "spec": candidate,
+        "reply": "Готово",
+        "changes": [],
+        "usage": {"model": "test-model", "total": 7},
+    }
+
+    studio = _Studio(spec_path, tmp_path / "out")
+    server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(studio))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with patch("src.spec_chat.chat_edit", return_value=ai_result):
+            status, raw = _request(
+                server.server_port,
+                "POST",
+                "/api/import-tz",
+                {"name": "tz.png", "data": "QUJD", "provider": "mock"},
+            )
+
+        rejected = json.loads(raw)
+        assert status == 422, raw
+        assert rejected["ok"] is False
+        assert rejected["code"] == "invalid_paramspec"
+        assert rejected["error_code"] == rejected["code"]
+        assert rejected["details"]
+        assert spec_path.read_bytes() == original
+        assert studio.workspaces.current_spec_path(None) == spec_path.resolve()
+        assert sorted(path.name for path in tmp_path.glob("*.json")) == ["draft.json"]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_all_catalog_writes_are_strict_for_unknown_fields(tmp_path: Path) -> None:
     spec = json.loads(
         (ROOT / "paramspecs" / "komi_72_tumba_podkatnaya.json").read_text(
             encoding="utf-8"
@@ -165,6 +275,10 @@ def test_save_is_strict_and_does_not_overwrite_on_unknown_fields(tmp_path: Path)
     spec_path.write_text(original, encoding="utf-8")
     candidate = json.loads(json.dumps(spec))
     candidate["future_top_level"] = True
+    duplicate_source = tmp_path / "duplicate_source.json"
+    duplicate_source.write_text(
+        json.dumps(candidate, ensure_ascii=False), encoding="utf-8"
+    )
 
     studio = _Studio(spec_path, tmp_path / "out")
     server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(studio))
@@ -179,6 +293,55 @@ def test_save_is_strict_and_does_not_overwrite_on_unknown_fields(tmp_path: Path)
         assert rejected["code"] == "invalid_paramspec"
         assert any("future_top_level" in item for item in rejected["details"])
         assert spec_path.read_text(encoding="utf-8") == original
+
+        status, raw = _request(
+            server.server_port,
+            "POST",
+            "/api/rename",
+            {"file": "duplicate_source.json", "name": "Каноническая запись"},
+        )
+        assert status == 200, raw
+        renamed = json.loads(duplicate_source.read_text(encoding="utf-8"))
+        assert renamed["project_name"] == "Каноническая запись"
+        assert "future_top_level" not in renamed
+        revisions = json.loads(
+            (tmp_path / "duplicate_source.versions.json").read_text(encoding="utf-8")
+        )
+        assert revisions
+        assert all("future_top_level" not in item["spec"] for item in revisions)
+
+        candidate["catalog"] = {
+            "creator_user_id": "owner-1",
+            "responsible_user_id": "owner-1",
+        }
+        duplicate_source.write_text(
+            json.dumps(candidate, ensure_ascii=False), encoding="utf-8"
+        )
+        status, raw = _request(
+            server.server_port,
+            "POST",
+            "/api/catalog/assign",
+            {"file": "duplicate_source.json", "responsible_user_id": ""},
+        )
+        assert status == 200, raw
+        assigned = json.loads(duplicate_source.read_text(encoding="utf-8"))
+        assert "future_top_level" not in assigned
+        assert assigned["catalog"].get("responsible_user_id") == ""
+
+        duplicate_source.write_text(
+            json.dumps(candidate, ensure_ascii=False), encoding="utf-8"
+        )
+        status, raw = _request(
+            server.server_port,
+            "POST",
+            "/api/duplicate",
+            {"file": "duplicate_source.json", "stay_catalog": True},
+        )
+        assert status == 200, raw
+        duplicate = json.loads(
+            (tmp_path / "duplicate_source_copy.json").read_text(encoding="utf-8")
+        )
+        assert "future_top_level" not in duplicate
     finally:
         server.shutdown()
         server.server_close()
