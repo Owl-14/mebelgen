@@ -742,14 +742,30 @@ def _legacy_response_patches(spec: dict[str, Any], new: dict[str, Any]) \
 _MISSING = object()
 
 
-def _normalize_provider_operations(operations: list[Any]) -> list[Any]:
+def _unique_section_id(spec: dict[str, Any], preferred: str) -> str:
+    existing = {
+        str(section.get("id") or "").strip()
+        for section in spec.get("sections") or []
+        if isinstance(section, dict)
+    }
+    base = re.sub(r"[^a-zA-Z0-9_-]+", "-", preferred.strip()).strip("-") or "section"
+    if base not in existing:
+        return base
+    index = 2
+    while f"{base}-{index}" in existing:
+        index += 1
+    return f"{base}-{index}"
+
+
+def _normalize_provider_operations(
+    operations: list[Any], spec: dict[str, Any] | None = None,
+) -> list[Any]:
     """Translate provider output into the typed operation contract.
 
-    Only deterministic, lossless repairs are allowed here.  In particular, the
-    target of a dimension/material/archetype operation is fully determined by
-    another typed field.  For AddSection an explicit ``section.id`` is the
-    canonical identity of the object being created; a matching target-missing
-    precondition follows that identity.  This function never invents ids.
+    Only deterministic compilation is allowed here. Targets and preconditions
+    come from the selected ParamSpec, not provider guesses. For AddSection the
+    requested semantic id is allocated uniquely against the current sections;
+    no command wording or catalog fixture is special-cased.
     """
     normalized: list[Any] = []
     aliases = {
@@ -762,6 +778,7 @@ def _normalize_provider_operations(operations: list[Any]) -> list[Any]:
         "panel_type", "section_id", "between", "above", "below", "middle",
         "align_front", "align_back", "delta_mm",
     }
+    source_spec = spec or {}
     for raw in operations:
         if not isinstance(raw, dict):
             normalized.append(raw)
@@ -770,13 +787,32 @@ def _normalize_provider_operations(operations: list[Any]) -> list[Any]:
             item = copy.deepcopy(raw)
             op_name = item.get("op")
             if op_name == "SetDimension" and item.get("dimension") in {
-                "width", "depth", "height",
+                "width", "depth", "height", "depth_carcass", "tolerance",
             }:
                 item["target_id"] = f"dimensions.{item['dimension']}"
+                current = _flatten(source_spec).get(item["target_id"], _MISSING)
+                item["preconditions"] = (
+                    [{"kind": "value_equals", "path": item["target_id"], "value": current}]
+                    if current is not _MISSING else
+                    [{"kind": "target_exists", "target_id": "dimensions"}]
+                )
             elif op_name == "SetMaterial" and isinstance(item.get("field"), str):
                 item["target_id"] = f"materials.{item['field']}"
+                current = _flatten(source_spec).get(item["target_id"], _MISSING)
+                item["preconditions"] = (
+                    [{"kind": "value_equals", "path": item["target_id"], "value": current}]
+                    if current is not _MISSING else
+                    [{"kind": "target_exists", "target_id": "materials"}]
+                )
             elif op_name == "ChangeArchetype":
                 item["target_id"] = "archetype"
+                item["preconditions"] = [{
+                    "kind": "value_equals", "path": "archetype",
+                    "value": source_spec.get("archetype"),
+                }]
+            elif op_name == "DuplicateModel":
+                item["target_id"] = "model"
+                item["preconditions"] = [{"kind": "target_exists", "target_id": "model"}]
             elif op_name == "AddSection" and isinstance(item.get("section"), dict):
                 section = item["section"]
                 target_id = str(item.get("target_id") or "")
@@ -790,15 +826,29 @@ def _normalize_provider_operations(operations: list[Any]) -> list[Any]:
                 if (not section.get("id") and supplied_id
                         and (explicit_section_target or plain_section_target)):
                     section["id"] = supplied_id
-                section_id = str(section.get("id") or "").strip()
-                if section_id and target_id not in {section_id, f"section:{section_id}"}:
-                    canonical_target = f"section:{section_id}"
-                    item["target_id"] = canonical_target
-                    for condition in item.get("preconditions") or []:
-                        if (isinstance(condition, dict)
-                                and condition.get("kind") == "target_missing"
-                                and condition.get("target_id") == target_id):
-                            condition["target_id"] = canonical_target
+                section_id = _unique_section_id(
+                    source_spec, str(section.get("id") or supplied_id or "section")
+                )
+                section["id"] = section_id
+                canonical_target = f"section:{section_id}"
+                item["target_id"] = canonical_target
+                item["preconditions"] = [{
+                    "kind": "target_missing", "target_id": canonical_target,
+                }]
+            elif op_name in {"QueryModel", "DiagnoseModel"}:
+                item["target_id"] = "model"
+                item["preconditions"] = [{"kind": "target_exists", "target_id": "model"}]
+            elif op_name in {
+                "UpdateSection", "DeleteSection", "AddShelf", "MovePanel",
+                "MovePart", "ResizePart", "DeletePart",
+            } and item.get("target_id"):
+                item["preconditions"] = [{
+                    "kind": "target_exists", "target_id": item["target_id"],
+                }]
+            elif op_name == "AddPanel" and item.get("target_id"):
+                item["preconditions"] = [{
+                    "kind": "target_missing", "target_id": item["target_id"],
+                }]
             normalized.append(item)
             continue
         kind = str(raw.get("kind") or raw.get("operation") or raw.get("action") or "")
@@ -818,37 +868,6 @@ def _normalize_provider_operations(operations: list[Any]) -> list[Any]:
         item.update({key: raw[key] for key in semantic_fields if key in raw})
         normalized.append(item)
     return normalized
-
-
-def _deterministic_duplicate_operation(
-    message: str, context: dict[str, Any] | None = None,
-) -> list[dict[str, Any]]:
-    """Recognize an explicit whole-model duplicate without asking the LLM."""
-
-    if (context or {}).get("selected_part"):
-        return []
-    text = str(message or "").strip().casefold()
-    same_object = re.search(
-        r"\b(так(?:ую|ой|ое)\s+же|копи(?:ю|ровать|руй)|дублир\w*)\b", text
-    )
-    furniture = re.search(
-        r"\b(тумб|шкаф|стол|стеллаж|мебел|издели|модел|объект)\w*\b", text
-    )
-    if not same_object or not furniture:
-        return []
-    if re.search(r"\bсправа\b", text):
-        direction = "right"
-    elif re.search(r"\bслева\b", text):
-        direction = "left"
-    else:
-        return []
-    return [{
-        "op": "DuplicateModel",
-        "target_id": "model",
-        "preconditions": [{"kind": "target_exists", "target_id": "model"}],
-        "direction": direction,
-        "gap_mm": 0,
-    }]
 
 
 def _apply_compatibility_patches(spec: dict[str, Any],
@@ -904,50 +923,6 @@ def chat_edit(spec: dict[str, Any], message: str,
             "resolved_operations": [], "usage": None,
             "trace": {"prompts": [], "policy": request_policy},
         })
-
-    deterministic_operations = _deterministic_duplicate_operation(message, context)
-    if deterministic_operations:
-        trace = {"prompts": [], "router": {
-            "kind": "deterministic", "node": "edit_operations",
-        }}
-        try:
-            from .edit_operations import EditApplicationError, apply_edit_operations
-
-            applied = apply_edit_operations(spec, deterministic_operations, context)
-            from .production_gate import evaluate_production_gate
-
-            decision = evaluate_production_gate(applied["spec"])
-            if not decision.report.ok:
-                return _production_gate_refusal(
-                    decision,
-                    None,
-                    operations=applied["operations"],
-                    resolved_operations=applied.get("resolved_operations") or [],
-                    trace=trace,
-                )
-            accepted = decision.accepted_spec
-            assert accepted is not None
-            direction = deterministic_operations[0]["direction"]
-            reply = ("Копия изделия поставлена справа."
-                     if direction == "right" else "Копия изделия поставлена слева.")
-            return summarize({
-                "reply": reply,
-                "spec": accepted,
-                "changes": spec_diff(spec, accepted),
-                "operations": applied["operations"],
-                "resolved_operations": applied.get("resolved_operations") or [],
-                "usage": None,
-                "check_report": decision.report.to_dict(),
-                "trace": trace,
-            })
-        except (EditApplicationError, ValueError) as error:
-            reply = f"Правка отклонена — операции не применены: {error}"
-            return summarize({
-                "reply": reply, "error": reply,
-                "code": "operation_validation_failed", "spec": None,
-                "changes": [], "operations": [], "resolved_operations": [],
-                "usage": None, "trace": trace,
-            })
 
     build_name = resolve_provider_name(provider)
     routed_node = classify_intent(message, spec, context, has_images=bool(images))
@@ -1091,7 +1066,7 @@ def chat_edit(spec: dict[str, Any], message: str,
                     "spec": None, "changes": [],
                     "operations": [], "resolved_operations": [], "usage": usage,
                     "trace": trace}
-        normalized_for_scope = _normalize_provider_operations(raw_operations)
+        normalized_for_scope = _normalize_provider_operations(raw_operations, spec)
         allowed_part_ops = {"AddPanel", "MovePanel", "DeletePart"}
         if any(not isinstance(item, dict) or item.get("op") not in allowed_part_ops
                for item in normalized_for_scope):
@@ -1117,7 +1092,7 @@ def chat_edit(spec: dict[str, Any], message: str,
             raw_operations.extend(legacy_operations)
         if _contains_llm_coordinates(raw_operations):
             return _coordinate_refusal(usage, trace)
-        raw_operations = _normalize_provider_operations(raw_operations)
+        raw_operations = _normalize_provider_operations(raw_operations, spec)
         if not raw_operations and not compatibility:
             return {"reply": res.get("reply", ""), "spec": None,
                     "changes": [], "operations": [], "resolved_operations": [],

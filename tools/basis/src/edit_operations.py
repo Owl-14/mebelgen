@@ -364,30 +364,54 @@ def _set_path(spec: dict[str, Any], path: str, value: Any) -> None:
 def _duplicate_model(spec: dict[str, Any], operation: DuplicateModel) -> dict[str, Any]:
     """Turn one furniture item into two deterministic composite blocks."""
 
-    if spec.get("archetype") == "composite":
-        raise EditApplicationError("duplicating an existing composite is not supported")
     dimensions = copy.deepcopy(spec.get("dimensions") or {})
     width = dimensions.get("width")
     if not isinstance(width, (int, float)) or width <= 0:
         raise EditApplicationError("model width is required for horizontal duplication")
 
-    child = copy.deepcopy(spec)
-    catalog = child.pop("catalog", None)
-    child.pop("created", None)
-    child.pop("draft", None)
     shift = float(width) + float(operation.gap_mm)
-    if operation.direction == "right":
-        blocks = [
-            {"name": "исходная", "origin": {"x": 0, "y": 0, "z": 0}, "spec": child},
-            {"name": "копия справа", "origin": {"x": shift, "y": 0, "z": 0},
-             "spec": copy.deepcopy(child)},
-        ]
+    catalog = copy.deepcopy(spec.get("catalog"))
+
+    if spec.get("archetype") == "composite":
+        source_blocks = copy.deepcopy(spec.get("blocks") or [])
+        if not source_blocks:
+            raise EditApplicationError("composite model has no blocks to duplicate")
+
+        def shifted(blocks: list[dict[str, Any]], offset: float, suffix: str) \
+                -> list[dict[str, Any]]:
+            result: list[dict[str, Any]] = []
+            for index, block in enumerate(copy.deepcopy(blocks), start=1):
+                origin = block.setdefault("origin", {})
+                origin["x"] = float(origin.get("x") or 0) + offset
+                block["name"] = f"{block.get('name') or f'блок {index}'} {suffix}"
+                result.append(block)
+            return result
+
+        if operation.direction == "right":
+            blocks = shifted(source_blocks, 0, "исходный") + shifted(
+                source_blocks, shift, "копия справа"
+            )
+        else:
+            blocks = shifted(source_blocks, 0, "копия слева") + shifted(
+                source_blocks, shift, "исходный"
+            )
     else:
-        blocks = [
-            {"name": "копия слева", "origin": {"x": 0, "y": 0, "z": 0},
-             "spec": copy.deepcopy(child)},
-            {"name": "исходная", "origin": {"x": shift, "y": 0, "z": 0}, "spec": child},
-        ]
+        child = copy.deepcopy(spec)
+        child.pop("catalog", None)
+        child.pop("created", None)
+        child.pop("draft", None)
+        if operation.direction == "right":
+            blocks = [
+                {"name": "исходная", "origin": {"x": 0, "y": 0, "z": 0}, "spec": child},
+                {"name": "копия справа", "origin": {"x": shift, "y": 0, "z": 0},
+                 "spec": copy.deepcopy(child)},
+            ]
+        else:
+            blocks = [
+                {"name": "копия слева", "origin": {"x": 0, "y": 0, "z": 0},
+                 "spec": copy.deepcopy(child)},
+                {"name": "исходная", "origin": {"x": shift, "y": 0, "z": 0}, "spec": child},
+            ]
     dimensions["width"] = float(width) * 2 + float(operation.gap_mm)
     composite: dict[str, Any] = {
         "schemaVersion": spec.get("schemaVersion"),

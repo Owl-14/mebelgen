@@ -2004,6 +2004,30 @@ def make_handler(st: _Studio):
                         )
                         return
                 workspace = st.workspaces.workspace(auth)
+                # The browser owns the visible product identity. The previous
+                # in-memory-only selection was lost on every service restart,
+                # so an already open tab could edit the first catalog item
+                # while displaying another one. Bind stateful routes to the
+                # explicit, validated file sent by the editor.
+                project_bound_routes = {"/api/chat", "/api/chat-history", "/api/save"}
+                requested_project = str(body.get("project_file") or "").strip()
+                if path in project_bound_routes and requested_project:
+                    try:
+                        st.workspaces.select(auth, requested_project)
+                    except FileNotFoundError:
+                        self._json({
+                            "ok": False,
+                            "error": "Выбранное изделие больше не найдено. Обновите каталог.",
+                            "code": "project_not_found",
+                        }, 404)
+                        return
+                elif path in project_bound_routes and len(_list_projects(workspace.spec_dir)) > 1:
+                    self._json({
+                        "ok": False,
+                        "error": "Не удалось определить открытое изделие. Обновите страницу.",
+                        "code": "project_identity_required",
+                    }, 409)
+                    return
                 spec_path = st.workspaces.current_spec_path(auth)
                 current_spec = json.loads(spec_path.read_text(encoding="utf-8"))
                 spec = body.get("spec") or {}
@@ -5984,6 +6008,9 @@ async function loadProjects(){
     `${x.name.slice(0,38)} · ${x.archetype} ${x.dims}</option>`).join('');
   loadReviews();
 }
+function activeProjectFile(){
+  return CAT_CURRENT_FILE||$('projSel').value||'';
+}
 function adoptSpec(p){
   SPEC=p.spec;CAT_CURRENT_FILE=p.file||CAT_CURRENT_FILE;UNDO.length=0;$('btnUndo').disabled=true;
   savedSpecJson=JSON.stringify(SPEC);generatedSpecJson=null;generatedRevision='';
@@ -6080,7 +6107,8 @@ $('projRen').onclick=async()=>{   // переименовать текущее �
   if(!name) return;
   const previousName=SPEC.project_name;SPEC.project_name=name;
   const r=await fetch('/api/save',{method:'POST',
-    headers:{'Content-Type':'application/json'},body:JSON.stringify({spec:SPEC})});
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({spec:SPEC,project_file:activeProjectFile()})});
   const p=await r.json();
   if(p.ok){savedSpecJson=JSON.stringify(SPEC);fillForm();loadProjects();schedule();toast('Переименовано: '+name);}
   else{SPEC.project_name=previousName;toast('Ошибка: '+(p.error||''),true);}
@@ -7054,7 +7082,8 @@ async function loadChatHistory(){
   const generation=chatWorkspaceGeneration;
   try{
     const response=await fetch('/api/chat-history',{method:'POST',
-      headers:{'Content-Type':'application/json'},body:'{}'});
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({project_file:activeProjectFile()})});
     if(!response.ok)return;
     const payload=await response.json();
     if(generation!==chatWorkspaceGeneration||OPERATIONS.size)return;
@@ -7167,7 +7196,8 @@ async function requestChat(payload,controller){
   },CHAT_REQUEST_TIMEOUT_MS);
   try{return await fetch('/api/chat',{method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({...payload,operation_id:activeChatOperationId}),signal:controller.signal});}
+    body:JSON.stringify({...payload,project_file:activeProjectFile(),
+      operation_id:activeChatOperationId}),signal:controller.signal});}
   finally{clearTimeout(timeout);chatRequestInFlight=false;syncChatPrimaryAction();}
 }
 async function cancelActiveChatRequest(reason='user'){
@@ -7548,7 +7578,7 @@ function productionErrorText(payload){
 async function saveSpec(){
   const r=await fetch('/api/save',{method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({spec:SPEC})});
+    body:JSON.stringify({spec:SPEC,project_file:activeProjectFile()})});
   const result=await r.json();
   if(result.ok){savedSpecJson=JSON.stringify(SPEC);syncViewportStatus();}
   if(result.ok&&!SPEC.draft){

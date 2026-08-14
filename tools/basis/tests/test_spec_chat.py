@@ -254,16 +254,19 @@ def test_provider_operation_normalization_is_bounded_and_deterministic():
             ],
             "section": {"id": "canonical", "kind": "open"},
         },
-    ])
+    ], SPEC)
 
     assert operations[0]["target_id"] == "dimensions.width"
     assert operations[1]["section"]["id"] == "right"
-    assert "id" not in operations[2]["section"]
+    assert operations[2]["section"]["id"] == "sections"
     assert operations[3]["target_id"] == "section:canonical"
     assert operations[3]["preconditions"] == [
         {"kind": "target_missing", "target_id": "section:canonical"},
-        {"kind": "target_exists", "target_id": "model"},
     ]
+    assert operations[0]["preconditions"] == [{
+        "kind": "value_equals", "path": "dimensions.width",
+        "value": SPEC["dimensions"]["width"],
+    }]
 
 
 def test_add_section_provider_id_mismatch_is_repaired_atomically():
@@ -299,27 +302,56 @@ def test_add_section_provider_id_mismatch_is_repaired_atomically():
     assert "sections" not in SPEC
 
 
-def test_explicit_whole_model_duplicate_bypasses_provider_and_builds_composite(monkeypatch):
+def test_whole_model_duplicate_is_a_provider_visible_semantic_operation(monkeypatch):
     import src.spec_chat as sc
 
     source = json.loads((ROOT / "paramspecs" / "cabinet_700x400x500.json").read_text(
         encoding="utf-8"
     ))
 
-    class ProviderMustNotRun:
-        def chat(self, *args, **kwargs):
-            raise AssertionError("explicit duplication must not call the LLM")
+    calls = []
 
-    monkeypatch.setattr(sc, "get_chat_provider", lambda name=None: ProviderMustNotRun())
+    class SemanticProvider:
+        def chat(self, *args, **kwargs):
+            calls.append(args[1])
+            direction = "left" if "слева" in args[1].lower() else "right"
+            return {"reply": "Готово.", "operations": [{
+                "op": "DuplicateModel", "direction": direction, "gap_mm": 0,
+            }]}
+
+    monkeypatch.setattr(sc, "get_chat_provider", lambda name=None: SemanticProvider())
     result = sc.chat_edit(source, "Поставь справа такую же тумбу")
 
     assert result["spec"]["archetype"] == "composite"
     assert result["spec"]["dimensions"]["width"] == 1400
-    assert result["usage"] is None
+    assert calls == ["Поставь справа такую же тумбу"]
     assert result["operations"][0]["op"] == "DuplicateModel"
-    assert result["trace"]["router"] == {
-        "kind": "deterministic", "node": "edit_operations",
-    }
+    assert result["operations"][0]["target_id"] == "model"
+    assert result["operations"][0]["preconditions"] == [
+        {"kind": "target_exists", "target_id": "model"},
+    ]
+    assert result["trace"]["router"] == {"kind": "deterministic", "node": "edit_operations"}
+
+
+def test_add_section_collision_is_allocated_by_server_not_provider(monkeypatch):
+    import src.spec_chat as sc
+
+    source = json.loads((ROOT / "paramspecs" / "cabinet_700x400x500.json").read_text(
+        encoding="utf-8"
+    ))
+
+    class Provider:
+        def chat(self, *args, **kwargs):
+            return {"reply": "Добавил секцию.", "operations": [{
+                "op": "AddSection", "section": {"id": "main", "kind": "open"},
+            }]}
+
+    monkeypatch.setattr(sc, "get_chat_provider", lambda name=None: Provider())
+    result = sc.chat_edit(source, "Добавь ещё одну открытую секцию")
+
+    assert result["spec"] is not None
+    assert [section["id"] for section in result["spec"]["sections"]] == ["main", "main-2"]
+    assert result["operations"][0]["target_id"] == "section:main-2"
 
 
 def test_question_about_model():
@@ -389,6 +421,7 @@ def test_mock_result_exposes_versioned_prompt_trace():
     assert trace["router"] == {"kind": "deterministic", "node": "edit_operations"}
     assert trace["prompts"][0]["prompt_id"] == "furniture.edit-operations"
     assert trace["prompts"][0]["prompt_version"] == "1.0.0"
+    assert trace["prompts"][0]["capability_version"] == "2.0.0"
 
 
 def test_read_only_node_cannot_smuggle_a_spec_mutation(monkeypatch):
