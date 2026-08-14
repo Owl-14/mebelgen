@@ -36,9 +36,41 @@ def test_edit_operation_is_discriminated_union_with_all_first_slice_variants():
     tags = set(item_schema["discriminator"]["mapping"])
     assert tags == {
         "SetDimension", "SetMaterial", "ChangeArchetype", "AddSection",
+        "DuplicateModel",
         "UpdateSection", "DeleteSection", "AddShelf", "AddPanel", "MovePanel", "MovePart",
         "ResizePart", "DeletePart", "QueryModel", "DiagnoseModel",
     }
+
+
+def test_duplicate_model_builds_two_horizontal_composite_blocks():
+    source = json.loads((ROOT / "paramspecs" / "cabinet_700x400x500.json").read_text(
+        encoding="utf-8"
+    ))
+    original = copy.deepcopy(source)
+
+    result = apply_edit_operations(source, [{
+        "op": "DuplicateModel",
+        "target_id": "model",
+        "preconditions": _exists("model"),
+        "direction": "right",
+        "gap_mm": 0,
+    }])
+
+    duplicate = result["spec"]
+    assert duplicate["archetype"] == "composite"
+    assert duplicate["dimensions"]["width"] == 1400
+    assert [block["origin"]["x"] for block in duplicate["blocks"]] == [0, 700]
+    assert duplicate["blocks"][0]["spec"] == duplicate["blocks"][1]["spec"]
+    assert source == original
+
+    from src.studio import build_payload
+
+    payload = build_payload(duplicate)
+    assert payload["ok"], payload["issues"]
+    from src.generators import generate_from_paramspec
+
+    project = generate_from_paramspec(duplicate)
+    assert max(panel["placement"]["x2"] for panel in project["panels"]) == 1400
 
 
 @pytest.mark.parametrize("missing", ["target_id", "preconditions"])

@@ -299,6 +299,29 @@ def test_add_section_provider_id_mismatch_is_repaired_atomically():
     assert "sections" not in SPEC
 
 
+def test_explicit_whole_model_duplicate_bypasses_provider_and_builds_composite(monkeypatch):
+    import src.spec_chat as sc
+
+    source = json.loads((ROOT / "paramspecs" / "cabinet_700x400x500.json").read_text(
+        encoding="utf-8"
+    ))
+
+    class ProviderMustNotRun:
+        def chat(self, *args, **kwargs):
+            raise AssertionError("explicit duplication must not call the LLM")
+
+    monkeypatch.setattr(sc, "get_chat_provider", lambda name=None: ProviderMustNotRun())
+    result = sc.chat_edit(source, "Поставь справа такую же тумбу")
+
+    assert result["spec"]["archetype"] == "composite"
+    assert result["spec"]["dimensions"]["width"] == 1400
+    assert result["usage"] is None
+    assert result["operations"][0]["op"] == "DuplicateModel"
+    assert result["trace"]["router"] == {
+        "kind": "deterministic", "node": "edit_operations",
+    }
+
+
 def test_question_about_model():
     """D3: вопрос о модели — ответ из контекста, спека не трогается."""
     r = chat_edit(SPEC, "сколько стоит?", context={"estimate_total": 2181.0})

@@ -820,6 +820,37 @@ def _normalize_provider_operations(operations: list[Any]) -> list[Any]:
     return normalized
 
 
+def _deterministic_duplicate_operation(
+    message: str, context: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Recognize an explicit whole-model duplicate without asking the LLM."""
+
+    if (context or {}).get("selected_part"):
+        return []
+    text = str(message or "").strip().casefold()
+    same_object = re.search(
+        r"\b(так(?:ую|ой|ое)\s+же|копи(?:ю|ровать|руй)|дублир\w*)\b", text
+    )
+    furniture = re.search(
+        r"\b(тумб|шкаф|стол|стеллаж|мебел|издели|модел|объект)\w*\b", text
+    )
+    if not same_object or not furniture:
+        return []
+    if re.search(r"\bсправа\b", text):
+        direction = "right"
+    elif re.search(r"\bслева\b", text):
+        direction = "left"
+    else:
+        return []
+    return [{
+        "op": "DuplicateModel",
+        "target_id": "model",
+        "preconditions": [{"kind": "target_exists", "target_id": "model"}],
+        "direction": direction,
+        "gap_mm": 0,
+    }]
+
+
 def _apply_compatibility_patches(spec: dict[str, Any],
                                  patches: list[dict[str, Any]]) -> dict[str, Any]:
     working = copy.deepcopy(spec)
@@ -873,6 +904,50 @@ def chat_edit(spec: dict[str, Any], message: str,
             "resolved_operations": [], "usage": None,
             "trace": {"prompts": [], "policy": request_policy},
         })
+
+    deterministic_operations = _deterministic_duplicate_operation(message, context)
+    if deterministic_operations:
+        trace = {"prompts": [], "router": {
+            "kind": "deterministic", "node": "edit_operations",
+        }}
+        try:
+            from .edit_operations import EditApplicationError, apply_edit_operations
+
+            applied = apply_edit_operations(spec, deterministic_operations, context)
+            from .production_gate import evaluate_production_gate
+
+            decision = evaluate_production_gate(applied["spec"])
+            if not decision.report.ok:
+                return _production_gate_refusal(
+                    decision,
+                    None,
+                    operations=applied["operations"],
+                    resolved_operations=applied.get("resolved_operations") or [],
+                    trace=trace,
+                )
+            accepted = decision.accepted_spec
+            assert accepted is not None
+            direction = deterministic_operations[0]["direction"]
+            reply = ("Копия изделия поставлена справа."
+                     if direction == "right" else "Копия изделия поставлена слева.")
+            return summarize({
+                "reply": reply,
+                "spec": accepted,
+                "changes": spec_diff(spec, accepted),
+                "operations": applied["operations"],
+                "resolved_operations": applied.get("resolved_operations") or [],
+                "usage": None,
+                "check_report": decision.report.to_dict(),
+                "trace": trace,
+            })
+        except (EditApplicationError, ValueError) as error:
+            reply = f"Правка отклонена — операции не применены: {error}"
+            return summarize({
+                "reply": reply, "error": reply,
+                "code": "operation_validation_failed", "spec": None,
+                "changes": [], "operations": [], "resolved_operations": [],
+                "usage": None, "trace": trace,
+            })
 
     build_name = resolve_provider_name(provider)
     routed_node = classify_intent(message, spec, context, has_images=bool(images))

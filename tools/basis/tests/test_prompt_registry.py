@@ -116,6 +116,7 @@ def test_node_capabilities_share_the_typed_reducer_contract() -> None:
     assert operations["items"]["discriminator"]["propertyName"] == "op"
     tags = set(operations["items"]["discriminator"]["mapping"])
     assert {"SetDimension", "AddPanel", "MovePanel", "DeletePart"} <= tags
+    assert "DuplicateModel" not in tags
     assert edit["x-paramspec-protected-paths"] == ["/schemaVersion"]
 
     part = capability_schema("part_edit")

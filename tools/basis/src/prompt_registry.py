@@ -138,7 +138,19 @@ def capability_schema(node: str) -> dict[str, Any]:
         from .edit_operations import edit_operation_json_schema
 
         operations_schema = edit_operation_json_schema()
+        # DuplicateModel is server-owned and deterministic.  Explicit
+        # duplication bypasses the provider, so the approved LLM capability
+        # schema and trace evidence remain unchanged.
+        items = operations_schema.get("items") or {}
+        mapping = (items.get("discriminator") or {}).get("mapping") or {}
+        duplicate_ref = mapping.pop("DuplicateModel", None)
+        if duplicate_ref:
+            items["oneOf"] = [
+                item for item in items.get("oneOf") or []
+                if item.get("$ref") != duplicate_ref
+            ]
         definitions = operations_schema.pop("$defs", {})
+        definitions.pop("DuplicateModel", None)
         result = {
             "type": "object",
             "additionalProperties": False,
