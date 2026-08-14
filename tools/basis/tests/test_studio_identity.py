@@ -345,6 +345,7 @@ def test_authenticated_studio_scopes_catalog_and_renders_profile(tmp_path: Path)
                 "POST",
                 "/api/chat",
                 {
+                    "project_file": "product.json",
                     "spec": _spec("Тумба Константы"),
                     "message": "Сделай шире",
                     "history": [{"role": "user", "text": "чужая клиентская история"}],
@@ -359,6 +360,7 @@ def test_authenticated_studio_scopes_catalog_and_renders_profile(tmp_path: Path)
                 "POST",
                 "/api/chat",
                 {
+                    "project_file": "product.json",
                     "spec": _spec("Тумба Константы после правки"),
                     "message": "Добавь полку",
                     "history": [],
@@ -414,7 +416,7 @@ def test_authenticated_studio_scopes_catalog_and_renders_profile(tmp_path: Path)
         assert len(provider_error["trace_id"]) == 32
 
         status, _headers, history_body = browser.request(
-            "POST", "/api/chat-history", {}, csrf=True
+            "POST", "/api/chat-history", {"project_file": "product.json"}, csrf=True
         )
         assert status == 200
         history = json.loads(history_body)
@@ -446,7 +448,7 @@ def test_authenticated_studio_scopes_catalog_and_renders_profile(tmp_path: Path)
         assert status == 200
         assert json.loads(other_versions_body)["versions"][0]["dims"] == "922×400×750"
         status, _headers, other_history_body = other_browser.request(
-            "POST", "/api/chat-history", {}, csrf=True
+            "POST", "/api/chat-history", {"project_file": "product.json"}, csrf=True
         )
         assert status == 200
         assert json.loads(other_history_body)["operations"] == []

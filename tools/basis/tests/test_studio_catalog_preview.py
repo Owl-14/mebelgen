@@ -154,6 +154,74 @@ def test_open_validates_and_builds_before_switching_current_product(tmp_path: Pa
         thread.join(timeout=2)
 
 
+def test_chat_and_save_bind_to_explicit_product_after_server_selection_reset(
+    tmp_path: Path,
+) -> None:
+    """A restarted server must not silently edit the first catalog product."""
+    source = json.loads(
+        (ROOT / "paramspecs" / "komi_72_tumba_podkatnaya.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    spec_dir = tmp_path / "paramspecs"
+    spec_dir.mkdir()
+    first_path = spec_dir / "a-first.json"
+    second_path = spec_dir / "b-second.json"
+    first = json.loads(json.dumps(source))
+    first["project_name"] = "Первое"
+    second = json.loads(json.dumps(source))
+    second["project_name"] = "Второе"
+    first_path.write_text(json.dumps(first, ensure_ascii=False), encoding="utf-8")
+    second_path.write_text(json.dumps(second, ensure_ascii=False), encoding="utf-8")
+
+    # New process state points at the first item, while the browser still has
+    # the second product open.
+    studio = _Studio(first_path, tmp_path / "out")
+    server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(studio))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        status, raw = _request(
+            server.server_port,
+            "POST",
+            "/api/chat",
+            {
+                "project_file": "b-second.json",
+                "spec": second,
+                "message": "сделай глубину 610",
+                "provider": "mock",
+            },
+        )
+        assert status == 200, raw
+        edited = json.loads(raw)["spec"]
+        assert edited["dimensions"]["depth"] == 610
+        assert studio.workspaces.current_spec_path(None).name == "b-second.json"
+
+        status, raw = _request(
+            server.server_port,
+            "POST",
+            "/api/save",
+            {"project_file": "b-second.json", "spec": edited},
+        )
+        assert status == 200, raw
+        assert json.loads(second_path.read_text(encoding="utf-8"))["dimensions"]["depth"] == 610
+        assert json.loads(first_path.read_text(encoding="utf-8"))["dimensions"]["depth"] \
+            == first["dimensions"]["depth"]
+
+        status, raw = _request(
+            server.server_port,
+            "POST",
+            "/api/chat",
+            {"spec": second, "message": "глубина 620", "provider": "mock"},
+        )
+        assert status == 409
+        assert json.loads(raw)["code"] == "project_identity_required"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
 def test_save_is_strict_and_does_not_overwrite_on_unknown_fields(tmp_path: Path) -> None:
     spec = json.loads(
         (ROOT / "paramspecs" / "komi_72_tumba_podkatnaya.json").read_text(

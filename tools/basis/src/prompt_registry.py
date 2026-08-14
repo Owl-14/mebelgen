@@ -83,6 +83,10 @@ class PromptRequest:
         return {
             "prompt_id": self.prompt_id,
             "prompt_version": self.prompt_version,
+            "capability_version": (
+                "2.0.0" if self.node in {"edit_operations", "part_edit", "repair"}
+                else "1.0.0"
+            ),
             "node": self.node,
             "context_chars": self.context_chars,
             "context_limit_chars": self.context_limit_chars,
@@ -138,19 +142,24 @@ def capability_schema(node: str) -> dict[str, Any]:
         from .edit_operations import edit_operation_json_schema
 
         operations_schema = edit_operation_json_schema()
-        # DuplicateModel is server-owned and deterministic.  Explicit
-        # duplication bypasses the provider, so the approved LLM capability
-        # schema and trace evidence remain unchanged.
-        items = operations_schema.get("items") or {}
-        mapping = (items.get("discriminator") or {}).get("mapping") or {}
-        duplicate_ref = mapping.pop("DuplicateModel", None)
-        if duplicate_ref:
-            items["oneOf"] = [
-                item for item in items.get("oneOf") or []
-                if item.get("$ref") != duplicate_ref
-            ]
         definitions = operations_schema.pop("$defs", {})
-        definitions.pop("DuplicateModel", None)
+        # The provider chooses semantic actions. Concurrency guards and targets
+        # that are implied by typed fields belong to the trusted compiler, not
+        # to natural-language generation. This prevents invented section ids or
+        # stale value_equals conditions from rejecting otherwise valid edits.
+        inferred_targets = {
+            "SetDimension", "SetMaterial", "ChangeArchetype", "DuplicateModel",
+            "AddSection", "QueryModel", "DiagnoseModel",
+        }
+        for definition_name, definition in definitions.items():
+            if not isinstance(definition, dict):
+                continue
+            properties = definition.get("properties") or {}
+            required = list(definition.get("required") or [])
+            required = [field for field in required if field != "preconditions"]
+            if definition_name in inferred_targets:
+                required = [field for field in required if field != "target_id"]
+            definition["required"] = required
         result = {
             "type": "object",
             "additionalProperties": False,
@@ -164,6 +173,15 @@ def capability_schema(node: str) -> dict[str, Any]:
         schema = json.loads(PARAMSPEC_SCHEMA_PATH.read_text(encoding="utf-8"))
         result["x-paramspec-allowed-root-fields"] = _allowed_param_roots(schema)
         result["x-paramspec-protected-paths"] = ["/schemaVersion"]
+        result["x-operation-contract-version"] = "2.0.0"
+        result["x-operation-semantics"] = {
+            "DuplicateModel": "copy the whole current furniture model left or right",
+            "AddSection": "add an internal compartment inside the current model",
+            "SetDimension": "change an overall furniture dimension",
+            "UpdateSection": "change an existing internal compartment",
+            "AddPanel": "add one shelf or vertical partition",
+            "MovePanel": "move one shelf or vertical partition",
+        }
         if node == "part_edit":
             result["x-allowed-operation-tags"] = ["AddPanel", "MovePanel", "DeletePart"]
         elif node == "repair":

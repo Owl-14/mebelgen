@@ -73,6 +73,31 @@ def test_duplicate_model_builds_two_horizontal_composite_blocks():
     assert max(panel["placement"]["x2"] for panel in project["panels"]) == 1400
 
 
+def test_duplicate_model_can_repeat_an_existing_composite_without_nesting():
+    source = json.loads((ROOT / "paramspecs" / "cabinet_700x400x500.json").read_text(
+        encoding="utf-8"
+    ))
+    first = apply_edit_operations(source, [{
+        "op": "DuplicateModel", "target_id": "model",
+        "preconditions": _exists("model"), "direction": "right", "gap_mm": 50,
+    }])["spec"]
+    repeated = apply_edit_operations(first, [{
+        "op": "DuplicateModel", "target_id": "model",
+        "preconditions": _exists("model"), "direction": "left", "gap_mm": 100,
+    }])["spec"]
+
+    assert repeated["archetype"] == "composite"
+    assert repeated["dimensions"]["width"] == 3000
+    assert len(repeated["blocks"]) == 4
+    assert all(block["spec"]["archetype"] != "composite" for block in repeated["blocks"])
+    assert [block["origin"]["x"] for block in repeated["blocks"]] == [0, 750, 1550, 2300]
+
+    from src.studio import build_payload
+
+    payload = build_payload(repeated)
+    assert payload["ok"], payload["issues"]
+
+
 @pytest.mark.parametrize("missing", ["target_id", "preconditions"])
 def test_target_and_preconditions_are_required_for_every_operation(missing):
     raw = {
