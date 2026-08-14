@@ -96,6 +96,18 @@ class ChangeArchetype(_EditOperation):
         return self
 
 
+class DuplicateModel(_EditOperation):
+    op: Literal["DuplicateModel"]
+    direction: Literal["right", "left"]
+    gap_mm: float = Field(default=0, ge=0, le=10_000)
+
+    @model_validator(mode="after")
+    def target_is_model(self) -> "DuplicateModel":
+        if self.target_id != "model":
+            raise ValueError("target_id must be 'model'")
+        return self
+
+
 class AddSection(_EditOperation):
     op: Literal["AddSection"]
     section: Section
@@ -233,7 +245,8 @@ class DiagnoseModel(_EditOperation):
 
 
 EditOperation: TypeAlias = Annotated[
-    SetDimension | SetMaterial | ChangeArchetype | AddSection | UpdateSection
+    SetDimension | SetMaterial | ChangeArchetype | DuplicateModel
+    | AddSection | UpdateSection
     | DeleteSection | AddShelf | AddPanel | MovePanel
     | MovePart | ResizePart | DeletePart
     | QueryModel | DiagnoseModel,
@@ -348,6 +361,49 @@ def _set_path(spec: dict[str, Any], path: str, value: Any) -> None:
     current[parts[-1]] = value
 
 
+def _duplicate_model(spec: dict[str, Any], operation: DuplicateModel) -> dict[str, Any]:
+    """Turn one furniture item into two deterministic composite blocks."""
+
+    if spec.get("archetype") == "composite":
+        raise EditApplicationError("duplicating an existing composite is not supported")
+    dimensions = copy.deepcopy(spec.get("dimensions") or {})
+    width = dimensions.get("width")
+    if not isinstance(width, (int, float)) or width <= 0:
+        raise EditApplicationError("model width is required for horizontal duplication")
+
+    child = copy.deepcopy(spec)
+    catalog = child.pop("catalog", None)
+    child.pop("created", None)
+    child.pop("draft", None)
+    shift = float(width) + float(operation.gap_mm)
+    if operation.direction == "right":
+        blocks = [
+            {"name": "исходная", "origin": {"x": 0, "y": 0, "z": 0}, "spec": child},
+            {"name": "копия справа", "origin": {"x": shift, "y": 0, "z": 0},
+             "spec": copy.deepcopy(child)},
+        ]
+    else:
+        blocks = [
+            {"name": "копия слева", "origin": {"x": 0, "y": 0, "z": 0},
+             "spec": copy.deepcopy(child)},
+            {"name": "исходная", "origin": {"x": shift, "y": 0, "z": 0}, "spec": child},
+        ]
+    dimensions["width"] = float(width) * 2 + float(operation.gap_mm)
+    composite: dict[str, Any] = {
+        "schemaVersion": spec.get("schemaVersion"),
+        "project_name": f"{spec.get('project_name') or 'Изделие'} — 2 шт.",
+        "archetype": "composite",
+        "dimensions": dimensions,
+        "materials": copy.deepcopy(spec.get("materials") or {}),
+        "blocks": blocks,
+    }
+    if spec.get("furniture_type") is not None:
+        composite["furniture_type"] = spec["furniture_type"]
+    if catalog is not None:
+        composite["catalog"] = catalog
+    return composite
+
+
 def _query_reply(spec: dict[str, Any], operation: QueryModel,
                  context: dict[str, Any]) -> str:
     dims = spec.get("dimensions") or {}
@@ -404,6 +460,8 @@ def apply_edit_operations(spec: dict[str, Any], operations: Any,
                 _set_path(working, operation.target_id, operation.value)
             elif isinstance(operation, ChangeArchetype):
                 working["archetype"] = operation.archetype
+            elif isinstance(operation, DuplicateModel):
+                working = _duplicate_model(working, operation)
             elif isinstance(operation, AddSection):
                 if _section_index(working, operation.target_id) is not None:
                     raise EditApplicationError(f"section target {operation.target_id!r} already exists")
