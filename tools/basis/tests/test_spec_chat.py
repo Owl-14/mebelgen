@@ -245,11 +245,58 @@ def test_provider_operation_normalization_is_bounded_and_deterministic():
             "preconditions": [{"kind": "target_missing", "target_id": "sections"}],
             "section": {"kind": "open"},
         },
+        {
+            "op": "AddSection",
+            "target_id": "section:provider-alias",
+            "preconditions": [
+                {"kind": "target_missing", "target_id": "section:provider-alias"},
+                {"kind": "target_exists", "target_id": "model"},
+            ],
+            "section": {"id": "canonical", "kind": "open"},
+        },
     ])
 
     assert operations[0]["target_id"] == "dimensions.width"
     assert operations[1]["section"]["id"] == "right"
     assert "id" not in operations[2]["section"]
+    assert operations[3]["target_id"] == "section:canonical"
+    assert operations[3]["preconditions"] == [
+        {"kind": "target_missing", "target_id": "section:canonical"},
+        {"kind": "target_exists", "target_id": "model"},
+    ]
+
+
+def test_add_section_provider_id_mismatch_is_repaired_atomically():
+    """Production regression: three explicit section ids beat provider aliases."""
+    import src.spec_chat as sc
+    from src.edit_operations import apply_edit_operations
+
+    raw = []
+    for position, (section_id, kind) in enumerate([
+        ("door", "door"),
+        ("shelves", "shelves"),
+        ("drawers", "drawers"),
+    ], start=1):
+        provider_target = f"section:provider-{position}"
+        raw.append({
+            "op": "AddSection",
+            "target_id": provider_target,
+            "preconditions": [{"kind": "target_missing", "target_id": provider_target}],
+            "section": {"id": section_id, "kind": kind},
+            "position": position,
+        })
+
+    normalized = sc._normalize_provider_operations(raw)
+    result = apply_edit_operations(SPEC, normalized)
+
+    assert result["changed"] is True
+    assert [section["id"] for section in result["spec"]["sections"]] == [
+        "door", "shelves", "drawers",
+    ]
+    assert [operation["target_id"] for operation in result["operations"]] == [
+        "section:door", "section:shelves", "section:drawers",
+    ]
+    assert "sections" not in SPEC
 
 
 def test_question_about_model():

@@ -747,8 +747,9 @@ def _normalize_provider_operations(operations: list[Any]) -> list[Any]:
 
     Only deterministic, lossless repairs are allowed here.  In particular, the
     target of a dimension/material/archetype operation is fully determined by
-    another typed field.  Section ids are copied only when the provider already
-    supplied the same id in ``target_id``; this function never invents ids.
+    another typed field.  For AddSection an explicit ``section.id`` is the
+    canonical identity of the object being created; a matching target-missing
+    precondition follows that identity.  This function never invents ids.
     """
     normalized: list[Any] = []
     aliases = {
@@ -789,6 +790,15 @@ def _normalize_provider_operations(operations: list[Any]) -> list[Any]:
                 if (not section.get("id") and supplied_id
                         and (explicit_section_target or plain_section_target)):
                     section["id"] = supplied_id
+                section_id = str(section.get("id") or "").strip()
+                if section_id and target_id not in {section_id, f"section:{section_id}"}:
+                    canonical_target = f"section:{section_id}"
+                    item["target_id"] = canonical_target
+                    for condition in item.get("preconditions") or []:
+                        if (isinstance(condition, dict)
+                                and condition.get("kind") == "target_missing"
+                                and condition.get("target_id") == target_id):
+                            condition["target_id"] = canonical_target
             normalized.append(item)
             continue
         kind = str(raw.get("kind") or raw.get("operation") or raw.get("action") or "")
