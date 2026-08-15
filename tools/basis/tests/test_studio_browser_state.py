@@ -20,6 +20,11 @@ from src.studio import _Studio, make_handler  # noqa: E402
 
 
 PRODUCTION_BUTTONS = ("btnCfrn", "btnB3d", "btnDeliver")
+STYLE_DIRECTIONS = (
+    ("a", "direction-a-precision-light.css", "#1f5faf"),
+    ("b", "direction-b-warm-workshop.css", "#8a4b16"),
+    ("c", "direction-c-blueprint.css", "#0b5d78"),
+)
 
 
 @pytest.fixture(scope="module")
@@ -220,3 +225,50 @@ def test_notification_queue_retains_history_and_replaces_sticky_progress(
     expect(page.locator("#toastHistory li")).to_have_text(
         ["Пересчёт завершён", "Пересчёт выполняется"]
     )
+
+
+@pytest.mark.parametrize(("key", "css_name", "accent"), STYLE_DIRECTIONS)
+def test_review_direction_is_live_and_reduced_motion_is_effective(
+    chromium: Browser, studio_url: str, key: str, css_name: str, accent: str
+) -> None:
+    context = chromium.new_context(
+        viewport={"width": 1440, "height": 900}, reduced_motion="reduce"
+    )
+    page = context.new_page()
+    page.goto(studio_url, wait_until="domcontentloaded")
+    page.wait_for_function("() => viewportModelState === 'ready'")
+    css_path = ROOT / "ux" / "style-directions" / css_name
+    page.add_style_tag(path=str(css_path))
+    page.evaluate(
+        "key => document.documentElement.setAttribute('data-meb094-direction', key)",
+        key,
+    )
+
+    applied = page.evaluate(
+        """() => ({
+            direction: document.documentElement.dataset.meb094Direction,
+            accent: getComputedStyle(document.documentElement)
+                .getPropertyValue('--accent').trim().toLowerCase(),
+            mediaMatches: matchMedia('(prefers-reduced-motion: reduce)').matches,
+        })"""
+    )
+    assert applied == {"direction": key, "accent": accent, "mediaMatches": True}
+
+    offenders = page.evaluate(
+        """() => {
+            const toMs = value => Math.max(...value.split(',').map(raw => {
+                const token = raw.trim();
+                return token.endsWith('ms') ? parseFloat(token) : parseFloat(token) * 1000;
+            }));
+            return [...document.querySelectorAll('*')].flatMap(element => {
+                const style = getComputedStyle(element);
+                const animationMs = toMs(style.animationDuration);
+                const transitionMs = toMs(style.transitionDuration);
+                return animationMs > 0.011 || transitionMs > 0.011
+                    ? [{tag: element.tagName, id: element.id, animationMs, transitionMs}]
+                    : [];
+            });
+        }"""
+    )
+    assert offenders == []
+    context.close()

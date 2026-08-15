@@ -27,7 +27,7 @@
 |---|---|---|---|---|
 | 1 | Scope и baseline | DONE | Пользователь, текущий процесс, неприкосновенная 3D-сцена, visual-only граница | Граница подтверждена пользователем |
 | 2 | Визуальный аудит Studio | REVIEW READY | Current-master screenshots, per-action parity и раздельная классификация issues | Пользователь подтверждает baseline evidence |
-| 3 | Визуальные направления | QUEUED | 2–3 style boards на одной реальной сцене | Выбран характер продукта |
+| 3 | Визуальные направления | REVIEW READY / BLOCKED | 3 style directions на одной реальной сцене | Пользователь выбирает характер продукта |
 | 4 | High-fidelity visual pass | QUEUED | Текущий экран Studio, причёсанный в Figma без нового workflow | Согласован каждый уголок экрана |
 | 5 | CSS/HTML implementation | QUEUED | Та же страница и функции в новой визуальной оболочке | Живой review в настоящем Studio |
 | 6 | Parity и visual QA | QUEUED | Функциональная и screenshot-регрессия | Ни одна функция и ни один аспект 3D не изменены |
@@ -82,6 +82,8 @@ Read-only просмотр реализуется отдельным этапо�
   конструкция и установка в верхней части режима `Параметры`.
 - [VISUAL_SYSTEM_SPEC.md](VISUAL_SYSTEM_SPEC.md) — токены, плотность, состояния
   компонентов, motion и единый язык локальных SVG Studio.
+- [style-directions/README.md](style-directions/README.md) — три равноправных
+  style direction на текущем Studio; выбор пользователя ещё не сделан.
 - [../assets/studio/README.md](../assets/studio/README.md) — происхождение и
   правила использования утверждённой марки Studio.
 - [../rules/studio-ui.md](../rules/studio-ui.md) — техническая граница редизайна
