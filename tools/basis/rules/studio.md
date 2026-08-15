@@ -91,6 +91,12 @@ ParamSpec, версии, preview, AI-историю и существующие 
 | `/api/builds`, `/api/open-file` | история сборок (расход ₽), открыть результат (в т.ч. БАЗИС-Просмотр) |
 | `/api/deliver` | лист согласования (открывается в браузере) |
 
+## Платный LLM rollout
+
+Актуальные платные кандидаты, cost/safety gates и процедура rollback описаны в
+[`llm-provider-selection.md`](llm-provider-selection.md). Платный default всегда
+opt-in; CI не вызывает его автоматически.
+
 ## Stateful AI-оркестрация (MEB-145)
 
 Новый LangGraph-путь включается только переменной

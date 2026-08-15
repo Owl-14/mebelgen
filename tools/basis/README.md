@@ -209,15 +209,19 @@ CFRN→B3D всегда используйте `build-b3d` с ParamSpec или p
 | Переменная | Описание |
 |---|---|
 | `BAZIS_API_KEY` | ключ БАЗИС-Облака (для `build-b3d`, `cloud`, раскрой) — ПЛАТНЫЕ операции |
-| `SPEC_CHAT_PROVIDER` | провайдер чата Studio по умолчанию: `mock`\|`gigachat`\|`glm`\|`kimi`\|`deepseek`\|`openai`\|`gemini` |
+| `SPEC_CHAT_PROVIDER` | явный provider: `mock`\|`gigachat`\|`glm`\|`kimi`\|`deepseek`\|`openai`\|`gemini`\|`glm-5.2`\|`kimi-k3`; без значения работает прежний бесплатный/default fallback |
+| `SPEC_CHAT_PAID_ENABLED` | только разрешает явно выбранный платный ID; сам провайдера не выбирает (`0` по умолчанию) |
+| `SPEC_CHAT_MAX_REQUEST_USD` / `SPEC_CHAT_MAX_COMPLETION_TOKENS` | жёсткий потолок worst-case стоимости полного сериализованного text request (по умолчанию `$0.15` и максимум 4096 output tokens) |
+| `SPEC_CHAT_ALLOW_PAID_IN_CI` | аварийный явный opt-in live-вызовов в CI; по умолчанию платные вызовы в CI запрещены |
 | `VISION_EXTRACT_PROVIDER` | кто читает фото ТЗ в конвейере (напр. `gigachat`), сборку делает SPEC_CHAT_PROVIDER |
 | `GIGACHAT_AUTH_KEY` | GigaChat (Сбер): текст+vision, работает из РФ (+`GIGACHAT_SCOPE/MODEL/VISION_MODEL/VERIFY/CA`) |
 | `GLM_API_KEY` | GLM/Zhipu `glm-4.5-flash` (бесплатный, thinking отключён) |
-| `KIMI_API_KEY` | Kimi/Moonshot (платный) |
+| `ZAI_API_KEY` | Z.AI `glm-5.2` на фиксированном `https://api.z.ai/api/paas/v4/`; требует paid feature flag |
+| `KIMI_API_KEY` / `MOONSHOT_API_KEY` | Kimi/Moonshot; новый `kimi-k3` требует paid feature flag |
 | `DEEPSEEK_API_KEY` | DeepSeek |
 | `OPENAI_API_KEY` | OpenAI `gpt-4o` (чат и `convert`) |
 | `GEMINI_API_KEY` | Gemini (из РФ заблокирован) |
-| `LLM_API_KEY/BASE_URL/MODEL/VISION_MODEL/JSON_MODE` | переопределение любого OpenAI-совместимого провайдера |
+| `LLM_API_KEY/BASE_URL/MODEL/VISION_MODEL/JSON_MODE` | legacy overrides OpenAI-совместимых провайдеров; paid IDs фиксируют endpoint/model под проверенный rate card |
 | `PARAMSPEC_PROVIDER` | провайдер извлечения ParamSpec для `convert`/`ingest` |
 | `BAZIS_VIEWER` | путь к БАЗИС-Просмотру (по умолчанию `D:\bazis\viewer.exe`) |
 | `AKEDA_TELEMETRY_BACKEND` | экспорт trace: `none` (по умолчанию), `console`, `file`, `otlp`, `langsmith`; можно перечислить через запятую |
@@ -235,7 +239,8 @@ CFRN→B3D всегда используйте `build-b3d` с ParamSpec или p
 
 Studio создаёт один `trace_id` на AI-запрос и показывает его в серверной истории
 команд. В trace входят только хэши проекта/ревизии, провайдер и модель, версия
-промпта, типы операций, token usage, количества панелей/присадок и итоги проверок.
+промпта, типы операций, token usage, вычисленная стоимость USD, количества
+панелей/присадок и итоги проверок.
 Полный текст ТЗ, сообщения, изображения, ParamSpec и секреты отбрасываются
 deny-by-default политикой `src/telemetry.py`; исключения записываются только кодом
 класса без текста и stack trace.

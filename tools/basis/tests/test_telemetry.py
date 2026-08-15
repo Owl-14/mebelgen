@@ -61,11 +61,15 @@ def test_attribute_policy_drops_prompts_specs_images_and_secrets() -> None:
         "authorization": "Bearer secret",
         "token": "secret",
         "gen_ai.usage.total_tokens": 123,
+        "gen_ai.usage.cost_usd": 0.01234567,
+        "gen_ai.usage.input_token_upper_bound": 54321,
         "operation.types": ["dimensions", "sections"],
     })
     assert attrs == {
         "model": "mock",
         "gen_ai.usage.total_tokens": 123,
+        "gen_ai.usage.cost_usd": 0.01234567,
+        "gen_ai.usage.input_token_upper_bound": 54321,
         "operation.types": ["dimensions", "sections"],
     }
 
