@@ -16,9 +16,13 @@
 
 ```bash
 python -m venv .venv && .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -r requirements.txt          # конвейер ТЗ → модель и Studio без аккаунтов
+pip install -r requirements-server.txt   # + аккаунты/админка (argon2) и экспорт трейсов (OpenTelemetry)
+pip install -r requirements-dev.txt      # + pytest, hypothesis, playwright
 copy .env.example .env        # вписать OPENAI_API_KEY (для convert)
 ```
+
+Тесты, которым нужен необязательный пакет, пропускаются, если он не установлен.
 
 ## Конвейер
 

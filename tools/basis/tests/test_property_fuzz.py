@@ -8,6 +8,7 @@ import math
 from collections import Counter
 
 import pytest
+pytest.importorskip("hypothesis")
 from hypothesis import HealthCheck, given, settings, strategies as st
 from jsonschema import Draft202012Validator
 

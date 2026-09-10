@@ -12,6 +12,8 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+pytest.importorskip("opentelemetry.sdk")
+
 from src.spec_chat import chat_edit  # noqa: E402
 from src.studio import PAGE, _trace_engineering_result, build_payload, make_handler  # noqa: E402
 from src.telemetry import (  # noqa: E402

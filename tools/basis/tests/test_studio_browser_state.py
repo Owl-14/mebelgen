@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Iterator
 
 import pytest
+pytest.importorskip("playwright")
 from playwright.sync_api import Browser, Page, expect, sync_playwright
 
 
