@@ -603,11 +603,19 @@ def _archived_catalog_projects(
     return projects
 
 
-def _migrate_catalog_identity(spec_dir: Path, owner: dict[str, str] | None) -> None:
-    """Attach legacy tenant products to the organization owner without touching mtime."""
+_CATALOG_IDENTITY_MIGRATED: set[Path] = set()
 
-    if not owner:
+
+def _migrate_catalog_identity(spec_dir: Path, owner: dict[str, str] | None) -> None:
+    """Attach legacy tenant products to the organization owner without touching mtime.
+
+    Runs once per catalog for the lifetime of the process: listing the catalog
+    must not keep rewriting product files.
+    """
+
+    if not owner or spec_dir in _CATALOG_IDENTITY_MIGRATED:
         return
+    _CATALOG_IDENTITY_MIGRATED.add(spec_dir)
     for path in sorted(spec_dir.glob("*.json")):
         if path.name.endswith((".project.json", ".versions.json")):
             continue
@@ -809,6 +817,25 @@ def _read_paramspec_document(value: Any) -> tuple[dict[str, Any], dict[str, Any]
     return envelope.canonical_document(), envelope.metrics()
 
 
+def _document_warnings(value: Any) -> list[str]:
+    """Notes about a stored document the editor shows as-is.
+
+    The page keeps every field the file has (nothing is silently dropped on the
+    way to the browser); this tells the operator what the strict contract will
+    not carry into generation.
+    """
+
+    try:
+        _canonical, metrics = _read_paramspec_document(value)
+    except (TypeError, ValueError) as error:
+        return [f"Изделие не проходит строгую проверку ParamSpec: {str(error)[:200]}"]
+    unknown = [str(item) for item in (metrics.get("unknown_fields") or [])]
+    if unknown:
+        shown = ", ".join(unknown[:6]) + (" …" if len(unknown) > 6 else "")
+        return [f"Поля вне схемы ParamSpec, генератор их не учитывает: {shown}"]
+    return []
+
+
 def _spec_revision(spec: dict[str, Any]) -> str:
     """Stable revision used to reject a preview rendered for an old model."""
 
@@ -818,10 +845,17 @@ def _spec_revision(spec: dict[str, Any]) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-def _production_gate_error(
-    spec: dict[str, Any], model_revision: str | None
-) -> dict[str, Any] | None:
-    """Explain why production artifacts must not be built for this browser state.
+# Checks whose failure makes the exported file itself wrong.  Everything else
+# (completeness of hardware, unresolved material slots, drilling standards) is a
+# production concern: it blocks paid cloud builds and delivery sheets, but a plain
+# .cfrn export only carries it back as a warning, the way Studio always allowed.
+_HARD_GATE_ISSUES = ("schema", "consistency", "geometry", "cfrn", "holes")
+
+
+def _production_gate(
+    spec: dict[str, Any], model_revision: str | None, *, strict: bool = True
+) -> tuple[dict[str, Any] | None, list[str]]:
+    """Return ``(error, warnings)`` for a production action on this browser state.
 
     The browser sends the revision of the last successfully rendered 3D payload.
     We still recompute all server-side checks: the revision is a freshness guard,
@@ -836,7 +870,7 @@ def _production_gate_error(
             "object": "Текущее изделие",
             "reason": "Ожидалось описание изделия в формате ParamSpec.",
             "next_action": "Перезагрузите Studio и повторите действие.",
-        }
+        }, []
     expected_revision = _spec_revision(spec)
     supplied_revision = str(model_revision or "")
     project_name = str(spec.get("project_name") or "Текущее изделие")
@@ -850,36 +884,49 @@ def _production_gate_error(
             "object": project_name,
             "reason": "В рабочем поле показана другая или предыдущая редакция модели.",
             "next_action": "Дождитесь пересчёта текущей модели и повторите действие.",
-        }
+        }, []
 
     payload = build_payload(spec)
-    issues = [
-        str(value)
-        for values in (payload.get("issues") or {}).values()
-        for value in (values or [])
-    ]
+    blocking: list[str] = []
+    warnings: list[str] = []
+    for category, values in (payload.get("issues") or {}).items():
+        texts = [str(value) for value in (values or [])]
+        if strict or category in _HARD_GATE_ISSUES:
+            blocking.extend(texts)
+        else:
+            warnings.extend(texts)
     unresolved = [
-        str(slot)
+        f"Не выбрана позиция базы: {slot}"
         for slot, value in (payload.get("refs") or {}).items()
         if isinstance(value, dict) and not value.get("resolved")
     ]
-    if issues or unresolved or not payload.get("viewer"):
-        reasons = issues[:3]
-        reasons.extend(f"Не выбрана позиция базы: {slot}" for slot in unresolved[:3])
-        if not reasons:
-            reasons.append("3D-модель для этой редакции не построена.")
+    if strict:
+        blocking.extend(unresolved)
+    else:
+        warnings.extend(unresolved)
+    if not payload.get("viewer"):
+        blocking.append("3D-модель для этой редакции не построена.")
+    if blocking:
         return {
             "ok": False,
             "code": "production_blocked",
             "error": "Производство и экспорт заблокированы для текущей редакции.",
             "object": project_name,
-            "reason": reasons,
+            "reason": blocking[:6],
             "next_action": (
                 "Исправьте блокирующие проверки и выберите все позиции базы, "
                 "затем дождитесь нового пересчёта."
             ),
-        }
-    return None
+        }, warnings
+    return None, warnings
+
+
+def _production_gate_error(
+    spec: dict[str, Any], model_revision: str | None
+) -> dict[str, Any] | None:
+    """Strict variant kept for callers that only need the blocking error."""
+
+    return _production_gate(spec, model_revision, strict=True)[0]
 
 
 # ------------------------------------------------------------------ версии (D2)
@@ -1699,12 +1746,7 @@ def make_handler(st: _Studio):
                     return
                 spec_path = st.workspaces.current_spec_path(auth)
                 spec = json.loads(spec_path.read_text(encoding="utf-8"))
-                try:
-                    spec, _read_metrics = _read_paramspec_document(spec)
-                except (TypeError, ValueError):
-                    # Keep malformed legacy data visible to the existing UI;
-                    # generation will return the normal schema error report.
-                    pass
+                spec_warnings = _document_warnings(spec)
                 from .webviewer import SCENE_JS
                 page = (PAGE
                         .replace("__SCENE_JS__", SCENE_JS)
@@ -1715,6 +1757,8 @@ def make_handler(st: _Studio):
                         .replace("__ADMIN_URL__", json.dumps(st.admin_url, ensure_ascii=False)
                                  .replace("</", "<\\/"))
                         .replace("__PROJECT_FILE__", json.dumps(spec_path.name, ensure_ascii=False))
+                        .replace("__SPEC_WARNINGS__", json.dumps(spec_warnings, ensure_ascii=False)
+                                 .replace("</", "<\\/"))
                         .replace("__SPEC__", json.dumps(spec, ensure_ascii=False)
                                  .replace("</", "<\\/")))
                 self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
@@ -2077,9 +2121,11 @@ def make_handler(st: _Studio):
                     "revision.hash": hash_payload(spec),
                     "image.count": len(body.get("images") or []),
                 })
+                production_warnings: list[str] = []
                 if path in ("/api/export-cfrn", "/api/build-b3d", "/api/deliver"):
-                    production_error = _production_gate_error(
-                        spec, body.get("model_revision")
+                    production_error, production_warnings = _production_gate(
+                        spec, body.get("model_revision"),
+                        strict=path != "/api/export-cfrn",
                     )
                     if production_error is not None:
                         self._json(production_error, 409)
@@ -3158,16 +3204,16 @@ def make_handler(st: _Studio):
                     from .paramspec import validate_paramspec
                     from .paramspec_versioning import strict_paramspec_v1_for_write
 
+                    # The operator's work is never refused: a document that does
+                    # not pass the strict contract is persisted as-is (the way
+                    # Studio always did) and the problems come back as warnings.
                     write_errors = validate_paramspec(spec)
                     if write_errors:
-                        self._json({
-                            "ok": False,
-                            "code": "invalid_paramspec",
-                            "error": "Изделие не сохранено: ParamSpec не прошёл строгую проверку",
-                            "details": write_errors[:12],
-                        }, 422)
-                        return
-                    spec = _reorder_like(strict_paramspec_v1_for_write(spec), current_spec)
+                        save_warnings = [str(item) for item in write_errors[:12]]
+                        spec = _reorder_like(spec, current_spec)
+                    else:
+                        save_warnings = []
+                        spec = _reorder_like(strict_paramspec_v1_for_write(spec), current_spec)
                     _write_json_atomic(spec_path, spec)
                     add_current_attributes({
                         "revision.hash": hash_payload(spec),
@@ -3183,15 +3229,17 @@ def make_handler(st: _Studio):
                                 base64.b64decode(prev.split(",", 1)[1]))
                         except Exception:
                             pass
-                    if spec.get("draft"):              # черновик: только файл, без модели
-                        self._json({"ok": True, "spec": str(spec_path), "project": None})
+                    if spec.get("draft") or save_warnings:   # черновик/с замечаниями: только файл
+                        self._json({"ok": True, "spec": str(spec_path), "project": None,
+                                    "warnings": save_warnings})
                         return
                     _snapshot_version(spec_path, spec)          # версия (D2)
                     from .generators import generate_from_paramspec
                     project = generate_from_paramspec(spec)
                     out = workspace.out_dir / (spec_path.stem + ".project.json")
                     _write_json_atomic(out, project)
-                    self._json({"ok": True, "spec": str(spec_path), "project": str(out)})
+                    self._json({"ok": True, "spec": str(spec_path), "project": str(out),
+                                "warnings": []})
                 elif path == "/api/export-cfrn":
                     from .generators import generate_from_paramspec
                     from .materials import resolve_project_materials
@@ -3203,7 +3251,7 @@ def make_handler(st: _Studio):
                         pass
                     out = workspace.out_dir / (spec_path.stem + ".cfrn")
                     out.write_bytes(project_to_cfrn_bytes(project))
-                    self._json({"ok": True, "cfrn": str(out)})
+                    self._json({"ok": True, "cfrn": str(out), "warnings": production_warnings})
                 elif path == "/api/build-b3d":
                     payload = build_payload(spec)
                     if not payload["ok"]:                # деньги — только на зелёную модель
@@ -3483,7 +3531,6 @@ PAGE = r"""<!DOCTYPE html>
     color:#4f5968;font-size:11px}
   .part-local-actions button:hover{color:var(--accent);background:transparent}
   .part-local-actions #ovDelete{color:var(--bad)}
-  #partChatRow[hidden]{display:none}
   #fs_part[aria-busy="true"] input,#fs_part[aria-busy="true"] button{cursor:wait}
   #main{--chat-stack-height:133px;--viewport-status-height:24px;
     grid-column:2;grid-row:1;position:relative;min-width:0;min-height:0;
@@ -3667,8 +3714,6 @@ PAGE = r"""<!DOCTYPE html>
     background:#343a44;color:#fff}
   #chatImgs .chip-remove svg{width:10px;height:10px}
   #chatMsg.drop{outline:2px dashed var(--accent);outline-offset:2px}
-  #partChatRow{display:flex;gap:5px;margin-top:8px;border-top:1px solid var(--line);padding-top:8px}
-  #partChat{flex:1;padding:4px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px}
   fieldset{border:1px solid var(--line);border-radius:8px;margin:0 0 10px;padding:8px 10px}
   legend{font-size:11px;text-transform:uppercase;color:var(--mut);padding:0 4px}
   .row{display:flex;gap:6px;align-items:center;margin:4px 0}
@@ -4363,7 +4408,7 @@ PAGE = r"""<!DOCTYPE html>
         <button id="ovDetail" type="button" title="Чертёж детали с размерами и присадками">Чертёж</button>
       </div>
       <p class="part-context-note">Нижняя команда уже адресована выбранной детали — опишите правку там.</p>
-      <details id="partExact" class="part-exact">
+      <details id="partExact" class="part-exact" open>
         <summary>Точные параметры</summary>
         <p class="part-exact-hint">Грани в координатах модели, мм</p>
         <div id="partEditStatus" role="status" aria-live="polite"></div>
@@ -4394,10 +4439,6 @@ PAGE = r"""<!DOCTYPE html>
         <div class="part-local-actions">
           <button id="ovReset" type="button" hidden>Сбросить к результату генератора</button>
           <button id="ovDelete" type="button">Удалить деталь…</button>
-        </div>
-        <div id="partChatRow" hidden aria-hidden="true">
-          <input id="partChat" type="hidden" tabindex="-1">
-          <button id="partChatSend" type="button" hidden tabindex="-1">К команде</button>
         </div>
       </details>
     </div>
@@ -4947,6 +4988,7 @@ window.fetch = (input, init={}) => {
   });
 };
 let SPEC = __SPEC__;
+const SPEC_WARNINGS = __SPEC_WARNINGS__;   // что в файле не по контракту (показываем при старте)
 const FIELDS = __FIELDS__;                 // archetype -> [{key,label,type,...}]
 const SECTION_ARCHS = __SECTION_ARCHS__;   // архетипы с секциями
 const $ = id => document.getElementById(id);
@@ -5100,7 +5142,7 @@ function setRightPanel(open,mode=rightPanelMode,fromUser=false){
     else if(focusWasRail)rightPanelModes[rightPanelMode].tab.focus({preventScroll:true});
   });
 }
-const wideStudioLayout=window.matchMedia('(min-width: 1600px)');
+const wideStudioLayout=window.matchMedia('(min-width: 1180px)');
 function syncRightPanelToViewport(){
   const open=rightPanelUserChoice===null
     ? wideStudioLayout.matches
@@ -7193,7 +7235,7 @@ function syncModelEditLock(){
   const locked=modelMutationLocked();
   setModelMutationControlsLocked(locked);
   Object.entries(rightPanelModes).forEach(([key,item])=>item.panel.inert=key!==rightPanelMode);
-  [$('chatMsg'),$('chatAttach'),$('aiProvider'),$('partChat'),$('partChatSend')]
+  [$('chatMsg'),$('chatAttach'),$('aiProvider')]
     .filter(Boolean).forEach(el=>el.disabled=locked);
   $('btnFixAll').disabled=locked;
   syncChatPrimaryAction();
@@ -7204,7 +7246,7 @@ function setChatBusy(busy,stateText){
   chatBusy=!!busy;
   $('fs_chat').setAttribute('aria-busy',String(chatBusy));
   $('fs_chat').classList.toggle('is-busy',chatBusy);
-  [$('chatMsg'),$('chatAttach'),$('aiProvider'),$('partChat'),$('partChatSend')]
+  [$('chatMsg'),$('chatAttach'),$('aiProvider')]
     .filter(Boolean).forEach(el=>el.disabled=chatBusy);
   syncModelEditLock();
   if(currentSelectedPart())syncPartEditState();
@@ -7584,6 +7626,10 @@ async function refreshBalance(){
     BAL_ITEMS=d.items||null; BAL_ERR=d.error?String(d.error).slice(0,60):null; renderTokens();
   }catch(e){}
 }
+function syncProviderLabel(){
+  const sel=$('aiProvider'),opt=sel&&sel.options[sel.selectedIndex];
+  $('chatMetaTitle').textContent='Изменить модель словами'+(opt?' · '+opt.textContent:'');
+}
 async function loadProviders(){
   try{
     const r=await fetch('/api/providers',{method:'POST',
@@ -7591,8 +7637,8 @@ async function loadProviders(){
     const d=await r.json();
     const sel=$('aiProvider');
     sel.innerHTML=(d.providers||[]).map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
-    CHAT_PROVIDER=d.active; sel.value=d.active;
-    sel.onchange=()=>{CHAT_PROVIDER=sel.value; SESSION_TOKENS=0; refreshBalance();};
+    CHAT_PROVIDER=d.active; sel.value=d.active; syncProviderLabel();
+    sel.onchange=()=>{CHAT_PROVIDER=sel.value; SESSION_TOKENS=0; syncProviderLabel(); refreshBalance();};
   }catch(e){}
   refreshBalance();
 }
@@ -7625,11 +7671,14 @@ async function saveSpec(){
   }
   return result;
 }
+function warnList(p){return (p&&Array.isArray(p.warnings)?p.warnings:[]).slice(0,3);}
 $('btnSave').onclick=async()=>{const p=await saveSpec();
   toast(p.ok?('Сохранено: '+p.spec):('Ошибка: '+p.error),!p.ok);
+  warnList(p).forEach(w=>toast('Сохранено с замечанием: '+w,true));
   loadVersions();};
 $('btnCfrn').onclick=async()=>{const p=await post('/api/export-cfrn');
-  toast(p.ok?('.cfrn: '+p.cfrn):productionErrorText(p),!p.ok);};
+  toast(p.ok?('.cfrn: '+p.cfrn):productionErrorText(p),!p.ok);
+  warnList(p).forEach(w=>toast('Экспорт с замечанием: '+w,true));};
 $('btnB3d').onclick=async()=>{
   if(!lastOk){toast('Проверки не пройдены',true);return;}
   if(!confirm('Собрать .b3d через облако БАЗИС? Операция платная (~10₽).'))return;
@@ -7708,4 +7757,5 @@ loadBuilds();
 
 /* старт */
 fillForm(); resize(); apply().catch(()=>{});
+SPEC_WARNINGS.forEach(w=>toast(w,true));
 </script></body></html>"""
