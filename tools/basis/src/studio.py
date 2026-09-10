@@ -627,7 +627,7 @@ def _migrate_catalog_identity(spec_dir: Path, owner: dict[str, str] | None) -> N
         if catalog == before:
             continue
         spec["catalog"] = catalog
-        path.write_text(json.dumps(spec, ensure_ascii=False, indent=2), encoding="utf-8")
+        _write_json_atomic(path, spec)
         _os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns))
 
 
@@ -762,11 +762,36 @@ def _safe_spec_file(spec_dir: Path, fname: str) -> Path:
     return p
 
 
+def _reorder_like(value: Any, reference: Any) -> Any:
+    """Return ``value`` with dict keys in the order ``reference`` uses.
+
+    The strict writer emits keys in model order, which differs from the order
+    people keep in hand-written ParamSpec files.  Re-ordering against the
+    document already on disk keeps a save of an unchanged product a no-op in
+    version control.
+    """
+    if isinstance(value, dict) and isinstance(reference, dict):
+        ordered: dict[str, Any] = {}
+        for key in reference:
+            if key in value:
+                ordered[key] = _reorder_like(value[key], reference[key])
+        for key, item in value.items():
+            if key not in ordered:
+                ordered[key] = item
+        return ordered
+    if (
+        isinstance(value, list) and isinstance(reference, list)
+        and len(value) == len(reference)
+    ):
+        return [_reorder_like(item, ref) for item, ref in zip(value, reference)]
+    return value
+
+
 def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
     temporary = path.with_name(f".{path.name}.{secrets.token_hex(6)}.tmp")
     try:
         temporary.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2),
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
         temporary.replace(path)
@@ -2564,8 +2589,7 @@ def make_handler(st: _Studio):
                             "project.hash": hash_payload({"project_file": out.name}),
                             "revision.hash": hash_payload(new_spec),
                         }) as persist_span:
-                            out.write_text(json.dumps(new_spec, ensure_ascii=False, indent=2),
-                                           encoding="utf-8")
+                            _write_json_atomic(out, new_spec)
                             persist_span.set_attributes({"revision.persisted": True,
                                                          "check.outcome": "pass"})
                         st.workspaces.set_current(auth, out)
@@ -2911,8 +2935,7 @@ def make_handler(st: _Studio):
                     while p.exists():
                         p = workspace.spec_dir / f"{_slugify(name)}_{i}.json"
                         i += 1
-                    p.write_text(json.dumps(new_spec, ensure_ascii=False, indent=2),
-                                 encoding="utf-8")
+                    _write_json_atomic(p, new_spec)
                     st.workspaces.set_current(auth, p)
                     self._json({"ok": True, "spec": new_spec, "file": p.name})
                 elif path == "/api/duplicate":   # дубликат текущего (D1)
@@ -2936,8 +2959,7 @@ def make_handler(st: _Studio):
                     while p.exists():
                         p = workspace.spec_dir / f"{source_path.stem}_copy{i}.json"
                         i += 1
-                    p.write_text(json.dumps(dup, ensure_ascii=False, indent=2),
-                                 encoding="utf-8")
+                    _write_json_atomic(p, dup)
                     if not body.get("stay_catalog"):
                         st.workspaces.set_current(auth, p)
                     self._audit_product_action(
@@ -3145,7 +3167,7 @@ def make_handler(st: _Studio):
                             "details": write_errors[:12],
                         }, 422)
                         return
-                    spec = strict_paramspec_v1_for_write(spec)
+                    spec = _reorder_like(strict_paramspec_v1_for_write(spec), current_spec)
                     _write_json_atomic(spec_path, spec)
                     add_current_attributes({
                         "revision.hash": hash_payload(spec),
@@ -3168,8 +3190,7 @@ def make_handler(st: _Studio):
                     from .generators import generate_from_paramspec
                     project = generate_from_paramspec(spec)
                     out = workspace.out_dir / (spec_path.stem + ".project.json")
-                    out.write_text(json.dumps(project, ensure_ascii=False, indent=2),
-                                   encoding="utf-8")
+                    _write_json_atomic(out, project)
                     self._json({"ok": True, "spec": str(spec_path), "project": str(out)})
                 elif path == "/api/export-cfrn":
                     from .generators import generate_from_paramspec
