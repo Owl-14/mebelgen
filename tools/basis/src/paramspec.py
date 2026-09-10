@@ -415,40 +415,26 @@ def parse_paramspec(data: Any) -> ParamSpec:
     return ParamSpec.model_validate(data)
 
 
-def validate_paramspec(data: Any, schema_path: Path | None = None) -> list[str]:
+def validate_paramspec(data: Any) -> list[str]:
     """Return Studio-ready validation errors (empty means valid).
 
-    ``schema_path`` remains supported for callers/tests that explicitly supply
-    an alternate JSON Schema.  Normal validation always uses the typed model.
+    The typed model is the single contract; the checked-in JSON Schema is
+    generated from it for AI/API consumers and is not a second validator here.
     """
     from .telemetry import hash_payload, span
 
     with span("paramspec.validate", {"revision.hash": hash_payload(data)}) as trace_span:
-        if schema_path is not None:
-            from jsonschema import Draft202012Validator
-
-            validator = Draft202012Validator(load_schema(schema_path))
-            errors: list[str] = []
-            for err in sorted(validator.iter_errors(data), key=lambda item: list(item.path)):
-                path = ".".join(str(part) for part in err.path) or "(root)"
-                errors.append(f"{path}: {err.message}")
+        try:
+            parse_paramspec(data)
+        except ValidationError as exc:
+            errors = _format_errors(exc)
         else:
-            try:
-                parse_paramspec(data)
-            except ValidationError as exc:
-                errors = _format_errors(exc)
-            else:
-                errors = []
+            errors = []
         trace_span.set_attributes({
             "check.outcome": "pass" if not errors else "fail",
             "error.codes": ["paramspec_invalid"] if errors else [],
         })
         return errors
-
-
-def validate_paramspec_file(path: str | Path, schema_path: Path | None = None) -> list[str]:
-    with Path(path).open(encoding="utf-8") as file:
-        return validate_paramspec(json.load(file), schema_path)
 
 
 def paramspec_json_schema() -> dict[str, Any]:
