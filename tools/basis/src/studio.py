@@ -1689,6 +1689,7 @@ def make_handler(st: _Studio):
                                  .replace("</", "<\\/"))
                         .replace("__ADMIN_URL__", json.dumps(st.admin_url, ensure_ascii=False)
                                  .replace("</", "<\\/"))
+                        .replace("__PROJECT_FILE__", json.dumps(spec_path.name, ensure_ascii=False))
                         .replace("__SPEC__", json.dumps(spec, ensure_ascii=False)
                                  .replace("</", "<\\/")))
                 self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
@@ -2009,7 +2010,18 @@ def make_handler(st: _Studio):
                 # so an already open tab could edit the first catalog item
                 # while displaying another one. Bind stateful routes to the
                 # explicit, validated file sent by the editor.
-                project_bound_routes = {"/api/chat", "/api/chat-history", "/api/save"}
+                project_bound_routes = {
+                    "/api/chat", "/api/chat-history", "/api/save",
+                    "/api/versions", "/api/restore", "/api/import-tz",
+                    "/api/export-cfrn", "/api/build-b3d", "/api/deliver",
+                    "/api/duplicate",
+                }
+                # Routes where acting on a stale selection corrupts data or
+                # writes files under another product's name.
+                identity_required_routes = {
+                    "/api/chat", "/api/chat-history", "/api/save", "/api/restore",
+                    "/api/export-cfrn", "/api/build-b3d", "/api/deliver",
+                }
                 requested_project = str(body.get("project_file") or "").strip()
                 if path in project_bound_routes and requested_project:
                     try:
@@ -2021,7 +2033,7 @@ def make_handler(st: _Studio):
                             "code": "project_not_found",
                         }, 404)
                         return
-                elif path in project_bound_routes and len(_list_projects(workspace.spec_dir)) > 1:
+                elif path in identity_required_routes and len(_list_projects(workspace.spec_dir)) > 1:
                     self._json({
                         "ok": False,
                         "error": "Не удалось определить открытое изделие. Обновите страницу.",
@@ -6062,7 +6074,8 @@ function importTzFile(f){
     const s=String(rd.result), b64=s.slice(s.indexOf(',')+1);
     try{
       const r=await fetch('/api/import-tz',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({name:f.name,data:b64,provider:CHAT_PROVIDER})});
+        body:JSON.stringify({name:f.name,data:b64,provider:CHAT_PROVIDER,
+          project_file:activeProjectFile()})});
       const p=await r.json();
       done();
       if(p.ok){adoptSpec(p); toast('✅ ТЗ распознано → '+(p.spec&&p.spec.project_name||p.file));}
@@ -6170,7 +6183,7 @@ const CAT_RULES=[  // раздел ← archetype/furniture_type
   ['Стеллажи',p=>/стеллаж|полк/i.test(p.ftype)||['shelving'].includes(p.archetype)],
   ['Черновики',p=>p.draft],
 ];
-let CAT_ITEMS=[],CAT_VISIBLE_ITEMS=[],CAT_SELECTED_FILE='',CAT_CURRENT_FILE='',
+let CAT_ITEMS=[],CAT_VISIBLE_ITEMS=[],CAT_SELECTED_FILE='',CAT_CURRENT_FILE=__PROJECT_FILE__||'',
   CAT_LAST_CLICK_FILE='',CAT_LAST_CLICK_AT=0,CAT_SCOPE='all',CAT_TYPE='all',
   CAT_STATUS='all',CAT_RESPONSIBLE='all',CAT_TOTAL=0,CAT_CURRENT_USER_ID='',
   CAT_COUNTS={all:0,mine:0,unassigned:0,archived:0},CAT_MEMBERS=[],CAT_TYPES=[],CAT_SEARCH_TIMER=null;
@@ -6626,7 +6639,8 @@ if(location.hash==='#catalog')queueMicrotask(()=>openCatalog({pushHistory:false}
 
 $('projDup').onclick=async()=>{
   const r=await fetch('/api/duplicate',{method:'POST',
-    headers:{'Content-Type':'application/json'},body:JSON.stringify({spec:SPEC})});
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({spec:SPEC,project_file:activeProjectFile()})});
   const p=await r.json();
   if(p.ok) adoptSpec(p); else toast('Ошибка: '+(p.error||''),true);
 };
@@ -7566,7 +7580,8 @@ loadProviders();
 /* ---------- экспорт ---------- */
 async function post(url){const r=await fetch(url,{method:'POST',
   headers:{'Content-Type':'application/json'},
-  body:JSON.stringify({spec:SPEC,model_revision:generatedRevision})});
+  body:JSON.stringify({spec:SPEC,model_revision:generatedRevision,
+    project_file:activeProjectFile()})});
   return await r.json();}
 function productionErrorText(payload){
   const reason=Array.isArray(payload&&payload.reason)?payload.reason[0]:payload&&payload.reason;
@@ -7618,7 +7633,8 @@ stage.addEventListener('drop',e=>{
 /* ---------- версии (AKD-133) ---------- */
 async function loadVersions(){
   const r=await fetch('/api/versions',{method:'POST',
-    headers:{'Content-Type':'application/json'},body:'{}'});
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({project_file:activeProjectFile()})});
   const p=await r.json();
   $('verSel').innerHTML='<option value="">— версии (при сохранении) —</option>'+
     (p.versions||[]).map(v=>`<option value="${v.index}">${v.ts.replace('T',' ')} · `+
@@ -7628,7 +7644,8 @@ $('verRestore').onclick=async()=>{
   const idx=$('verSel').value;
   if(idx==='')return;
   const r=await fetch('/api/restore',{method:'POST',
-    headers:{'Content-Type':'application/json'},body:JSON.stringify({index:+idx})});
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({index:+idx,project_file:activeProjectFile()})});
   const p=await r.json();
   if(p.ok){pushUndo(); SPEC=p.spec;savedSpecJson=JSON.stringify(SPEC);
     generatedSpecJson=null;generatedRevision='';scene3d.select(null); fillForm(); apply();
