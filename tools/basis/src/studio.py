@@ -603,11 +603,19 @@ def _archived_catalog_projects(
     return projects
 
 
-def _migrate_catalog_identity(spec_dir: Path, owner: dict[str, str] | None) -> None:
-    """Attach legacy tenant products to the organization owner without touching mtime."""
+_CATALOG_IDENTITY_MIGRATED: set[Path] = set()
 
-    if not owner:
+
+def _migrate_catalog_identity(spec_dir: Path, owner: dict[str, str] | None) -> None:
+    """Attach legacy tenant products to the organization owner without touching mtime.
+
+    Runs once per catalog for the lifetime of the process: listing the catalog
+    must not keep rewriting product files.
+    """
+
+    if not owner or spec_dir in _CATALOG_IDENTITY_MIGRATED:
         return
+    _CATALOG_IDENTITY_MIGRATED.add(spec_dir)
     for path in sorted(spec_dir.glob("*.json")):
         if path.name.endswith((".project.json", ".versions.json")):
             continue
@@ -627,7 +635,7 @@ def _migrate_catalog_identity(spec_dir: Path, owner: dict[str, str] | None) -> N
         if catalog == before:
             continue
         spec["catalog"] = catalog
-        path.write_text(json.dumps(spec, ensure_ascii=False, indent=2), encoding="utf-8")
+        _write_json_atomic(path, spec)
         _os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns))
 
 
@@ -762,11 +770,36 @@ def _safe_spec_file(spec_dir: Path, fname: str) -> Path:
     return p
 
 
+def _reorder_like(value: Any, reference: Any) -> Any:
+    """Return ``value`` with dict keys in the order ``reference`` uses.
+
+    The strict writer emits keys in model order, which differs from the order
+    people keep in hand-written ParamSpec files.  Re-ordering against the
+    document already on disk keeps a save of an unchanged product a no-op in
+    version control.
+    """
+    if isinstance(value, dict) and isinstance(reference, dict):
+        ordered: dict[str, Any] = {}
+        for key in reference:
+            if key in value:
+                ordered[key] = _reorder_like(value[key], reference[key])
+        for key, item in value.items():
+            if key not in ordered:
+                ordered[key] = item
+        return ordered
+    if (
+        isinstance(value, list) and isinstance(reference, list)
+        and len(value) == len(reference)
+    ):
+        return [_reorder_like(item, ref) for item, ref in zip(value, reference)]
+    return value
+
+
 def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
     temporary = path.with_name(f".{path.name}.{secrets.token_hex(6)}.tmp")
     try:
         temporary.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2),
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
         temporary.replace(path)
@@ -784,6 +817,25 @@ def _read_paramspec_document(value: Any) -> tuple[dict[str, Any], dict[str, Any]
     return envelope.canonical_document(), envelope.metrics()
 
 
+def _document_warnings(value: Any) -> list[str]:
+    """Notes about a stored document the editor shows as-is.
+
+    The page keeps every field the file has (nothing is silently dropped on the
+    way to the browser); this tells the operator what the strict contract will
+    not carry into generation.
+    """
+
+    try:
+        _canonical, metrics = _read_paramspec_document(value)
+    except (TypeError, ValueError) as error:
+        return [f"Изделие не проходит строгую проверку ParamSpec: {str(error)[:200]}"]
+    unknown = [str(item) for item in (metrics.get("unknown_fields") or [])]
+    if unknown:
+        shown = ", ".join(unknown[:6]) + (" …" if len(unknown) > 6 else "")
+        return [f"Поля вне схемы ParamSpec, генератор их не учитывает: {shown}"]
+    return []
+
+
 def _spec_revision(spec: dict[str, Any]) -> str:
     """Stable revision used to reject a preview rendered for an old model."""
 
@@ -793,10 +845,17 @@ def _spec_revision(spec: dict[str, Any]) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-def _production_gate_error(
-    spec: dict[str, Any], model_revision: str | None
-) -> dict[str, Any] | None:
-    """Explain why production artifacts must not be built for this browser state.
+# Checks whose failure makes the exported file itself wrong.  Everything else
+# (completeness of hardware, unresolved material slots, drilling standards) is a
+# production concern: it blocks paid cloud builds and delivery sheets, but a plain
+# .cfrn export only carries it back as a warning, the way Studio always allowed.
+_HARD_GATE_ISSUES = ("schema", "consistency", "geometry", "cfrn", "holes")
+
+
+def _production_gate(
+    spec: dict[str, Any], model_revision: str | None, *, strict: bool = True
+) -> tuple[dict[str, Any] | None, list[str]]:
+    """Return ``(error, warnings)`` for a production action on this browser state.
 
     The browser sends the revision of the last successfully rendered 3D payload.
     We still recompute all server-side checks: the revision is a freshness guard,
@@ -811,7 +870,7 @@ def _production_gate_error(
             "object": "Текущее изделие",
             "reason": "Ожидалось описание изделия в формате ParamSpec.",
             "next_action": "Перезагрузите Studio и повторите действие.",
-        }
+        }, []
     expected_revision = _spec_revision(spec)
     supplied_revision = str(model_revision or "")
     project_name = str(spec.get("project_name") or "Текущее изделие")
@@ -825,36 +884,49 @@ def _production_gate_error(
             "object": project_name,
             "reason": "В рабочем поле показана другая или предыдущая редакция модели.",
             "next_action": "Дождитесь пересчёта текущей модели и повторите действие.",
-        }
+        }, []
 
     payload = build_payload(spec)
-    issues = [
-        str(value)
-        for values in (payload.get("issues") or {}).values()
-        for value in (values or [])
-    ]
+    blocking: list[str] = []
+    warnings: list[str] = []
+    for category, values in (payload.get("issues") or {}).items():
+        texts = [str(value) for value in (values or [])]
+        if strict or category in _HARD_GATE_ISSUES:
+            blocking.extend(texts)
+        else:
+            warnings.extend(texts)
     unresolved = [
-        str(slot)
+        f"Не выбрана позиция базы: {slot}"
         for slot, value in (payload.get("refs") or {}).items()
         if isinstance(value, dict) and not value.get("resolved")
     ]
-    if issues or unresolved or not payload.get("viewer"):
-        reasons = issues[:3]
-        reasons.extend(f"Не выбрана позиция базы: {slot}" for slot in unresolved[:3])
-        if not reasons:
-            reasons.append("3D-модель для этой редакции не построена.")
+    if strict:
+        blocking.extend(unresolved)
+    else:
+        warnings.extend(unresolved)
+    if not payload.get("viewer"):
+        blocking.append("3D-модель для этой редакции не построена.")
+    if blocking:
         return {
             "ok": False,
             "code": "production_blocked",
             "error": "Производство и экспорт заблокированы для текущей редакции.",
             "object": project_name,
-            "reason": reasons,
+            "reason": blocking[:6],
             "next_action": (
                 "Исправьте блокирующие проверки и выберите все позиции базы, "
                 "затем дождитесь нового пересчёта."
             ),
-        }
-    return None
+        }, warnings
+    return None, warnings
+
+
+def _production_gate_error(
+    spec: dict[str, Any], model_revision: str | None
+) -> dict[str, Any] | None:
+    """Strict variant kept for callers that only need the blocking error."""
+
+    return _production_gate(spec, model_revision, strict=True)[0]
 
 
 # ------------------------------------------------------------------ версии (D2)
@@ -1068,39 +1140,6 @@ class _Studio:
         self.guard = _ChatGuard(self.out_dir)
         self._cancelled_chat_operations: dict[str, float] = {}
         self._cancelled_chat_lock = threading.RLock()
-        from .rollout import RolloutController
-
-        self.rollout = RolloutController(self.out_dir / ".rollout")
-        self.ai_graph = None
-        self.ai_shadow_graph = None
-        graph_mode = self.rollout.config.modes.get("langgraph", "off")
-        graph_killed = "langgraph" in self.rollout.config.killed
-        if graph_mode in {"on", "canary"} and not graph_killed:
-            from .studio_graph import StudioGraphOrchestrator
-
-            self.ai_graph = StudioGraphOrchestrator.durable(
-                self.out_dir / ".studio_graph",
-                cancellation_probe=self.is_chat_operation_cancelled,
-            )
-        candidate_modes = [
-            self.rollout.config.modes.get(name, "off")
-            for name in ("typed_ops", "edit_engine", "full_gate", "split_prompts", "langgraph")
-        ]
-        if (
-            not graph_killed
-            and all(mode in {"shadow", "on", "canary"} for mode in candidate_modes)
-            and any(mode == "shadow" for mode in candidate_modes)
-        ):
-            from .studio_graph import (
-                GraphAdapters,
-                NullRevisionStore,
-                StudioGraphOrchestrator,
-            )
-
-            self.ai_shadow_graph = StudioGraphOrchestrator(
-                GraphAdapters.defaults(NullRevisionStore()),
-                cancellation_probe=self.is_chat_operation_cancelled,
-            )
         self.started = _time.time()               # /healthz, /version (AKD-264)
         # демо-режим: изделия, существовавшие на старте, защищены от перезаписи
         self.protected: set[str] = (
@@ -1674,12 +1713,7 @@ def make_handler(st: _Studio):
                     return
                 spec_path = st.workspaces.current_spec_path(auth)
                 spec = json.loads(spec_path.read_text(encoding="utf-8"))
-                try:
-                    spec, _read_metrics = _read_paramspec_document(spec)
-                except (TypeError, ValueError):
-                    # Keep malformed legacy data visible to the existing UI;
-                    # generation will return the normal schema error report.
-                    pass
+                spec_warnings = _document_warnings(spec)
                 from .webviewer import SCENE_JS
                 page = (PAGE
                         .replace("__SCENE_JS__", SCENE_JS)
@@ -1688,6 +1722,9 @@ def make_handler(st: _Studio):
                         .replace("__AUTH__", json.dumps(self._public_auth(auth), ensure_ascii=False)
                                  .replace("</", "<\\/"))
                         .replace("__ADMIN_URL__", json.dumps(st.admin_url, ensure_ascii=False)
+                                 .replace("</", "<\\/"))
+                        .replace("__PROJECT_FILE__", json.dumps(spec_path.name, ensure_ascii=False))
+                        .replace("__SPEC_WARNINGS__", json.dumps(spec_warnings, ensure_ascii=False)
                                  .replace("</", "<\\/"))
                         .replace("__SPEC__", json.dumps(spec, ensure_ascii=False)
                                  .replace("</", "<\\/")))
@@ -2009,7 +2046,18 @@ def make_handler(st: _Studio):
                 # so an already open tab could edit the first catalog item
                 # while displaying another one. Bind stateful routes to the
                 # explicit, validated file sent by the editor.
-                project_bound_routes = {"/api/chat", "/api/chat-history", "/api/save"}
+                project_bound_routes = {
+                    "/api/chat", "/api/chat-history", "/api/save",
+                    "/api/versions", "/api/restore", "/api/import-tz",
+                    "/api/export-cfrn", "/api/build-b3d", "/api/deliver",
+                    "/api/duplicate",
+                }
+                # Routes where acting on a stale selection corrupts data or
+                # writes files under another product's name.
+                identity_required_routes = {
+                    "/api/chat", "/api/chat-history", "/api/save", "/api/restore",
+                    "/api/export-cfrn", "/api/build-b3d", "/api/deliver",
+                }
                 requested_project = str(body.get("project_file") or "").strip()
                 if path in project_bound_routes and requested_project:
                     try:
@@ -2021,7 +2069,7 @@ def make_handler(st: _Studio):
                             "code": "project_not_found",
                         }, 404)
                         return
-                elif path in project_bound_routes and len(_list_projects(workspace.spec_dir)) > 1:
+                elif path in identity_required_routes and len(_list_projects(workspace.spec_dir)) > 1:
                     self._json({
                         "ok": False,
                         "error": "Не удалось определить открытое изделие. Обновите страницу.",
@@ -2040,9 +2088,11 @@ def make_handler(st: _Studio):
                     "revision.hash": hash_payload(spec),
                     "image.count": len(body.get("images") or []),
                 })
+                production_warnings: list[str] = []
                 if path in ("/api/export-cfrn", "/api/build-b3d", "/api/deliver"):
-                    production_error = _production_gate_error(
-                        spec, body.get("model_revision")
+                    production_error, production_warnings = _production_gate(
+                        spec, body.get("model_revision"),
+                        strict=path != "/api/export-cfrn",
                     )
                     if production_error is not None:
                         self._json(production_error, 409)
@@ -2164,270 +2214,11 @@ def make_handler(st: _Studio):
                                if auth is not None else body.get("history") or [])
                     from .spec_chat import chat_edit
 
-                    auth_context = (auth or {}).get("context") or {}
-                    tenant_id = str(
-                        (auth_context.get("organization") or {}).get("id")
-                        or workspace.organization_id
-                        or ""
-                    ) or None
-                    user_id = str(
-                        (auth_context.get("user") or {}).get("id") or ""
-                    ) or None
-                    rollout_plan = st.rollout.plan(tenant_id, user_id)
-                    from .telemetry import set_rollout_context
-
-                    checkpoint_degraded = bool(
-                        st.ai_graph is not None and st.ai_graph.storage_degraded
-                    )
-                    if checkpoint_degraded and rollout_plan.primary == "graph":
-                        rollout_plan = st.rollout.latch(
-                            rollout_plan,
-                            st.ai_graph.storage_error or "checkpoint_storage_degraded",
-                        )
-                    set_rollout_context(
-                        primary=rollout_plan.primary,
-                        shadow=rollout_plan.shadow,
-                        canary=rollout_plan.canary,
-                    )
-                    shadow_report = None
-                    candidate_result = None
-                    candidate_latency_ms = 0.0
-                    execution_started = _time.perf_counter()
-                    use_graph = (
-                        rollout_plan.primary == "graph"
-                        and st.ai_graph is not None
-                        and not checkpoint_degraded
-                    )
-
-                    if use_graph:
-                        from .studio_graph import (
-                            CheckpointStorageError,
-                            GraphConflict,
-                            GraphRevisionError,
-                        )
-
-                        operation_id = (
-                            st._valid_chat_operation_id(body.get("operation_id"))
-                            or secrets.token_hex(16)
-                        )
-                        candidate_started = _time.perf_counter()
-                        try:
-                            res = st.ai_graph.run(
-                                project_key=str(spec_path.resolve()),
-                                spec=spec,
-                                message=message,
-                                history=history,
-                                context=ctx,
-                                images=body.get("images") or None,
-                                provider=provider,
-                                generation=operation_id,
-                                expected_revision=_spec_revision(spec),
-                            )
-                            candidate_result = res
-                        except CheckpointStorageError as error:
-                            checkpoint_degraded = True
-                            candidate_result = {
-                                "spec": None,
-                                "usage": {},
-                                "code": "checkpoint_storage_failed",
-                                "error": type(error).__name__,
-                            }
-                            rollout_plan = st.rollout.latch(
-                                rollout_plan, str(error) or "checkpoint_storage_failed"
-                            )
-                            set_rollout_context(
-                                primary="legacy", shadow=False, canary=False
-                            )
-                            res = chat_edit(
-                                spec, message, history, ctx,
-                                body.get("images") or None, provider,
-                            )
-                        except GraphConflict as error:
-                            self._json({
-                                "ok": False,
-                                "error": str(error),
-                                "code": "generation_conflict",
-                            }, 409)
-                            return
-                        except GraphRevisionError as error:
-                            self._json({
-                                "ok": False,
-                                "error": str(error),
-                                "code": "stale_revision",
-                            }, 409)
-                            return
-                        finally:
-                            candidate_latency_ms = (
-                                _time.perf_counter() - candidate_started
-                            ) * 1000
-                    else:
-                        res = chat_edit(spec, message,
-                                        history,
-                                        ctx,
-                                        body.get("images") or None,
-                                        provider)
-                        if rollout_plan.shadow and st.ai_shadow_graph is not None:
-                            from .rollout import compare_shadow_results
-
-                            candidate_started = _time.perf_counter()
-                            try:
-                                candidate = st.ai_shadow_graph.run(
-                                    project_key=str(spec_path.resolve()),
-                                    spec=spec,
-                                    message=message,
-                                    history=history,
-                                    context=ctx,
-                                    images=body.get("images") or None,
-                                    provider=provider,
-                                    generation=secrets.token_hex(16),
-                                    expected_revision=_spec_revision(spec),
-                                    shadow=True,
-                                )
-                                candidate_result = candidate
-                                shadow_report = compare_shadow_results(res, candidate)
-                            except Exception as error:
-                                candidate_result = {
-                                    "spec": None,
-                                    "usage": {},
-                                    "code": "shadow_candidate_failed",
-                                    "error": type(error).__name__,
-                                }
-                                shadow_report = {
-                                    "equal": False,
-                                    "comparison_error": type(error).__name__,
-                                }
-                            finally:
-                                candidate_latency_ms = (
-                                    _time.perf_counter() - candidate_started
-                                ) * 1000
+                    res = chat_edit(spec, message, history, ctx,
+                                    body.get("images") or None, provider)
                     _trace_engineering_result(
                         res.get("spec") if isinstance(res, dict) else None
                     )
-                    from .rollout import RolloutMetric
-
-                    metric_result = candidate_result or res
-                    usage = (
-                        metric_result.get("usage")
-                        if isinstance(metric_result.get("usage"), dict) else {}
-                    )
-                    checkpoint = (
-                        metric_result.get("checkpoint")
-                        if isinstance(metric_result.get("checkpoint"), dict) else {}
-                    )
-                    code = str(metric_result.get("code") or "")
-                    trace = (
-                        metric_result.get("trace")
-                        if isinstance(metric_result.get("trace"), dict) else {}
-                    )
-                    router = trace.get("router") if isinstance(trace.get("router"), dict) else {}
-                    routed_node = str(router.get("node") or "")
-                    graph_meta = (
-                        metric_result.get("graph")
-                        if isinstance(metric_result.get("graph"), dict) else {}
-                    )
-                    edit_attempted = (
-                        routed_node in {"create_paramspec", "edit_operations", "part_edit"}
-                        or isinstance(metric_result.get("spec"), dict)
-                        or bool(graph_meta.get("operations"))
-                        or code in {
-                            "invalid_operation", "operation_validation_failed",
-                            "part_edit_contract_violation", "production_gate_failed",
-                        }
-                    )
-                    rollout_dashboard = st.rollout.record(
-                        RolloutMetric(
-                            latency_ms=(
-                                candidate_latency_ms
-                                if candidate_result is not None
-                                else (_time.perf_counter() - execution_started) * 1000
-                            ),
-                            total_tokens=int(usage.get("total") or 0),
-                            cost_usd=(
-                                float(usage["cost_usd"])
-                                if usage.get("cost_usd") is not None
-                                else float(usage["cost"])
-                                if usage.get("cost") is not None
-                                else None
-                            ),
-                            invalid_operation=code in {
-                                "invalid_operation", "operation_validation_failed",
-                                "part_edit_contract_violation",
-                            },
-                            live_divergence=(
-                                shadow_report is not None
-                                and candidate_result is not None
-                                and (
-                                    isinstance(candidate_result.get("spec"), dict)
-                                    != isinstance(res.get("spec"), dict)
-                                )
-                            ),
-                            edit_attempted=edit_attempted,
-                            edit_success=isinstance(metric_result.get("spec"), dict),
-                            checkpoint_bytes=int(checkpoint.get("bytes") or 0),
-                            paramspec_equal=(
-                                shadow_report.get("paramspec_equal")
-                                if isinstance(shadow_report, dict) else None
-                            ),
-                            geometry_equal=(
-                                shadow_report.get("geometry_equal")
-                                if isinstance(shadow_report, dict) else None
-                            ),
-                            drilling_equal=(
-                                shadow_report.get("drilling_equal")
-                                if isinstance(shadow_report, dict) else None
-                            ),
-                            result_code=code,
-                            source=(
-                                "shadow_candidate" if shadow_report is not None
-                                else "graph_candidate" if candidate_result is not None
-                                else "legacy"
-                            ),
-                        ),
-                        tenant_id=tenant_id,
-                        user_id=user_id,
-                        plan=rollout_plan,
-                    )
-                    add_current_attributes({
-                        "rollout.primary": rollout_plan.primary,
-                        "rollout.shadow": rollout_plan.shadow,
-                        "rollout.canary": rollout_plan.canary,
-                        "rollout.stopped": bool(rollout_dashboard.get("stopped")),
-                        "shadow.equal": (
-                            shadow_report.get("equal")
-                            if isinstance(shadow_report, dict) else None
-                        ),
-                        "shadow.paramspec_equal": (
-                            shadow_report.get("paramspec_equal")
-                            if isinstance(shadow_report, dict) else None
-                        ),
-                        "shadow.geometry_equal": (
-                            shadow_report.get("geometry_equal")
-                            if isinstance(shadow_report, dict) else None
-                        ),
-                        "shadow.drilling_equal": (
-                            shadow_report.get("drilling_equal")
-                            if isinstance(shadow_report, dict) else None
-                        ),
-                        "checkpoint.bytes": int(checkpoint.get("bytes") or 0),
-                        "checkpoint.degraded": checkpoint_degraded,
-                    })
-                    res = dict(res)
-                    res["rollout"] = {
-                        **rollout_plan.public_dict(),
-                        "checkpoint_degraded": checkpoint_degraded,
-                        "slo": {
-                            "stopped": bool(rollout_dashboard.get("stopped")),
-                            "reasons": list(rollout_dashboard.get("reasons") or []),
-                            "samples": int(
-                                (rollout_dashboard.get("summary") or {}).get("samples")
-                                or rollout_dashboard.get("samples") or 0
-                            ),
-                        },
-                        **(
-                            {"shadow_comparison": shadow_report}
-                            if shadow_report is not None else {}
-                        ),
-                    }
                     st.guard.add_tokens(int(((res.get("usage") or {}).get("total")) or 0))
                     if st.consume_chat_cancellation(body.get("operation_id")):
                         self._json({
@@ -2552,8 +2343,7 @@ def make_handler(st: _Studio):
                             "project.hash": hash_payload({"project_file": out.name}),
                             "revision.hash": hash_payload(new_spec),
                         }) as persist_span:
-                            out.write_text(json.dumps(new_spec, ensure_ascii=False, indent=2),
-                                           encoding="utf-8")
+                            _write_json_atomic(out, new_spec)
                             persist_span.set_attributes({"revision.persisted": True,
                                                          "check.outcome": "pass"})
                         st.workspaces.set_current(auth, out)
@@ -2899,8 +2689,7 @@ def make_handler(st: _Studio):
                     while p.exists():
                         p = workspace.spec_dir / f"{_slugify(name)}_{i}.json"
                         i += 1
-                    p.write_text(json.dumps(new_spec, ensure_ascii=False, indent=2),
-                                 encoding="utf-8")
+                    _write_json_atomic(p, new_spec)
                     st.workspaces.set_current(auth, p)
                     self._json({"ok": True, "spec": new_spec, "file": p.name})
                 elif path == "/api/duplicate":   # дубликат текущего (D1)
@@ -2924,8 +2713,7 @@ def make_handler(st: _Studio):
                     while p.exists():
                         p = workspace.spec_dir / f"{source_path.stem}_copy{i}.json"
                         i += 1
-                    p.write_text(json.dumps(dup, ensure_ascii=False, indent=2),
-                                 encoding="utf-8")
+                    _write_json_atomic(p, dup)
                     if not body.get("stay_catalog"):
                         st.workspaces.set_current(auth, p)
                     self._audit_product_action(
@@ -3124,16 +2912,16 @@ def make_handler(st: _Studio):
                     from .paramspec import validate_paramspec
                     from .paramspec_versioning import strict_paramspec_v1_for_write
 
+                    # The operator's work is never refused: a document that does
+                    # not pass the strict contract is persisted as-is (the way
+                    # Studio always did) and the problems come back as warnings.
                     write_errors = validate_paramspec(spec)
                     if write_errors:
-                        self._json({
-                            "ok": False,
-                            "code": "invalid_paramspec",
-                            "error": "Изделие не сохранено: ParamSpec не прошёл строгую проверку",
-                            "details": write_errors[:12],
-                        }, 422)
-                        return
-                    spec = strict_paramspec_v1_for_write(spec)
+                        save_warnings = [str(item) for item in write_errors[:12]]
+                        spec = _reorder_like(spec, current_spec)
+                    else:
+                        save_warnings = []
+                        spec = _reorder_like(strict_paramspec_v1_for_write(spec), current_spec)
                     _write_json_atomic(spec_path, spec)
                     add_current_attributes({
                         "revision.hash": hash_payload(spec),
@@ -3149,16 +2937,17 @@ def make_handler(st: _Studio):
                                 base64.b64decode(prev.split(",", 1)[1]))
                         except Exception:
                             pass
-                    if spec.get("draft"):              # черновик: только файл, без модели
-                        self._json({"ok": True, "spec": str(spec_path), "project": None})
+                    if spec.get("draft") or save_warnings:   # черновик/с замечаниями: только файл
+                        self._json({"ok": True, "spec": str(spec_path), "project": None,
+                                    "warnings": save_warnings})
                         return
                     _snapshot_version(spec_path, spec)          # версия (D2)
                     from .generators import generate_from_paramspec
                     project = generate_from_paramspec(spec)
                     out = workspace.out_dir / (spec_path.stem + ".project.json")
-                    out.write_text(json.dumps(project, ensure_ascii=False, indent=2),
-                                   encoding="utf-8")
-                    self._json({"ok": True, "spec": str(spec_path), "project": str(out)})
+                    _write_json_atomic(out, project)
+                    self._json({"ok": True, "spec": str(spec_path), "project": str(out),
+                                "warnings": []})
                 elif path == "/api/export-cfrn":
                     from .generators import generate_from_paramspec
                     from .materials import resolve_project_materials
@@ -3170,7 +2959,7 @@ def make_handler(st: _Studio):
                         pass
                     out = workspace.out_dir / (spec_path.stem + ".cfrn")
                     out.write_bytes(project_to_cfrn_bytes(project))
-                    self._json({"ok": True, "cfrn": str(out)})
+                    self._json({"ok": True, "cfrn": str(out), "warnings": production_warnings})
                 elif path == "/api/build-b3d":
                     payload = build_payload(spec)
                     if not payload["ok"]:                # деньги — только на зелёную модель
@@ -3450,7 +3239,6 @@ PAGE = r"""<!DOCTYPE html>
     color:#4f5968;font-size:11px}
   .part-local-actions button:hover{color:var(--accent);background:transparent}
   .part-local-actions #ovDelete{color:var(--bad)}
-  #partChatRow[hidden]{display:none}
   #fs_part[aria-busy="true"] input,#fs_part[aria-busy="true"] button{cursor:wait}
   #main{--chat-stack-height:133px;--viewport-status-height:24px;
     grid-column:2;grid-row:1;position:relative;min-width:0;min-height:0;
@@ -3634,8 +3422,6 @@ PAGE = r"""<!DOCTYPE html>
     background:#343a44;color:#fff}
   #chatImgs .chip-remove svg{width:10px;height:10px}
   #chatMsg.drop{outline:2px dashed var(--accent);outline-offset:2px}
-  #partChatRow{display:flex;gap:5px;margin-top:8px;border-top:1px solid var(--line);padding-top:8px}
-  #partChat{flex:1;padding:4px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px}
   fieldset{border:1px solid var(--line);border-radius:8px;margin:0 0 10px;padding:8px 10px}
   legend{font-size:11px;text-transform:uppercase;color:var(--mut);padding:0 4px}
   .row{display:flex;gap:6px;align-items:center;margin:4px 0}
@@ -4330,7 +4116,7 @@ PAGE = r"""<!DOCTYPE html>
         <button id="ovDetail" type="button" title="Чертёж детали с размерами и присадками">Чертёж</button>
       </div>
       <p class="part-context-note">Нижняя команда уже адресована выбранной детали — опишите правку там.</p>
-      <details id="partExact" class="part-exact">
+      <details id="partExact" class="part-exact" open>
         <summary>Точные параметры</summary>
         <p class="part-exact-hint">Грани в координатах модели, мм</p>
         <div id="partEditStatus" role="status" aria-live="polite"></div>
@@ -4361,10 +4147,6 @@ PAGE = r"""<!DOCTYPE html>
         <div class="part-local-actions">
           <button id="ovReset" type="button" hidden>Сбросить к результату генератора</button>
           <button id="ovDelete" type="button">Удалить деталь…</button>
-        </div>
-        <div id="partChatRow" hidden aria-hidden="true">
-          <input id="partChat" type="hidden" tabindex="-1">
-          <button id="partChatSend" type="button" hidden tabindex="-1">К команде</button>
         </div>
       </details>
     </div>
@@ -4914,6 +4696,7 @@ window.fetch = (input, init={}) => {
   });
 };
 let SPEC = __SPEC__;
+const SPEC_WARNINGS = __SPEC_WARNINGS__;   // что в файле не по контракту (показываем при старте)
 const FIELDS = __FIELDS__;                 // archetype -> [{key,label,type,...}]
 const SECTION_ARCHS = __SECTION_ARCHS__;   // архетипы с секциями
 const $ = id => document.getElementById(id);
@@ -5067,7 +4850,7 @@ function setRightPanel(open,mode=rightPanelMode,fromUser=false){
     else if(focusWasRail)rightPanelModes[rightPanelMode].tab.focus({preventScroll:true});
   });
 }
-const wideStudioLayout=window.matchMedia('(min-width: 1600px)');
+const wideStudioLayout=window.matchMedia('(min-width: 1180px)');
 function syncRightPanelToViewport(){
   const open=rightPanelUserChoice===null
     ? wideStudioLayout.matches
@@ -6062,7 +5845,8 @@ function importTzFile(f){
     const s=String(rd.result), b64=s.slice(s.indexOf(',')+1);
     try{
       const r=await fetch('/api/import-tz',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({name:f.name,data:b64,provider:CHAT_PROVIDER})});
+        body:JSON.stringify({name:f.name,data:b64,provider:CHAT_PROVIDER,
+          project_file:activeProjectFile()})});
       const p=await r.json();
       done();
       if(p.ok){adoptSpec(p); toast('✅ ТЗ распознано → '+(p.spec&&p.spec.project_name||p.file));}
@@ -6170,7 +5954,7 @@ const CAT_RULES=[  // раздел ← archetype/furniture_type
   ['Стеллажи',p=>/стеллаж|полк/i.test(p.ftype)||['shelving'].includes(p.archetype)],
   ['Черновики',p=>p.draft],
 ];
-let CAT_ITEMS=[],CAT_VISIBLE_ITEMS=[],CAT_SELECTED_FILE='',CAT_CURRENT_FILE='',
+let CAT_ITEMS=[],CAT_VISIBLE_ITEMS=[],CAT_SELECTED_FILE='',CAT_CURRENT_FILE=__PROJECT_FILE__||'',
   CAT_LAST_CLICK_FILE='',CAT_LAST_CLICK_AT=0,CAT_SCOPE='all',CAT_TYPE='all',
   CAT_STATUS='all',CAT_RESPONSIBLE='all',CAT_TOTAL=0,CAT_CURRENT_USER_ID='',
   CAT_COUNTS={all:0,mine:0,unassigned:0,archived:0},CAT_MEMBERS=[],CAT_TYPES=[],CAT_SEARCH_TIMER=null;
@@ -6626,7 +6410,8 @@ if(location.hash==='#catalog')queueMicrotask(()=>openCatalog({pushHistory:false}
 
 $('projDup').onclick=async()=>{
   const r=await fetch('/api/duplicate',{method:'POST',
-    headers:{'Content-Type':'application/json'},body:JSON.stringify({spec:SPEC})});
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({spec:SPEC,project_file:activeProjectFile()})});
   const p=await r.json();
   if(p.ok) adoptSpec(p); else toast('Ошибка: '+(p.error||''),true);
 };
@@ -7158,7 +6943,7 @@ function syncModelEditLock(){
   const locked=modelMutationLocked();
   setModelMutationControlsLocked(locked);
   Object.entries(rightPanelModes).forEach(([key,item])=>item.panel.inert=key!==rightPanelMode);
-  [$('chatMsg'),$('chatAttach'),$('aiProvider'),$('partChat'),$('partChatSend')]
+  [$('chatMsg'),$('chatAttach'),$('aiProvider')]
     .filter(Boolean).forEach(el=>el.disabled=locked);
   $('btnFixAll').disabled=locked;
   syncChatPrimaryAction();
@@ -7169,7 +6954,7 @@ function setChatBusy(busy,stateText){
   chatBusy=!!busy;
   $('fs_chat').setAttribute('aria-busy',String(chatBusy));
   $('fs_chat').classList.toggle('is-busy',chatBusy);
-  [$('chatMsg'),$('chatAttach'),$('aiProvider'),$('partChat'),$('partChatSend')]
+  [$('chatMsg'),$('chatAttach'),$('aiProvider')]
     .filter(Boolean).forEach(el=>el.disabled=chatBusy);
   syncModelEditLock();
   if(currentSelectedPart())syncPartEditState();
@@ -7549,6 +7334,10 @@ async function refreshBalance(){
     BAL_ITEMS=d.items||null; BAL_ERR=d.error?String(d.error).slice(0,60):null; renderTokens();
   }catch(e){}
 }
+function syncProviderLabel(){
+  const sel=$('aiProvider'),opt=sel&&sel.options[sel.selectedIndex];
+  $('chatMetaTitle').textContent='Изменить модель словами'+(opt?' · '+opt.textContent:'');
+}
 async function loadProviders(){
   try{
     const r=await fetch('/api/providers',{method:'POST',
@@ -7556,8 +7345,8 @@ async function loadProviders(){
     const d=await r.json();
     const sel=$('aiProvider');
     sel.innerHTML=(d.providers||[]).map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
-    CHAT_PROVIDER=d.active; sel.value=d.active;
-    sel.onchange=()=>{CHAT_PROVIDER=sel.value; SESSION_TOKENS=0; refreshBalance();};
+    CHAT_PROVIDER=d.active; sel.value=d.active; syncProviderLabel();
+    sel.onchange=()=>{CHAT_PROVIDER=sel.value; SESSION_TOKENS=0; syncProviderLabel(); refreshBalance();};
   }catch(e){}
   refreshBalance();
 }
@@ -7566,7 +7355,8 @@ loadProviders();
 /* ---------- экспорт ---------- */
 async function post(url){const r=await fetch(url,{method:'POST',
   headers:{'Content-Type':'application/json'},
-  body:JSON.stringify({spec:SPEC,model_revision:generatedRevision})});
+  body:JSON.stringify({spec:SPEC,model_revision:generatedRevision,
+    project_file:activeProjectFile()})});
   return await r.json();}
 function productionErrorText(payload){
   const reason=Array.isArray(payload&&payload.reason)?payload.reason[0]:payload&&payload.reason;
@@ -7589,11 +7379,14 @@ async function saveSpec(){
   }
   return result;
 }
+function warnList(p){return (p&&Array.isArray(p.warnings)?p.warnings:[]).slice(0,3);}
 $('btnSave').onclick=async()=>{const p=await saveSpec();
   toast(p.ok?('Сохранено: '+p.spec):('Ошибка: '+p.error),!p.ok);
+  warnList(p).forEach(w=>toast('Сохранено с замечанием: '+w,true));
   loadVersions();};
 $('btnCfrn').onclick=async()=>{const p=await post('/api/export-cfrn');
-  toast(p.ok?('.cfrn: '+p.cfrn):productionErrorText(p),!p.ok);};
+  toast(p.ok?('.cfrn: '+p.cfrn):productionErrorText(p),!p.ok);
+  warnList(p).forEach(w=>toast('Экспорт с замечанием: '+w,true));};
 $('btnB3d').onclick=async()=>{
   if(!lastOk){toast('Проверки не пройдены',true);return;}
   if(!confirm('Собрать .b3d через облако БАЗИС? Операция платная (~10₽).'))return;
@@ -7618,7 +7411,8 @@ stage.addEventListener('drop',e=>{
 /* ---------- версии (AKD-133) ---------- */
 async function loadVersions(){
   const r=await fetch('/api/versions',{method:'POST',
-    headers:{'Content-Type':'application/json'},body:'{}'});
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({project_file:activeProjectFile()})});
   const p=await r.json();
   $('verSel').innerHTML='<option value="">— версии (при сохранении) —</option>'+
     (p.versions||[]).map(v=>`<option value="${v.index}">${v.ts.replace('T',' ')} · `+
@@ -7628,7 +7422,8 @@ $('verRestore').onclick=async()=>{
   const idx=$('verSel').value;
   if(idx==='')return;
   const r=await fetch('/api/restore',{method:'POST',
-    headers:{'Content-Type':'application/json'},body:JSON.stringify({index:+idx})});
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({index:+idx,project_file:activeProjectFile()})});
   const p=await r.json();
   if(p.ok){pushUndo(); SPEC=p.spec;savedSpecJson=JSON.stringify(SPEC);
     generatedSpecJson=null;generatedRevision='';scene3d.select(null); fillForm(); apply();
@@ -7670,4 +7465,5 @@ loadBuilds();
 
 /* старт */
 fillForm(); resize(); apply().catch(()=>{});
+SPEC_WARNINGS.forEach(w=>toast(w,true));
 </script></body></html>"""

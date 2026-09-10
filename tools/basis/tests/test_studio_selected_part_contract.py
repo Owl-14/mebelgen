@@ -183,15 +183,11 @@ def test_selected_part_is_a_static_dom_inspector_with_real_facts() -> None:
 
 def test_selected_part_does_not_duplicate_the_global_composer() -> None:
     dom = _dom()
-    _tag, row_attrs, row_ancestors = dom.by_id["partChatRow"]
-    assert "partCard" in row_ancestors
-    assert "hidden" in row_attrs and row_attrs.get("aria-hidden") == "true"
-
-    _tag, input_attrs, _ancestors = dom.by_id["partChat"]
-    assert input_attrs.get("type") == "hidden"
-    assert input_attrs.get("tabindex") == "-1"
-    _tag, send_attrs, _ancestors = dom.by_id["partChatSend"]
-    assert "hidden" in send_attrs and send_attrs.get("tabindex") == "-1"
+    # The per-part command row was replaced by the selected-part context of the
+    # global composer; no hidden duplicate is left in the markup.
+    for legacy_id in ("partChatRow", "partChat", "partChatSend"):
+        assert legacy_id not in dom.by_id
+    assert "partChat" not in PAGE
 
     assert "partCommandFocus" not in PAGE
     assert "focusPartCommand" not in PAGE

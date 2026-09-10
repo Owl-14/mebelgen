@@ -13,6 +13,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import pytest
+pytest.importorskip("argon2")
 from argon2 import PasswordHasher, Type
 
 ROOT = Path(__file__).resolve().parent.parent

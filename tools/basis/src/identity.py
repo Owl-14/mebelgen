@@ -24,8 +24,22 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Mapping
 
-from argon2 import PasswordHasher, Type
-from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
+try:  # argon2 is only needed when Studio runs with accounts (--require-auth)
+    from argon2 import PasswordHasher, Type
+    from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
+except ImportError:  # pragma: no cover - exercised on machines without the extra
+    PasswordHasher = None  # type: ignore[assignment,misc]
+    Type = None  # type: ignore[assignment,misc]
+
+    class _ArgonUnavailable(Exception):
+        """Placeholder so ``except`` clauses stay valid without argon2."""
+
+    InvalidHashError = VerificationError = VerifyMismatchError = _ArgonUnavailable  # type: ignore[misc]
+
+ARGON2_INSTALL_HINT = (
+    "Для аккаунтов Studio нужен пакет argon2-cffi: "
+    "pip install -r requirements-server.txt"
+)
 
 
 SCHEMA_VERSION = 2
@@ -442,6 +456,8 @@ class IdentityStore:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.busy_timeout_ms = max(1, int(busy_timeout_ms))
+        if password_hasher is None and PasswordHasher is None:
+            raise RuntimeError(ARGON2_INSTALL_HINT)
         self._hasher = password_hasher or PasswordHasher(
             time_cost=3,
             memory_cost=65_536,

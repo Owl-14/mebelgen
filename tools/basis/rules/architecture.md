@@ -61,8 +61,6 @@ ParamSpec; координаты всегда считает детерминир
 | `studio.py` | Studio: HTTP-сервер, страница редактора, каталог изделий (+SVG-аксонометрия карточек `/thumb/`), версии, экспорт-центр (rules/studio.md) |
 | `spec_chat.py` | ИИ-чат: провайдеры (mock/gigachat/glm/kimi/deepseek/openai/gemini), конвейер фото-ТЗ vision→сборка, анти-инъекция; обычные правки принимаются только как типизированные операции |
 | `edit_operations.py` | Pydantic discriminated union AI-операций + атомарный reducer в ParamSpec v1; проверяет target/preconditions и не вычисляет геометрию |
-| `studio_graph.py` | feature-flagged LangGraph-оркестрация AI-команд; состояние, checkpoints, отмена/возобновление и Protocol-адаптеры к детерминированному движку |
-| `rollout.py` | независимые component flags/kill switches, tenant/user canary, non-mutating shadow compare, privacy-safe SLO state и автоматический stop→legacy rollback |
 | `techview.py`, `sheet_layout.py` | чертёж SVG (фронт+бок+деталировка), аллокатор выносок |
 | `nesting.py` | bin-packing раскрой (KERF=4) |
 | `estimate.py` | смета материалов по ценам базы |
@@ -125,9 +123,6 @@ offline, не обновляет goldens и возвращает ненулев�
 - `pytest tests/` может краснеть из-за чужой битой спеки в `paramspecs/`
   (тесты сканируют каталог) — смотреть, чья спека падает, прежде чем чинить код.
 - e2e ИИ: `python qa/e2e_ai.py` против живого Studio (нужны ключи провайдера).
-- offline rollout drill: `python -m qa.rollout_drill`; dashboard contract —
-  `ops/dashboards/ai-rollout.json`, процедура — `ops/ai-rollout-runbook.md`.
-- offline trace/eval: `python main.py trace-eval` (ключи и сеть не нужны).
 
 ## Координатные конвенции (краткая шпаргалка)
 

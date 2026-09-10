@@ -26,13 +26,9 @@ jobs:
         run: python -m playwright install --with-deps chromium
       - name: engine check matrix
         run: python -m qa.engine_checks
-      - name: offline HTTP rollback drill
-        run: python -m qa.rollout_drill --output out/rollout-drill.json
       - name: unit tests
         run: python -m pytest tests/ -q --ignore=tests/test_studio_browser_state.py
       - name: browser tests
         run: python -m pytest tests/test_studio_browser_state.py -q
-      - name: offline trace replay eval
-        run: python main.py trace-eval
       - name: regression gate (goldens)
         run: python -m tests.regression

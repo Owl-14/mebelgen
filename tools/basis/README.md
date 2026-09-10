@@ -16,9 +16,13 @@
 
 ```bash
 python -m venv .venv && .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -r requirements.txt          # конвейер ТЗ → модель и Studio без аккаунтов
+pip install -r requirements-server.txt   # + аккаунты/админка (argon2) и экспорт трейсов (OpenTelemetry)
+pip install -r requirements-dev.txt      # + pytest, hypothesis, playwright
 copy .env.example .env        # вписать OPENAI_API_KEY (для convert)
 ```
+
+Тесты, которым нужен необязательный пакет, пропускаются, если он не установлен.
 
 ## Конвейер
 
@@ -225,11 +229,7 @@ CFRN→B3D всегда используйте `build-b3d` с ParamSpec или p
 | `AKEDA_TELEMETRY_FILE` | JSONL-файл локального backend (по умолчанию `out/traces.jsonl`) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_EXPORTER_OTLP_HEADERS` | стандартные endpoint и заголовки OTLP/HTTP; значения заголовков не попадают в spans |
 | `LANGSMITH_API_KEY` / `LANGSMITH_PROJECT` / `LANGSMITH_OTEL_ENDPOINT` | опциональный LangSmith OTLP backend; endpoint по умолчанию `https://api.smith.langchain.com/otel/v1/traces` |
-| `AKEDA_ROLLOUT_<COMPONENT>` | независимый режим `off`/`shadow`/`canary`/`on` для `TYPED_OPS`, `EDIT_ENGINE`, `FULL_GATE`, `SPLIT_PROMPTS`, `TRACING_EXPORTERS`, `LANGGRAPH` |
-| `AKEDA_KILL_SWITCH_<COMPONENT>` | мгновенно отключает компонент и возвращает execution path на legacy; exporter отключается независимо |
-| `AKEDA_CANARY_TENANTS` / `AKEDA_CANARY_USERS` / `AKEDA_CANARY_PERCENT` | server-identity canary без доверия body/header идентификаторам |
-| `AKEDA_SLO_*` | budgets latency/tokens/reported-cost/invalid-op/false-rejection/edit-success/checkpoint; полный список в `ops/ai-rollout-runbook.md` |
-| `AKEDA_CHECKPOINT_MAX_THREADS` / `AKEDA_CHECKPOINT_MAX_PER_THREAD` / `AKEDA_CHECKPOINT_RETENTION_DAYS` | bounded retention LangGraph SQLite; storage failure fail-closed переключает на legacy |
+| `AKEDA_KILL_SWITCH_TRACING_EXPORTERS` | `1` отключает экспорт spans; `trace_id` в ответах и истории остаётся |
 
 ## OpenTelemetry
 
@@ -254,44 +254,3 @@ python main.py studio paramspecs/wardrobe_demo.json --no-open
 `LANGSMITH_API_KEY` и, при необходимости, `LANGSMITH_PROJECT`; ключ хранится только
 в окружении и не сериализуется.
 
-Shadow/canary, автоматические SLO stop conditions, dashboard и offline rollback
-drill описаны в [`ops/ai-rollout-runbook.md`](ops/ai-rollout-runbook.md). Быстрая
-проверка механизма без provider/production вызовов: `python -m qa.rollout_drill`.
-
-## Offline trace replay и eval
-
-Replay does not call a model, but it is not an operation-only fixture replay.
-Every case executes the production intent router and request policy. Recorded
-intent/create/vision/edit/repair replies are validated with the production
-capability schemas; a vision reply must be digest-linked to its create node,
-and repair consumes at most `MAX_REPAIR_ITERATIONS` attempts. Before execution,
-a fail-closed privacy pass scans the dataset and every referenced fixture.
-Request policy is the first decision for every case and denial short-circuits
-router/provider/replay. Vision integrity is not treated as semantic accuracy:
-verified semantics require a digest-pinned, human-approved annotation linked to
-the create fixture; otherwise the metric is `unverified`. Privacy scanning also
-rejects identity fields and conservative full-name patterns such as Russian ФИО.
-
-Версионируемый dataset `qa/trace_eval/v1/scenarios.json` хранит неперсональные
-команды, ссылки на fixture ParamSpec, сохранённые выходы AI-узлов и ожидаемые
-diff/число деталей/присадок/production checks. Replay начинается после границы
-модели: LLM, vision и облачные API не вызываются, а записанные полные ParamSpec
-или typed operations проходят текущие reducer, генератор и production gate.
-
-```bash
-python main.py trace-eval
-python main.py trace-eval -o out/trace-eval.json
-python main.py trace-eval --compare out/trace-eval-baseline.json
-```
-
-До operation replay проверяется decision envelope: hash/class команды, результат
-router, актуальные prompt id/version из registry, allowlist provider/model,
-наличие vision stage и фактические типы операций. Подмена любого поля отклоняет
-trace до reducer/gate.
-
-JSON-отчёт детерминирован и содержит dataset digest, prompt/model profiles,
-decision/node/output/verdict digests и итог каждого сценария. `--compare`
-показывает изменения решения или производственного результата между отчётами
-разных prompt/model версий. Добавление сценария требует ожидаемых decision и
-node outputs плюс output profile; raw prompt, полный пользовательский ParamSpec,
-base64 изображения и секреты в trace-файл не помещаются.

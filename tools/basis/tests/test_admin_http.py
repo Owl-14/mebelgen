@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+pytest.importorskip("argon2")
 from argon2 import PasswordHasher, Type
 
 from src.admin import (

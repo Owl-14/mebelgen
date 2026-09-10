@@ -63,6 +63,35 @@ def test_production_gate_requires_current_rendered_revision_and_clean_checks():
     assert blocked["reason"] and blocked["next_action"]
 
 
+def test_plain_cfrn_export_warns_where_paid_builds_block():
+    """Неподобранный декор — не повод запрещать рабочий .cfrn.
+
+    Платная сборка и лист согласования остаются строгими; обычный экспорт
+    отдаёт файл и возвращает замечания, как Studio делал до gate.
+    """
+    from src.studio import _production_gate
+
+    unknown_decor = json.loads(
+        (ROOT / "paramspecs" / "cabinet_700x400x500.json").read_text(encoding="utf-8")
+    )
+    unknown_decor["materials"]["color"] = "Несуществующий декор ZZZ"
+    revision = _spec_revision(unknown_decor)
+
+    error, warnings = _production_gate(unknown_decor, revision, strict=False)
+    assert error is None
+    assert warnings and any("board" in item for item in warnings)
+
+    error, warnings = _production_gate(unknown_decor, revision, strict=True)
+    assert error and error["code"] == "production_blocked"
+    assert any("board" in item for item in error["reason"])
+
+    # Ошибки геометрии/схемы блокируют и обычный экспорт.
+    invalid = json.loads(json.dumps(SPEC))
+    del invalid["dimensions"]
+    error, _warnings = _production_gate(invalid, _spec_revision(invalid), strict=False)
+    assert error and error["code"] == "production_blocked"
+
+
 def test_payload_reacts_to_edit():
     edited = json.loads(json.dumps(SPEC))
     edited["dimensions"]["width"] = 600             # правка как в редакторе

@@ -72,6 +72,11 @@ class TenantWorkspaceManager:
         self.tenant_root = tenant_root.resolve() if tenant_root is not None else None
         self._current: dict[str, Path] = {}
         self._lock = threading.RLock()
+        # The spec passed on the command line is the product the operator asked
+        # to open.  Seed the legacy (no-auth) session with it, otherwise the
+        # first catalog file in alphabetical order silently wins after start.
+        if self.legacy_spec_path.is_file():
+            self._current[self.session_key(None)] = self.legacy_spec_path
 
     @staticmethod
     def _context(auth: Mapping[str, Any] | None) -> Mapping[str, Any]:
@@ -132,7 +137,13 @@ class TenantWorkspaceManager:
                     return selected
 
             candidates = _valid_specs(workspace.spec_dir)
-            if candidates:
+            if (
+                workspace.organization_id is None
+                and self.legacy_spec_path.is_file()
+                and self.legacy_spec_path.parent == workspace.spec_dir.resolve()
+            ):
+                selected = self.legacy_spec_path
+            elif candidates:
                 selected = candidates[0].resolve()
             elif workspace.organization_id is None:
                 selected = self.legacy_spec_path

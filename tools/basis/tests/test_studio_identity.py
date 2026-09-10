@@ -11,6 +11,9 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
+import pytest
+
+pytest.importorskip("argon2")
 from argon2 import PasswordHasher, Type
 
 ROOT = Path(__file__).resolve().parent.parent

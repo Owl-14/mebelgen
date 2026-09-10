@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 
 import pytest
+pytest.importorskip("argon2")
 from argon2 import PasswordHasher, Type
 
 

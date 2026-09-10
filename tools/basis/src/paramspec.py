@@ -16,6 +16,7 @@ from pydantic import (
     ConfigDict,
     Discriminator,
     Field,
+    PlainSerializer,
     RootModel,
     Tag,
     ValidationError,
@@ -28,34 +29,47 @@ class _ContractModel(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
 
+def _json_number(value: float) -> int | float:
+    return int(value) if float(value).is_integer() else value
+
+
+# Millimetre values are floats for validation, but persisted JSON keeps the
+# integer spelling the operator wrote (``700``, not ``700.0``): the generators
+# never needed the ``.0`` and every save produced a noisy diff otherwise.
+Number: TypeAlias = Annotated[
+    float,
+    PlainSerializer(_json_number, return_type=int | float, when_used="json"),
+]
+
+
 class Dimensions(_ContractModel):
-    width: float = Field(ge=50, le=10_000)
-    depth: float = Field(ge=50, le=10_000)
-    height: float = Field(ge=50, le=10_000)
-    depth_carcass: float | None = Field(default=None, gt=0)
-    tolerance: float | None = None
+    width: Number = Field(ge=50, le=10_000)
+    depth: Number = Field(ge=50, le=10_000)
+    height: Number = Field(ge=50, le=10_000)
+    depth_carcass: Number | None = Field(default=None, gt=0)
+    tolerance: Number | None = None
 
 
 class Materials(_ContractModel):
-    board_thickness: float = Field(gt=0)
-    back_thickness: float | None = Field(default=None, gt=0)
+    board_thickness: Number = Field(gt=0)
+    back_thickness: Number | None = Field(default=None, gt=0)
     board_material: str | None = None
     back_material: str | None = None
     facade_material: str | None = None
-    edge_band_thickness: float | None = Field(default=None, ge=0)
+    edge_band_thickness: Number | None = Field(default=None, ge=0)
     color: str | None = None
     color_code: str | None = None
     facade_color: str | None = None
     facade_color_code: str | None = None
     board_article: str | None = None
     facade_article: str | None = None
-    top_thickness: float | None = Field(default=None, ge=3, le=60)
+    top_thickness: Number | None = Field(default=None, ge=3, le=60)
     texture_direction: Literal["along", "across"] | None = None
 
 
 class Legs(_ContractModel):
     type: str | None = None
-    height: float | None = Field(default=None, ge=0)
+    height: Number | None = Field(default=None, ge=0)
     adjustable: bool | None = None
     color: str | None = None
     count: int | None = Field(default=None, ge=0)
@@ -63,17 +77,17 @@ class Legs(_ContractModel):
 
 
 class Gaps(_ContractModel):
-    facade: float | None = Field(default=None, ge=0)
-    default: float | None = Field(default=None, ge=0)
+    facade: Number | None = Field(default=None, ge=0)
+    default: Number | None = Field(default=None, ge=0)
 
 
 class Handles(_ContractModel):
     type: str | None = None
     material: str | None = None
     color: str | None = None
-    size: float | None = Field(default=None, ge=0)
+    size: Number | None = Field(default=None, ge=0)
     count: int | None = Field(default=None, ge=0)
-    offset_from_top: float | None = Field(default=None, ge=0)
+    offset_from_top: Number | None = Field(default=None, ge=0)
     furniture_encoded: str | None = None
 
 
@@ -88,7 +102,7 @@ class CatalogMetadata(_ContractModel):
 
 class DrawerGuides(_ContractModel):
     type: str | None = None
-    length_mm: float | None = Field(default=None, gt=0)
+    length_mm: Number | None = Field(default=None, gt=0)
     soft_close: bool | None = None
     with_closer: bool | None = Field(
         default=None,
@@ -124,19 +138,19 @@ class Hardware(_ContractModel):
 
 class Rod(_ContractModel):
     axis: Literal["x", "z"] | None = None
-    height: float | None = None
-    diameter: float | None = Field(default=None, gt=0)
-    length: float | None = Field(default=None, gt=0)
+    height: Number | None = None
+    diameter: Number | None = Field(default=None, gt=0)
+    length: Number | None = Field(default=None, gt=0)
 
 
 class _SectionFields(_ContractModel):
     id: str | None = None
-    width_share: float | None = Field(default=None, gt=0)
+    width_share: Number | None = Field(default=None, gt=0)
     shelves: int | None = Field(default=None, ge=0, le=20)
-    shelf_levels: list[float] | None = None
+    shelf_levels: list[Number] | None = None
     shelf_label: str | None = None
     drawers: int | None = Field(default=None, ge=0, le=20)
-    drawer_heights: list[float] | None = None
+    drawer_heights: list[Number] | None = None
     door: int | None = Field(default=None, ge=0, le=2)
     door_name: str | list[str] | None = None
     door_names: list[str] | None = None
@@ -145,26 +159,26 @@ class _SectionFields(_ContractModel):
     door_inset: bool | None = None
     door_z: Literal["overlay", "front", "inset"] | None = None
     rod: bool | Rod | None = None
-    front_bottom: float | None = None
-    front_top: float | None = None
+    front_bottom: Number | None = None
+    front_top: Number | None = None
     open_top: bool | None = None
-    open_top_height: float | None = None
+    open_top_height: Number | None = None
     cover_top: bool | None = None
     prefix: str | None = None
-    niche_z_front: float | None = None
-    guide_gap: float | None = Field(default=None, ge=0)
+    niche_z_front: Number | None = None
+    guide_gap: Number | None = Field(default=None, ge=0)
     guide_type: str | None = None
-    box_z1: float | None = None
-    box_depth: float | None = Field(default=None, gt=0)
-    box_y_offset: float | None = None
-    box_height: float | None = Field(default=None, gt=0)
-    box_back_thickness: float | None = Field(default=None, gt=0)
-    box_bottom_thickness: float | None = Field(default=None, gt=0)
+    box_z1: Number | None = None
+    box_depth: Number | None = Field(default=None, gt=0)
+    box_y_offset: Number | None = None
+    box_height: Number | None = Field(default=None, gt=0)
+    box_back_thickness: Number | None = Field(default=None, gt=0)
+    box_bottom_thickness: Number | None = Field(default=None, gt=0)
     box_bottom_mode: Literal["between", "under"] | None = None
     box_back_mode: Literal["beyond", "inset"] | None = None
     box_sides_on_bottom: bool | None = None
     boxes: bool | None = None
-    back_limit: float | None = None
+    back_limit: Number | None = None
 
 
 class ShelvesSection(_SectionFields):
@@ -190,23 +204,23 @@ Section: TypeAlias = Annotated[
 
 
 class Placement(_ContractModel):
-    x1: float | None = None
-    x2: float | None = None
-    y1: float | None = None
-    y2: float | None = None
-    z1: float | None = None
-    z2: float | None = None
+    x1: Number | None = None
+    x2: Number | None = None
+    y1: Number | None = None
+    y2: Number | None = None
+    z1: Number | None = None
+    z2: Number | None = None
 
 
 class Override(_ContractModel):
     panel: str
     action: Literal["transform", "delete", "rename", "add"] | None = None
     placement: Placement | None = None
-    move: tuple[float, float, float] | None = None
+    move: tuple[Number, Number, Number] | None = None
     to: str | None = None
     type: str | None = None
     orientation: str | None = None
-    thickness: float | None = Field(default=None, gt=0)
+    thickness: Number | None = Field(default=None, gt=0)
     material: str | None = None
 
 
@@ -230,25 +244,25 @@ class _ParamSpecFields(_ContractModel):
     back_mount: Literal["inset", "overlay"] | None = None
     sides_over_top: bool | None = None
     rod: bool | Rod | None = None
-    interior_z_front: float | None = None
-    carcass_z_front: float | None = None
-    top_overhang: tuple[float, float] | None = None
+    interior_z_front: Number | None = None
+    carcass_z_front: Number | None = None
+    top_overhang: tuple[Number, Number] | None = None
     socle_full: bool | None = None
-    socle_recess: float | None = Field(default=None, ge=0)
-    facade_reveal: float | None = Field(default=None, ge=0)
+    socle_recess: Number | None = Field(default=None, ge=0)
+    facade_reveal: Number | None = Field(default=None, ge=0)
     apron: bool | None = None
-    apron_height: float | None = Field(default=None, gt=0)
+    apron_height: Number | None = Field(default=None, gt=0)
     frame: str | None = None
     screen: bool | None = None
-    screen_height: float | None = Field(default=None, gt=0)
-    screen_thickness: float | None = Field(default=None, gt=0)
-    screen_margin: float | None = Field(default=None, ge=0)
-    screen_z: float | None = None
-    top_thickness: float | None = Field(default=None, gt=0)
-    pedestal_diameter: float | None = Field(default=None, gt=0)
+    screen_height: Number | None = Field(default=None, gt=0)
+    screen_thickness: Number | None = Field(default=None, gt=0)
+    screen_margin: Number | None = Field(default=None, ge=0)
+    screen_z: Number | None = None
+    top_thickness: Number | None = Field(default=None, gt=0)
+    pedestal_diameter: Number | None = Field(default=None, gt=0)
     base: bool | None = None
-    base_thickness: float | None = Field(default=None, gt=0)
-    base_diameter: float | None = Field(default=None, gt=0)
+    base_thickness: Number | None = Field(default=None, gt=0)
+    base_diameter: Number | None = Field(default=None, gt=0)
 
 
 class CorpusParamSpec(_ParamSpecFields):
@@ -306,9 +320,9 @@ NonCompositeParamSpec: TypeAlias = Annotated[
 
 
 class Origin(_ContractModel):
-    x: float = 0
-    y: float = 0
-    z: float = 0
+    x: Number = 0
+    y: Number = 0
+    z: Number = 0
 
 
 class CompositeBlock(_ContractModel):
@@ -401,40 +415,26 @@ def parse_paramspec(data: Any) -> ParamSpec:
     return ParamSpec.model_validate(data)
 
 
-def validate_paramspec(data: Any, schema_path: Path | None = None) -> list[str]:
+def validate_paramspec(data: Any) -> list[str]:
     """Return Studio-ready validation errors (empty means valid).
 
-    ``schema_path`` remains supported for callers/tests that explicitly supply
-    an alternate JSON Schema.  Normal validation always uses the typed model.
+    The typed model is the single contract; the checked-in JSON Schema is
+    generated from it for AI/API consumers and is not a second validator here.
     """
     from .telemetry import hash_payload, span
 
     with span("paramspec.validate", {"revision.hash": hash_payload(data)}) as trace_span:
-        if schema_path is not None:
-            from jsonschema import Draft202012Validator
-
-            validator = Draft202012Validator(load_schema(schema_path))
-            errors: list[str] = []
-            for err in sorted(validator.iter_errors(data), key=lambda item: list(item.path)):
-                path = ".".join(str(part) for part in err.path) or "(root)"
-                errors.append(f"{path}: {err.message}")
+        try:
+            parse_paramspec(data)
+        except ValidationError as exc:
+            errors = _format_errors(exc)
         else:
-            try:
-                parse_paramspec(data)
-            except ValidationError as exc:
-                errors = _format_errors(exc)
-            else:
-                errors = []
+            errors = []
         trace_span.set_attributes({
             "check.outcome": "pass" if not errors else "fail",
             "error.codes": ["paramspec_invalid"] if errors else [],
         })
         return errors
-
-
-def validate_paramspec_file(path: str | Path, schema_path: Path | None = None) -> list[str]:
-    with Path(path).open(encoding="utf-8") as file:
-        return validate_paramspec(json.load(file), schema_path)
 
 
 def paramspec_json_schema() -> dict[str, Any]:

@@ -303,7 +303,10 @@ function MebelScene(container){
     const a=w/h, oh=orthoR*Math.max(1,1/a);
     ortho.left=-oh*a;ortho.right=oh*a;ortho.top=oh;ortho.bottom=-oh;
     ortho.updateProjectionMatrix();
-    renderer.setSize(w,h);}
+    renderer.setSize(w,h);
+    // подгонка камеры была сделана при нулевом контейнере (скрытая вкладка,
+    // ранний вызов) — повторяем её при первом реальном размере
+    if(!fitted&&world&&w>0&&h>0){fitted=true;setView(curView);}}   // setView сам зовёт size()
   addEventListener('resize',size);
 
   // --- ракурсы: аксонометрия/перспектива/сверху/спереди/слева ---
@@ -660,7 +663,9 @@ function MebelScene(container){
     const modelSphere=0.5*Math.sqrt(W*W+H*H+D*D)||600;
     if(!fitted||opts.resetView||opts.refit){
       if(opts.resetView)curView=opts.view||'persp';
-      setView(curView); fitted=true;
+      setView(curView);
+      // при контейнере 0×0 камера получила NaN — считаем подгонку несделанной
+      fitted=container.clientWidth>0&&container.clientHeight>0;
     }else setOrbitBounds(modelCenter,modelSphere);
     syncOpenablesState();
   }

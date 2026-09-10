@@ -11,7 +11,7 @@ printf '%s\n' "$SHA" > "$META_DIR/DEPLOY_SHA"
 COPYFILE_DISABLE=1 tar czf /tmp/basis_update.tgz \
     --exclude='__pycache__' --exclude='.previews' \
     -C "$META_DIR" DEPLOY_SHA -C "$PWD" \
-    main.py requirements.txt README.md AGENTS.md RULES.md STUDIO.md \
+    main.py requirements.txt requirements-server.txt README.md AGENTS.md RULES.md STUDIO.md \
     src schema prompts rules materials scripts tests qa landing vendor assets ops
 scp -i "$KEY" /tmp/basis_update.tgz "$HOST":/tmp/
 ssh -i "$KEY" "$HOST" 'set -eu

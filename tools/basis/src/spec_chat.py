@@ -386,9 +386,14 @@ class OpenAICompatProvider:
             timeout = max(1.0, float(os.environ.get("SPEC_CHAT_TIMEOUT_S", "120")))
         except ValueError:
             timeout = 120.0
-        # Не оставляем интерфейс ждать SDK-дефолт (до 10 минут плюс повторы).
-        # Повтор команды остаётся явным решением пользователя в Studio.
-        self.client = OpenAI(api_key=api_key, timeout=timeout, max_retries=0,
+        # Не оставляем интерфейс ждать SDK-дефолт (до 10 минут плюс повторы),
+        # но один повтор на 429/5xx даём: иначе любая сетевая икота провайдера
+        # превращается в ошибку команды.
+        try:
+            retries = max(0, int(os.environ.get("SPEC_CHAT_MAX_RETRIES", "1")))
+        except ValueError:
+            retries = 1
+        self.client = OpenAI(api_key=api_key, timeout=timeout, max_retries=retries,
                              **({"base_url": base} if base else {}))
         self.model = os.environ.get("LLM_MODEL", p["model"])
         self.vision_model = os.environ.get("LLM_VISION_MODEL", p["vision"])

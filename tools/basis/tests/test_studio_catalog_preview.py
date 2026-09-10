@@ -222,15 +222,15 @@ def test_chat_and_save_bind_to_explicit_product_after_server_selection_reset(
         thread.join(timeout=2)
 
 
-def test_save_is_strict_and_does_not_overwrite_on_unknown_fields(tmp_path: Path) -> None:
+def test_save_keeps_unknown_fields_and_reports_them_as_warnings(tmp_path: Path) -> None:
+    """Studio never refuses the operator's work: the document is stored as-is."""
     spec = json.loads(
         (ROOT / "paramspecs" / "komi_72_tumba_podkatnaya.json").read_text(
             encoding="utf-8"
         )
     )
     spec_path = tmp_path / "item.json"
-    original = json.dumps(spec, ensure_ascii=False)
-    spec_path.write_text(original, encoding="utf-8")
+    spec_path.write_text(json.dumps(spec, ensure_ascii=False), encoding="utf-8")
     candidate = json.loads(json.dumps(spec))
     candidate["future_top_level"] = True
 
@@ -242,11 +242,21 @@ def test_save_is_strict_and_does_not_overwrite_on_unknown_fields(tmp_path: Path)
         status, raw = _request(
             server.server_port, "POST", "/api/save", {"spec": candidate}
         )
-        rejected = json.loads(raw)
-        assert status == 422
-        assert rejected["code"] == "invalid_paramspec"
-        assert any("future_top_level" in item for item in rejected["details"])
-        assert spec_path.read_text(encoding="utf-8") == original
+        saved = json.loads(raw)
+        assert status == 200
+        assert saved["ok"] is True
+        assert any("future_top_level" in item for item in saved["warnings"])
+        stored = json.loads(spec_path.read_text(encoding="utf-8"))
+        assert stored["future_top_level"] is True
+        assert stored["dimensions"] == spec["dimensions"]
+
+        # The page shows the stored document and tells the operator what the
+        # strict contract does not carry into generation.
+        status, raw = _request(server.server_port, "GET", "/")
+        page = raw.decode("utf-8")
+        assert status == 200
+        assert '"future_top_level": true' in page or '"future_top_level":true' in page
+        assert "future_top_level" in page.split("const SPEC_WARNINGS = ", 1)[1].split(";", 1)[0]
     finally:
         server.shutdown()
         server.server_close()

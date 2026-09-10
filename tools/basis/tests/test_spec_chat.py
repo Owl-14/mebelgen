@@ -122,7 +122,7 @@ def test_rejected_provider_cannot_mutate_current_revision_by_reference(monkeypat
     assert SPEC == before
 
 
-def test_openai_compat_provider_has_bounded_timeout_without_hidden_retries(monkeypatch):
+def test_openai_compat_provider_has_bounded_timeout_and_one_retry(monkeypatch):
     import types
     import src.spec_chat as sc
 
@@ -138,6 +138,10 @@ def test_openai_compat_provider_has_bounded_timeout_without_hidden_retries(monke
     sc.OpenAICompatProvider("openai")
 
     assert captured["timeout"] == 45.0
+    assert captured["max_retries"] == 1          # один повтор на 429/5xx
+
+    monkeypatch.setenv("SPEC_CHAT_MAX_RETRIES", "0")
+    sc.OpenAICompatProvider("openai")
     assert captured["max_retries"] == 0
 
 
