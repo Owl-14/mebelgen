@@ -63,7 +63,7 @@
 | Провайдеры и чат | `src/spec_chat.py`, `src/providers.py` | вызов vision/LLM, разбор ответа, разделение create/edit, usage и trace |
 | Операции | `src/edit_operations.py` | Pydantic-модели операций, preconditions, copy-on-write и атомарность |
 | Семантическая геометрия правок | `src/edit_engine.py`, `src/overrides.py` | перевод разрешённых команд детали в детерминированные overrides |
-| Оркестрация | `src/studio_graph.py`, `src/orchestrator.py` | граф шагов, bounded repair, защита ревизий и сохранение |
+| Оркестрация | `src/spec_chat.py` (`chat_edit`), `src/studio.py` (`/api/chat`) | синхронный контракт: маршрут → операции → reducer → production gate → ответ |
 | Генераторы | `src/generators/registry.py`, `src/generators/*.py` | панели, размеры, placement и конструкция каждого архетипа |
 | Присадки/фурнитура | `src/hardware.py`, `src/hardware_geometry.py`, `src/fasteners3d.py` | система 32, отверстия, крепёж и его 3D-представление |
 | Материалы | `src/materials.py`, `src/materials_policy.py`, `materials/` | реальные материалы/артикулы, резолвинг и политика полноты |
@@ -175,50 +175,6 @@ Provider обязан поддерживать общий внутренний �
 стоимости и без сохранения пользовательского содержимого. Переключение модели
 не должно менять полномочия узла.
 
-### Shadow/canary rollout AI-конвейера
-
-1. Feature flags и kill switches независимы по компонентам, но частичный новый
-   execution path не допускается: при выключенном typed ops/EditEngine/full
-   gate/split prompts/LangGraph весь запрос возвращается на проверенный path.
-2. Shadow не пишет domain state, revisions, catalog, AI history или audit.
-   Разрешены только in-memory candidate state и privacy-safe агрегаты сравнения
-   ParamSpec/geometry/drilling.
-3. Canary выбирается только по server-owned tenant/user identity. Идентификатор
-   из body/header/query не может включить canary.
-4. До rollout утверждаются budgets latency, token/reported cost, invalid-op,
-   false-rejection, edit-success и checkpoint retention/size. Missing reported
-   cost не считается нулём: percentile/min-samples используют только reported
-   values. False-rejection берётся только из labelled eval MEB-151, live
-   divergence публикуется отдельно. В denominator входят только trusted
-   `trace-eval-case-v1` с `ok=true`, валидным digest verdict и конечным статусом
-   `accepted|replied|rejected`; missing/timeout/unknown/failed/inconclusive
-   учитываются отдельным inconclusive counter. Самосогласованные caller hashes
-   недостаточны: case id, dataset/report, node-output и verdict digests должны
-   совпасть с immutable checked-in MEB-151 approval manifest; общий telemetry
-   `record()` не принимает false-rejection поля или eval marker strings. Eval
-   evidence дедуплицируется по privacy-safe digest manifest/report version,
-   trusted run identity, candidate digest и case id; отдельный run учитывается
-   только при явной привязке в approval manifest. Превышение
-   автоматически останавливает candidate и переключает следующие запросы на
-   legacy; это не должно отключать production gate.
-5. Checkpoints имеют bounded retention. Недоступность/переполнение storage
-   fail-closed возвращает legacy path и не сохраняет candidate revision.
-6. Rollout evidence связывается с engine matrix (MEB-149), replay/evals
-   (MEB-151) и ручным cost-bounded provider bake-off (MEB-153). Непринятый
-   evidence блокирует production rollout, но не offline разработку.
-
-### Условный fine-tune
-
-Fine-tune нельзя начинать по наличию отдельных примеров или субъективному
-ощущению качества. Сначала обязателен offline dry-run из
-`rules/finetune-data-readiness.md`: минимум 200 human-approved пар ТЗ→ParamSpec
-с подтверждёнными правами, production quality, dedup, split/leakage checks и
-измеримым плато prompt+RAG. Решение о принятии результата принимает только
-предварительно зарегистрированное A/B-правило на frozen holdout. Красный или
-неполный отчёт означает `stay_in_backlog`; синтетические пары не восполняют
-недостающие реальные данные. Pair-local флаг доверия недостаточен: обязателен
-allowlisted source type и структурированный rights record, который отдельно
-проходит governance/legal проверку вне возможностей offline gate.
 
 ### Новый вид присадки/фурнитуры
 
@@ -326,8 +282,7 @@ inside referenced fixtures, not only secrets in the top-level trace.
 | Изменение | Обязательные профильные проверки |
 |---|---|
 | ParamSpec/schema | `test_paramspec_pydantic.py`, все catalog validation, migration tests |
-| create/edit AI | `test_prompt_registry.py`, `test_spec_chat.py`, `test_edit_operations.py`, `test_studio_graph.py` |
-| trace/eval dataset | `python main.py trace-eval`, `test_trace_replay.py`; только offline, live provider не является CI-гейтом |
+| create/edit AI | `test_prompt_registry.py`, `test_spec_chat.py`, `test_edit_operations.py` |
 | import/API | профильный HTTP-тест Studio: status, code, trace id, отсутствие записи при ошибке |
 | generator | тест архетипа, geometry/consistency, production gate, regression/golden |
 | drilling/hardware | hardware, hardware_geometry, drilling_check, CFRN holes parity |

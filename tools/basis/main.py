@@ -381,18 +381,6 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_finetune_readiness(args: argparse.Namespace) -> int:
-    from src.finetune_readiness import evaluate_readiness, write_report
-
-    evidence = Path(args.evidence) if args.evidence else None
-    report = evaluate_readiness(Path(args.dataset), evidence_path=evidence)
-    encoded = json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True)
-    if args.output:
-        write_report(report, Path(args.output))
-    print(encoded)
-    return 0 if report["ready_for_finetune_experiment"] else 2
-
-
 def cmd_generate(args: argparse.Namespace) -> int:
     from src.paramspec import validate_paramspec
     from src.generators import generate_from_paramspec
@@ -486,43 +474,6 @@ def cmd_finish(args: argparse.Namespace) -> int:
         print("\nТребуется правка по ТЗ (вертикали и пр.)", file=sys.stderr)
         return 2
     return 0
-
-
-def cmd_trace_eval(args: argparse.Namespace) -> int:
-    """Replay recorded AI node outputs without calling an LLM or cloud API."""
-
-    from src.trace_replay import (
-        DEFAULT_DATASET,
-        compare_reports,
-        run_dataset,
-        write_report,
-    )
-
-    report = run_dataset(Path(args.dataset) if args.dataset else DEFAULT_DATASET)
-    print(
-        f"trace-eval {report['dataset_version']}: "
-        f"{report['passed']}/{report['case_count']} сценариев прошли"
-    )
-    for case in report["cases"]:
-        marker = "OK" if case["ok"] else "FAIL"
-        print(f"  {marker} {case['id']} [{case['prompt_version']} / {case['model']}]")
-        for mismatch in case["mismatches"]:
-            print(f"    - {mismatch}")
-    if args.output:
-        write_report(report, args.output)
-        print(f"Отчёт: {args.output}")
-
-    comparison = None
-    if args.compare:
-        baseline = json.loads(Path(args.compare).read_text(encoding="utf-8"))
-        comparison = compare_reports(baseline, report)
-        print(
-            f"Сравнение: {comparison['comparable_cases']} общих сценариев, "
-            f"изменено {len(comparison['changed'])}"
-        )
-        for change in comparison["changed"]:
-            print(f"  CHANGED {change['id']}")
-    return 0 if report["failed"] == 0 and (comparison is None or comparison["ok"]) else 2
 
 
 def main() -> int:
@@ -708,29 +659,6 @@ def main() -> int:
     p_ing.add_argument("--project", required=True, help="Принятый/исправленный project.json")
     p_ing.add_argument("--tz", help="Текст исходного ТЗ (опционально)")
     p_ing.set_defaults(func=cmd_ingest)
-
-    p_eval = sub.add_parser(
-        "trace-eval",
-        help="Offline replay сохранённых AI node outputs через reducer и production gate",
-    )
-    p_eval.add_argument(
-        "--dataset",
-        help="Версионированный scenarios.json (по умолчанию qa/trace_eval/v1)",
-    )
-    p_eval.add_argument("-o", "--output", help="Записать сравнимый JSON-отчёт")
-    p_eval.add_argument(
-        "--compare",
-        help="Сравнить результат с ранее сохранённым JSON-отчётом prompt/model",
-    )
-    p_eval.set_defaults(func=cmd_trace_eval)
-    p_ft = sub.add_parser(
-        "finetune-readiness",
-        help="Offline dry-run gate данных ТЗ→ParamSpec; fine-tune и LLM не запускаются",
-    )
-    p_ft.add_argument("--dataset", default="dataset", help="Каталог JSON-пар ТЗ→ParamSpec")
-    p_ft.add_argument("--evidence", help="JSON с offline prompt+RAG и A/B evidence")
-    p_ft.add_argument("--output", help="Записать машиночитаемый JSON-отчёт")
-    p_ft.set_defaults(func=cmd_finetune_readiness)
 
     p_cons = sub.add_parser(
         "check-consistency",

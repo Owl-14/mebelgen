@@ -91,42 +91,6 @@ ParamSpec, версии, preview, AI-историю и существующие 
 | `/api/builds`, `/api/open-file` | история сборок (расход ₽), открыть результат (в т.ч. БАЗИС-Просмотр) |
 | `/api/deliver` | лист согласования (открывается в браузере) |
 
-## Stateful AI-оркестрация (MEB-145)
-
-Новый LangGraph-путь включается только переменной
-`STUDIO_LANGGRAPH_ORCHESTRATION=1`. Без флага `/api/chat` использует прежний
-синхронный контракт. С флагом ответ сохраняет поля `reply`, `spec`, `changes`,
-`usage`, `created`, а дополнительный блок `graph` сообщает редакции, операции,
-результаты проверок и версию промпта.
-
-Checkpoints и журнал редакций хранятся в `<out>/.studio_graph/`. Простые явно
-заданные изменения габаритов планируются правилами без LLM; неоднозначные
-команды и изображения идут через существующие AI-провайдеры. Граф вызывает
-текущие `validate_paramspec`, `generate_from_paramspec`, `compute_drilling` и
-Studio quality gates через Protocol-адаптеры — геометрических формул в графе
-нет. Число repair-итераций жёстко ограничено двумя.
-
-## Shadow/canary rollout и SLO (MEB-158)
-
-`src/rollout.py` управляет шестью независимыми компонентами: typed operations,
-EditEngine, full gate, split prompts, tracing/exporters и LangGraph. У каждого
-есть режим `off|shadow|canary|on` и kill switch. Новый execution path становится
-primary только как целый безопасный контур; отключение любого execution-
-компонента возвращает запрос на синхронный path и не пропускает проверки.
-
-Shadow отвечает пользователю только legacy-результатом. Кандидат использует
-in-memory checkpoints и `NullRevisionStore`; сравниваются accepted ParamSpec,
-geometry и drilling, но candidate не пишется в каталог, revisions, AI history
-или audit. Canary выбирается по проверенной session tenant/user identity либо
-стабильному процентному bucket, а не по данным request body.
-
-После bounded окна метрик превышение latency/token/reported-cost, invalid-op,
-false-rejection, edit-success или checkpoint budget автоматически записывает
-stop и переводит последующие запросы на legacy. Rollout state хранит только
-хэшированные actor ids и числа. SQLite checkpoints ограничены по возрасту,
-threads, checkpoints/thread и bytes; недоступное storage деградирует в legacy.
-Полный контракт, dashboard и drill: `ops/ai-rollout-runbook.md`.
-
 ## Гарантии
 
 - случайная трата на облако невозможна: кнопка неактивна при красных чеках +
