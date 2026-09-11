@@ -138,6 +138,34 @@ def cmd_build_b3d(args: argparse.Namespace) -> int:
 def cmd_local_b3d(args: argparse.Namespace) -> int:
     from src.local_b3d import prepare_local_b3d, verify_local_b3d
 
+    if args.local_b3d_op == "build":
+        from src.b3d_builder import project_to_b3d_bytes
+        from src.b3d_verify import verify_b3d_parity
+        from src.local_b3d import _load_input
+
+        source = Path(args.input)
+        _kind, project, _gate = _load_input(source)
+        out = Path(args.output or source.with_name(source.stem.removesuffix(".project") + ".b3d"))
+        out.write_bytes(project_to_b3d_bytes(project))
+        parity = verify_b3d_parity(out, project)
+        print(f"Готов .b3d (формат 15, без облака): {out}  ({out.stat().st_size} байт)")
+        print(
+            f"Паритет с моделью: {'ок' if parity['ok'] else 'ОШИБКИ'} — "
+            f"панелей {parity['panels']['actual']}/{parity['panels']['expected']}, "
+            f"присадок {parity['drilling']['actual']}/{parity['drilling']['expected']}"
+        )
+        for error in parity["errors"][:8]:
+            print(f"  - {error['code']}: {error['detail']}")
+        code = 0 if parity["ok"] else 2
+        if args.check_viewer:
+            from src.b3d_viewer_check import check_with_viewer
+
+            check = check_with_viewer(out)
+            print(f"БАЗИС-Просмотр: {check['status']} за {check['seconds']} с — {check['detail']}")
+            if check["status"] not in ("accepted", "unavailable"):
+                code = 2
+        return code
+
     if args.local_b3d_op == "prepare":
         result = prepare_local_b3d(args.input, args.out)
         print(f"Offline import-пакет: {args.out}")
@@ -550,9 +578,20 @@ def main() -> int:
 
     p_local_b3d = sub.add_parser(
         "local-b3d",
-        help="offline-пакет для импорта/сохранения в desktop БАЗИС + проверка результата (без APIList)",
+        help="локальный .b3d: build (сами, без облака) / prepare+verify (через desktop БАЗИС)",
     )
     local_b3d_sub = p_local_b3d.add_subparsers(dest="local_b3d_op", required=True)
+    p_local_build = local_b3d_sub.add_parser(
+        "build",
+        help="собрать нативный .b3d самим (формат 15, без подписи и облака) + офлайн-паритет",
+    )
+    p_local_build.add_argument("input", help="ParamSpec или project.json")
+    p_local_build.add_argument("-o", "--output", help="путь .b3d (по умолчанию рядом со входом)")
+    p_local_build.add_argument(
+        "--check-viewer", action="store_true",
+        help="открыть результат в БАЗИС-Просмотр 3D и убедиться, что файл принят (Windows, env BAZIS_VIEWER)",
+    )
+    p_local_build.set_defaults(func=cmd_local_b3d)
     p_local_prepare = local_b3d_sub.add_parser("prepare", help="подготовить воспроизводимый import-пакет")
     p_local_prepare.add_argument("input", help="ParamSpec или project.json")
     p_local_prepare.add_argument("--out", required=True, help="новый каталог пакета")

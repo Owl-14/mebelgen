@@ -56,3 +56,15 @@ def test_reads_geometry_and_holes():
     assert furn is not None
     holes = child(furn, "Holes")
     assert holes and len(holes[2]) == 64    # присадки в файле
+
+
+def test_desktop_file_is_reproduced_byte_for_byte():
+    """Десктопный .b3d (сохранён Мебельщиком) собирается нашим кодеком байт-в-байт.
+
+    Значит, у десктопного формата нет скрытого состояния/подписи вне дерева:
+    parse → write даёт тот же файл, включая zlib-поток (уровень 6) и отсутствие хвоста.
+    """
+    src = (ROOT / "qa" / "fixtures" / "wardrobe_demo_production.b3d").read_bytes()
+    doc = parse_b3d(src)
+    assert doc["trailer"] == b""
+    assert write_b3d(doc["sections"], doc["trailer"]) == src
