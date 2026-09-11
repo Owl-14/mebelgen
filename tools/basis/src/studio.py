@@ -994,7 +994,7 @@ def _verify_parity(spec: dict[str, Any], b3d: Path) -> dict[str, Any] | None:
 
 
 def _log_build(out_dir: Path, spec: dict[str, Any], b3d: Path,
-               parity: dict[str, Any] | None = None) -> None:
+               parity: dict[str, Any] | None = None, *, source: str = "cloud") -> None:
     from datetime import datetime
     f = out_dir / "builds.json"
     try:
@@ -1005,7 +1005,8 @@ def _log_build(out_dir: Path, spec: dict[str, Any], b3d: Path,
     builds.append({"ts": datetime.now().isoformat(timespec="seconds"),
                    "file": str(b3d), "project": spec.get("project_name", ""),
                    "dims": f'{d.get("width")}×{d.get("depth")}×{d.get("height")}',
-                   "cost_rub": B3D_COST_RUB,
+                   "cost_rub": B3D_COST_RUB if source == "cloud" else 0,
+                   "source": source,
                    "parity": bool(parity and parity.get("ok"))})
     f.write_text(json.dumps(builds, ensure_ascii=False, indent=1), encoding="utf-8")
 
@@ -2049,14 +2050,15 @@ def make_handler(st: _Studio):
                 project_bound_routes = {
                     "/api/chat", "/api/chat-history", "/api/save",
                     "/api/versions", "/api/restore", "/api/import-tz",
-                    "/api/export-cfrn", "/api/build-b3d", "/api/deliver",
-                    "/api/duplicate",
+                    "/api/export-cfrn", "/api/build-b3d", "/api/build-b3d-local",
+                    "/api/deliver", "/api/duplicate",
                 }
                 # Routes where acting on a stale selection corrupts data or
                 # writes files under another product's name.
                 identity_required_routes = {
                     "/api/chat", "/api/chat-history", "/api/save", "/api/restore",
-                    "/api/export-cfrn", "/api/build-b3d", "/api/deliver",
+                    "/api/export-cfrn", "/api/build-b3d", "/api/build-b3d-local",
+                    "/api/deliver",
                 }
                 requested_project = str(body.get("project_file") or "").strip()
                 if path in project_bound_routes and requested_project:
@@ -2089,7 +2091,7 @@ def make_handler(st: _Studio):
                     "image.count": len(body.get("images") or []),
                 })
                 production_warnings: list[str] = []
-                if path in ("/api/export-cfrn", "/api/build-b3d", "/api/deliver"):
+                if path in ("/api/export-cfrn", "/api/build-b3d", "/api/build-b3d-local", "/api/deliver"):
                     production_error, production_warnings = _production_gate(
                         spec, body.get("model_revision"),
                         strict=path != "/api/export-cfrn",
@@ -2976,6 +2978,29 @@ def make_handler(st: _Studio):
                                     **{k: str(v) for k, v in rep.items()}})
                     except Exception as e:
                         self._json({"ok": False, "error": str(e)[:300]}, 502)
+                elif path == "/api/build-b3d-local":   # нативный .b3d самим, без облака
+                    payload = build_payload(spec)
+                    if not payload["ok"]:
+                        self._json({"ok": False, "error": "проверки не пройдены",
+                                    "issues": payload["issues"]}, 409)
+                        return
+                    from .b3d_builder import project_to_b3d_bytes
+                    from .generators import generate_from_paramspec
+                    from .materials import resolve_project_materials
+                    project = generate_from_paramspec(spec)
+                    try:
+                        project["material_refs"] = resolve_project_materials(project)
+                    except Exception:
+                        pass
+                    out = workspace.out_dir / (spec_path.stem + ".b3d")
+                    try:
+                        out.write_bytes(project_to_b3d_bytes(project))
+                        parity = _verify_parity(spec, out)
+                        _log_build(workspace.out_dir, spec, out, parity, source="local")
+                        self._json({"ok": True, "b3d": str(out), "bytes": out.stat().st_size,
+                                    "parity": parity, "source": "local"})
+                    except Exception as e:
+                        self._json({"ok": False, "error": str(e)[:300]}, 500)
                 elif path == "/api/builds":         # история сборок .b3d (C3)
                     self._json(_read_builds(workspace.out_dir))
                 elif path == "/api/open-file":      # открыть результат (C3)
@@ -4281,7 +4306,8 @@ PAGE = r"""<!DOCTYPE html>
       <div class="row" style="gap:6px">
         <button id="btnSave">Сохранить</button>
         <button id="btnCfrn">.cfrn</button>
-        <button id="btnB3d" class="primary">Собрать .b3d (~10₽)</button>
+        <button id="btnB3dLocal" class="primary" title="Нативный .b3d формата 15 собирается здесь, без облака и оплаты">Собрать .b3d</button>
+        <button id="btnB3d" title="Платная сборка через облако БАЗИС (~10₽)">.b3d через облако</button>
       </div>
       <div class="row" style="gap:6px;margin-top:4px">
         <button id="btnDeliver">Лист согласования</button>
@@ -5219,7 +5245,7 @@ function syncProductionAvailability(){
   const current=generatedSpecJson===JSON.stringify(SPEC),
     ready=viewportModelState==='ready'&&current&&!!generatedRevision&&lastOk&&!modelMutationLocked(),
     reason=ready?'Текущая редакция проверена и готова к производству':productionBlockReason();
-  ['btnCfrn','btnB3d','btnDeliver'].forEach(id=>{const button=$(id);if(!button)return;
+  ['btnCfrn','btnB3dLocal','btnB3d','btnDeliver'].forEach(id=>{const button=$(id);if(!button)return;
     button.disabled=!ready;button.title=reason;});
 }
 function syncDependentDataNotices(){
@@ -7387,6 +7413,15 @@ $('btnSave').onclick=async()=>{const p=await saveSpec();
 $('btnCfrn').onclick=async()=>{const p=await post('/api/export-cfrn');
   toast(p.ok?('.cfrn: '+p.cfrn):productionErrorText(p),!p.ok);
   warnList(p).forEach(w=>toast('Экспорт с замечанием: '+w,true));};
+$('btnB3dLocal').onclick=async()=>{
+  if(!lastOk){toast('Проверки не пройдены',true);return;}
+  toast('Собираю .b3d…');
+  const p=await post('/api/build-b3d-local');
+  toast(p.ok?('Готов .b3d: '+p.b3d):productionErrorText(p),!p.ok);
+  if(p.ok){loadBuilds();
+    if(confirm('Открыть результат в БАЗИС-Просмотре?'))
+      await fetch('/api/open-file',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({path:p.b3d})});}};
 $('btnB3d').onclick=async()=>{
   if(!lastOk){toast('Проверки не пройдены',true);return;}
   if(!confirm('Собрать .b3d через облако БАЗИС? Операция платная (~10₽).'))return;

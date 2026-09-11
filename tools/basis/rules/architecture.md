@@ -25,6 +25,7 @@ ParamSpec; координаты всегда считает детерминир
     ├── delivery (src/delivery.py) — лист согласования (версии, PDF/PNG)
     ├── cfrn.py → .cfrn ──(облако БАЗИС, ПЛАТНО ~10₽)──► .b3d  (build_b3d.py)
     │                                └── b3d_verify.py — паритет .b3d ↔ Studio-модель
+    ├── b3d_builder.py → нативный .b3d (формат 15) сами, без облака (`local-b3d build`)
     └── local_b3d.py → offline import-пакет → лицензированный desktop БАЗИС → .b3d
                                      └── структура + базовый паритет; нативность требует real round-trip
 ```
@@ -54,7 +55,8 @@ ParamSpec; координаты всегда считает детерминир
 | `production_gate.py` | атомарный гейт AI/reducer-кандидата: Pydantic → JSON Schema → генерация → consistency/geometry/bounds → CFRN → drilling/system 32/purpose registry → completeness/materials; возвращает `CheckReport`, не применяя красную ревизию |
 | `bounds_check.py` | структурные панели внутри заявленного W×D×H; overlay-фасад/задник может выйти только по Z и не дальше своей заявленной толщины |
 | `cfrn.py` | project.json → `.cfrn` (родная ЛЕВОсторонняя конвенция БАЗИС, разворот фасадами к камере) + `check_cfrn_encoding` / `check_cfrn_holes` |
-| `b3d_format.py`, `b3d_verify.py`, `local_b3d.py` | чтение .b3d, offline hand-off и паритет; не подмена нативного builder |
+| `b3d_format.py`, `b3d_builder.py`, `b3d_viewer_check.py` | кодек BZ85 (чтение любого .b3d, запись байт-в-байт), сборка нативного .b3d формата 15 из project.json, проверка открываемости через БАЗИС-Просмотр |
+| `b3d_verify.py`, `local_b3d.py` | паритет .b3d ↔ модель; offline hand-off через десктопный импортёр |
 | `b3d_preflight.py`, `build_b3d.py`, `cloud_api.py`, `cloud_cutting.py` | обязательный offline B3D preflight и облако БАЗИС (ПЛАТНО, только по явной просьбе); красная модель не создаёт cloud-клиент/`model_convert`, Cutting использует pinned transport — `rules/cutting-api.md` |
 | `cutting_ledger.py`, `cutting_operator_trust.py`, `cutting_preflight.py`, `material_link_contract.py` | approval-digest canonical ledger/operator boundary, общий offline/live preflight и строгий article/sheet/post-audit material-link contract |
 | `webviewer.py` | `viewer_payload` + `SCENE_JS` (общий three.js-движок: панели, присадки, метизы, анимация открывания, ракурсы `setView`, снапшоты) |

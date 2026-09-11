@@ -173,6 +173,22 @@ landing/     обложка демо (planovo.pro/bazis)
 (если `count > 0`). Направляющие/петли — когда подключён каталог поставщика, иначе
 мастерами БАЗИС «Установка ящиков/дверей». Подробнее о фурнитуре — [../../docs/BASIS_AUTOMATION.md](../../docs/BASIS_AUTOMATION.md).
 
+## Сборка .b3d локально (без облака)
+
+```bash
+python main.py local-b3d build paramspecs/<x>.json -o D:/claude/bazis/out/<x>.b3d --check-viewer
+```
+
+`src/b3d_builder.py` пишет нативный `.b3d` формата версии 15 (как десктопный
+Мебельщик 2023.10) прямо из нашего `project.json`, без облака и оплаты. Геометрия
+берётся из того же представления, что и `.cfrn`; панели совпадают с облачным
+эталоном `qa/fixtures/wardrobe_demo_ours_cloud.b3d` байт-в-байт по положению и
+контуру, присадки проходят `b3d_verify`. `--check-viewer` открывает результат в
+БАЗИС-Просмотр 3D и убеждается, что файл принят. В Studio это кнопка
+**«Собрать .b3d»** на вкладке «Производство». Чего пока нет: мешей тел фурнитуры
+(ручки, опоры, штанга без видимого тела) и миниатюры. Почему это работает —
+`rules/local_b3d_pipeline.md`.
+
 ## Сборка .b3d через облако (device-independent)
 
 Без десктопа: `project.json → src/cfrn.py собирает .cfrn → облако `model-convert
@@ -188,10 +204,6 @@ preflight: schema/mapping, геометрию, CFRN encoding и holes parity, п
 Raw `cloud model-convert --type cfrn-to-b3d` отключён, потому что произвольный
 CFRN нельзя доказуемо связать с прошедшей проверку исходной моделью. Для
 CFRN→B3D всегда используйте `build-b3d` с ParamSpec или project JSON.
-
-Сводный offline readiness MEB-132 без внешних вызовов:
-`python qa/meb132_readiness.py`. Статусы реальной БАЗИС/MatBase/Cutting-среды в
-этом отчёте намеренно остаются `blocked`, пока не приложено внешнее evidence.
 
 ## Материалы
 
