@@ -145,10 +145,10 @@
         "z": 0
       },
       "edge_banding": {
-        "bottom": 2,
-        "top": 0.4,
-        "left": 2,
-        "right": 2
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": false
     },
@@ -181,10 +181,10 @@
         "z": 0
       },
       "edge_banding": {
-        "bottom": 2,
-        "top": 0.4,
-        "left": 2,
-        "right": 2
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": false
     },
@@ -217,10 +217,10 @@
         "z": 0
       },
       "edge_banding": {
-        "left": 2,
-        "right": 0.4,
-        "top": 0.4,
-        "bottom": 0.4
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
       },
       "estimated": false
     },
@@ -253,10 +253,10 @@
         "z": 0
       },
       "edge_banding": {
-        "left": 2,
-        "right": 0.4,
-        "top": 0.4,
-        "bottom": 0.4
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
       },
       "estimated": false
     },
@@ -267,20 +267,20 @@
       "material": "ХДФ белый",
       "thickness": 3,
       "dimensions": {
-        "width": 632,
-        "height": 2400
+        "width": 630,
+        "height": 2398
       },
       "placement": {
-        "x1": 0.0,
-        "x2": 632.0,
-        "y1": 0.0,
-        "y2": 2400.0,
+        "x1": 1.0,
+        "x2": 631.0,
+        "y1": 1.0,
+        "y2": 2399.0,
         "z1": 630.0,
         "z2": 633.0
       },
       "position": {
-        "x": 0.0,
-        "y": 0.0,
+        "x": 1.0,
+        "y": 1.0,
         "z": 630.0
       },
       "rotation": {
@@ -341,7 +341,7 @@
       "thickness": 16,
       "dimensions": {
         "width": 600,
-        "height": 611
+        "height": 614
       },
       "placement": {
         "x1": 16.0,
@@ -349,7 +349,7 @@
         "y1": 2050.0,
         "y2": 2066.0,
         "z1": 16.0,
-        "z2": 627.0
+        "z2": 630.0
       },
       "position": {
         "x": 16.0,
@@ -362,10 +362,10 @@
         "z": 0
       },
       "edge_banding": {
-        "bottom": 2,
-        "top": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0,
+        "right": 0
       },
       "estimated": false,
       "section_id": "main"
@@ -399,10 +399,10 @@
         "z": 0
       },
       "edge_banding": {
-        "bottom": 2,
-        "top": 0.4,
-        "left": 2,
-        "right": 2
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": false
     },
@@ -435,10 +435,10 @@
         "z": 0
       },
       "edge_banding": {
-        "bottom": 2,
-        "top": 0.4,
-        "left": 2,
-        "right": 2
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": false
     },
@@ -471,10 +471,10 @@
         "z": 0
       },
       "edge_banding": {
-        "left": 2,
-        "right": 0.4,
-        "top": 0.4,
-        "bottom": 0.4
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
       },
       "estimated": false
     },
@@ -507,10 +507,10 @@
         "z": 0
       },
       "edge_banding": {
-        "left": 2,
-        "right": 0.4,
-        "top": 0.4,
-        "bottom": 0.4
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
       },
       "estimated": false
     },
@@ -521,20 +521,20 @@
       "material": "ХДФ белый",
       "thickness": 3,
       "dimensions": {
-        "width": 664,
-        "height": 870
+        "width": 662,
+        "height": 868
       },
       "placement": {
-        "x1": 632.0,
-        "x2": 1296.0,
-        "y1": 0.0,
-        "y2": 870.0,
+        "x1": 633.0,
+        "x2": 1295.0,
+        "y1": 1.0,
+        "y2": 869.0,
         "z1": 630.0,
         "z2": 633.0
       },
       "position": {
-        "x": 632.0,
-        "y": 0.0,
+        "x": 633.0,
+        "y": 1.0,
         "z": 630.0
       },
       "rotation": {
@@ -690,10 +690,10 @@
         "z": 0
       },
       "edge_banding": {
-        "bottom": 2,
-        "top": 0.4,
-        "left": 2,
-        "right": 2
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": false
     },
@@ -726,10 +726,10 @@
         "z": 0
       },
       "edge_banding": {
-        "bottom": 2,
-        "top": 0.4,
-        "left": 2,
-        "right": 2
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": false
     },
@@ -762,10 +762,10 @@
         "z": 0
       },
       "edge_banding": {
-        "left": 2,
-        "right": 0.4,
-        "top": 0.4,
-        "bottom": 0.4
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
       },
       "estimated": false
     },
@@ -798,10 +798,10 @@
         "z": 0
       },
       "edge_banding": {
-        "left": 2,
-        "right": 0.4,
-        "top": 0.4,
-        "bottom": 0.4
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
       },
       "estimated": false
     },
@@ -812,20 +812,20 @@
       "material": "ХДФ белый",
       "thickness": 3,
       "dimensions": {
-        "width": 664,
-        "height": 1000
+        "width": 662,
+        "height": 998
       },
       "placement": {
-        "x1": 632.0,
-        "x2": 1296.0,
-        "y1": 1400.0,
-        "y2": 2400.0,
+        "x1": 633.0,
+        "x2": 1295.0,
+        "y1": 1401.0,
+        "y2": 2399.0,
         "z1": 630.0,
         "z2": 633.0
       },
       "position": {
-        "x": 632.0,
-        "y": 1400.0,
+        "x": 633.0,
+        "y": 1401.0,
         "z": 630.0
       },
       "rotation": {
@@ -945,10 +945,10 @@
         "z": 0
       },
       "edge_banding": {
-        "bottom": 2,
-        "top": 0.4,
-        "left": 2,
-        "right": 2
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": false
     },
@@ -981,10 +981,10 @@
         "z": 0
       },
       "edge_banding": {
-        "bottom": 2,
-        "top": 0.4,
-        "left": 2,
-        "right": 2
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": false
     },
@@ -1017,10 +1017,10 @@
         "z": 0
       },
       "edge_banding": {
-        "left": 2,
-        "right": 0.4,
-        "top": 0.4,
-        "bottom": 0.4
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
       },
       "estimated": false
     },
@@ -1053,10 +1053,10 @@
         "z": 0
       },
       "edge_banding": {
-        "left": 2,
-        "right": 0.4,
-        "top": 0.4,
-        "bottom": 0.4
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
       },
       "estimated": false
     },
@@ -1067,20 +1067,20 @@
       "material": "ХДФ белый",
       "thickness": 3,
       "dimensions": {
-        "width": 564,
-        "height": 870
+        "width": 562,
+        "height": 868
       },
       "placement": {
-        "x1": 1296.0,
-        "x2": 1860.0,
-        "y1": 0.0,
-        "y2": 870.0,
+        "x1": 1297.0,
+        "x2": 1859.0,
+        "y1": 1.0,
+        "y2": 869.0,
         "z1": 630.0,
         "z2": 633.0
       },
       "position": {
-        "x": 1296.0,
-        "y": 0.0,
+        "x": 1297.0,
+        "y": 1.0,
         "z": 630.0
       },
       "rotation": {
@@ -1141,7 +1141,7 @@
       "thickness": 16,
       "dimensions": {
         "width": 532,
-        "height": 611
+        "height": 614
       },
       "placement": {
         "x1": 1312.0,
@@ -1149,7 +1149,7 @@
         "y1": 477.0,
         "y2": 493.0,
         "z1": 16.0,
-        "z2": 627.0
+        "z2": 630.0
       },
       "position": {
         "x": 1312.0,
@@ -1162,10 +1162,10 @@
         "z": 0
       },
       "edge_banding": {
-        "bottom": 2,
-        "top": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0,
+        "right": 0
       },
       "estimated": false,
       "section_id": "main"
@@ -1236,10 +1236,10 @@
         "z": 0
       },
       "edge_banding": {
-        "bottom": 2,
-        "top": 0.4,
-        "left": 2,
-        "right": 2
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": false
     },
@@ -1272,10 +1272,10 @@
         "z": 0
       },
       "edge_banding": {
-        "bottom": 2,
-        "top": 0.4,
-        "left": 2,
-        "right": 2
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": false
     },
@@ -1308,10 +1308,10 @@
         "z": 0
       },
       "edge_banding": {
-        "left": 2,
-        "right": 0.4,
-        "top": 0.4,
-        "bottom": 0.4
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
       },
       "estimated": false
     },
@@ -1344,10 +1344,10 @@
         "z": 0
       },
       "edge_banding": {
-        "left": 2,
-        "right": 0.4,
-        "top": 0.4,
-        "bottom": 0.4
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
       },
       "estimated": false
     },
@@ -1358,20 +1358,20 @@
       "material": "ХДФ белый",
       "thickness": 3,
       "dimensions": {
-        "width": 564,
-        "height": 1000
+        "width": 562,
+        "height": 998
       },
       "placement": {
-        "x1": 1296.0,
-        "x2": 1860.0,
-        "y1": 1400.0,
-        "y2": 2400.0,
+        "x1": 1297.0,
+        "x2": 1859.0,
+        "y1": 1401.0,
+        "y2": 2399.0,
         "z1": 630.0,
         "z2": 633.0
       },
       "position": {
-        "x": 1296.0,
-        "y": 1400.0,
+        "x": 1297.0,
+        "y": 1401.0,
         "z": 630.0
       },
       "rotation": {
@@ -1396,7 +1396,7 @@
       "thickness": 16,
       "dimensions": {
         "width": 532,
-        "height": 611
+        "height": 614
       },
       "placement": {
         "x1": 1312.0,
@@ -1404,7 +1404,7 @@
         "y1": 1892.0,
         "y2": 1908.0,
         "z1": 16.0,
-        "z2": 627.0
+        "z2": 630.0
       },
       "position": {
         "x": 1312.0,
@@ -1417,10 +1417,10 @@
         "z": 0
       },
       "edge_banding": {
-        "bottom": 2,
-        "top": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0,
+        "right": 0
       },
       "estimated": false,
       "section_id": "main"

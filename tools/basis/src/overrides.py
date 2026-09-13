@@ -69,11 +69,24 @@ def apply_back_mount(project: dict[str, Any], mode: str | None) -> dict[str, Any
         return project
     t = float(back.get("thickness", 3))
     pl = back["placement"]
-    pl["x1"] = min(q["placement"]["x1"] for q in carcass)
-    pl["x2"] = max(q["placement"]["x2"] for q in carcass)
-    pl["y1"] = min(q["placement"]["y1"] for q in carcass)
-    pl["y2"] = max(q["placement"]["y2"] for q in carcass)
+    # накладной задник режут на 1 мм внутрь от габарита корпуса с каждой стороны
+    # (эталон технолога: 1198×2138 на корпус 1200×2140) — не выступает за торцы
+    inset = 1.0
+    pl["x1"] = _r(min(q["placement"]["x1"] for q in carcass) + inset)
+    pl["x2"] = _r(max(q["placement"]["x2"] for q in carcass) - inset)
+    pl["y1"] = _r(min(q["placement"]["y1"] for q in carcass) + inset)
+    pl["y2"] = _r(max(q["placement"]["y2"] for q in carcass) - inset)
     z_rear = max(q["placement"]["z2"] for q in carcass)
+    # Генераторы строят внутренние детали (перегородки, полки, цоколь) до
+    # плоскости ВРЕЗНОГО задника, т.е. на толщину задника короче боковин.
+    # При накладном заднике это оставляет щель между их задним торцом и
+    # задником (гвоздям не во что бить); у технолога перегородка и полки
+    # идут до задней плоскости корпуса — вытягиваем их до неё.
+    inset_rear = _r(z_rear - t)
+    for q in carcass:
+        if q.get("type") in ("vertical_partition", "shelf", "plinth")                 and abs(float(q["placement"]["z2"]) - inset_rear) < 0.05:
+            q["placement"]["z2"] = _r(z_rear)
+            _refresh_derived(q)
     pl["z1"], pl["z2"] = _r(z_rear), _r(z_rear + t)
     back["override"] = True
     _refresh_derived(back)

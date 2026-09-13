@@ -25,7 +25,8 @@ def test_overlay_back_gets_nails():
     spec["back_mount"] = "overlay"
     p = generate_from_paramspec(spec)
     back = next(x for x in p["panels"] if x["type"] == "back")
-    assert back["placement"]["z1"] == 450 and back["placement"]["x1"] == 0
+    # накладной задник за корпусом, на 1 мм внутрь от габарита (эталон технолога)
+    assert back["placement"]["z1"] == 450 and back["placement"]["x1"] == 1
     s = drilling_summary(compute_drilling(p))
     assert s.get("задник (гвоздь)", 0) >= 8
     assert not check_drilling_geometry(p)["errors"]

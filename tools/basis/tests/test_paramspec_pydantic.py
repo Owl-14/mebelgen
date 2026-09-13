@@ -35,7 +35,7 @@ def test_all_paramspec_v1_files_round_trip_without_geometry_change():
         assert dumped == raw, path.name
         assert generate_from_paramspec(dumped)["panels"] == generate_from_paramspec(raw)["panels"], path.name
         checked += 1
-    assert checked == 38
+    assert checked == 39
 
 
 @pytest.mark.parametrize(

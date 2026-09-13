@@ -578,7 +578,9 @@ def _compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
                 if not (pl["x1"] - 1 <= cx <= pl["x2"] + 1) or y2o - y1o < 60:
                     continue
                 pts = [(cx, y) for y in _row96_centered(y1o, y2o)]
-            elif q.get("type") in ("bottom", "top", "shelf"):
+            elif q.get("type") in ("bottom", "top"):
+                # полки к заднику не прибиваются (эталон технолога: 92 гвоздя =
+                # 2 стойки + перегородка + дно + крышка); съёмные — тем более
                 cy = (qp["y1"] + qp["y2"]) / 2
                 x1o, x2o = max(qp["x1"], pl["x1"]), min(qp["x2"], pl["x2"])
                 if not (pl["y1"] - 1 <= cy <= pl["y2"] + 1) or x2o - x1o < 60:

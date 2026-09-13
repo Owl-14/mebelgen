@@ -73,10 +73,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": false
     },
@@ -109,10 +109,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": false
     },
@@ -145,10 +145,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
       },
       "estimated": false
     },
@@ -181,10 +181,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
       },
       "estimated": false
     },
@@ -195,20 +195,20 @@
       "material": "ДВП",
       "thickness": 3.2,
       "dimensions": {
-        "width": 1200,
-        "height": 740
+        "width": 1198,
+        "height": 738
       },
       "placement": {
-        "x1": 0,
-        "x2": 1200,
-        "y1": 0,
-        "y2": 740,
+        "x1": 1,
+        "x2": 1199,
+        "y1": 1,
+        "y2": 739,
         "z1": 270,
         "z2": 273.2
       },
       "position": {
-        "x": 0,
-        "y": 0,
+        "x": 1,
+        "y": 1,
         "z": 270
       },
       "rotation": {
@@ -217,10 +217,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 0,
+        "bottom": 0,
+        "left": 0,
+        "right": 0
       },
       "estimated": false,
       "override": true
@@ -232,7 +232,7 @@
       "material": "ЛДСП",
       "thickness": 22,
       "dimensions": {
-        "width": 266.8,
+        "width": 270,
         "height": 696
       },
       "placement": {
@@ -241,7 +241,7 @@
         "y1": 22,
         "y2": 718,
         "z1": 0,
-        "z2": 266.8
+        "z2": 270
       },
       "position": {
         "x": 589,
@@ -254,10 +254,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
       },
       "estimated": false
     },
@@ -269,7 +269,7 @@
       "thickness": 22,
       "dimensions": {
         "width": 567,
-        "height": 266.8
+        "height": 270
       },
       "placement": {
         "x1": 22,
@@ -277,7 +277,7 @@
         "y1": 362,
         "y2": 384,
         "z1": 0,
-        "z2": 266.8
+        "z2": 270
       },
       "position": {
         "x": 22,
@@ -290,10 +290,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0,
+        "right": 0
       },
       "estimated": false,
       "section_id": "left"
@@ -327,10 +327,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 2,
+        "bottom": 2,
+        "left": 2,
+        "right": 2
       },
       "estimated": false,
       "section_id": "left"
@@ -343,7 +343,7 @@
       "thickness": 22,
       "dimensions": {
         "width": 567,
-        "height": 266.8
+        "height": 270
       },
       "placement": {
         "x1": 611,
@@ -351,7 +351,7 @@
         "y1": 362,
         "y2": 384,
         "z1": 0,
-        "z2": 266.8
+        "z2": 270
       },
       "position": {
         "x": 611,
@@ -364,10 +364,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0,
+        "right": 0
       },
       "estimated": false,
       "section_id": "right"
@@ -401,10 +401,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 2,
+        "bottom": 2,
+        "left": 2,
+        "right": 2
       },
       "estimated": false,
       "section_id": "right"
