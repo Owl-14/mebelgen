@@ -10,7 +10,8 @@ from typing import Any
 
 from .base import read_carcass
 from .corpus import carcass_calc
-from .columns import column_bounds, door_in_column, drawer_stack, facade_x_span, partitions, rod_in_column, shelves_in_column
+from .columns import (column_bounds, door_in_column, drawer_facade_span, drawer_stack, facade_x_span,
+                      partitions, rod_in_column, shelves_in_column)
 from .helpers import build_project, carcass, facade_band, panel, shelf_levels
 
 
@@ -21,6 +22,8 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     # зазор между фасадами ящиков по вертикали — gaps.default (эталон технолога:
     # 4 мм при боковом/дверном 2 мм); без него — как у фасадов
     gd = float((spec.get("gaps") or {}).get("default", g))
+    # глубина проёма до задника: тонкий задник по умолчанию накладной (за корпусом)
+    inner_depth = c.D if (c.T_back <= 6 and spec.get("back_mount") != "inset") else c.D - c.T_back
     yb, yt = c.Hleg + c.T, c.H - c.T_top
     # фронт полок/перегородок = фронт корпуса (дно/крышка), а не утоплен на T:
     # иначе полки посередине не доходят до переднего края изделия
@@ -60,6 +63,8 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
         levels = levels or []
 
         fspan = facade_x_span(idx - 1, bounds, c.W, c.T, reveal, g)   # внешний пролёт фасада секции
+        if kind == "drawers":
+            fspan = drawer_facade_span(idx - 1, bounds, c.W, c.T, reveal)   # эталон: зазор reveal с обеих сторон
 
         if kind == "drawers":
             _fb = sec.get("front_bottom")                       # Y-координата низа нижнего фасада
@@ -75,7 +80,7 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
                 heights = [round(h, 2)] * n
             # короб ящика не должен доходить до задника (передний край = D − T_back)
             # и до крышки: верхний накладной фасад перекрывает её торец (MEB-166)
-            sec_dr = {**sec, "back_limit": c.D - c.T_back, "top_limit": yt}
+            sec_dr = {**sec, "back_limit": inner_depth, "top_limit": yt}
             ps, dm, topy = drawer_stack(cx1, cx2, fb, heights, gd, sec_dr, c.T, c.mat, sid,
                                         sec.get("prefix", ""), facade_bounds=fspan)
             # нижний фасад перекрывает торец дна (как дверь): если фасад

@@ -129,7 +129,10 @@ def test_panels_match_cloud_oracle_and_parity_passes(tmp_path: Path):
     # внутрь от габарита, полка над стеком ящиков сидит в зоне фасадов и
     # верхний фасад заканчивается на зазор ниже её верха, соседняя полка
     # выравнивается по ней (AKD-190).
-    moved = {"Задняя стенка", "Полка под нишей", "Фасад ящик 3", "Полка левая (left) 1"}
+    moved = {"Задняя стенка", "Полка под нишей", "Полка левая (left) 1"}
+    # короб ящика собран по эталону технолога (задняя между боковинами, дно до
+    # неё, зазор направляющей 13, фасад с зазором reveal с обеих сторон)
+    moved |= {name for name in cloud if name.startswith("Ящик") or name.startswith("Фасад ящик")}
     mismatched = sorted(name for name in cloud
                         if name not in deepened | moved and cloud[name] != ours[name])
     assert mismatched == []

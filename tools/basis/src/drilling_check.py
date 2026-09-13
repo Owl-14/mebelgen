@@ -132,7 +132,10 @@ def check_drilling_geometry(project: dict[str, Any],
                             and abs(x[lvl_t] - h[lvl_t]) < 0.5)
                 for a, b in zip(xs, xs[1:]):
                     df = b - a
-                    if 1 < df <= 64 and abs(df / 32 - round(df / 32)) * 32 > 1.5:
+                    # пара «стяжка+шкант» стоит через 32; больший шаг — уже
+                    # расстояние между парами разных стыков (узкое дно короба:
+                    # 96 от каждого торца даёт 54) — его сетка не держит
+                    if 1 < df < 48 and abs(df / 32 - round(df / 32)) * 32 > 1.5:
                         warnings.append(f"{purpose} @ {h.get('panel')}: шаг {df:.0f} "
                                         f"не кратен 32 (система 32)")
                         break
