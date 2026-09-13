@@ -1011,6 +1011,25 @@ def _log_build(out_dir: Path, spec: dict[str, Any], b3d: Path,
     f.write_text(json.dumps(builds, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
+DOWNLOAD_SUFFIXES = {".b3d": "application/octet-stream", ".cfrn": "application/octet-stream"}
+
+
+def _download_url(path: Path) -> str:
+    return "/download/" + quote(path.name, safe="")
+
+
+def _downloadable_result(out_dir: Path, name: str) -> Path | None:
+    """Файл результата для скачивания браузером: только имя, только .b3d/.cfrn,
+    только из каталога результатов текущей компании (без обхода путей)."""
+    if not name or name != Path(name).name or name.startswith("."):
+        return None
+    root = out_dir.resolve()
+    p = (root / name).resolve()
+    if p.parent != root or p.suffix.lower() not in DOWNLOAD_SUFFIXES or not p.is_file():
+        return None
+    return p
+
+
 def _open_file(out_dir: Path, path: str) -> dict[str, Any]:
     """Открыть файл из каталога результатов: .b3d — БАЗИС-Просмотр, прочее — ОС."""
     import os
@@ -1774,6 +1793,26 @@ def make_handler(st: _Studio):
                     self._send(200, data, "image/svg+xml; charset=utf-8")
                 else:
                     self._send(404, b"{}")
+            elif path.startswith("/download/"):  # скачать собранный .b3d/.cfrn с любого компьютера
+                auth = self._require_access("production.export")
+                if st.require_auth and auth is None:
+                    return
+                from urllib.parse import unquote
+                workspace = st.workspaces.workspace(auth)
+                p = _downloadable_result(workspace.out_dir, unquote(path[len("/download/"):]))
+                if p is None:
+                    self._send(404, b"{}")
+                else:
+                    self._send(
+                        200,
+                        p.read_bytes(),
+                        DOWNLOAD_SUFFIXES[p.suffix.lower()],
+                        headers=[
+                            ("Content-Disposition",
+                             f"attachment; filename*=UTF-8''{quote(p.name, safe='')}"),
+                            ("Cache-Control", "private, no-store"),
+                        ],
+                    )
             elif path.startswith("/preview/"):   # миниатюры каталога (AKD-217)
                 auth = self._require_access("project.read")
                 if st.require_auth and auth is None:
@@ -2961,7 +3000,8 @@ def make_handler(st: _Studio):
                         pass
                     out = workspace.out_dir / (spec_path.stem + ".cfrn")
                     out.write_bytes(project_to_cfrn_bytes(project))
-                    self._json({"ok": True, "cfrn": str(out), "warnings": production_warnings})
+                    self._json({"ok": True, "cfrn": str(out), "download": _download_url(out),
+                                "warnings": production_warnings})
                 elif path == "/api/build-b3d":
                     payload = build_payload(spec)
                     if not payload["ok"]:                # деньги — только на зелёную модель
@@ -2974,7 +3014,7 @@ def make_handler(st: _Studio):
                         rep = build_b3d_from_paramspec(spec, out)
                         parity = _verify_parity(spec, out)         # паритет ✓ (AKD-169)
                         _log_build(workspace.out_dir, spec, out, parity)  # история сборок (C3)
-                        self._json({"ok": True, "parity": parity,
+                        self._json({"ok": True, "parity": parity, "download": _download_url(out),
                                     **{k: str(v) for k, v in rep.items()}})
                     except Exception as e:
                         self._json({"ok": False, "error": str(e)[:300]}, 502)
@@ -2998,13 +3038,21 @@ def make_handler(st: _Studio):
                         parity = _verify_parity(spec, out)
                         _log_build(workspace.out_dir, spec, out, parity, source="local")
                         self._json({"ok": True, "b3d": str(out), "bytes": out.stat().st_size,
+                                    "download": _download_url(out),
                                     "parity": parity, "source": "local"})
                     except Exception as e:
                         self._json({"ok": False, "error": str(e)[:300]}, 500)
                 elif path == "/api/builds":         # история сборок .b3d (C3)
                     self._json(_read_builds(workspace.out_dir))
                 elif path == "/api/open-file":      # открыть результат (C3)
-                    self._json(_open_file(workspace.out_dir, str(body.get("path", ""))))
+                    # Запускает программу на машине сервера — удалённому посетителю
+                    # это бесполезно (и небезопасно): ему — /download/.
+                    if self.headers.get("X-Real-IP") or self.headers.get("X-Forwarded-For") \
+                            or self.client_address[0] not in ("127.0.0.1", "::1"):
+                        self._json({"ok": False, "code": "local_only",
+                                    "error": "Открыть можно только на компьютере с Studio — скачайте файл"}, 403)
+                    else:
+                        self._json(_open_file(workspace.out_dir, str(body.get("path", ""))))
                 elif path == "/api/deliver":        # лист согласования (C3)
                     from datetime import datetime
                     from .generators import generate_from_paramspec
@@ -7411,28 +7459,36 @@ $('btnSave').onclick=async()=>{const p=await saveSpec();
   toast(p.ok?('Сохранено: '+p.spec):('Ошибка: '+p.error),!p.ok);
   warnList(p).forEach(w=>toast('Сохранено с замечанием: '+w,true));
   loadVersions();};
+/* Studio на этом же компьютере — можно открыть файл в БАЗИС-Просмотре;
+   с другого компьютера (сайт) файл отдаётся браузеру как скачивание. */
+const LOCAL_STUDIO=['localhost','127.0.0.1','[::1]','::1'].includes(location.hostname);
+function downloadResult(url){if(!url)return;
+  const a=document.createElement('a');a.href=url;a.download='';
+  document.body.appendChild(a);a.click();a.remove();}
+async function deliverB3d(p){
+  loadBuilds();
+  if(!LOCAL_STUDIO){downloadResult(p.download);return;}
+  if(confirm('Открыть результат в БАЗИС-Просмотре?\n(«Отмена» — скачать файл)'))
+    await fetch('/api/open-file',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({path:p.b3d})});
+  else downloadResult(p.download);}
 $('btnCfrn').onclick=async()=>{const p=await post('/api/export-cfrn');
-  toast(p.ok?('.cfrn: '+p.cfrn):productionErrorText(p),!p.ok);
-  warnList(p).forEach(w=>toast('Экспорт с замечанием: '+w,true));};
+  toast(p.ok?('.cfrn: '+(p.cfrn||'').split(/[\\/]/).pop()):productionErrorText(p),!p.ok);
+  warnList(p).forEach(w=>toast('Экспорт с замечанием: '+w,true));
+  if(p.ok&&!LOCAL_STUDIO)downloadResult(p.download);};
 $('btnB3dLocal').onclick=async()=>{
   if(!lastOk){toast('Проверки не пройдены',true);return;}
   toast('Собираю .b3d…');
   const p=await post('/api/build-b3d-local');
-  toast(p.ok?('Готов .b3d: '+p.b3d):productionErrorText(p),!p.ok);
-  if(p.ok){loadBuilds();
-    if(confirm('Открыть результат в БАЗИС-Просмотре?'))
-      await fetch('/api/open-file',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({path:p.b3d})});}};
+  toast(p.ok?('Готов .b3d: '+(LOCAL_STUDIO?p.b3d:(p.b3d||'').split(/[\\/]/).pop())):productionErrorText(p),!p.ok);
+  if(p.ok)await deliverB3d(p);};
 $('btnB3d').onclick=async()=>{
   if(!lastOk){toast('Проверки не пройдены',true);return;}
   if(!confirm('Собрать .b3d через облако БАЗИС? Операция платная (~10₽).'))return;
   toast('Сборка в облаке…');
   const p=await post('/api/build-b3d');
-  toast(p.ok?('Готов .b3d: '+p.b3d):productionErrorText(p),!p.ok);
-  if(p.ok){loadBuilds();
-    if(confirm('Открыть результат в БАЗИС-Просмотре?'))
-      await fetch('/api/open-file',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({path:p.b3d})});}};
+  toast(p.ok?('Готов .b3d: '+(LOCAL_STUDIO?p.b3d:(p.b3d||'').split(/[\\/]/).pop())):productionErrorText(p),!p.ok);
+  if(p.ok)await deliverB3d(p);};
 
 /* ---------- drag&drop ТЗ в область 3D / пустой экран (AKD-135/214) ---------- */
 const stage=$('main');
@@ -7486,10 +7542,13 @@ async function loadBuilds(){
       const par=x.parity===true?' <span title="паритет Studio↔b3d подтверждён" style="color:var(--ok)">✓</span>'
                :(x.parity===false?' <span title="паритет не подтверждён" style="color:#c78a2b">?</span>':'');
       return `<div class="row" style="margin:2px 0"><span class="mini" style="flex:1"
-        title="${x.file}">${x.ts.replace('T',' ')} · ${f}${par}</span>
-        <button class="fb" data-open="${x.file}">▶</button></div>`;}).join('');
+        title="${f}">${x.ts.replace('T',' ')} · ${f}${par}</span>
+        <button class="fb" title="Скачать" data-download="/download/${encodeURIComponent(f)}">⬇</button>
+        ${LOCAL_STUDIO?`<button class="fb" title="Открыть в БАЗИС-Просмотре" data-open="${x.file}">▶</button>`:''}</div>`;}).join('');
 }
 document.addEventListener('click',async e=>{
+  const d=e.target.dataset&&e.target.dataset.download;
+  if(d){downloadResult(d);return;}
   const f=e.target.dataset&&e.target.dataset.open;
   if(!f) return;
   const r=await fetch('/api/open-file',{method:'POST',
