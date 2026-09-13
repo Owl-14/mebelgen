@@ -424,7 +424,7 @@ def test_mock_result_exposes_versioned_prompt_trace():
     trace = result["trace"]
     assert trace["router"] == {"kind": "deterministic", "node": "edit_operations"}
     assert trace["prompts"][0]["prompt_id"] == "furniture.edit-operations"
-    assert trace["prompts"][0]["prompt_version"] == "1.0.0"
+    assert trace["prompts"][0]["prompt_version"] == "1.1.0"
     assert trace["prompts"][0]["capability_version"] == "2.0.0"
 
 

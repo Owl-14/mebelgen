@@ -112,6 +112,13 @@ def drawer_stack(cx1, cx2, fb, heights, gap, p, T, mat, sid, prefix, facade_boun
     box_h = p.get("box_height", round(min(heights) * 0.52, 2))
     box_back = p.get("box_back_thickness", T)
     box_bot = p.get("box_bottom_thickness", T)
+    # кламп: боковины короба не выше самого низкого фасада (MEB-166)
+    side_lift = box_bot if p.get("box_sides_on_bottom", False) else 0
+    box_h = min(box_h, round(min(heights) - box_y_off - side_lift, 2))
+    top_limit = p.get("top_limit")                       # низ крышки над стеком
+    if top_limit is not None and heights:
+        top_side_y1 = fb + sum(heights[:-1]) + (len(heights) - 1) * gap + box_y_off + side_lift
+        box_h = min(box_h, round(top_limit - top_side_y1, 2))
     bottom_mode = p.get("box_bottom_mode", "between")   # between | under
     # короб (с задней стенкой) не должен заходить в задник корпуса
     back_limit = p.get("back_limit")

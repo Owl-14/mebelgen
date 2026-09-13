@@ -897,6 +897,58 @@ def _apply_compatibility_patches(spec: dict[str, Any],
             current[parts[-1]] = patch["value"]
     return working
 
+
+def _drawer_facts(spec: dict[str, Any]) -> list[dict[str, Any]]:
+    """Фактические размеры ящиков для edit-промпта (MEB-166).
+
+    Без них модель переводит «стенки до 2/3 фасада» в выдуманные миллиметры.
+    Считает детерминированный генератор; сбой генерации — просто без фактов.
+    """
+    sections = spec.get("sections") or []
+    drawer_sections = [i for i, s in enumerate(sections)
+                       if isinstance(s, dict) and s.get("kind") == "drawers"]
+    if not drawer_sections:
+        return []
+    # предел берём у самого генератора: пробная сборка с заведомо огромной
+    # высотой короба возвращает уже зажатые боковины — одна формула, не две
+    probe = copy.deepcopy(spec)
+    for index in drawer_sections:
+        probe["sections"][index]["box_height"] = 100_000
+    try:
+        from .generators import generate_from_paramspec
+        project = generate_from_paramspec(copy.deepcopy(spec))
+        probe_panels = generate_from_paramspec(probe).get("panels") or []
+    except Exception:
+        return []
+    panels = project.get("panels") or []
+    facts: list[dict[str, Any]] = []
+    for index in drawer_sections:
+        section = sections[index]
+        # section_id генераторов: drawer_unit — drawer_stack, колонки — id или col<N>
+        ids = {str(section.get("id") or f"col{index + 1}")}
+        if len(drawer_sections) == 1:
+            ids.add("drawer_stack")
+        fronts = sorted((p for p in panels if p.get("type") == "drawer_front"
+                         and p.get("section_id") in ids),
+                        key=lambda p: -p["placement"]["y1"])
+        sides = [p for p in panels if p.get("type") == "drawer_side_left"
+                 and p.get("section_id") in ids]
+        if not fronts:
+            continue
+        heights = [round(p["dimensions"]["height"], 1) for p in fronts]
+        limits = [p["dimensions"]["height"] for p in probe_panels
+                  if p.get("type") == "drawer_side_left" and p.get("section_id") in ids]
+        facts.append({
+            "target_id": f"sections.{index}",
+            "drawers": len(fronts),
+            "front_heights_mm": heights,              # сверху вниз
+            "box_height_mm": round(sides[0]["dimensions"]["height"], 1) if sides else None,
+            "box_height_explicit": "box_height" in section,
+            "max_box_height_mm": round(min(limits), 1) if limits else None,
+        })
+    return facts
+
+
 def chat_edit(spec: dict[str, Any], message: str,
               history: list[dict[str, str]] | None = None,
               context: dict[str, Any] | None = None,
@@ -931,6 +983,10 @@ def chat_edit(spec: dict[str, Any], message: str,
 
     build_name = resolve_provider_name(provider)
     routed_node = classify_intent(message, spec, context, has_images=bool(images))
+    if routed_node == "edit_operations":
+        facts = _drawer_facts(spec)
+        if facts:
+            context = {**(context or {}), "drawer_facts": facts}
     prompt_meta = build_prompt_request(
         routed_node, message=message, spec=spec, history=history, context=context
     ).trace

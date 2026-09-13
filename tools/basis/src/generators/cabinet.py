@@ -74,7 +74,8 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
                 h = (top - fb - (n - 1) * gd) / n
                 heights = [round(h, 2)] * n
             # короб ящика не должен доходить до задника (передний край = D − T_back)
-            sec_dr = {**sec, "back_limit": c.D - c.T_back}
+            # и до крышки: верхний накладной фасад перекрывает её торец (MEB-166)
+            sec_dr = {**sec, "back_limit": c.D - c.T_back, "top_limit": yt}
             ps, dm, topy = drawer_stack(cx1, cx2, fb, heights, gd, sec_dr, c.T, c.mat, sid,
                                         sec.get("prefix", ""), facade_bounds=fspan)
             # нижний фасад перекрывает торец дна (как дверь): если фасад
