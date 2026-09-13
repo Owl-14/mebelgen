@@ -141,8 +141,11 @@ def drawer_stack(cx1, cx2, fb, heights, gap, p, T, mat, sid, prefix, facade_boun
     back_limit = p.get("back_limit")
     box_depth = p.get("box_depth", std_guide_length(
         (back_limit if back_limit is not None else 450) - box_z1 - BOX_DEPTH_CLEARANCE))
-    box_y_off = p.get("box_y_offset", BOX_Y_OFFSET)
-    box_h = p.get("box_height", round(min(heights) - BOX_HEIGHT_MARGIN, 2))
+    min_front = min(heights)
+    # тесный фасад (ниже 64+): отступ не выше половины фасада, а короб —
+    # по старой пропорции 0.52, иначе боковина уходит в ноль
+    box_y_off = min(p.get("box_y_offset", BOX_Y_OFFSET), max(0.0, round(min_front / 2, 2)))
+    box_h = p.get("box_height", round(max(min_front - BOX_HEIGHT_MARGIN, min_front * 0.52), 2))
     box_back = p.get("box_back_thickness", T)
     box_bot = p.get("box_bottom_thickness", T)
     # кламп: боковины короба не выше самого низкого фасада (MEB-166)
@@ -152,6 +155,7 @@ def drawer_stack(cx1, cx2, fb, heights, gap, p, T, mat, sid, prefix, facade_boun
     if top_limit is not None and heights:
         top_side_y1 = fb + sum(heights[:-1]) + (len(heights) - 1) * gap + box_y_off + side_lift
         box_h = min(box_h, round(top_limit - top_side_y1, 2))
+    box_h = max(box_h, 8.0)                              # короб всегда положительной высоты
     bottom_mode = p.get("box_bottom_mode", "between")   # between | under
     # задняя стенка: inside (эталон технолога — между боковинами у заднего
     # торца, дно до неё) | outside (накладная за боковинами, AKD-181)
