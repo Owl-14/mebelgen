@@ -3,8 +3,8 @@
 Идея: «функционал БАЗИСа, который нам нужен» уже реализован в конвейере на Python
 (генераторы, материалы, присадки, фурнитура, проверки). Studio отдаёт его в наш
 3D-вьювер через локальный HTTP-сервер: правки параметров пересчитываются мгновенно
-и БЕСПЛАТНО, а платная сборка .b3d через облако — только по явному подтверждению
-и только когда все проверки зелёные.
+и БЕСПЛАТНО; нативный .b3d собирается здесь же (формат 15, без облака) и только
+когда все проверки зелёные. Платная сборка через облако БАЗИС из Studio убрана.
 
 Один источник правды: ничего не портируется в JS — браузер шлёт ParamSpec,
 Python возвращает панели/присадки/фурнитуру/проверки/BOM/чертёж.
@@ -964,17 +964,13 @@ def _list_versions(spec_path: Path) -> list[dict[str, Any]]:
 
 # ------------------------------------------------------------------ экспорт-центр (C3)
 
-B3D_COST_RUB = 10          # цена облачной конвертации CfrnToB3d
-
-
 def _read_builds(out_dir: Path) -> dict[str, Any]:
     f = out_dir / "builds.json"
     try:
         builds = json.loads(f.read_text(encoding="utf-8"))
     except Exception:
         builds = []
-    return {"builds": builds[-20:][::-1],              # свежие сверху
-            "total_spent": sum(b.get("cost_rub", 0) for b in builds)}
+    return {"builds": builds[-20:][::-1]}              # свежие сверху
 
 
 def _verify_parity(spec: dict[str, Any], b3d: Path) -> dict[str, Any] | None:
@@ -1005,7 +1001,6 @@ def _log_build(out_dir: Path, spec: dict[str, Any], b3d: Path,
     builds.append({"ts": datetime.now().isoformat(timespec="seconds"),
                    "file": str(b3d), "project": spec.get("project_name", ""),
                    "dims": f'{d.get("width")}×{d.get("depth")}×{d.get("height")}',
-                   "cost_rub": B3D_COST_RUB if source == "cloud" else 0,
                    "source": source,
                    "parity": bool(parity and parity.get("ok"))})
     f.write_text(json.dumps(builds, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -2068,7 +2063,7 @@ def make_handler(st: _Studio):
                     "/api/export-cfrn": "production.export",
                     "/api/deliver": "production.export",
                     "/api/open-file": "production.export",
-                    "/api/build-b3d": "production.build",
+                    "/api/build-b3d-local": "production.build",
                 }
                 auth = self._require_access(permissions.get(path, "project.read"), csrf=True)
                 if st.require_auth and auth is None:
@@ -2089,14 +2084,14 @@ def make_handler(st: _Studio):
                 project_bound_routes = {
                     "/api/chat", "/api/chat-history", "/api/save",
                     "/api/versions", "/api/restore", "/api/import-tz",
-                    "/api/export-cfrn", "/api/build-b3d", "/api/build-b3d-local",
+                    "/api/export-cfrn", "/api/build-b3d-local",
                     "/api/deliver", "/api/duplicate",
                 }
                 # Routes where acting on a stale selection corrupts data or
                 # writes files under another product's name.
                 identity_required_routes = {
                     "/api/chat", "/api/chat-history", "/api/save", "/api/restore",
-                    "/api/export-cfrn", "/api/build-b3d", "/api/build-b3d-local",
+                    "/api/export-cfrn", "/api/build-b3d-local",
                     "/api/deliver",
                 }
                 requested_project = str(body.get("project_file") or "").strip()
@@ -2130,7 +2125,7 @@ def make_handler(st: _Studio):
                     "image.count": len(body.get("images") or []),
                 })
                 production_warnings: list[str] = []
-                if path in ("/api/export-cfrn", "/api/build-b3d", "/api/build-b3d-local", "/api/deliver"):
+                if path in ("/api/export-cfrn", "/api/build-b3d-local", "/api/deliver"):
                     production_error, production_warnings = _production_gate(
                         spec, body.get("model_revision"),
                         strict=path != "/api/export-cfrn",
@@ -3002,22 +2997,6 @@ def make_handler(st: _Studio):
                     out.write_bytes(project_to_cfrn_bytes(project))
                     self._json({"ok": True, "cfrn": str(out), "download": _download_url(out),
                                 "warnings": production_warnings})
-                elif path == "/api/build-b3d":
-                    payload = build_payload(spec)
-                    if not payload["ok"]:                # деньги — только на зелёную модель
-                        self._json({"ok": False, "error": "проверки не пройдены",
-                                    "issues": payload["issues"]}, 409)
-                        return
-                    from .build_b3d import build_b3d_from_paramspec
-                    out = workspace.out_dir / (spec_path.stem + ".b3d")
-                    try:
-                        rep = build_b3d_from_paramspec(spec, out)
-                        parity = _verify_parity(spec, out)         # паритет ✓ (AKD-169)
-                        _log_build(workspace.out_dir, spec, out, parity)  # история сборок (C3)
-                        self._json({"ok": True, "parity": parity, "download": _download_url(out),
-                                    **{k: str(v) for k, v in rep.items()}})
-                    except Exception as e:
-                        self._json({"ok": False, "error": str(e)[:300]}, 502)
                 elif path == "/api/build-b3d-local":   # нативный .b3d самим, без облака
                     payload = build_payload(spec)
                     if not payload["ok"]:
@@ -4355,12 +4334,11 @@ PAGE = r"""<!DOCTYPE html>
         <button id="btnSave">Сохранить</button>
         <button id="btnCfrn">.cfrn</button>
         <button id="btnB3dLocal" class="primary" title="Нативный .b3d формата 15 собирается здесь, без облака и оплаты">Собрать .b3d</button>
-        <button id="btnB3d" title="Платная сборка через облако БАЗИС (~10₽)">.b3d через облако</button>
       </div>
       <div class="row" style="gap:6px;margin-top:4px">
         <button id="btnDeliver">Лист согласования</button>
       </div>
-      <div class="mini">Платная сборка доступна только при зелёных проверках.</div>
+      <div class="mini">Сборка .b3d доступна только при зелёных проверках.</div>
       <div class="row" style="gap:6px;margin-top:6px">
         <select id="verSel" style="flex:1"><option value="">— версии (при сохранении) —</option></select>
         <button id="verRestore" type="button" aria-label="Восстановить выбранную версию"
@@ -5293,7 +5271,7 @@ function syncProductionAvailability(){
   const current=generatedSpecJson===JSON.stringify(SPEC),
     ready=viewportModelState==='ready'&&current&&!!generatedRevision&&lastOk&&!modelMutationLocked(),
     reason=ready?'Текущая редакция проверена и готова к производству':productionBlockReason();
-  ['btnCfrn','btnB3dLocal','btnB3d','btnDeliver'].forEach(id=>{const button=$(id);if(!button)return;
+  ['btnCfrn','btnB3dLocal','btnDeliver'].forEach(id=>{const button=$(id);if(!button)return;
     button.disabled=!ready;button.title=reason;});
 }
 function syncDependentDataNotices(){
@@ -7482,13 +7460,6 @@ $('btnB3dLocal').onclick=async()=>{
   const p=await post('/api/build-b3d-local');
   toast(p.ok?('Готов .b3d: '+(LOCAL_STUDIO?p.b3d:(p.b3d||'').split(/[\\/]/).pop())):productionErrorText(p),!p.ok);
   if(p.ok)await deliverB3d(p);};
-$('btnB3d').onclick=async()=>{
-  if(!lastOk){toast('Проверки не пройдены',true);return;}
-  if(!confirm('Собрать .b3d через облако БАЗИС? Операция платная (~10₽).'))return;
-  toast('Сборка в облаке…');
-  const p=await post('/api/build-b3d');
-  toast(p.ok?('Готов .b3d: '+(LOCAL_STUDIO?p.b3d:(p.b3d||'').split(/[\\/]/).pop())):productionErrorText(p),!p.ok);
-  if(p.ok)await deliverB3d(p);};
 
 /* ---------- drag&drop ТЗ в область 3D / пустой экран (AKD-135/214) ---------- */
 const stage=$('main');
@@ -7536,7 +7507,7 @@ async function loadBuilds(){
   const p=await r.json();
   const b=$('builds');
   if(!(p.builds||[]).length){b.innerHTML='';return;}
-  b.innerHTML=`<div class="mini">Сборки .b3d (расход ~${p.total_spent}₽):</div>`+
+  b.innerHTML=`<div class="mini">Сборки .b3d:</div>`+
     p.builds.slice(0,5).map(x=>{
       const f=(x.file||'').split(/[\\/]/).pop();
       const par=x.parity===true?' <span title="паритет Studio↔b3d подтверждён" style="color:var(--ok)">✓</span>'

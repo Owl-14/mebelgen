@@ -29,7 +29,7 @@ LEGACY_FUNCTIONAL_IDS = {
     "archSel",
     "badges",
     "bom",
-    "btnB3d",
+    "btnB3dLocal",
     "btnCfrn",
     "btnDeliver",
     "btnFixAll",

@@ -32,13 +32,13 @@ copy .env.example .env        # вписать OPENAI_API_KEY (для convert)
   → [КОД]  генератор архетипа → project.json (panels[] с placement)
   → [ВАЛИДАТОРЫ] схема + геометрия + согласованность
   → [STUDIO] показ и правки в нашем движке (живое 3D + чертёж + BOM, бесплатно)
-  → (только по явному запросу) импортёр в Мебельщике ИЛИ облако .cfrn→.b3d (ПЛАТНО)
+  → [КОД]  нативный .b3d собираем сами (local-b3d build, бесплатно)
 ```
 Координаты считает детерминированный код, не модель (см. [RULES.md](RULES.md)).
 
 **Правило по умолчанию: любой запрос «сделай мебель» завершается показом в Studio —
-нашем локальном движке. API/облако БАЗИС не используется, пока пользователь явно
-не попросит собрать `.b3d` (платно) или импортировать в десктопный Мебельщик.**
+нашем локальном движке. `.b3d` собирается локально; платные операции облака БАЗИС
+отключены в коде (включаются только осознанно: `BAZIS_CLOUD_PAID=1`).**
 
 ## Studio — локальный редактор (основной способ показа и правок)
 
@@ -53,8 +53,8 @@ python main.py studio paramspecs/<spec>.json [--port 8765] [--out ../../out]
 (схема/встык/геометрия/.cfrn/присадки), BOM, правка габаритов/материала/секций
 и параметров **любого архетипа** (селектор архетипа + динамическая форма),
 raw-JSON редактор. Кнопки: «Сохранить» (spec + project.json), «.cfrn»,
-«Собрать .b3d (~10₽)» — платная сборка только по явному клику и при зелёных
-проверках. Статичный `viewer` (.html) остаётся для отправки файлом.
+«Собрать .b3d» — нативный файл собирается локально, бесплатно, при зелёных
+проверках; с другого компьютера файл скачивается браузером. Статичный `viewer` (.html) остаётся для отправки файлом.
 
 **Чат с ИИ** (панель в Studio): правки словами — «сделай глубину 600», «замени
 цвет на дуб вотан», «фасады белые», «добавь ножки 100», «дверь открывается вверх».
@@ -108,14 +108,14 @@ python main.py techview  projects/<project>.json                 # чертёж 
 python main.py hardware  projects/<project>.json [--full]        # присадки/фурнитура
 python main.py deliver   paramspecs/<spec>.json [--status draft] # лист согласования
 
-# Сборка нативной модели .b3d через облако БАЗИС (device-independent, ПЛАТНО ~10₽/операция)
-python main.py build-b3d         projects/<project>.json -o out.b3d
+# Сборка нативной модели .b3d локально (формат 15, без облака и оплаты)
+python main.py local-b3d build   paramspecs/<spec>.json -o out.b3d --check-viewer
 
 # Offline hand-off без APIList: пакет для desktop БАЗИС, затем проверка сохранённого файла
 python main.py local-b3d prepare paramspecs/<model>.json --out out/local-b3d-package
 python main.py local-b3d verify  out/local-b3d-package out/<model>.b3d \
   --expected-package-sha256 <SHA-256 из prepare>
-python main.py cloud info | list | model-convert … | drawing-convert …
+python main.py cloud info | list                                  # model-/drawing-convert отключены (платно)
 python main.py cutting info                                       # контракт без сети/ключа
 python qa/cutting_contract_harness.py                             # полный offline contract flow
 # live Cutting отсутствует в обычном CLI/CI; отдельный operator entrypoint,
@@ -189,7 +189,12 @@ python main.py local-b3d build paramspecs/<x>.json -o D:/claude/bazis/out/<x>.b3
 (ручки, опоры, штанга без видимого тела) и миниатюры. Почему это работает —
 `rules/local_b3d_pipeline.md`.
 
-## Сборка .b3d через облако (device-independent)
+## Сборка .b3d через облако — отключена
+
+Платные операции облака БАЗИС (`build-b3d`, `cloud model-convert`,
+`cloud drawing-convert`, кнопка в Studio) отключены: `.b3d` собираем локально.
+`CloudTasksClient.model_convert/drawing_convert` отказывают до сетевого запроса,
+пока не задано `BAZIS_CLOUD_PAID=1`. Описание ниже — для истории.
 
 Без десктопа: `project.json → src/cfrn.py собирает .cfrn → облако `model-convert
 CfrnToB3d` → нативный `.b3d`. Команда `build-b3d`. Каждая конвертация платная (~10₽,
@@ -225,6 +230,7 @@ CFRN→B3D всегда используйте `build-b3d` с ParamSpec или p
 | Переменная | Описание |
 |---|---|
 | `BAZIS_API_KEY` | ключ БАЗИС-Облака (для `build-b3d`, `cloud`, раскрой) — ПЛАТНЫЕ операции |
+| `BAZIS_CLOUD_PAID` | `1` — разрешить платные конвертации облака; по умолчанию отключены |
 | `SPEC_CHAT_PROVIDER` | провайдер чата Studio по умолчанию: `mock`\|`gigachat`\|`glm`\|`kimi`\|`deepseek`\|`openai`\|`gemini` |
 | `VISION_EXTRACT_PROVIDER` | кто читает фото ТЗ в конвейере (напр. `gigachat`), сборку делает SPEC_CHAT_PROVIDER |
 | `GIGACHAT_AUTH_KEY` | GigaChat (Сбер): текст+vision, работает из РФ (+`GIGACHAT_SCOPE/MODEL/VISION_MODEL/VERIFY/CA`) |

@@ -30,6 +30,23 @@ TASK_TYPE = {0: "ExecuteClientScript", 1: "DrawingConvertation", 2: "Model3DConv
 MODEL_CONVERT = {"b3d-to-cfrn": 0, "cfrn-to-b3d": 1}            # Model3DConvertTypeEnum
 DRAWING_FORMAT = {"pdf": 0, "jpeg": 1, "wmf": 2, "svg": 3}      # DrawingConvertFormatEnum
 
+# Платные конвертации (model-convert / drawing-convert) отключены: .b3d собираем
+# сами (local-b3d build). Включить обратно — только осознанно: BAZIS_CLOUD_PAID=1.
+PAID_ENV = "BAZIS_CLOUD_PAID"
+PAID_DISABLED_MESSAGE = (
+    "Платные операции БАЗИС-Облака отключены. Нативный .b3d собирается локально: "
+    f"`main.py local-b3d build <paramspec>`. Включить облако: {PAID_ENV}=1."
+)
+
+
+def paid_cloud_enabled() -> bool:
+    return os.environ.get(PAID_ENV) == "1"
+
+
+def require_paid_cloud_enabled() -> None:
+    if not paid_cloud_enabled():
+        raise RuntimeError(PAID_DISABLED_MESSAGE)
+
 
 class CloudTasksClient:
     def __init__(self, api_key: str | None = None, base_url: str | None = None,
@@ -68,6 +85,7 @@ class CloudTasksClient:
         return r.status_code
 
     def model_convert(self, files: list[str], convert_type: int) -> Any:
+        require_paid_cloud_enabled()
         payload = [("models", (Path(f).name, open(f, "rb"))) for f in files]  # noqa: SIM115
         try:
             r = requests.post(self._url("/model-convert"), headers=self._headers(),
@@ -79,6 +97,7 @@ class CloudTasksClient:
         return r.json()
 
     def drawing_convert(self, files: list[str], fmt: int) -> Any:
+        require_paid_cloud_enabled()
         payload = [("drawings", (Path(f).name, open(f, "rb"))) for f in files]  # noqa: SIM115
         try:
             r = requests.post(self._url("/drawing-convert"), headers=self._headers(),
