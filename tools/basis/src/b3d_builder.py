@@ -128,8 +128,12 @@ def _material_label(entry: dict[str, Any]) -> str:
 
 # ------------------------------------------------------------------ сборка
 
+_SHEET_KINDS = ("лдсп", "хдф", "двп", "мдф", "фанера", "дсп")
+
+
 class _Builder:
-    def __init__(self, doc: dict[str, Any]) -> None:
+    def __init__(self, doc: dict[str, Any], *, board_kind: str = "ЛДСП") -> None:
+        self.board_kind = str(board_kind or "ЛДСП").strip() or "ЛДСП"
         self.objects: list[dict[str, Any]] = doc["table"]["objects"]
         self.materials: list[dict[str, Any]] = doc["table"]["materials"]
         self.hole_catalog: list[dict[str, Any]] = doc["table"].get("holes") or []
@@ -143,6 +147,19 @@ class _Builder:
         self.next_id += 1
         return value
 
+    def panel_material_label(self, entry: dict[str, Any], thickness: float) -> str:
+        """«ЛДСП, 16 мм, Белый<CR>W1000 ST26» — форма записи базы материалов
+        десктопного Мебельщика (эталон технолога); листовой материал без
+        декора («ХДФ»/«ДВП») — «ХДФ, 4 мм»."""
+        name = str(entry.get("name") or "").strip()
+        art = str(entry.get("art") or "").strip()
+        thick = f"{thickness:g}"
+        if name.lower().startswith(_SHEET_KINDS):
+            label = f"{name}, {thick} мм"
+        else:
+            label = f"{self.board_kind}, {thick} мм, {name}" if name else f"{self.board_kind}, {thick} мм"
+        return f"{label}\r{art}" if art else label
+
     # --- панель
     def panel(self, node: dict[str, Any], obj: dict[str, Any]) -> tuple:
         matrix = node["matrix"]
@@ -152,7 +169,8 @@ class _Builder:
             ("Name", "str", str(obj.get("name") or "")),
             _id_node(self.take_id()),
             _trans(matrix[12], matrix[13], matrix[14], quaternion_from_cfrn_matrix(matrix)),
-            ("Mat", "str", _material_label(self.materials[obj["materialIndex"]])),
+            ("Mat", "str", self.panel_material_label(self.materials[obj["materialIndex"]],
+                                                     float(obj.get("thickness") or 16))),
             ("Thick", "f64", float(obj.get("thickness") or 16)),
             ("Contour", "blob", rectangle_contour(size["x"], size["y"])),
         ]
@@ -295,7 +313,8 @@ class _Builder:
 def build_b3d_sections(project: dict[str, Any], *, saved_at: _dt.datetime | None = None) -> list[tuple[int, tuple]]:
     """Дерево BZ85 (секции Header/Document) для project.json."""
     doc = project_to_cfrn_json(project)
-    return _Builder(doc).build(doc, saved_at=saved_at)
+    board_kind = str((project.get("materials") or {}).get("board_material") or "ЛДСП")
+    return _Builder(doc, board_kind=board_kind).build(doc, saved_at=saved_at)
 
 
 def project_to_b3d_bytes(project: dict[str, Any], *, saved_at: _dt.datetime | None = None) -> bytes:

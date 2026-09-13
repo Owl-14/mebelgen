@@ -117,11 +117,14 @@ def test_partition_above_and_below_resolves_but_refuses_unfastened_joint():
         "align_back": True,
     }])
 
-    _failed(result, "quality_gate_failed")
+    # Перегородка, выровненная по заду, доходит до накладного задника и
+    # крепится его гвоздями (полки теперь тоже идут до задней плоскости),
+    # поэтому проверка полноты крепежа проходит; отказ остаётся только за
+    # неразрешёнными стыками (см. test_structured_refusals_*).
+    assert result.ok and result.spec is not None, result.failure
     placement = result.resolved_overrides[0]["placement"]
     assert placement["y1"] == 266 and placement["y2"] == 600
-    assert any("Upper divider" in message
-               for message in result.quality_gates["completeness"])
+    assert result.quality_gates["completeness"] == []
 
 
 def test_structured_refusals_cover_targets_orientation_bounds_and_overrides():

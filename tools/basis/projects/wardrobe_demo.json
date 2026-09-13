@@ -214,20 +214,20 @@
       "material": "ДВП",
       "thickness": 3.2,
       "dimensions": {
-        "width": 1200,
-        "height": 2140
+        "width": 1198,
+        "height": 2138
       },
       "placement": {
-        "x1": 0,
-        "x2": 1200,
-        "y1": 60,
-        "y2": 2200,
+        "x1": 1,
+        "x2": 1199,
+        "y1": 61,
+        "y2": 2199,
         "z1": 600,
         "z2": 603.2
       },
       "position": {
-        "x": 0,
-        "y": 60,
+        "x": 1,
+        "y": 61,
         "z": 600
       },
       "rotation": {
@@ -251,7 +251,7 @@
       "material": "ЛДСП",
       "thickness": 16,
       "dimensions": {
-        "width": 596.8,
+        "width": 600,
         "height": 2108
       },
       "placement": {
@@ -260,7 +260,7 @@
         "y1": 76,
         "y2": 2184,
         "z1": 0,
-        "z2": 596.8
+        "z2": 600
       },
       "position": {
         "x": 592,
@@ -288,19 +288,19 @@
       "thickness": 16,
       "dimensions": {
         "width": 576,
-        "height": 580.8
+        "height": 584
       },
       "placement": {
         "x1": 16,
         "x2": 592,
-        "y1": 680,
-        "y2": 696,
+        "y1": 700,
+        "y2": 716,
         "z1": 16,
-        "z2": 596.8
+        "z2": 600
       },
       "position": {
         "x": 16,
-        "y": 680,
+        "y": 700,
         "z": 16
       },
       "rotation": {
@@ -325,7 +325,7 @@
       "thickness": 16,
       "dimensions": {
         "width": 576,
-        "height": 580.8
+        "height": 584
       },
       "placement": {
         "x1": 16,
@@ -333,7 +333,7 @@
         "y1": 1100,
         "y2": 1116,
         "z1": 16,
-        "z2": 596.8
+        "z2": 600
       },
       "position": {
         "x": 16,
@@ -362,7 +362,7 @@
       "thickness": 16,
       "dimensions": {
         "width": 576,
-        "height": 580.8
+        "height": 584
       },
       "placement": {
         "x1": 16,
@@ -370,7 +370,7 @@
         "y1": 1500,
         "y2": 1516,
         "z1": 16,
-        "z2": 596.8
+        "z2": 600
       },
       "position": {
         "x": 16,
@@ -399,7 +399,7 @@
       "thickness": 16,
       "dimensions": {
         "width": 576,
-        "height": 580.8
+        "height": 584
       },
       "placement": {
         "x1": 16,
@@ -407,7 +407,7 @@
         "y1": 1900,
         "y2": 1916,
         "z1": 16,
-        "z2": 596.8
+        "z2": 600
       },
       "position": {
         "x": 16,
@@ -457,10 +457,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 2,
+        "bottom": 2,
+        "left": 2,
+        "right": 2
       },
       "estimated": false,
       "section_id": "left"
@@ -494,10 +494,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 2,
+        "bottom": 2,
+        "left": 2,
+        "right": 2
       },
       "estimated": true,
       "section_id": "right"
@@ -679,10 +679,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 2,
+        "bottom": 2,
+        "left": 2,
+        "right": 2
       },
       "estimated": true,
       "section_id": "right"
@@ -843,13 +843,13 @@
       "thickness": 16,
       "dimensions": {
         "width": 597,
-        "height": 216
+        "height": 200.0
       },
       "placement": {
         "x1": 601,
         "x2": 1198,
         "y1": 480,
-        "y2": 696.0,
+        "y2": 680.0,
         "z1": -16,
         "z2": 0
       },
@@ -864,10 +864,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 2,
+        "bottom": 2,
+        "left": 2,
+        "right": 2
       },
       "estimated": true,
       "section_id": "right"
@@ -1028,19 +1028,19 @@
       "thickness": 16,
       "dimensions": {
         "width": 576,
-        "height": 596.8
+        "height": 600
       },
       "placement": {
         "x1": 608,
         "x2": 1184,
-        "y1": 680,
-        "y2": 696,
+        "y1": 666,
+        "y2": 682,
         "z1": 0,
-        "z2": 596.8
+        "z2": 600
       },
       "position": {
         "x": 608,
-        "y": 680,
+        "y": 666,
         "z": 0
       },
       "rotation": {

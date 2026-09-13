@@ -58,6 +58,19 @@ def _panels(document):
     return result
 
 
+def _contour_size(blob: bytes) -> tuple[float, float]:
+    """(w, h) прямоугольного контура из блоба: u32 count + отрезки 0x10 с 4 double."""
+    import struct
+
+    count = struct.unpack_from("<I", blob, 0)[0]
+    xs, ys, p = [], [], 4
+    for _ in range(count):
+        assert blob[p] == 0x10
+        x1, y1, x2, y2 = struct.unpack_from("<4d", blob, p + 1)
+        xs += [x1, x2]; ys += [y1, y2]; p += 33
+    return round(max(xs) - min(xs), 2), round(max(ys) - min(ys), 2)
+
+
 def test_quaternion_matches_cloud_convention():
     # горизонтальная панель «Дно» из .cfrn-представления wardrobe_demo:
     # облако записало для неё Rx,Ry,Rz,Rw = (-0.7071, 0, 0, 0.7071)
@@ -106,8 +119,28 @@ def test_panels_match_cloud_oracle_and_parity_passes(tmp_path: Path):
     ours = _panels(parse_b3d(data)["sections"][1][1])
     cloud = _panels(parse_b3d(CLOUD_FIXTURE.read_bytes())["sections"][1][1])
     assert set(ours) == set(cloud)
-    mismatched = sorted(name for name in cloud if cloud[name] != ours[name])
+    # Эталон облака собран, когда перегородка и полки при накладном заднике
+    # заканчивались на толщину задника раньше боковин. Теперь они идут до
+    # задней плоскости корпуса (как у технолога), поэтому у этих деталей
+    # контур глубже ровно на толщину задника; положение и толщина те же.
+    back_thickness = 3.2
+    deepened = {"Перегородка 1"} | {f"Полка левая (left) {i}" for i in range(2, 5)}
+    # Сознательно ушли от эталона облака (по файлу технолога): задник на 1 мм
+    # внутрь от габарита, полка над стеком ящиков сидит в зоне фасадов и
+    # верхний фасад заканчивается на зазор ниже её верха, соседняя полка
+    # выравнивается по ней (AKD-190).
+    moved = {"Задняя стенка", "Полка под нишей", "Фасад ящик 3", "Полка левая (left) 1"}
+    mismatched = sorted(name for name in cloud
+                        if name not in deepened | moved and cloud[name] != ours[name])
     assert mismatched == []
+    for name in deepened:
+        (trans_c, contour_c, thick_c), (trans_o, contour_o, thick_o) = cloud[name], ours[name]
+        assert trans_c == trans_o and thick_c == thick_o, name
+        wc, hc = _contour_size(contour_c)
+        wo, ho = _contour_size(contour_o)
+        # глубина полки лежит по y контура, глубина перегородки — по x
+        grown = sorted((round(wo - wc, 2), round(ho - hc, 2)))
+        assert grown == [0.0, back_thickness], (name, wc, hc, wo, ho)
 
     path = tmp_path / "wardrobe_demo.b3d"
     path.write_bytes(data)

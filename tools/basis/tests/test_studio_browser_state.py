@@ -50,10 +50,13 @@ def studio_url(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
 @pytest.fixture(scope="module")
 def chromium() -> Iterator[Browser]:
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(
-            headless=True,
-            args=["--enable-unsafe-swiftshader", "--use-angle=swiftshader"],
-        )
+        try:
+            browser = playwright.chromium.launch(
+                headless=True,
+                args=["--enable-unsafe-swiftshader", "--use-angle=swiftshader"],
+            )
+        except Exception as error:  # пакет есть, а браузер не установлен (playwright install)
+            pytest.skip(f"Chromium для Playwright недоступен: {str(error).splitlines()[0][:120]}")
         try:
             yield browser
         finally:

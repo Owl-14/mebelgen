@@ -76,10 +76,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": false
     },
@@ -112,10 +112,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": false
     },
@@ -148,10 +148,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
       },
       "estimated": false
     },
@@ -184,10 +184,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
       },
       "estimated": false
     },
@@ -198,20 +198,20 @@
       "material": "ДВП",
       "thickness": 3.2,
       "dimensions": {
-        "width": 404,
-        "height": 674
+        "width": 402,
+        "height": 672
       },
       "placement": {
-        "x1": 0,
-        "x2": 404,
-        "y1": 0,
-        "y2": 674,
+        "x1": 1,
+        "x2": 403,
+        "y1": 1,
+        "y2": 673,
         "z1": 490,
         "z2": 493.2
       },
       "position": {
-        "x": 0,
-        "y": 0,
+        "x": 1,
+        "y": 1,
         "z": 490
       },
       "rotation": {
@@ -220,10 +220,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 0,
+        "bottom": 0,
+        "left": 0,
+        "right": 0
       },
       "estimated": false,
       "override": true
@@ -257,10 +257,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 2,
+        "bottom": 2,
+        "left": 2,
+        "right": 2
       },
       "estimated": true,
       "section_id": "drawer_stack"
@@ -294,10 +294,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 0,
+        "bottom": 0,
+        "left": 0,
+        "right": 0
       },
       "estimated": true,
       "section_id": "drawer_stack"
@@ -331,10 +331,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 0.5,
+        "bottom": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": true,
       "section_id": "drawer_stack"
@@ -368,10 +368,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 0.5,
+        "bottom": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": true,
       "section_id": "drawer_stack"
@@ -405,10 +405,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 0.5,
+        "bottom": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": true,
       "section_id": "drawer_stack"
@@ -442,10 +442,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 2,
+        "bottom": 2,
+        "left": 2,
+        "right": 2
       },
       "estimated": true,
       "section_id": "drawer_stack"
@@ -479,10 +479,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 0,
+        "bottom": 0,
+        "left": 0,
+        "right": 0
       },
       "estimated": true,
       "section_id": "drawer_stack"
@@ -516,10 +516,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 0.5,
+        "bottom": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": true,
       "section_id": "drawer_stack"
@@ -553,10 +553,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 0.5,
+        "bottom": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": true,
       "section_id": "drawer_stack"
@@ -590,10 +590,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 0.5,
+        "bottom": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": true,
       "section_id": "drawer_stack"
@@ -606,13 +606,13 @@
       "thickness": 16,
       "dimensions": {
         "width": 400,
-        "height": 171
+        "height": 155.0
       },
       "placement": {
         "x1": 2,
         "x2": 402,
         "y1": 384,
-        "y2": 555,
+        "y2": 539.0,
         "z1": -16,
         "z2": 0
       },
@@ -627,10 +627,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 2,
+        "bottom": 2,
+        "left": 2,
+        "right": 2
       },
       "estimated": true,
       "section_id": "drawer_stack"
@@ -664,10 +664,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 0,
+        "bottom": 0,
+        "left": 0,
+        "right": 0
       },
       "estimated": true,
       "section_id": "drawer_stack"
@@ -701,10 +701,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 0.5,
+        "bottom": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": true,
       "section_id": "drawer_stack"
@@ -738,10 +738,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 0.5,
+        "bottom": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": true,
       "section_id": "drawer_stack"
@@ -775,10 +775,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 0.5,
+        "bottom": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": true,
       "section_id": "drawer_stack"
@@ -791,19 +791,19 @@
       "thickness": 16,
       "dimensions": {
         "width": 372,
-        "height": 486.8
+        "height": 490
       },
       "placement": {
         "x1": 16,
         "x2": 388,
-        "y1": 539,
-        "y2": 555,
+        "y1": 525,
+        "y2": 541,
         "z1": 0,
-        "z2": 486.8
+        "z2": 490
       },
       "position": {
         "x": 16,
-        "y": 539,
+        "y": 525,
         "z": 0
       },
       "rotation": {
@@ -812,10 +812,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0,
+        "right": 0
       },
       "estimated": true,
       "section_id": "top_open"

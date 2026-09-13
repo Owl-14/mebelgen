@@ -105,11 +105,15 @@ _CFRN_FACADE_TYPES = {"door_front", "drawer_front", "facade", "screen"}
 # НАШИХ контуров (_contour/_ROT): vertical — x конт. от ПЕРЕДА (z1);
 # horizont — y конт. от ЗАДА (привязка z2, растёт к переду); front — прямая.
 #   vertical: x конт. вдоль +Z от z1 → x=0 = ПЕРЕДНИЙ торец: left→3, right(зад)→1;
-#   horizont: y конт. вдоль −Z от z2 → y=max = ПЕРЕД: bottom(перед)→2, top(зад)→0;
+#   horizont: в собранном .b3d (наш builder и облако дают одинаковые Trans)
+#             локальная +y уходит к ЗАДУ (мировой −Z), y=0 лежит на переднем
+#             торце → bottom(перед)→0, top(зад)→2. Сверено с файлом технолога
+#             (qa/fixtures/wardrobe_demo_production.b3d: полки/крышка/дно —
+#             кромка Elem=0 = перед); старая карта клала кромку на задний торец.
 #   front: прямое соответствие.
 _BUTT_SIDES = {
     "vertical": {"left": 3, "right": 1, "top": 2, "bottom": 0},
-    "horizont": {"bottom": 2, "top": 0, "left": 3, "right": 1},
+    "horizont": {"bottom": 0, "top": 2, "left": 3, "right": 1},
     "front": {"bottom": 0, "right": 1, "top": 2, "left": 3},
 }
 
@@ -208,8 +212,8 @@ def project_to_cfrn_json(project: dict[str, Any]) -> dict[str, Any]:
         sx, sy, sz = pl["x2"] - pl["x1"], pl["y2"] - pl["y1"], pl["z2"] - pl["z1"]
         cont = _contour(orient, sx, sy, sz)
         pname = str(p.get("name", "")).lower()
-        if "задн" in pname or p.get("type") == "back":
-            mi = back_idx
+        if p.get("type") == "back":            # только задник корпуса: задняя стенка
+            mi = back_idx                        # ящика — плита, как у технолога
         elif facade_idx and p.get("type") in _CFRN_FACADE_TYPES:
             mi = facade_idx                       # декор фасадов (AKD-260)
         else:

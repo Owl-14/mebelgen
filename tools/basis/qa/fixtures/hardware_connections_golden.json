@@ -14,18 +14,32 @@
         "count": 40,
         "sha256": "8d49347ec13f07c087bb175c36d5f303763c752b21a42cbac4089591a32c779e",
         "bom": [
-          {"name": "Стяжка эксцентриковая MNFX (комплект)", "qty": 8},
-          {"name": "Шкант 8×30", "qty": 8}
+          {
+            "name": "Стяжка эксцентриковая MNFX (комплект)",
+            "qty": 8
+          },
+          {
+            "name": "Шкант 8×30",
+            "qty": 8
+          }
         ]
       }
     },
     "confirmat": {
       "paramspec": "komi_72_tumba_podkatnaya.json",
-      "purposes": ["евровинт (проход Ø8)", "конфирмат"],
+      "purposes": [
+        "евровинт (проход Ø8)",
+        "конфирмат"
+      ],
       "expected": {
         "count": 8,
         "sha256": "6a334ee26f0b736afe8e846182f8f0c9a66ba287b16bc5d0462edaa9139626b9",
-        "bom": [{"name": "Евровинт конфирмат 7×50", "qty": 4}]
+        "bom": [
+          {
+            "name": "Евровинт конфирмат 7×50",
+            "qty": 4
+          }
+        ]
       }
     },
     "removable_shelf": {
@@ -37,7 +51,12 @@
       "expected": {
         "count": 64,
         "sha256": "99bd9c711dbd842d4a76d946c961efe493777cc8ba4a03057cc267b425953c2b",
-        "bom": [{"name": "Эксцентрик Ø20 в пласт. корпусе (SE01PB)", "qty": 32}]
+        "bom": [
+          {
+            "name": "Эксцентрик Ø20 в пласт. корпусе (SE01PB)",
+            "qty": 32
+          }
+        ]
       }
     },
     "fixed_shelf": {
@@ -51,10 +70,16 @@
       ],
       "expected": {
         "count": 62,
-        "sha256": "fa0dfb9d43678f79c083b0dae23bfd610f045d3bf7f25a127d0fde505166a694",
+        "sha256": "baaa974d3a415444b5f3d5af14786dd37ede31c62f2a41437195834fbea5eb04",
         "bom": [
-          {"name": "Стяжка эксцентриковая MNFX (комплект)", "qty": 10},
-          {"name": "Шкант 8×30", "qty": 16}
+          {
+            "name": "Стяжка эксцентриковая MNFX (комплект)",
+            "qty": 10
+          },
+          {
+            "name": "Шкант 8×30",
+            "qty": 16
+          }
         ]
       }
     },
@@ -68,16 +93,28 @@
       "expected": {
         "count": 40,
         "sha256": "390986a3bb06eccb5308e11e5bbaab7b4ae8667c6e20804f4e31df34c2523d5c",
-        "bom": [{"name": "Петля накладная", "qty": 8}]
+        "bom": [
+          {
+            "name": "Петля накладная",
+            "qty": 8
+          }
+        ]
       }
     },
     "guides": {
       "paramspec": "komi_72_tumba_podkatnaya.json",
-      "purposes": ["направляющая (саморез)"],
+      "purposes": [
+        "направляющая (саморез)"
+      ],
       "expected": {
         "count": 36,
         "sha256": "b0f3ca223f8d7c1bb377e678c3ed262f2c60f66f46e44e0ed8099cef4d86c6db",
-        "bom": [{"name": "Саморез US3,5×16 (направляющие)", "qty": 36}]
+        "bom": [
+          {
+            "name": "Саморез US3,5×16 (направляющие)",
+            "qty": 36
+          }
+        ]
       }
     },
     "facade_tie": {
@@ -89,43 +126,77 @@
       "expected": {
         "count": 12,
         "sha256": "c3488b90957f6866826986226c2c509bacd4e62fc794042885251a2367cf2184",
-        "bom": [{"name": "Стяжка фасадная (эксцентрик+шток)", "qty": 6}]
+        "bom": [
+          {
+            "name": "Стяжка фасадная (эксцентрик+шток)",
+            "qty": 6
+          }
+        ]
       }
     },
     "back": {
       "paramspec": "komi_72_tumba_podkatnaya.json",
-      "purposes": ["задник (гвоздь)", "задник (прокол Ø3)"],
+      "purposes": [
+        "задник (гвоздь)",
+        "задник (прокол Ø3)"
+      ],
       "expected": {
         "count": 40,
-        "sha256": "96863356d137e550c8f9a153fa186dbe4ff7c960dc6d6f32413563aebd1035fc",
-        "bom": [{"name": "Гвоздь 1×16", "qty": 20}]
+        "sha256": "23c1b405abda96727be0b2034ee67970446a8eeecec8c8774dded479954200ac",
+        "bom": [
+          {
+            "name": "Гвоздь 1×16",
+            "qty": 20
+          }
+        ]
       }
     },
     "legs": {
       "paramspec": "komi_46_shkaf_dokumenty.json",
-      "purposes": ["опора (саморез)"],
+      "purposes": [
+        "опора (саморез)"
+      ],
       "expected": {
         "count": 8,
         "sha256": "1b589819b9692c500ce317935d6dbc722c7d9f1a38591a24db53955fb3deae96",
-        "bom": [{"name": "Саморез 3,5×16 (опоры)", "qty": 8}]
+        "bom": [
+          {
+            "name": "Саморез 3,5×16 (опоры)",
+            "qty": 8
+          }
+        ]
       }
     },
     "rod": {
       "paramspec": "wardrobe_demo.json",
-      "purposes": ["штангодержатель (саморез)"],
+      "purposes": [
+        "штангодержатель (саморез)"
+      ],
       "expected": {
         "count": 4,
         "sha256": "a1ac5d589fb973aaa8dd5cf9f4ff78a1a321366087856b33a6827160acb1fead",
-        "bom": [{"name": "Штангодержатель (комплект)", "qty": 2}]
+        "bom": [
+          {
+            "name": "Штангодержатель (комплект)",
+            "qty": 2
+          }
+        ]
       }
     },
     "metal_frame": {
       "paramspec": "komi_38_stol_direktora.json",
-      "purposes": ["каркас (саморез)"],
+      "purposes": [
+        "каркас (саморез)"
+      ],
       "expected": {
         "count": 12,
         "sha256": "26a128a26f8956e6b39578b7840d6ca4e7e5a15be120ddea5eb26a5eabe71161",
-        "bom": [{"name": "Саморез 5×12 (каркас/экран)", "qty": 12}]
+        "bom": [
+          {
+            "name": "Саморез 5×12 (каркас/экран)",
+            "qty": 12
+          }
+        ]
       }
     }
   }

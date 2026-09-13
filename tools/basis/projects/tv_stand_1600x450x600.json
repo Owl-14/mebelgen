@@ -87,10 +87,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": false
     },
@@ -123,10 +123,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": false
     },
@@ -159,10 +159,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
       },
       "estimated": false
     },
@@ -195,10 +195,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
       },
       "estimated": false
     },
@@ -209,20 +209,20 @@
       "material": "ДВП",
       "thickness": 3.2,
       "dimensions": {
-        "width": 1600,
-        "height": 600
+        "width": 1598,
+        "height": 598
       },
       "placement": {
-        "x1": 0,
-        "x2": 1600,
-        "y1": 0,
-        "y2": 600,
+        "x1": 1,
+        "x2": 1599,
+        "y1": 1,
+        "y2": 599,
         "z1": 450,
         "z2": 453.2
       },
       "position": {
-        "x": 0,
-        "y": 0,
+        "x": 1,
+        "y": 1,
         "z": 450
       },
       "rotation": {
@@ -231,10 +231,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 0,
+        "bottom": 0,
+        "left": 0,
+        "right": 0
       },
       "estimated": false,
       "override": true
@@ -268,10 +268,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 2,
+        "bottom": 2,
+        "left": 2,
+        "right": 2
       },
       "estimated": true
     },
@@ -282,7 +282,7 @@
       "material": "ЛДСП",
       "thickness": 16,
       "dimensions": {
-        "width": 446.8,
+        "width": 450,
         "height": 454
       },
       "placement": {
@@ -291,7 +291,7 @@
         "y1": 130,
         "y2": 584,
         "z1": 0,
-        "z2": 446.8
+        "z2": 450
       },
       "position": {
         "x": 430,
@@ -304,10 +304,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
       },
       "estimated": false
     },
@@ -318,7 +318,7 @@
       "material": "ЛДСП",
       "thickness": 16,
       "dimensions": {
-        "width": 446.8,
+        "width": 450,
         "height": 454
       },
       "placement": {
@@ -327,7 +327,7 @@
         "y1": 130,
         "y2": 584,
         "z1": 0,
-        "z2": 446.8
+        "z2": 450
       },
       "position": {
         "x": 1154,
@@ -340,10 +340,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
       },
       "estimated": false
     },
@@ -355,7 +355,7 @@
       "thickness": 16,
       "dimensions": {
         "width": 414,
-        "height": 430.8
+        "height": 434
       },
       "placement": {
         "x1": 16,
@@ -363,7 +363,7 @@
         "y1": 345,
         "y2": 361,
         "z1": 16,
-        "z2": 446.8
+        "z2": 450
       },
       "position": {
         "x": 16,
@@ -376,10 +376,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0,
+        "right": 0
       },
       "estimated": false,
       "section_id": "left"
@@ -413,10 +413,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 2,
+        "bottom": 2,
+        "left": 2,
+        "right": 2
       },
       "estimated": false,
       "section_id": "left"
@@ -450,10 +450,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 2,
+        "bottom": 2,
+        "left": 2,
+        "right": 2
       },
       "estimated": true,
       "section_id": "middle"
@@ -487,10 +487,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 2,
+        "bottom": 2,
+        "left": 2,
+        "right": 2
       },
       "estimated": true,
       "section_id": "middle"
@@ -503,7 +503,7 @@
       "thickness": 16,
       "dimensions": {
         "width": 414,
-        "height": 430.8
+        "height": 434
       },
       "placement": {
         "x1": 1170,
@@ -511,7 +511,7 @@
         "y1": 345,
         "y2": 361,
         "z1": 16,
-        "z2": 446.8
+        "z2": 450
       },
       "position": {
         "x": 1170,
@@ -524,10 +524,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0,
+        "right": 0
       },
       "estimated": false,
       "section_id": "right"
@@ -561,10 +561,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 2,
+        "bottom": 2,
+        "left": 2,
+        "right": 2
       },
       "estimated": false,
       "section_id": "right"
