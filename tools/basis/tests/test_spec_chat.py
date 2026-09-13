@@ -437,6 +437,28 @@ def test_photo_tz_usage_counts_vision_and_build_calls(monkeypatch):
                           "completion": 12, "total": 42}
 
 
+def test_chat_edit_captures_raw_response_for_journal(monkeypatch):
+    """Сырой ответ модели уходит в AI-журнал, но не в ответ браузеру."""
+    import src.spec_chat as sc
+
+    raw = '{"reply": "Сделал.", "operations": [{"op": "Teleport"}]}'
+
+    class Provider:
+        model = "fake-model"
+
+        def chat(self, *args, **kwargs):
+            return {"reply": "Сделал.", "operations": [{"op": "Teleport"}], "raw_text": raw}
+
+    monkeypatch.setattr(sc, "get_chat_provider", lambda name=None: Provider())
+    capture: dict = {}
+    result = sc.chat_edit(SPEC, "сделай глубину 600", journal=capture)
+
+    assert "raw_text" not in result
+    assert capture["raw_response"] == raw
+    assert capture["model"] == "fake-model"
+    assert capture["node"] and capture["prompt_version"]
+
+
 def test_deepseek_balance_uses_its_own_endpoint(monkeypatch):
     """У DeepSeek баланс в GET /user/balance (не Moonshot-овский /users/me/balance)."""
     import requests

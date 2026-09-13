@@ -49,6 +49,21 @@ sudo -u bazis /opt/bazis/venv/bin/python scripts/migrate_tenant_catalog.py \
 глубина 14 суток. Скрипт создаёт отдельную consistent SQLite backup и архивирует
 `tenants/`; legacy-каталог остаётся в `paramspecs-<дата>.tgz`.
 
+## AI-журнал (ТЗ, ответы нейросетей, ошибки)
+Каждый вызов нейросети из чата и импорта ТЗ пишется в
+`/opt/bazis/data/ai_journal.sqlite3`, фото ТЗ — в `/opt/bazis/data/ai_journal_files/`
+(оба в ежедневном бэкапе). Содержимое хранится при `AI_JOURNAL_STORE_CONTENT=1`
+(по умолчанию); `0` — только метаданные и счётчики. Путь меняет `AI_JOURNAL_DB`.
+
+```bash
+cd /opt/bazis/basis
+sudo -u bazis /opt/bazis/venv/bin/python main.py ai-journal stats --db /opt/bazis/data/ai_journal.sqlite3 --since 7d
+sudo -u bazis /opt/bazis/venv/bin/python main.py ai-journal export --db /opt/bazis/data/ai_journal.sqlite3 -o /tmp/ai.zip
+```
+`export` без `--since` отдаёт всё новое с прошлой выгрузки (`--all` — вся база,
+`--no-mark` — не сдвигать отметку). В ZIP: `tz.jsonl`, `errors.jsonl`,
+`pairs.jsonl`, `images/`, `manifest.json`.
+
 ## Ключи и лимиты
 `.env` на сервере (руками, в git не попадает): ключи ИИ-провайдеров + лимиты
 демо `STUDIO_CHAT_RPM/RPD`, `STUDIO_TOKENS_PER_DAY`; `STUDIO_PUBLIC=1` задан в

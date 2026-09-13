@@ -331,6 +331,25 @@ def cmd_studio(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_ai_journal(args: argparse.Namespace) -> int:
+    """AI-журнал: сводка (stats) и выгрузка ТЗ/ошибок/пар в ZIP (export)."""
+    import json as _json
+    from datetime import datetime
+
+    from src.ai_journal import AIJournal
+
+    journal = AIJournal(args.db or os.environ.get("AI_JOURNAL_DB")
+                        or ".akeda-data/ai_journal.sqlite3")
+    if args.op == "stats":
+        result = journal.summary(args.since or "")
+    else:
+        output = args.output or f"ai_journal_{datetime.now():%Y%m%d_%H%M%S}.zip"
+        result = journal.export_zip(output, since="" if args.all else args.since,
+                                    mark=not args.no_mark)
+    print(_json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
 def cmd_admin(args: argparse.Namespace) -> int:
     """Локальный identity/admin-контур; Studio подключается после tenant-миграции."""
     from src.admin import run_admin
@@ -667,6 +686,21 @@ def main() -> int:
     p_ad.add_argument("--bootstrap-name", default="Администратор Akeda")
     p_ad.add_argument("--no-open", action="store_true", help="Не открывать браузер")
     p_ad.set_defaults(func=cmd_admin)
+
+    p_aj = sub.add_parser(
+        "ai-journal",
+        help="AI-журнал: сводка (stats) и выгрузка ТЗ/ошибок/пар для дообучения в ZIP (export)",
+    )
+    p_aj.add_argument("op", choices=["stats", "export"])
+    p_aj.add_argument("--db", help="SQLite журнала (env AI_JOURNAL_DB; на сервере "
+                                   "/opt/bazis/data/ai_journal.sqlite3)")
+    p_aj.add_argument("--since", help="период: 7d, 24h или ISO-дата; export без --since — "
+                                      "всё новое с прошлой выгрузки")
+    p_aj.add_argument("--all", action="store_true", help="export: вся база")
+    p_aj.add_argument("--no-mark", action="store_true",
+                      help="export: не сдвигать отметку последней выгрузки")
+    p_aj.add_argument("-o", "--output", help="путь ZIP")
+    p_aj.set_defaults(func=cmd_ai_journal)
 
     p_tv = sub.add_parser("techview", help="ParamSpec/project → чертёж SVG (фронт+бок, размерки/выноски без пересечений)")
     p_tv.add_argument("input", help="ParamSpec или project.json")
