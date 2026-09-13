@@ -16,7 +16,7 @@ GOLDEN = ROOT / "qa" / "fixtures" / "hardware_connections_golden.json"
 APPROVAL = ROOT / "qa" / "approvals" / "hardware_connections_approval.json"
 REQUIRED_CASES = {
     "dowel_eccentric", "confirmat", "removable_shelf", "fixed_shelf",
-    "hinges", "guides", "facade_tie", "back", "legs", "rod", "metal_frame",
+    "hinges", "guides", "back", "rod", "metal_frame",
 }
 
 

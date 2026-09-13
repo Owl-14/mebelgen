@@ -33,15 +33,20 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
         heights = [round(h, 2)] * n
 
     # параметры короба ящика (drawer-construction, не выводятся из габарита)
-    guide_gap = section.get("guide_gap", 14.5)
+    from .columns import (BOX_DEPTH_CLEARANCE, BOX_HEIGHT_MARGIN, BOX_Y_OFFSET, GUIDE_GAP,
+                          std_guide_length)
+    guide_gap = section.get("guide_gap", GUIDE_GAP)
     box_z1 = section.get("box_z1", 0)                             # короб прижат к фасаду (z=0)
-    box_depth = section.get("box_depth", round(c.D - c.T_back - box_z1 - 30, 2))
+    back_outside = section.get("box_back_mode", "inside") == "outside"
+    # глубина до задника: тонкий задник по умолчанию накладной (за корпусом)
+    inner_depth = c.D if (c.T_back <= 6 and spec.get("back_mount") != "inset") else c.D - c.T_back
+    box_depth = section.get("box_depth", std_guide_length(inner_depth - box_z1 - BOX_DEPTH_CLEARANCE))
     # кламп: короб (с задней стенкой) не должен упереться в задник корпуса —
     # защита от завышенного box_depth из ТЗ/чата (AKD-221)
-    box_back_lim = c.D - c.T_back - box_z1 - section.get("box_back_thickness", c.T)
+    box_back_lim = inner_depth - box_z1 - (section.get("box_back_thickness", c.T) if back_outside else 0)
     box_depth = max(50, min(box_depth, round(box_back_lim, 2)))
-    box_y_off = section.get("box_y_offset", c.T)
-    box_h = section.get("box_height", round(min(heights) * 0.52, 2))
+    box_y_off = section.get("box_y_offset", BOX_Y_OFFSET)
+    box_h = section.get("box_height", round(min(heights) - BOX_HEIGHT_MARGIN, 2))
     # кламп: боковины короба не выше самого низкого фасада — иначе короба
     # налезают на соседний ящик/крышку (MEB-166: чат прислал box_height=500).
     # Верхний накладной фасад перекрывает торец крышки, поэтому его короб
@@ -76,14 +81,20 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
         by1 = fy1 + box_y_off
         by2 = by1 + box_h
         bz2 = box_z1 + box_depth
-        panels.append(panel(f"Ящик {k} дно", "drawer_bottom", "horizont", (bxl2, bxr1), (by1, by1 + box_bot), (box_z1, bz2),
+        bot_z2 = bz2 if back_outside else bz2 - box_back                # дно до задней стенки
+        panels.append(panel(f"Ящик {k} дно", "drawer_bottom", "horizont", (bxl2, bxr1), (by1, by1 + box_bot), (box_z1, bot_z2),
                             thickness=box_bot, material=c.mat, section_id="drawer_stack", estimated=True))
         panels.append(panel(f"Ящик {k} боковина левая", "drawer_side_left", "vertical", (bxl1, bxl2), (by1, by2), (box_z1, bz2),
                             thickness=c.T, material=c.mat, section_id="drawer_stack", estimated=True))
         panels.append(panel(f"Ящик {k} боковина правая", "drawer_side_right", "vertical", (bxr1, bxr2), (by1, by2), (box_z1, bz2),
                             thickness=c.T, material=c.mat, section_id="drawer_stack", estimated=True))
-        # накладная стенка перекрывает торцы боковин (AKD-181) — есть куда крепить
-        panels.append(panel(f"Ящик {k} задняя", "drawer_back", "front", (bxl1, bxr2), (by1, by2), (bz2, bz2 + box_back),
+        if back_outside:
+            # накладная стенка перекрывает торцы боковин (AKD-181)
+            back_x, back_z = (bxl1, bxr2), (bz2, bz2 + box_back)
+        else:
+            # эталон технолога: стенка между боковинами у заднего торца
+            back_x, back_z = (bxl2, bxr1), (bz2 - box_back, bz2)
+        panels.append(panel(f"Ящик {k} задняя", "drawer_back", "front", back_x, (by1, by2), back_z,
                             thickness=box_back, material=c.mat, section_id="drawer_stack", estimated=True))
         drawers_meta.append({"id": f"drawer_{k}", "count": 1,
                              "guide_type": section.get("guide_type", "шариковые"), "soft_close": False, "lock": False,

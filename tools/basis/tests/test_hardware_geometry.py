@@ -80,7 +80,7 @@ def test_wardrobe_rod_modeled():
     rods = p["hardware"].get("rods") or []
     assert rods and rods[0]["axis"] == "x"
     holes = compute_drilling(p)
-    assert drilling_summary(holes).get("штангодержатель (саморез)") == 4
+    assert drilling_summary(holes).get("штангодержатель (саморез)") == 2   # по наколу на фланец (эталон)
     assert not check_drilling_geometry(p, holes)["errors"]
     kinds = {g["kind"] for g in compute_hardware_geometry(p)}
     assert "rod" in kinds and "rod_bracket" in kinds
@@ -109,7 +109,7 @@ def test_legs_and_metal_frame_modeled():
     kinds = {q["kind"] for q in compute_hardware_geometry(p)}
     assert "leg" in kinds
     holes = compute_drilling(p)
-    assert drilling_summary(holes).get("опора (саморез)") == 8
+    assert "опора (саморез)" not in drilling_summary(holes)   # опоры без присадки (эталон)
     assert not check_drilling_geometry(p, holes)["errors"]
     assert p["hardware"]["legs"]["count"] == 4          # дефолт из габарита
 

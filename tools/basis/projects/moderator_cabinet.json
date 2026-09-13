@@ -100,10 +100,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": false
     },
@@ -136,10 +136,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": false
     },
@@ -172,10 +172,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
       },
       "estimated": false
     },
@@ -208,10 +208,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
       },
       "estimated": false
     },
@@ -244,10 +244,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 0,
+        "bottom": 0,
+        "left": 0,
+        "right": 0
       },
       "estimated": false
     },
@@ -280,10 +280,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
       },
       "estimated": false
     },
@@ -316,10 +316,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "left": 0.5,
+        "right": 0,
+        "top": 0,
+        "bottom": 0
       },
       "estimated": false
     },
@@ -330,12 +330,12 @@
       "material": "ЛДСП",
       "thickness": 16,
       "dimensions": {
-        "width": 354,
+        "width": 353,
         "height": 240.0
       },
       "placement": {
         "x1": 2,
-        "x2": 356,
+        "x2": 355,
         "y1": 40.0,
         "y2": 280,
         "z1": -16,
@@ -352,10 +352,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 2,
+        "bottom": 2,
+        "left": 2,
+        "right": 2
       },
       "estimated": true,
       "section_id": "left_drawers"
@@ -368,7 +368,7 @@
       "thickness": 16,
       "dimensions": {
         "width": 301,
-        "height": 348
+        "height": 334
       },
       "placement": {
         "x1": 32,
@@ -376,7 +376,7 @@
         "y1": 58,
         "y2": 74,
         "z1": 20,
-        "z2": 368
+        "z2": 354
       },
       "position": {
         "x": 32,
@@ -389,10 +389,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 0,
+        "bottom": 0,
+        "left": 0,
+        "right": 0
       },
       "estimated": true,
       "section_id": "left_drawers"
@@ -404,7 +404,7 @@
       "material": "ЛДСП",
       "thickness": 16,
       "dimensions": {
-        "width": 348,
+        "width": 350,
         "height": 196
       },
       "placement": {
@@ -413,7 +413,7 @@
         "y1": 74,
         "y2": 270,
         "z1": 20,
-        "z2": 368
+        "z2": 370
       },
       "position": {
         "x": 32,
@@ -426,10 +426,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 0.5,
+        "bottom": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": true,
       "section_id": "left_drawers"
@@ -441,7 +441,7 @@
       "material": "ЛДСП",
       "thickness": 16,
       "dimensions": {
-        "width": 348,
+        "width": 350,
         "height": 196
       },
       "placement": {
@@ -450,7 +450,7 @@
         "y1": 74,
         "y2": 270,
         "z1": 20,
-        "z2": 368
+        "z2": 370
       },
       "position": {
         "x": 317,
@@ -463,10 +463,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 0.5,
+        "bottom": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": true,
       "section_id": "left_drawers"
@@ -478,21 +478,21 @@
       "material": "ЛДСП",
       "thickness": 16,
       "dimensions": {
-        "width": 301,
-        "height": 212
+        "width": 269,
+        "height": 196
       },
       "placement": {
-        "x1": 32,
-        "x2": 333,
-        "y1": 58,
+        "x1": 48,
+        "x2": 317,
+        "y1": 74,
         "y2": 270,
-        "z1": 368,
-        "z2": 384
+        "z1": 354,
+        "z2": 370
       },
       "position": {
-        "x": 32,
-        "y": 58,
-        "z": 368
+        "x": 48,
+        "y": 74,
+        "z": 354
       },
       "rotation": {
         "x": 0,
@@ -500,10 +500,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 0.5,
+        "bottom": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": true,
       "section_id": "left_drawers"
@@ -515,12 +515,12 @@
       "material": "ЛДСП",
       "thickness": 16,
       "dimensions": {
-        "width": 354,
+        "width": 353,
         "height": 224
       },
       "placement": {
         "x1": 2,
-        "x2": 356,
+        "x2": 355,
         "y1": 282,
         "y2": 506,
         "z1": -16,
@@ -537,10 +537,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 2,
+        "bottom": 2,
+        "left": 2,
+        "right": 2
       },
       "estimated": true,
       "section_id": "left_drawers"
@@ -553,7 +553,7 @@
       "thickness": 16,
       "dimensions": {
         "width": 301,
-        "height": 348
+        "height": 334
       },
       "placement": {
         "x1": 32,
@@ -561,7 +561,7 @@
         "y1": 284,
         "y2": 300,
         "z1": 20,
-        "z2": 368
+        "z2": 354
       },
       "position": {
         "x": 32,
@@ -574,10 +574,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 0,
+        "bottom": 0,
+        "left": 0,
+        "right": 0
       },
       "estimated": true,
       "section_id": "left_drawers"
@@ -589,7 +589,7 @@
       "material": "ЛДСП",
       "thickness": 16,
       "dimensions": {
-        "width": 348,
+        "width": 350,
         "height": 196
       },
       "placement": {
@@ -598,7 +598,7 @@
         "y1": 300,
         "y2": 496,
         "z1": 20,
-        "z2": 368
+        "z2": 370
       },
       "position": {
         "x": 32,
@@ -611,10 +611,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 0.5,
+        "bottom": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": true,
       "section_id": "left_drawers"
@@ -626,7 +626,7 @@
       "material": "ЛДСП",
       "thickness": 16,
       "dimensions": {
-        "width": 348,
+        "width": 350,
         "height": 196
       },
       "placement": {
@@ -635,7 +635,7 @@
         "y1": 300,
         "y2": 496,
         "z1": 20,
-        "z2": 368
+        "z2": 370
       },
       "position": {
         "x": 317,
@@ -648,10 +648,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 0.5,
+        "bottom": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": true,
       "section_id": "left_drawers"
@@ -663,21 +663,21 @@
       "material": "ЛДСП",
       "thickness": 16,
       "dimensions": {
-        "width": 301,
-        "height": 212
+        "width": 269,
+        "height": 196
       },
       "placement": {
-        "x1": 32,
-        "x2": 333,
-        "y1": 284,
+        "x1": 48,
+        "x2": 317,
+        "y1": 300,
         "y2": 496,
-        "z1": 368,
-        "z2": 384
+        "z1": 354,
+        "z2": 370
       },
       "position": {
-        "x": 32,
-        "y": 284,
-        "z": 368
+        "x": 48,
+        "y": 300,
+        "z": 354
       },
       "rotation": {
         "x": 0,
@@ -685,10 +685,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 0.5,
+        "bottom": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": true,
       "section_id": "left_drawers"
@@ -700,12 +700,12 @@
       "material": "ЛДСП",
       "thickness": 16,
       "dimensions": {
-        "width": 354,
+        "width": 353,
         "height": 224
       },
       "placement": {
         "x1": 2,
-        "x2": 356,
+        "x2": 355,
         "y1": 508,
         "y2": 732,
         "z1": -16,
@@ -722,10 +722,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 2,
+        "bottom": 2,
+        "left": 2,
+        "right": 2
       },
       "estimated": true,
       "section_id": "left_drawers"
@@ -738,7 +738,7 @@
       "thickness": 16,
       "dimensions": {
         "width": 301,
-        "height": 348
+        "height": 334
       },
       "placement": {
         "x1": 32,
@@ -746,7 +746,7 @@
         "y1": 510,
         "y2": 526,
         "z1": 20,
-        "z2": 368
+        "z2": 354
       },
       "position": {
         "x": 32,
@@ -759,10 +759,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 0,
+        "bottom": 0,
+        "left": 0,
+        "right": 0
       },
       "estimated": true,
       "section_id": "left_drawers"
@@ -774,7 +774,7 @@
       "material": "ЛДСП",
       "thickness": 16,
       "dimensions": {
-        "width": 348,
+        "width": 350,
         "height": 196
       },
       "placement": {
@@ -783,7 +783,7 @@
         "y1": 526,
         "y2": 722,
         "z1": 20,
-        "z2": 368
+        "z2": 370
       },
       "position": {
         "x": 32,
@@ -796,10 +796,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 0.5,
+        "bottom": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": true,
       "section_id": "left_drawers"
@@ -811,7 +811,7 @@
       "material": "ЛДСП",
       "thickness": 16,
       "dimensions": {
-        "width": 348,
+        "width": 350,
         "height": 196
       },
       "placement": {
@@ -820,7 +820,7 @@
         "y1": 526,
         "y2": 722,
         "z1": 20,
-        "z2": 368
+        "z2": 370
       },
       "position": {
         "x": 317,
@@ -833,10 +833,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 0.5,
+        "bottom": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": true,
       "section_id": "left_drawers"
@@ -848,21 +848,21 @@
       "material": "ЛДСП",
       "thickness": 16,
       "dimensions": {
-        "width": 301,
-        "height": 212
+        "width": 269,
+        "height": 196
       },
       "placement": {
-        "x1": 32,
-        "x2": 333,
-        "y1": 510,
+        "x1": 48,
+        "x2": 317,
+        "y1": 526,
         "y2": 722,
-        "z1": 368,
-        "z2": 384
+        "z1": 354,
+        "z2": 370
       },
       "position": {
-        "x": 32,
-        "y": 510,
-        "z": 368
+        "x": 48,
+        "y": 526,
+        "z": 354
       },
       "rotation": {
         "x": 0,
@@ -870,10 +870,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 0.5,
+        "bottom": 0,
+        "left": 0.5,
+        "right": 0.5
       },
       "estimated": true,
       "section_id": "left_drawers"
@@ -907,10 +907,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0,
+        "right": 0
       },
       "estimated": false,
       "section_id": "middle"
@@ -944,10 +944,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "bottom": 0.5,
+        "top": 0,
+        "left": 0,
+        "right": 0
       },
       "estimated": false,
       "section_id": "right"
@@ -981,10 +981,10 @@
         "z": 0
       },
       "edge_banding": {
-        "top": 0.4,
-        "bottom": 0.4,
-        "left": 0.4,
-        "right": 0.4
+        "top": 2,
+        "bottom": 2,
+        "left": 2,
+        "right": 2
       },
       "estimated": false,
       "section_id": "right"

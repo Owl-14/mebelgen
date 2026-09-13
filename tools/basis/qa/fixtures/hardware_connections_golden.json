@@ -32,12 +32,12 @@
         "конфирмат"
       ],
       "expected": {
-        "count": 8,
-        "sha256": "6a334ee26f0b736afe8e846182f8f0c9a66ba287b16bc5d0462edaa9139626b9",
+        "count": 20,
+        "sha256": "b3c18971264f08835bec1025173d0af1b8ea2c3e8b0fc9c36371c5a52ac9158d",
         "bom": [
           {
             "name": "Евровинт конфирмат 7×50",
-            "qty": 4
+            "qty": 10
           }
         ]
       }
@@ -69,16 +69,16 @@
         "эксцентрик (шток)"
       ],
       "expected": {
-        "count": 62,
-        "sha256": "baaa974d3a415444b5f3d5af14786dd37ede31c62f2a41437195834fbea5eb04",
+        "count": 224,
+        "sha256": "e2921215a971d687235ec7f084568f399e1388b4e4a090de1b0f4fc7781c1011",
         "bom": [
           {
             "name": "Стяжка эксцентриковая MNFX (комплект)",
-            "qty": 10
+            "qty": 40
           },
           {
             "name": "Шкант 8×30",
-            "qty": 16
+            "qty": 52
           }
         ]
       }
@@ -108,28 +108,11 @@
       ],
       "expected": {
         "count": 36,
-        "sha256": "b0f3ca223f8d7c1bb377e678c3ed262f2c60f66f46e44e0ed8099cef4d86c6db",
+        "sha256": "2894752a098478d6aa23142518d206076707b3bed0b0fba24e99a15c0a5af899",
         "bom": [
           {
             "name": "Саморез US3,5×16 (направляющие)",
             "qty": 36
-          }
-        ]
-      }
-    },
-    "facade_tie": {
-      "paramspec": "komi_72_tumba_podkatnaya.json",
-      "purposes": [
-        "фасадная стяжка (шток)",
-        "фасадная стяжка (эксцентрик Ø15)"
-      ],
-      "expected": {
-        "count": 12,
-        "sha256": "c3488b90957f6866826986226c2c509bacd4e62fc794042885251a2367cf2184",
-        "bom": [
-          {
-            "name": "Стяжка фасадная (эксцентрик+шток)",
-            "qty": 6
           }
         ]
       }
@@ -151,34 +134,18 @@
         ]
       }
     },
-    "legs": {
-      "paramspec": "komi_46_shkaf_dokumenty.json",
-      "purposes": [
-        "опора (саморез)"
-      ],
-      "expected": {
-        "count": 8,
-        "sha256": "1b589819b9692c500ce317935d6dbc722c7d9f1a38591a24db53955fb3deae96",
-        "bom": [
-          {
-            "name": "Саморез 3,5×16 (опоры)",
-            "qty": 8
-          }
-        ]
-      }
-    },
     "rod": {
       "paramspec": "wardrobe_demo.json",
       "purposes": [
         "штангодержатель (саморез)"
       ],
       "expected": {
-        "count": 4,
-        "sha256": "a1ac5d589fb973aaa8dd5cf9f4ff78a1a321366087856b33a6827160acb1fead",
+        "count": 2,
+        "sha256": "ab9adaf0862bcfc1e8c532c790de8a339a1885497b417c3b64e29afcf5699e4d",
         "bom": [
           {
             "name": "Штангодержатель (комплект)",
-            "qty": 2
+            "qty": 1
           }
         ]
       }

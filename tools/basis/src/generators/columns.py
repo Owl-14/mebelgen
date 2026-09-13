@@ -31,6 +31,37 @@ def column_bounds(W: float, T: float, sections: list[dict[str, Any]]) -> list[tu
     return bounds
 
 
+# Стандартные длины шариковых направляющих полного выдвижения (H=45), мм.
+GUIDE_LENGTHS = (250, 300, 350, 400, 450, 500, 550, 600)
+# Отступ боковины короба от боковины/перегородки корпуса: направляющая 12,7 мм
+# (эталон технолога: 13 от пласти при слоте 568 → короб 550).
+GUIDE_GAP = 13.0
+# Короб относительно фасада (эталон): низ короба на 32 выше низа фасада,
+# боковина ниже фасада на 64 (по 32 сверху и снизу), глубина = направляющая,
+# которая помещается с запасом 100 до задника.
+BOX_Y_OFFSET = 32.0
+BOX_HEIGHT_MARGIN = 64.0
+BOX_DEPTH_CLEARANCE = 100.0
+
+
+def std_guide_length(available: float) -> float:
+    """Самая длинная стандартная направляющая, помещающаяся в available мм."""
+    fitting = [length for length in GUIDE_LENGTHS if length <= available]
+    return float(fitting[-1] if fitting else GUIDE_LENGTHS[0])
+
+
+def drawer_facade_span(i: int, bounds: list[tuple[float, float]], W: float, T: float,
+                       reveal: float) -> tuple[float, float]:
+    """Внешний X-пролёт фасада ящика (эталон технолога): от края корпуса или
+    центра перегородки с зазором reveal с обеих сторон — 596 на колонну 600.
+    Дверь соседней секции заканчивается на полузазоре от центра перегородки,
+    два соседних стека ящиков получают между фасадами 2·reveal."""
+    cx1, cx2 = bounds[i]
+    left = reveal if i == 0 else round(cx1 - T / 2 + reveal, 2)
+    right = round(W - reveal, 2) if i == len(bounds) - 1 else round(cx2 + T / 2 - reveal, 2)
+    return left, right
+
+
 def facade_x_span(i: int, bounds: list[tuple[float, float]], W: float, T: float,
                   reveal: float, gap: float) -> tuple[float, float]:
     """Внешний X-пролёт НАКЛАДНОГО фасада секции i.
@@ -105,11 +136,13 @@ def drawer_stack(cx1, cx2, fb, heights, gap, p, T, mat, sid, prefix, facade_boun
     короб живёт в проёме [cx1,cx2] и прижат к фасаду (box_z1=0)."""
     panels: list[dict[str, Any]] = []
     meta: list[dict[str, Any]] = []
-    guide_gap = p.get("guide_gap", 14.5)
+    guide_gap = p.get("guide_gap", GUIDE_GAP)
     box_z1 = p.get("box_z1", 0)                          # короб прижат к фасаду (z=0)
-    box_depth = p.get("box_depth", 350)
-    box_y_off = p.get("box_y_offset", T)
-    box_h = p.get("box_height", round(min(heights) * 0.52, 2))
+    back_limit = p.get("back_limit")
+    box_depth = p.get("box_depth", std_guide_length(
+        (back_limit if back_limit is not None else 450) - box_z1 - BOX_DEPTH_CLEARANCE))
+    box_y_off = p.get("box_y_offset", BOX_Y_OFFSET)
+    box_h = p.get("box_height", round(min(heights) - BOX_HEIGHT_MARGIN, 2))
     box_back = p.get("box_back_thickness", T)
     box_bot = p.get("box_bottom_thickness", T)
     # кламп: боковины короба не выше самого низкого фасада (MEB-166)
@@ -120,10 +153,13 @@ def drawer_stack(cx1, cx2, fb, heights, gap, p, T, mat, sid, prefix, facade_boun
         top_side_y1 = fb + sum(heights[:-1]) + (len(heights) - 1) * gap + box_y_off + side_lift
         box_h = min(box_h, round(top_limit - top_side_y1, 2))
     bottom_mode = p.get("box_bottom_mode", "between")   # between | under
+    # задняя стенка: inside (эталон технолога — между боковинами у заднего
+    # торца, дно до неё) | outside (накладная за боковинами, AKD-181)
+    back_mode = p.get("box_back_mode", "inside")
+    back_outside = back_mode == "outside"
     # короб (с задней стенкой) не должен заходить в задник корпуса
-    back_limit = p.get("back_limit")
-    if back_limit is not None and box_z1 + box_depth + box_back > back_limit:
-        box_depth = max(50, back_limit - box_z1 - box_back)
+    if back_limit is not None and box_z1 + box_depth + (box_back if back_outside else 0) > back_limit:
+        box_depth = max(50, back_limit - box_z1 - (box_back if back_outside else 0))
     boxes = p.get("boxes", True)
     # накладной фасад: внешний пролёт (перекрывает боковины), иначе — врезной в проём
     fx1, fx2 = facade_bounds if facade_bounds else (cx1 + gap, cx2 - gap)
@@ -145,13 +181,14 @@ def drawer_stack(cx1, cx2, fb, heights, gap, p, T, mat, sid, prefix, facade_boun
         if boxes:
             bot_x = (cx1 + guide_gap, cx2 - guide_gap) if bottom_mode == "under" else (bxl2, bxr1)
             pre = f"{prefix}Ящик {k} " if prefix else f"Ящик {k} "
-            panels.append(panel(pre + "дно", "drawer_bottom", "horizont", bot_x, (box_y1, box_y1 + box_bot), (box_z1, bz2),
+            bot_z2 = bz2 if back_outside else bz2 - box_back      # дно до задней стенки
+            panels.append(panel(pre + "дно", "drawer_bottom", "horizont", bot_x, (box_y1, box_y1 + box_bot), (box_z1, bot_z2),
                                 thickness=box_bot, material=mat, section_id=sid, estimated=True))
             panels.append(panel(pre + "боковина левая", "drawer_side_left", "vertical", (bxl1, bxl2), (sy1, sy2), (box_z1, bz2),
                                 thickness=T, material=mat, section_id=sid, estimated=True))
             panels.append(panel(pre + "боковина правая", "drawer_side_right", "vertical", (bxr1, bxr2), (sy1, sy2), (box_z1, bz2),
                                 thickness=T, material=mat, section_id=sid, estimated=True))
-            if p.get("box_back_mode") == "inset":
+            if not back_outside:
                 back_z, back_x, back_y = (bz2 - box_back, bz2), (bxl2, bxr1), (sy1, sy2)
             else:
                 # накладная стенка перекрывает торцы боковин и дна — иначе стыки
