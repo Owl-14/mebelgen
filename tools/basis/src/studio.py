@@ -1081,10 +1081,14 @@ class _ChatGuard:
             d = json.loads(self.f.read_text(encoding="utf-8"))
         except Exception:
             d = {}
+        if not isinstance(d, dict):
+            d = {}
         day = self._day()
+        d[day] = int(d.get(day, 0)) + int(n)
+        # история по дням нужна отчётам и алертам; держим последние 90 суток
+        d = dict(sorted(d.items())[-90:])
         try:
-            self.f.write_text(json.dumps({day: int(d.get(day, 0)) + int(n)}),
-                              encoding="utf-8")
+            self.f.write_text(json.dumps(d), encoding="utf-8")
         except OSError:
             pass
 
