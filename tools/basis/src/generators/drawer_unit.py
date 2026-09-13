@@ -42,6 +42,14 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     box_depth = max(50, min(box_depth, round(box_back_lim, 2)))
     box_y_off = section.get("box_y_offset", c.T)
     box_h = section.get("box_height", round(min(heights) * 0.52, 2))
+    # кламп: боковины короба не выше самого низкого фасада — иначе короба
+    # налезают на соседний ящик/крышку (MEB-166: чат прислал box_height=500).
+    # Верхний накладной фасад перекрывает торец крышки, поэтому его короб
+    # ограничен ещё и низом крышки.
+    stack_top = fb + sum(heights) + (n - 1) * g
+    top_box_y1 = stack_top - heights[-1] + box_y_off
+    box_h = min(box_h, round(min(heights) - box_y_off, 2),
+                round(min(stack_top, c.H - c.T_top) - top_box_y1, 2))
     box_back = section.get("box_back_thickness", c.T)
     box_bot = section.get("box_bottom_thickness", c.T)
 
