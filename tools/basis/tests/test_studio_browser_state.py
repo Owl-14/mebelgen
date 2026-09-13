@@ -20,7 +20,7 @@ sys.path.insert(0, str(ROOT))
 from src.studio import _Studio, make_handler  # noqa: E402
 
 
-PRODUCTION_BUTTONS = ("btnCfrn", "btnB3d", "btnDeliver")
+PRODUCTION_BUTTONS = ("btnCfrn", "btnB3dLocal", "btnDeliver")
 
 
 @pytest.fixture(scope="module")

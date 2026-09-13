@@ -124,8 +124,12 @@ def cmd_check_geometry(args: argparse.Namespace) -> int:
 
 def cmd_build_b3d(args: argparse.Namespace) -> int:
     from src.build_b3d import build_b3d, build_b3d_from_paramspec
+    from src.cloud_api import PAID_DISABLED_MESSAGE, paid_cloud_enabled
 
-    data = json.loads(Path(args.input).read_text(encoding="utf-8"))
+    if not paid_cloud_enabled():
+        print(PAID_DISABLED_MESSAGE, file=sys.stderr)
+        return 2
+    data =json.loads(Path(args.input).read_text(encoding="utf-8"))
     out = args.output or str(Path(args.input).with_suffix(".b3d"))
     if data.get("schemaVersion") == "paramspec-v1":
         res = build_b3d_from_paramspec(data, out)
@@ -187,7 +191,8 @@ def cmd_local_b3d(args: argparse.Namespace) -> int:
 
 
 def cmd_cloud(args: argparse.Namespace) -> int:
-    from src.cloud_api import (CloudTasksClient, DRAWING_FORMAT, MODEL_CONVERT, api_overview)
+    from src.cloud_api import (CloudTasksClient, DRAWING_FORMAT, MODEL_CONVERT, PAID_DISABLED_MESSAGE,
+                               api_overview, paid_cloud_enabled)
 
     if args.op == "info":
         print(api_overview())
@@ -199,6 +204,9 @@ def cmd_cloud(args: argparse.Namespace) -> int:
             "<paramspec-or-project.json>`, который выполняет полный offline preflight.",
             file=sys.stderr,
         )
+        return 2
+    if args.op in ("model-convert", "drawing-convert") and not paid_cloud_enabled():
+        print(PAID_DISABLED_MESSAGE, file=sys.stderr)
         return 2
     c = CloudTasksClient()
     if args.op == "list":
