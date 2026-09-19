@@ -350,6 +350,14 @@ def cmd_ai_journal(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_bot(args: argparse.Namespace) -> int:
+    """Telegram-бот мониторинга: лимиты, ошибки, ТЗ, выгрузка AI-журнала."""
+    from src.telegram_bot import run_bot
+
+    run_bot()
+    return 0
+
+
 def cmd_admin(args: argparse.Namespace) -> int:
     """Локальный identity/admin-контур; Studio подключается после tenant-миграции."""
     from src.admin import run_admin
@@ -701,6 +709,13 @@ def main() -> int:
                       help="export: не сдвигать отметку последней выгрузки")
     p_aj.add_argument("-o", "--output", help="путь ZIP")
     p_aj.set_defaults(func=cmd_ai_journal)
+
+    p_bot = sub.add_parser(
+        "bot",
+        help="Telegram-бот мониторинга (env TELEGRAM_BOT_TOKEN, TELEGRAM_ALERT_CHAT_ID, "
+             "AI_JOURNAL_DB, STUDIO_OUT_DIR, BOT_HEALTH_URL)",
+    )
+    p_bot.set_defaults(func=cmd_bot)
 
     p_tv = sub.add_parser("techview", help="ParamSpec/project → чертёж SVG (фронт+бок, размерки/выноски без пересечений)")
     p_tv.add_argument("input", help="ParamSpec или project.json")
