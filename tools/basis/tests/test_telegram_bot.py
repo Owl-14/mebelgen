@@ -22,15 +22,18 @@ class FakeAPI:
     def __init__(self, status: str = "administrator") -> None:
         self.messages: list[tuple[int, str]] = []
         self.documents: list[tuple[int, str, str, dict]] = []
+        self.files: list[tuple[int, str, str]] = []
         self.status = status
 
     def send_message(self, chat_id, text):
         self.messages.append((chat_id, text))
 
     def send_document(self, chat_id, path, caption):
-        with zipfile.ZipFile(path) as archive:
-            manifest = json.loads(archive.read("manifest.json"))
-        self.documents.append((chat_id, Path(path).name, caption, manifest))
+        self.files.append((chat_id, Path(path).name, caption))
+        if str(path).endswith(".zip"):
+            with zipfile.ZipFile(path) as archive:
+                manifest = json.loads(archive.read("manifest.json"))
+            self.documents.append((chat_id, Path(path).name, caption, manifest))
 
     def get_chat_member_status(self, chat_id, user_id):
         return self.status
@@ -54,9 +57,19 @@ def _bot(tmp_path, api=None, *, clock=None, health=None, balances=None, tokens_p
     journal = AIJournal(tmp_path / "journal.sqlite3", store_content=True)
     bot = MonitorBot(api or FakeAPI(), journal, chat_id=GROUP, out_dir=tmp_path,
                      state_path=tmp_path / "bot_state.json", tokens_per_day=tokens_per_day,
+                     backup_dir=tmp_path / "backups",
                      health_fn=health, balance_fn=balances or (lambda: []),
                      now=clock or Clock(MONDAY_11 - 86400 * 3))
     return bot, journal
+
+
+def _backups(tmp_path, *, big: bool = False):
+    folder = tmp_path / "backups"
+    folder.mkdir(exist_ok=True)
+    (folder / "studio-data-2026-09-19.tgz").write_bytes(b"old")
+    (folder / "studio-data-2026-09-20.tgz").write_bytes(b"x" * (60 * 1024 * 1024 if big else 2048))
+    (folder / "paramspecs-2026-09-20.tgz").write_bytes(b"specs")
+    return folder
 
 
 def _cmd(text, chat=GROUP, user=1):
@@ -122,6 +135,29 @@ def test_export_only_for_admins_and_incremental(tmp_path):
     assert len(api.documents) == 2
 
 
+def test_backup_goes_to_group_for_admins_only(tmp_path):
+    api = FakeAPI(status="member")
+    bot, _ = _bot(tmp_path, api)
+    _backups(tmp_path)
+    bot.handle_update(_cmd("/backup"))
+    assert "только администраторам" in api.messages[-1][1] and not api.files
+
+    api.status = "creator"
+    bot.handle_update(_cmd("/backup"))
+    names = [name for _, name, _ in api.files]
+    assert names == ["studio-data-2026-09-20.tgz", "paramspecs-2026-09-20.tgz"]  # свежие
+    assert "Бэкап по запросу" in api.files[0][2]
+
+
+def test_backup_too_big_for_telegram_is_reported(tmp_path):
+    api = FakeAPI(status="creator")
+    bot, _ = _bot(tmp_path, api)
+    _backups(tmp_path, big=True)
+    bot.handle_update(_cmd("/backup"))
+    assert "больше лимита Telegram" in api.messages[-1][1]
+    assert [name for _, name, _ in api.files] == ["paramspecs-2026-09-20.tgz"]
+
+
 def test_health_alert_after_two_failures_and_recovery(tmp_path):
     api = FakeAPI()
     status = {"ok": False}
@@ -163,15 +199,20 @@ def test_budget_new_error_provider_failures_and_balance_alerts(tmp_path):
     assert "15%" in texts[0]
 
 
-def test_weekly_summary_once_per_week(tmp_path):
+def test_weekly_summary_and_backup_once_per_week(tmp_path):
     api = FakeAPI()
     clock = Clock(MONDAY_11)
     bot, _ = _bot(tmp_path, api, clock=clock)
+    _backups(tmp_path)
     bot.run_checks()
     clock.value += 3600
     bot.run_checks()
     weekly = [text for _, text in api.messages if "Итоги недели" in text]
     assert len(weekly) == 1
+    assert [name for _, name, _ in api.files] == [
+        "studio-data-2026-09-20.tgz", "paramspecs-2026-09-20.tgz",
+    ]
+    assert "еженедельный" in api.files[0][2]
 
 
 def test_state_survives_restart(tmp_path):

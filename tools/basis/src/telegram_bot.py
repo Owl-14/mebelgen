@@ -35,6 +35,7 @@ COMMANDS = [
     ("stats", "Сводка: запросы, ошибки, ТЗ (24h/7d/30d)"),
     ("errors", "Частые ошибки (24h/7d/30d)"),
     ("export", "ZIP с ТЗ, ответами и ошибками (админы)"),
+    ("backup", "Свежий бэкап сервера файлами (админы)"),
     ("chatid", "ID этого чата"),
 ]
 
@@ -45,6 +46,7 @@ HELP_TEXT = """<b>Бот мониторинга Akeda Studio</b>
 /errors [24h|7d|30d] — самые частые ошибки, 🆕 — появились впервые за период
 /export — ZIP со всем новым с прошлой выгрузки: ТЗ, ответы нейросетей, ошибки, пары для дообучения
 /export 7d — за период, /export all — вся база (только администраторы группы)
+/backup — прислать свежий бэкап сервера файлами: изделия компаний, учётки, AI-журнал с фото ТЗ (только администраторы группы)
 /chatid — ID этого чата
 /help — эта справка
 
@@ -54,7 +56,7 @@ HELP_TEXT = """<b>Бот мониторинга Akeda Studio</b>
 • баланс нейросети упал ниже 20% и 5% от максимума
 • провайдер нейросети сбоит несколько раз подряд
 • появилась ошибка нового типа
-По понедельникам в 10:00 — сводка за неделю."""
+По понедельникам в 10:00 — сводка за неделю и бэкап файлами."""
 
 ERROR_CLASS_NAMES = {
     "infrastructure": "инфраструктура",
@@ -177,6 +179,7 @@ class MonitorBot:
         out_dir: Path,
         state_path: Path,
         tokens_per_day: int,
+        backup_dir: Path | None = None,
         health_fn: Callable[[], bool] | None = None,
         balance_fn: Callable[[], list[dict[str, Any]]] | None = None,
         now: Callable[[], float] = time.time,
@@ -188,6 +191,7 @@ class MonitorBot:
         self.out_dir = Path(out_dir)
         self.state_path = Path(state_path)
         self.tokens_per_day = int(tokens_per_day)
+        self.backup_dir = Path(backup_dir) if backup_dir else None
         self.health_fn = health_fn
         self.balance_fn = balance_fn or collect_balances
         self.now = now
@@ -247,6 +251,12 @@ class MonitorBot:
         }
         if command == "/export":
             self.export(message, args)
+            return
+        if command == "/backup":
+            if not self._is_admin(message):
+                self.api.send_message(chat_id, "Бэкап доступен только администраторам группы.")
+                return
+            self.send_backups(reason="по запросу")
             return
         handler = handlers.get(command)
         if handler is None:
@@ -316,11 +326,42 @@ class MonitorBot:
         lines.append("Полные ответы нейросети и отчёты гейта — в /export.")
         return "\n".join(lines)
 
-    def export(self, message: Mapping[str, Any], args: list[str]) -> None:
+    def _is_admin(self, message: Mapping[str, Any]) -> bool:
         chat_id = int(message["chat"]["id"])
         user_id = int((message.get("from") or {}).get("id") or 0)
-        status = self.api.get_chat_member_status(chat_id, user_id) if user_id else ""
-        if status not in ("creator", "administrator"):
+        if not user_id:
+            return False
+        return self.api.get_chat_member_status(chat_id, user_id) in ("creator", "administrator")
+
+    def send_backups(self, *, reason: str) -> None:
+        """Отправить в группу свежие архивы бэкапа: вторая копия вне сервера."""
+        if self.chat_id is None or self.backup_dir is None:
+            return
+        archives = []
+        for pattern in ("studio-data-*.tgz", "paramspecs-*.tgz"):
+            found = sorted(self.backup_dir.glob(pattern), key=lambda p: p.stat().st_mtime)
+            if found:
+                archives.append(found[-1])
+        if not archives:
+            self.api.send_message(self.chat_id, "Бэкапов пока нет: ночная копия ещё не делалась.")
+            return
+        for path in archives:
+            size = path.stat().st_size
+            if size > MAX_DOCUMENT_BYTES:
+                self.api.send_message(
+                    self.chat_id,
+                    f"⚠️ Бэкап <code>{_esc(path.name)}</code> весит {size // (1024 * 1024)} МБ — "
+                    "больше лимита Telegram (50 МБ). Забирайте его с сервера "
+                    "(<code>/opt/bazis/backups</code>) или настроим выгрузку в хранилище.")
+                continue
+            made = time.strftime("%d.%m %H:%M", time.localtime(path.stat().st_mtime))
+            self.api.send_document(self.chat_id, path,
+                                   f"💾 Бэкап {_esc(reason)}: <code>{_esc(path.name)}</code>, "
+                                   f"{size // 1024} КБ, от {made}")
+
+    def export(self, message: Mapping[str, Any], args: list[str]) -> None:
+        chat_id = int(message["chat"]["id"])
+        if not self._is_admin(message):
             self.api.send_message(chat_id, "Выгрузка базы доступна только администраторам группы.")
             return
         since: str | None = None
@@ -452,6 +493,7 @@ class MonitorBot:
         if self.chat_id is not None:
             self.api.send_message(self.chat_id, "📊 Итоги недели\n\n" + self.stats_text("7d")
                                   + "\n\n" + self.errors_text("7d"))
+            self.send_backups(reason="еженедельный")
         self.state["weekly_sent"] = week
 
     # ------------------------------------------------------------ loop
@@ -498,6 +540,7 @@ def run_bot() -> None:
         out_dir=out_dir,
         state_path=out_dir / "bot_state.json",
         tokens_per_day=int(os.environ.get("STUDIO_TOKENS_PER_DAY", "400000")),
+        backup_dir=Path(os.environ.get("BOT_BACKUP_DIR", "/opt/bazis/backups")),
         health_fn=(lambda: check_health(health_url)) if health_url else None,
         check_interval_s=int(os.environ.get("BOT_CHECK_INTERVAL_S", "300")),
     )
