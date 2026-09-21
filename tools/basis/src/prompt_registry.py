@@ -33,7 +33,7 @@ _PROMPTS: dict[str, tuple[str, str]] = {
     "intent_routing": ("furniture.intent-routing", "1.0.0"),
     "vision_facts": ("furniture.vision-facts", "1.0.0"),
     "create_paramspec": ("furniture.create-paramspec", "1.0.0"),
-    "edit_operations": ("furniture.edit-operations", "1.0.0"),
+    "edit_operations": ("furniture.edit-operations", "1.1.0"),
     "part_edit": ("furniture.part-edit", "1.0.0"),
     "diagnosis": ("furniture.diagnosis", "1.0.0"),
     "repair": ("furniture.repair", "1.0.0"),
@@ -227,6 +227,10 @@ def _context_for(node: str, context: Mapping[str, Any] | None) -> dict[str, Any]
         if isinstance(source.get("panels"), list):
             result["panels"] = copy.deepcopy(source["panels"][:MAX_PANELS])
         return result
+    if node == "edit_operations":
+        # Факты считает детерминированный генератор (spec_chat._drawer_facts),
+        # модель лишь переводит относительные просьбы в значения поля (MEB-166).
+        return _pick(source, ("drawer_facts",))
     return {}
 
 

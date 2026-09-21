@@ -12,7 +12,7 @@
   "summary": {
     "public_archetype_count": 10,
     "generator_implementation_count": 8,
-    "paramspec_fixture_count": 38,
+    "paramspec_fixture_count": 39,
     "existing_panel_golden_count": 15,
     "matched_exact_panel_golden_count": 15,
     "mismatched_panel_golden_count": 0,
@@ -2219,7 +2219,8 @@
       "generator": "src.generators.cabinet.generate",
       "paramspec_fixtures": [
         "tz_shkaf_kombinirovanny",
-        "wardrobe_demo"
+        "wardrobe_demo",
+        "wardrobe_demo_technolog"
       ],
       "existing_panel_goldens": [
         "wardrobe_demo"
@@ -2243,7 +2244,8 @@
           ],
           "fixture_evidence": [
             "tz_shkaf_kombinirovanny",
-            "wardrobe_demo"
+            "wardrobe_demo",
+            "wardrobe_demo_technolog"
           ]
         },
         {
@@ -2260,7 +2262,8 @@
           ],
           "fixture_evidence": [
             "tz_shkaf_kombinirovanny",
-            "wardrobe_demo"
+            "wardrobe_demo",
+            "wardrobe_demo_technolog"
           ]
         },
         {
@@ -2270,7 +2273,8 @@
           ],
           "fixture_evidence": [
             "tz_shkaf_kombinirovanny",
-            "wardrobe_demo"
+            "wardrobe_demo",
+            "wardrobe_demo_technolog"
           ]
         },
         {
@@ -2287,7 +2291,8 @@
           ],
           "fixture_evidence": [
             "tz_shkaf_kombinirovanny",
-            "wardrobe_demo"
+            "wardrobe_demo",
+            "wardrobe_demo_technolog"
           ]
         },
         {
@@ -2297,7 +2302,8 @@
           ],
           "fixture_evidence": [
             "tz_shkaf_kombinirovanny",
-            "wardrobe_demo"
+            "wardrobe_demo",
+            "wardrobe_demo_technolog"
           ]
         },
         {
@@ -2307,7 +2313,8 @@
           ],
           "fixture_evidence": [
             "tz_shkaf_kombinirovanny",
-            "wardrobe_demo"
+            "wardrobe_demo",
+            "wardrobe_demo_technolog"
           ]
         },
         {
@@ -2326,7 +2333,8 @@
           ],
           "fixture_evidence": [
             "tz_shkaf_kombinirovanny",
-            "wardrobe_demo"
+            "wardrobe_demo",
+            "wardrobe_demo_technolog"
           ]
         },
         {
@@ -2336,7 +2344,8 @@
           ],
           "fixture_evidence": [
             "tz_shkaf_kombinirovanny",
-            "wardrobe_demo"
+            "wardrobe_demo",
+            "wardrobe_demo_technolog"
           ]
         },
         {
@@ -2346,7 +2355,8 @@
           ],
           "fixture_evidence": [
             "tz_shkaf_kombinirovanny",
-            "wardrobe_demo"
+            "wardrobe_demo",
+            "wardrobe_demo_technolog"
           ]
         },
         {
@@ -2356,7 +2366,8 @@
           ],
           "fixture_evidence": [
             "tz_shkaf_kombinirovanny",
-            "wardrobe_demo"
+            "wardrobe_demo",
+            "wardrobe_demo_technolog"
           ]
         },
         {
@@ -2366,7 +2377,8 @@
           ],
           "fixture_evidence": [
             "tz_shkaf_kombinirovanny",
-            "wardrobe_demo"
+            "wardrobe_demo",
+            "wardrobe_demo_technolog"
           ]
         },
         {
@@ -2376,7 +2388,8 @@
           ],
           "fixture_evidence": [
             "tz_shkaf_kombinirovanny",
-            "wardrobe_demo"
+            "wardrobe_demo",
+            "wardrobe_demo_technolog"
           ]
         },
         {
@@ -2420,7 +2433,8 @@
             "src.generators.columns.drawer_stack"
           ],
           "fixture_evidence": [
-            "wardrobe_demo"
+            "wardrobe_demo",
+            "wardrobe_demo_technolog"
           ]
         },
         {
@@ -2429,7 +2443,8 @@
             "src.generators.columns.drawer_stack"
           ],
           "fixture_evidence": [
-            "wardrobe_demo"
+            "wardrobe_demo",
+            "wardrobe_demo_technolog"
           ]
         },
         {
@@ -2474,7 +2489,8 @@
           ],
           "fixture_evidence": [
             "tz_shkaf_kombinirovanny",
-            "wardrobe_demo"
+            "wardrobe_demo",
+            "wardrobe_demo_technolog"
           ]
         },
         {
@@ -2491,7 +2507,8 @@
           ],
           "fixture_evidence": [
             "tz_shkaf_kombinirovanny",
-            "wardrobe_demo"
+            "wardrobe_demo",
+            "wardrobe_demo_technolog"
           ]
         },
         {
@@ -2530,7 +2547,8 @@
             "src.generators.cabinet.generate"
           ],
           "fixture_evidence": [
-            "wardrobe_demo"
+            "wardrobe_demo",
+            "wardrobe_demo_technolog"
           ]
         },
         {
@@ -2539,7 +2557,8 @@
             "src.generators.cabinet.generate"
           ],
           "fixture_evidence": [
-            "wardrobe_demo"
+            "wardrobe_demo",
+            "wardrobe_demo_technolog"
           ]
         },
         {
@@ -2547,7 +2566,9 @@
           "consumers": [
             "src.generators.cabinet.generate"
           ],
-          "fixture_evidence": []
+          "fixture_evidence": [
+            "wardrobe_demo_technolog"
+          ]
         },
         {
           "parameter": "sections[].guide_gap",
@@ -2576,7 +2597,8 @@
             "src.generators.columns.rod_in_column"
           ],
           "fixture_evidence": [
-            "wardrobe_demo"
+            "wardrobe_demo",
+            "wardrobe_demo_technolog"
           ]
         },
         {
@@ -2586,7 +2608,8 @@
           ],
           "fixture_evidence": [
             "tz_shkaf_kombinirovanny",
-            "wardrobe_demo"
+            "wardrobe_demo",
+            "wardrobe_demo_technolog"
           ]
         },
         {
@@ -2596,7 +2619,8 @@
           ],
           "fixture_evidence": [
             "tz_shkaf_kombinirovanny",
-            "wardrobe_demo"
+            "wardrobe_demo",
+            "wardrobe_demo_technolog"
           ]
         },
         {
@@ -2614,7 +2638,8 @@
             "src.generators.columns.column_bounds"
           ],
           "fixture_evidence": [
-            "wardrobe_demo"
+            "wardrobe_demo",
+            "wardrobe_demo_technolog"
           ]
         },
         {
@@ -2664,7 +2689,6 @@
         "sections[].door_names",
         "sections[].door_swing",
         "sections[].door_z",
-        "sections[].front_top",
         "sections[].guide_gap",
         "sections[].guide_type",
         "sections[].niche_z_front",

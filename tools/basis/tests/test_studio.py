@@ -34,7 +34,7 @@ def test_payload_ok_model():
     ]
     v = p["viewer"]
     assert len(v["panels"]) == 20
-    assert len(v["holes"]) == 161                   # komi_72: производственные шаблоны (AKD-287)
+    assert len(v["holes"]) == 293                   # komi_72: шаблоны AKD-287 + короб ящика по эталону технолога
     assert any(h["kind"] == "guide_corpus" for h in v["hardware"])
     assert p["stats"]["dims"]["w"] == 400 and p["stats"]["n_panels"] == 20
     assert any("аправляющ" in b["slot"] or "аправляющ" in b["name"] for b in p["bom"])

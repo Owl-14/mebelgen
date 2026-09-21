@@ -7217,7 +7217,8 @@ async function runChat(text){
     if(p.trace_id&&!operation.traceId){operation.traceId=String(p.trace_id);
       operation.contextLine.append(document.createTextNode(` · trace_id: ${operation.traceId}`));}
     if(!r.ok) throw new Error(p.reply||p.error||`Ошибка запроса (${r.status})`);
-    if(p.error&&!p.spec) throw new Error(String(p.error));
+    // отказ гейта: в reply — конкретные причины, error — только общий заголовок (MEB-166)
+    if(p.error&&!p.spec) throw new Error(String(p.code==='production_gate_rejected'&&p.reply?p.reply:p.error));
     if(controller.signal.aborted)throw new DOMException('Команда остановлена','AbortError');
     if(p.usage&&p.usage.total){SESSION_TOKENS+=p.usage.total; renderTokens();}
     refreshBalance();                              // остаток бесплатных токенов
@@ -7325,7 +7326,7 @@ async function fixAll(){
           history:[],context:diagCtx(),provider:CHAT_PROVIDER},controller);
       const p=await r.json();
       if(!r.ok) throw new Error(p.reply||p.error||`Ошибка запроса (${r.status})`);
-      if(p.error&&!p.spec)throw new Error(String(p.error));
+      if(p.error&&!p.spec)throw new Error(String(p.code==='production_gate_rejected'&&p.reply?p.reply:p.error));
       if(controller.signal.aborted)throw new DOMException('Автоисправление остановлено','AbortError');
       if(p.usage&&p.usage.total){operationTokens+=p.usage.total;
         SESSION_TOKENS+=p.usage.total; renderTokens();}

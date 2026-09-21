@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "approval": {
     "status": "approved",
-    "approval_ref": "MEB-152/initial-engineering-review",
-    "approved_by": "MEB-152 engineering review",
-    "approved_at": "2026-08-13",
-    "baseline_sha256": "f5442c7377284004bf663f604eef9676e715a8edb1e04bf149fb832448b4b8eb",
+    "approval_ref": "technologist-fixture-2026-09-13/drawer-box",
+    "approved_by": "сверка с qa/fixtures/wardrobe_demo_production.b3d (файл технолога)",
+    "approved_at": "2026-09-13",
+    "baseline_sha256": "e0eea5b6e1368c106684cd5bd3a62571506d631b9fd65a57747f81b6763b3b18",
     "change_policy": "Golden and this approval manifest must be reviewed as separate changes; candidate generation writes neither file."
   },
   "classes": {
@@ -13,99 +13,228 @@
       "paramspec": "stol_ofisny_foto.json",
       "topology": {
         "archetype": "desk",
-        "purpose_counts": {"шкант 8×30 (пласть)": 8, "шкант 8×30 (торец)": 8, "эксцентрик (канал Ø8)": 8, "эксцентрик (чашка Ø15)": 8, "эксцентрик (шток)": 8},
-        "panel_role_counts": {"back": 12, "side_left": 10, "side_right": 10, "top": 8},
-        "axis_direction_counts": {"шкант 8×30 (пласть)|x|+1": 2, "шкант 8×30 (пласть)|x|-1": 2, "шкант 8×30 (пласть)|y|+1": 4, "шкант 8×30 (торец)|x|+1": 2, "шкант 8×30 (торец)|x|-1": 2, "шкант 8×30 (торец)|y|-1": 4, "эксцентрик (канал Ø8)|x|+1": 2, "эксцентрик (канал Ø8)|x|-1": 2, "эксцентрик (канал Ø8)|y|-1": 4, "эксцентрик (чашка Ø15)|x|+1": 2, "эксцентрик (чашка Ø15)|x|-1": 2, "эксцентрик (чашка Ø15)|z|-1": 4, "эксцентрик (шток)|x|+1": 2, "эксцентрик (шток)|x|-1": 2, "эксцентрик (шток)|y|+1": 4}
+        "purpose_counts": {
+          "шкант 8×30 (пласть)": 8,
+          "шкант 8×30 (торец)": 8,
+          "эксцентрик (канал Ø8)": 8,
+          "эксцентрик (чашка Ø15)": 8,
+          "эксцентрик (шток)": 8
+        },
+        "panel_role_counts": {
+          "back": 12,
+          "side_left": 10,
+          "side_right": 10,
+          "top": 8
+        },
+        "axis_direction_counts": {
+          "шкант 8×30 (пласть)|x|+1": 2,
+          "шкант 8×30 (пласть)|x|-1": 2,
+          "шкант 8×30 (пласть)|y|+1": 4,
+          "шкант 8×30 (торец)|x|+1": 2,
+          "шкант 8×30 (торец)|x|-1": 2,
+          "шкант 8×30 (торец)|y|-1": 4,
+          "эксцентрик (канал Ø8)|x|+1": 2,
+          "эксцентрик (канал Ø8)|x|-1": 2,
+          "эксцентрик (канал Ø8)|y|-1": 4,
+          "эксцентрик (чашка Ø15)|x|+1": 2,
+          "эксцентрик (чашка Ø15)|x|-1": 2,
+          "эксцентрик (чашка Ø15)|z|-1": 4,
+          "эксцентрик (шток)|x|+1": 2,
+          "эксцентрик (шток)|x|-1": 2,
+          "эксцентрик (шток)|y|+1": 4
+        }
       }
     },
     "confirmat": {
       "paramspec": "komi_72_tumba_podkatnaya.json",
       "topology": {
         "archetype": "drawer_unit",
-        "purpose_counts": {"евровинт (проход Ø8)": 4, "конфирмат": 4},
-        "panel_role_counts": {"bottom": 4, "side_left": 2, "side_right": 2},
-        "axis_direction_counts": {"евровинт (проход Ø8)|y|+1": 4, "конфирмат|y|+1": 4}
+        "purpose_counts": {
+          "евровинт (проход Ø8)": 10,
+          "конфирмат": 10
+        },
+        "panel_role_counts": {
+          "bottom": 4,
+          "drawer_back": 6,
+          "drawer_bottom": 6,
+          "side_left": 2,
+          "side_right": 2
+        },
+        "axis_direction_counts": {
+          "евровинт (проход Ø8)|y|+1": 4,
+          "евровинт (проход Ø8)|z|-1": 6,
+          "конфирмат|y|+1": 4,
+          "конфирмат|z|-1": 6
+        }
       }
     },
     "removable_shelf": {
       "paramspec": "komi_46_shkaf_dokumenty.json",
       "topology": {
         "archetype": "cabinet",
-        "purpose_counts": {"эксцентрик полки (чашка Ø20)": 32, "эксцентрик полки (шток)": 32},
-        "panel_role_counts": {"removable_shelf": 32, "side_left": 8, "side_right": 8, "vertical_partition": 16},
-        "axis_direction_counts": {"эксцентрик полки (чашка Ø20)|y|+1": 32, "эксцентрик полки (шток)|x|+1": 16, "эксцентрик полки (шток)|x|-1": 16}
+        "purpose_counts": {
+          "эксцентрик полки (чашка Ø20)": 32,
+          "эксцентрик полки (шток)": 32
+        },
+        "panel_role_counts": {
+          "removable_shelf": 32,
+          "side_left": 8,
+          "side_right": 8,
+          "vertical_partition": 16
+        },
+        "axis_direction_counts": {
+          "эксцентрик полки (чашка Ø20)|y|+1": 32,
+          "эксцентрик полки (шток)|x|+1": 16,
+          "эксцентрик полки (шток)|x|-1": 16
+        }
       }
     },
     "fixed_shelf": {
       "paramspec": "wardrobe_demo.json",
       "topology": {
         "archetype": "wardrobe",
-        "purpose_counts": {"шкант 8×30 (пласть)": 16, "шкант 8×30 (торец)": 16, "эксцентрик (канал Ø8)": 10, "эксцентрик (чашка Ø15)": 10, "эксцентрик (шток)": 10},
-        "panel_role_counts": {"bottom": 6, "fixed_shelf": 12, "side_left": 8, "side_right": 12, "top": 12, "vertical_partition": 12},
-        "axis_direction_counts": {"шкант 8×30 (пласть)|x|+1": 2, "шкант 8×30 (пласть)|x|-1": 2, "шкант 8×30 (пласть)|y|+1": 6, "шкант 8×30 (пласть)|y|-1": 6, "шкант 8×30 (торец)|x|+1": 2, "шкант 8×30 (торец)|x|-1": 2, "шкант 8×30 (торец)|y|+1": 6, "шкант 8×30 (торец)|y|-1": 6, "эксцентрик (канал Ø8)|x|+1": 2, "эксцентрик (канал Ø8)|x|-1": 2, "эксцентрик (канал Ø8)|y|-1": 6, "эксцентрик (чашка Ø15)|x|+1": 2, "эксцентрик (чашка Ø15)|x|-1": 4, "эксцентрик (чашка Ø15)|y|+1": 4, "эксцентрик (шток)|x|+1": 2, "эксцентрик (шток)|x|-1": 2, "эксцентрик (шток)|y|+1": 6}
+        "purpose_counts": {
+          "шкант 8×30 (пласть)": 52,
+          "шкант 8×30 (торец)": 52,
+          "эксцентрик (канал Ø8)": 40,
+          "эксцентрик (чашка Ø15)": 40,
+          "эксцентрик (шток)": 40
+        },
+        "panel_role_counts": {
+          "bottom": 6,
+          "drawer_back": 24,
+          "drawer_bottom": 60,
+          "drawer_front": 24,
+          "drawer_side_left": 27,
+          "drawer_side_right": 27,
+          "fixed_shelf": 12,
+          "side_left": 8,
+          "side_right": 12,
+          "top": 12,
+          "vertical_partition": 12
+        },
+        "axis_direction_counts": {
+          "шкант 8×30 (пласть)|x|+1": 11,
+          "шкант 8×30 (пласть)|x|-1": 11,
+          "шкант 8×30 (пласть)|y|+1": 6,
+          "шкант 8×30 (пласть)|y|-1": 6,
+          "шкант 8×30 (пласть)|z|+1": 6,
+          "шкант 8×30 (пласть)|z|-1": 12,
+          "шкант 8×30 (торец)|x|+1": 11,
+          "шкант 8×30 (торец)|x|-1": 11,
+          "шкант 8×30 (торец)|y|+1": 6,
+          "шкант 8×30 (торец)|y|-1": 6,
+          "шкант 8×30 (торец)|z|+1": 12,
+          "шкант 8×30 (торец)|z|-1": 6,
+          "эксцентрик (канал Ø8)|x|+1": 11,
+          "эксцентрик (канал Ø8)|x|-1": 11,
+          "эксцентрик (канал Ø8)|y|-1": 6,
+          "эксцентрик (канал Ø8)|z|+1": 12,
+          "эксцентрик (чашка Ø15)|x|+1": 5,
+          "эксцентрик (чашка Ø15)|x|-1": 7,
+          "эксцентрик (чашка Ø15)|y|+1": 22,
+          "эксцентрик (чашка Ø15)|z|-1": 6,
+          "эксцентрик (шток)|x|+1": 11,
+          "эксцентрик (шток)|x|-1": 11,
+          "эксцентрик (шток)|y|+1": 6,
+          "эксцентрик (шток)|z|-1": 12
+        }
       }
     },
     "hinges": {
       "paramspec": "komi_46_shkaf_dokumenty.json",
       "topology": {
         "archetype": "cabinet",
-        "purpose_counts": {"петля (накол чашки)": 16, "петля (планка)": 16, "петля (чашка Ø35)": 8},
-        "panel_role_counts": {"door_front": 24, "side_left": 8, "side_right": 8},
-        "axis_direction_counts": {"петля (накол чашки)|z|-1": 16, "петля (планка)|x|+1": 8, "петля (планка)|x|-1": 8, "петля (чашка Ø35)|z|-1": 8}
+        "purpose_counts": {
+          "петля (накол чашки)": 16,
+          "петля (планка)": 16,
+          "петля (чашка Ø35)": 8
+        },
+        "panel_role_counts": {
+          "door_front": 24,
+          "side_left": 8,
+          "side_right": 8
+        },
+        "axis_direction_counts": {
+          "петля (накол чашки)|z|-1": 16,
+          "петля (планка)|x|+1": 8,
+          "петля (планка)|x|-1": 8,
+          "петля (чашка Ø35)|z|-1": 8
+        }
       }
     },
     "guides": {
       "paramspec": "komi_72_tumba_podkatnaya.json",
       "topology": {
         "archetype": "drawer_unit",
-        "purpose_counts": {"направляющая (саморез)": 36},
-        "panel_role_counts": {"drawer_side_left": 9, "drawer_side_right": 9, "side_left": 9, "side_right": 9},
-        "axis_direction_counts": {"направляющая (саморез)|x|+1": 18, "направляющая (саморез)|x|-1": 18}
-      }
-    },
-    "facade_tie": {
-      "paramspec": "komi_72_tumba_podkatnaya.json",
-      "topology": {
-        "archetype": "drawer_unit",
-        "purpose_counts": {"фасадная стяжка (шток)": 6, "фасадная стяжка (эксцентрик Ø15)": 6},
-        "panel_role_counts": {"drawer_front": 6, "drawer_side_left": 3, "drawer_side_right": 3},
-        "axis_direction_counts": {"фасадная стяжка (шток)|z|-1": 6, "фасадная стяжка (эксцентрик Ø15)|x|+1": 3, "фасадная стяжка (эксцентрик Ø15)|x|-1": 3}
+        "purpose_counts": {
+          "направляющая (саморез)": 36
+        },
+        "panel_role_counts": {
+          "drawer_side_left": 9,
+          "drawer_side_right": 9,
+          "side_left": 9,
+          "side_right": 9
+        },
+        "axis_direction_counts": {
+          "направляющая (саморез)|x|+1": 18,
+          "направляющая (саморез)|x|-1": 18
+        }
       }
     },
     "back": {
       "paramspec": "komi_72_tumba_podkatnaya.json",
       "topology": {
         "archetype": "drawer_unit",
-        "purpose_counts": {"задник (гвоздь)": 20, "задник (прокол Ø3)": 20},
-        "panel_role_counts": {"back": 20, "bottom": 4, "side_left": 6, "side_right": 6, "top": 4},
-        "axis_direction_counts": {"задник (гвоздь)|z|-1": 20, "задник (прокол Ø3)|z|-1": 20}
-      }
-    },
-    "legs": {
-      "paramspec": "komi_46_shkaf_dokumenty.json",
-      "topology": {
-        "archetype": "cabinet",
-        "purpose_counts": {"опора (саморез)": 8},
-        "panel_role_counts": {"bottom": 8},
-        "axis_direction_counts": {"опора (саморез)|y|+1": 8}
+        "purpose_counts": {
+          "задник (гвоздь)": 20,
+          "задник (прокол Ø3)": 20
+        },
+        "panel_role_counts": {
+          "back": 20,
+          "bottom": 4,
+          "side_left": 6,
+          "side_right": 6,
+          "top": 4
+        },
+        "axis_direction_counts": {
+          "задник (гвоздь)|z|-1": 20,
+          "задник (прокол Ø3)|z|-1": 20
+        }
       }
     },
     "rod": {
       "paramspec": "wardrobe_demo.json",
       "topology": {
         "archetype": "wardrobe",
-        "purpose_counts": {"штангодержатель (саморез)": 4},
-        "panel_role_counts": {"side_right": 2, "vertical_partition": 2},
-        "axis_direction_counts": {"штангодержатель (саморез)|x|+1": 2, "штангодержатель (саморез)|x|-1": 2}
+        "purpose_counts": {
+          "штангодержатель (саморез)": 2
+        },
+        "panel_role_counts": {
+          "side_right": 1,
+          "vertical_partition": 1
+        },
+        "axis_direction_counts": {
+          "штангодержатель (саморез)|x|+1": 1,
+          "штангодержатель (саморез)|x|-1": 1
+        }
       }
     },
     "metal_frame": {
       "paramspec": "komi_38_stol_direktora.json",
       "topology": {
         "archetype": "desk",
-        "purpose_counts": {"каркас (саморез)": 12},
-        "panel_role_counts": {"screen": 4, "top": 8},
-        "axis_direction_counts": {"каркас (саморез)|y|+1": 8, "каркас (саморез)|z|-1": 4}
+        "purpose_counts": {
+          "каркас (саморез)": 12
+        },
+        "panel_role_counts": {
+          "screen": 4,
+          "top": 8
+        },
+        "axis_direction_counts": {
+          "каркас (саморез)|y|+1": 8,
+          "каркас (саморез)|z|-1": 4
+        }
       }
     }
   },

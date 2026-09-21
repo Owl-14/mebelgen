@@ -13,6 +13,7 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     c = read_carcass(spec)
     section = (spec.get("sections") or [{"kind": "drawers", "drawers": 1}])[0]
     g = c.gap
+    gd = float((spec.get("gaps") or {}).get("default", g))   # вертикальный зазор между фасадами ящиков
     n = section["drawers"]
 
     # накладные фасады: полоса по высоте (перекрывает дно и крышку/столешницу)
@@ -28,19 +29,35 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
         heights = [float(h) for h in heights][::-1]
     else:
         top = section.get("front_top", band_top)
-        h = (top - fb - (n - 1) * g) / n
+        h = (top - fb - (n - 1) * gd) / n
         heights = [round(h, 2)] * n
 
     # параметры короба ящика (drawer-construction, не выводятся из габарита)
-    guide_gap = section.get("guide_gap", 14.5)
+    from .columns import (BOX_DEPTH_CLEARANCE, BOX_HEIGHT_MARGIN, BOX_Y_OFFSET, GUIDE_GAP,
+                          std_guide_length)
+    guide_gap = section.get("guide_gap", GUIDE_GAP)
     box_z1 = section.get("box_z1", 0)                             # короб прижат к фасаду (z=0)
-    box_depth = section.get("box_depth", round(c.D - c.T_back - box_z1 - 30, 2))
+    back_outside = section.get("box_back_mode", "inside") == "outside"
+    # глубина до задника: тонкий задник по умолчанию накладной (за корпусом)
+    inner_depth = c.D if (c.T_back <= 6 and spec.get("back_mount") != "inset") else c.D - c.T_back
+    box_depth = section.get("box_depth", std_guide_length(inner_depth - box_z1 - BOX_DEPTH_CLEARANCE))
     # кламп: короб (с задней стенкой) не должен упереться в задник корпуса —
     # защита от завышенного box_depth из ТЗ/чата (AKD-221)
-    box_back_lim = c.D - c.T_back - box_z1 - section.get("box_back_thickness", c.T)
+    box_back_lim = inner_depth - box_z1 - (section.get("box_back_thickness", c.T) if back_outside else 0)
     box_depth = max(50, min(box_depth, round(box_back_lim, 2)))
-    box_y_off = section.get("box_y_offset", c.T)
-    box_h = section.get("box_height", round(min(heights) * 0.52, 2))
+    min_front = min(heights)
+    # тесный фасад: отступ не выше половины фасада, короб — по пропорции 0.52
+    box_y_off = min(section.get("box_y_offset", BOX_Y_OFFSET), max(0.0, round(min_front / 2, 2)))
+    box_h = section.get("box_height", round(max(min_front - BOX_HEIGHT_MARGIN, min_front * 0.52), 2))
+    # кламп: боковины короба не выше самого низкого фасада — иначе короба
+    # налезают на соседний ящик/крышку (MEB-166: чат прислал box_height=500).
+    # Верхний накладной фасад перекрывает торец крышки, поэтому его короб
+    # ограничен ещё и низом крышки.
+    stack_top = fb + sum(heights) + (n - 1) * g
+    top_box_y1 = stack_top - heights[-1] + box_y_off
+    box_h = min(box_h, round(min(heights) - box_y_off, 2),
+                round(min(stack_top, c.H - c.T_top) - top_box_y1, 2))
+    box_h = max(box_h, 8.0)                                       # короб всегда положительной высоты
     box_back = section.get("box_back_thickness", c.T)
     box_bot = section.get("box_bottom_thickness", c.T)
 
@@ -67,23 +84,29 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
         by1 = fy1 + box_y_off
         by2 = by1 + box_h
         bz2 = box_z1 + box_depth
-        panels.append(panel(f"Ящик {k} дно", "drawer_bottom", "horizont", (bxl2, bxr1), (by1, by1 + box_bot), (box_z1, bz2),
+        bot_z2 = bz2 if back_outside else bz2 - box_back                # дно до задней стенки
+        panels.append(panel(f"Ящик {k} дно", "drawer_bottom", "horizont", (bxl2, bxr1), (by1, by1 + box_bot), (box_z1, bot_z2),
                             thickness=box_bot, material=c.mat, section_id="drawer_stack", estimated=True))
         panels.append(panel(f"Ящик {k} боковина левая", "drawer_side_left", "vertical", (bxl1, bxl2), (by1, by2), (box_z1, bz2),
                             thickness=c.T, material=c.mat, section_id="drawer_stack", estimated=True))
         panels.append(panel(f"Ящик {k} боковина правая", "drawer_side_right", "vertical", (bxr1, bxr2), (by1, by2), (box_z1, bz2),
                             thickness=c.T, material=c.mat, section_id="drawer_stack", estimated=True))
-        # накладная стенка перекрывает торцы боковин (AKD-181) — есть куда крепить
-        panels.append(panel(f"Ящик {k} задняя", "drawer_back", "front", (bxl1, bxr2), (by1, by2), (bz2, bz2 + box_back),
+        if back_outside:
+            # накладная стенка перекрывает торцы боковин (AKD-181)
+            back_x, back_z = (bxl1, bxr2), (bz2, bz2 + box_back)
+        else:
+            # эталон технолога: стенка между боковинами у заднего торца
+            back_x, back_z = (bxl2, bxr1), (bz2 - box_back, bz2)
+        panels.append(panel(f"Ящик {k} задняя", "drawer_back", "front", back_x, (by1, by2), back_z,
                             thickness=box_back, material=c.mat, section_id="drawer_stack", estimated=True))
         drawers_meta.append({"id": f"drawer_{k}", "count": 1,
                              "guide_type": section.get("guide_type", "шариковые"), "soft_close": False, "lock": False,
                              "dimensions": {"width": round(bxr1 - bxl2, 2), "height": box_h, "depth": box_depth},
                              "position": {"x": round(bxl2, 2), "y": round(by1, 2), "z": round(box_z1, 2)}, "estimated": True})
-        y = fy2 + g
+        y = fy2 + gd
 
     sections_meta = [{"id": "drawer_stack", "type": "drawer_stack",
-                      "dimensions": {"width": c.W - 2 * c.T, "height": round(y - g - fb, 2), "depth": box_depth, "estimated": True},
+                      "dimensions": {"width": c.W - 2 * c.T, "height": round(y - gd - fb, 2), "depth": box_depth, "estimated": True},
                       "elements": front_names}]
 
     # нижний фасад перекрывает торец дна: старт ровно с верха дна — брак
@@ -98,17 +121,21 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
 
     # перекрытие стека (AKD-187): полка над ящиками всегда, когда стек не
     # доходит до крышки (cover_top: false — отключить явно)
-    ny1 = fb + sum(heights) + (n - 1) * g         # верх верхнего фасада
+    ny1 = fb + sum(heights) + (n - 1) * gd        # верх верхнего фасада
     if section.get("cover_top", True) and ny1 + c.T <= (c.H - c.T_top) - 40:
-        panels.append(panel("Полка под нишей", "shelf", "horizont", (c.T, c.W - c.T), (ny1, ny1 + c.T),
+        # полка в зоне фасадов, верхний фасад на g ниже её верха (см. cabinet.py)
+        box_top = max((q["placement"]["y2"] for q in panels
+                       if q.get("type") in ("drawer_side_left", "drawer_side_right", "drawer_back")),
+                      default=ny1)
+        sy1 = round(max(ny1 + g - c.T, box_top), 2)
+        panels.append(panel("Полка под нишей", "shelf", "horizont", (c.T, c.W - c.T), (sy1, sy1 + c.T),
                             (section.get("niche_z_front", 0), c.D - c.T_back),
                             thickness=c.T, material=c.mat, section_id="top_open", estimated=True))
-        # верхний фасад продлевается на T и перекрывает торец полки (AKD-191)
         top_f = max((q for q in panels if q.get("type") == "drawer_front"),
                     key=lambda q: q["placement"]["y2"], default=None)
         if top_f is not None:
-            top_f["placement"]["y2"] = round(ny1 + c.T, 2)
-            top_f["dimensions"]["height"] = round(top_f["dimensions"]["height"] + c.T, 2)
+            top_f["placement"]["y2"] = round(sy1 + c.T - g, 2)
+            top_f["dimensions"]["height"] = round(top_f["placement"]["y2"] - top_f["placement"]["y1"], 2)
         sections_meta.append({"id": "top_open", "type": "open",
                               "dimensions": {"width": c.W - 2 * c.T, "height": round((c.H - c.T) - (ny1 + c.T), 2),
                                              "depth": round(c.D - c.T_back, 2), "estimated": True},

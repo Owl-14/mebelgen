@@ -158,6 +158,11 @@ def apply_edge_policy(panels: list[dict[str, Any]], spec: dict[str, Any]) -> Non
     # 0.5; СКРЫТЫЕ (в стыках, к заднику) — совсем без кромки
     m = spec.get("materials") or {}
     v = float(m.get("edge_band_thickness") or 2.0)
+    # ТЗ часто несёт «0.4»/«0.5» — это класс тонкой кромки видимых торцов, а не
+    # фасадной: фасады у технолога всегда 2 мм по кругу. Значение < 1 не
+    # переносим на фасады.
+    if v < 1:
+        v = 2.0
     vis = int(v) if v.is_integer() else v
     thin = 0.5
     for p in panels:

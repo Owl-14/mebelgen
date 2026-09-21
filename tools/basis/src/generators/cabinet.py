@@ -10,7 +10,8 @@ from typing import Any
 
 from .base import read_carcass
 from .corpus import carcass_calc
-from .columns import column_bounds, door_in_column, drawer_stack, facade_x_span, partitions, rod_in_column, shelves_in_column
+from .columns import (column_bounds, door_in_column, drawer_facade_span, drawer_stack, facade_x_span,
+                      partitions, rod_in_column, shelves_in_column)
 from .helpers import build_project, carcass, facade_band, panel, shelf_levels
 
 
@@ -18,6 +19,11 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     c = read_carcass(spec)
     sections = spec.get("sections") or [{"kind": "open"}]
     g = c.gap
+    # зазор между фасадами ящиков по вертикали — gaps.default (эталон технолога:
+    # 4 мм при боковом/дверном 2 мм); без него — как у фасадов
+    gd = float((spec.get("gaps") or {}).get("default", g))
+    # глубина проёма до задника: тонкий задник по умолчанию накладной (за корпусом)
+    inner_depth = c.D if (c.T_back <= 6 and spec.get("back_mount") != "inset") else c.D - c.T_back
     yb, yt = c.Hleg + c.T, c.H - c.T_top
     # фронт полок/перегородок = фронт корпуса (дно/крышка), а не утоплен на T:
     # иначе полки посередине не доходят до переднего края изделия
@@ -57,6 +63,8 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
         levels = levels or []
 
         fspan = facade_x_span(idx - 1, bounds, c.W, c.T, reveal, g)   # внешний пролёт фасада секции
+        if kind == "drawers":
+            fspan = drawer_facade_span(idx - 1, bounds, c.W, c.T, reveal)   # эталон: зазор reveal с обеих сторон
 
         if kind == "drawers":
             _fb = sec.get("front_bottom")                       # Y-координата низа нижнего фасада
@@ -68,11 +76,12 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
                 heights = [float(h) for h in heights][::-1]
             else:
                 top = sec.get("front_top", fb_top)
-                h = (top - fb - (n - 1) * g) / n
+                h = (top - fb - (n - 1) * gd) / n
                 heights = [round(h, 2)] * n
             # короб ящика не должен доходить до задника (передний край = D − T_back)
-            sec_dr = {**sec, "back_limit": c.D - c.T_back}
-            ps, dm, topy = drawer_stack(cx1, cx2, fb, heights, g, sec_dr, c.T, c.mat, sid,
+            # и до крышки: верхний накладной фасад перекрывает её торец (MEB-166)
+            sec_dr = {**sec, "back_limit": inner_depth, "top_limit": yt}
+            ps, dm, topy = drawer_stack(cx1, cx2, fb, heights, gd, sec_dr, c.T, c.mat, sid,
                                         sec.get("prefix", ""), facade_bounds=fspan)
             # нижний фасад перекрывает торец дна (как дверь): если фасад
             # начинается ровно с верха дна, открытый угол дна — брак
@@ -91,20 +100,27 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
             # верхний ящик открыт сверху — полка над стеком строится всегда
             # (cover_top: false — отключить явно)
             if sec.get("cover_top", True) and topy + c.T <= yt - 40:
-                sh = panel("Полка под нишей", "shelf", "horizont", (cx1, cx2), (topy, topy + c.T),
+                # Полка садится в зону фасадов: её верх на зазор g выше верха
+                # стека, верхний фасад заканчивается на g ниже верха полки и
+                # перекрывает её торец (эталон технолога: фасады равные, полка
+                # 680..696 при верхе фасада 694). Если короб верхнего ящика
+                # мешает, полка поднимается до его верха, фасад — за ней.
+                box_top = max((q["placement"]["y2"] for q in ps
+                               if q.get("type") in ("drawer_side_left", "drawer_side_right",
+                                                    "drawer_back")), default=topy)
+                sy1 = round(max(topy + g - c.T, box_top), 2)
+                sh = panel("Полка под нишей", "shelf", "horizont", (cx1, cx2), (sy1, sy1 + c.T),
                            (sec.get("niche_z_front", 0), iz2), thickness=c.T, material=c.mat,
                            section_id=sid, estimated=True)
                 sh["fixed"] = True      # стационарная: стяжки, не съёмные эксцентрики (AKD-287)
                 panels.append(sh)
                 names.append(sh["name"])
-                # верхний фасад продлевается на T и перекрывает торец полки
-                # (AKD-191: полка остаётся в корпусе, фасад — поверх, как с дном)
                 top_f = max((q for q in ps if q.get("type") == "drawer_front"),
                             key=lambda q: q["placement"]["y2"], default=None)
                 if top_f is not None:
-                    top_f["placement"]["y2"] = round(topy + c.T, 2)
+                    top_f["placement"]["y2"] = round(sy1 + c.T - g, 2)
                     top_f["dimensions"]["height"] = round(
-                        top_f["dimensions"]["height"] + c.T, 2)
+                        top_f["placement"]["y2"] - top_f["placement"]["y1"], 2)
         else:
             if levels:
                 base_label = sec.get("shelf_label", "Полка")
