@@ -463,6 +463,65 @@ def test_created_spec_is_normalized_before_the_production_gate(monkeypatch):
     assert capture["normalization"] and "Поправлено под контракт" in result["reply"]
 
 
+def test_tz_intake_repairs_the_candidate_once_by_gate_errors(monkeypatch):
+    """Кандидат красный по гейту → один повтор с ошибками → изделие принято."""
+    import copy
+    import src.spec_chat as sc
+
+    broken = copy.deepcopy(SPEC)
+    broken["project_name"] = "Стол из ТЗ"
+    broken["dimensions"] = {**SPEC["dimensions"], "width": 20}      # меньше контрактного минимума
+    calls: list[str] = []
+
+    class Provider:
+        model = "fake"
+
+        def chat(self, spec, message, *args, **kwargs):
+            calls.append(message)
+            if len(calls) == 1:
+                return {"reply": "Собрал по ТЗ", "spec": broken}
+            assert "check_errors" in (args[1] if len(args) > 1 else kwargs.get("context") or {})
+            return {"reply": "Чиню", "operations": [{
+                "op": "SetDimension", "dimension": "width", "value": 1400,
+            }]}
+
+    monkeypatch.setattr(sc, "get_chat_provider", lambda name=None: Provider())
+    capture: dict = {}
+    result = sc.chat_edit({}, "Собери ParamSpec по ТЗ", images=[{
+        "mime": "image/png", "data": "QUJD",
+    }], journal=capture)
+
+    assert len(calls) == 2, "ремонт вызывается ровно один раз"
+    assert result["spec"] is not None and result["spec"]["dimensions"]["width"] == 1400
+    assert capture["repair_errors"] and capture["repair_operations"] == ["SetDimension"]
+    assert "Исправлено по ошибкам проверок" in result["reply"]
+
+
+def test_tz_intake_repair_failure_keeps_the_honest_refusal(monkeypatch):
+    import copy
+    import src.spec_chat as sc
+
+    broken = copy.deepcopy(SPEC)
+    broken["dimensions"] = {**SPEC["dimensions"], "width": 20}
+
+    class Provider:
+        model = "fake"
+
+        def chat(self, spec, message, *args, **kwargs):
+            if "Исправь" in message:
+                raise RuntimeError("провайдер молчит")
+            return {"reply": "Собрал", "spec": broken}
+
+    monkeypatch.setattr(sc, "get_chat_provider", lambda name=None: Provider())
+    capture: dict = {}
+    result = sc.chat_edit({}, "Собери ParamSpec по ТЗ", images=[{
+        "mime": "image/png", "data": "QUJD",
+    }], journal=capture)
+
+    assert result["spec"] is None and result["code"] == "production_gate_rejected"
+    assert "провайдер молчит" in capture["repair_failed"]
+
+
 def test_chat_edit_captures_raw_response_for_journal(monkeypatch):
     """Сырой ответ модели уходит в AI-журнал, но не в ответ браузеру."""
     import src.spec_chat as sc

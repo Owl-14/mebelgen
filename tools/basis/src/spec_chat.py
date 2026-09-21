@@ -998,6 +998,60 @@ def _drawer_facts(spec: dict[str, Any]) -> list[dict[str, Any]]:
     return facts
 
 
+def _repair_created_spec(
+    provider: Any,
+    candidate: dict[str, Any],
+    decision: Any,
+    history: list[dict[str, str]] | None,
+    context: dict[str, Any] | None,
+    capture: dict[str, Any],
+) -> tuple[Any, dict[str, Any]] | None:
+    """Один повтор приёмки ТЗ: вернуть модели ошибки гейта и применить её правку.
+
+    Модель отвечает типизированными операциями (узел repair), их применяет тот
+    же детерминированный reducer, что и обычные правки чата, — геометрию она
+    по-прежнему не считает. Повтор ровно один: если и он не помог, изделие
+    честно отклоняется, а обе попытки видно в AI-журнале.
+    """
+    from .edit_operations import apply_edit_operations
+    from .paramspec_normalize import normalize_candidate
+    from .production_gate import evaluate_production_gate
+
+    errors = [f"{issue.code}: {issue.detail}" for issue in decision.report.errors[:8]]
+    repair_context = dict(context or {})
+    repair_context["check_errors"] = errors
+    capture["repair_errors"] = errors
+    try:
+        answer = provider.chat(copy.deepcopy(candidate),
+                               "Исправь изделие по ошибкам проверок.",
+                               history, repair_context)
+    except Exception as error:  # noqa: BLE001 - ремонт не обязан удаться
+        capture["repair_failed"] = f"{type(error).__name__}: {error}"
+        return None
+    if not isinstance(answer, dict):
+        return None
+    raw = answer.pop("raw_text", None)
+    if raw:
+        capture["raw_response"] = (capture.get("raw_response") or "") + "\n--- ремонт ---\n" + raw
+    operations = answer.get("operations")
+    if not isinstance(operations, list) or not operations:
+        capture["repair_operations"] = []
+        return None
+    try:
+        normalized_operations = _normalize_provider_operations(operations, candidate)
+        if _contains_llm_coordinates(normalized_operations):
+            capture["repair_failed"] = "llm_coordinates_forbidden"
+            return None
+        applied = apply_edit_operations(candidate, normalized_operations, context)
+    except Exception as error:  # noqa: BLE001 - кривой ремонт не ломает приёмку
+        capture["repair_failed"] = f"{type(error).__name__}: {error}"
+        return None
+    capture["repair_operations"] = [str(item.get("op")) for item in normalized_operations
+                                    if isinstance(item, dict)]
+    repaired = normalize_candidate(applied["spec"]).spec
+    return evaluate_production_gate(repaired, unresolved_materials_are_errors=False), repaired
+
+
 def chat_edit(spec: dict[str, Any], message: str,
               history: list[dict[str, str]] | None = None,
               context: dict[str, Any] | None = None,
@@ -1187,6 +1241,15 @@ def chat_edit(spec: dict[str, Any], message: str,
         # идёт через строгий гейт и красную спеку наружу не выпустит.
         decision = evaluate_production_gate(legacy_spec,
                                             unresolved_materials_are_errors=False)
+        repaired_ops: list[str] = []
+        if not decision.report.ok:
+            attempt = _repair_created_spec(build, legacy_spec, decision, history,
+                                           context, capture)
+            if attempt is not None:
+                repaired_decision, repaired_spec = attempt
+                if repaired_decision.report.ok:
+                    decision, legacy_spec = repaired_decision, repaired_spec
+                    repaired_ops = capture.get("repair_operations") or []
         if not decision.report.ok:
             refusal = _production_gate_refusal(decision, usage, trace=trace)
             refusal["normalization"] = normalized.notes
@@ -1205,6 +1268,9 @@ def chat_edit(spec: dict[str, Any], message: str,
         reply = res.get("reply", "Создано.")
         if normalized.notes:
             reply += "\nПоправлено под контракт: " + "; ".join(normalized.notes[:5])
+        if repaired_ops:
+            reply += ("\nИсправлено по ошибкам проверок: "
+                      + ", ".join(dict.fromkeys(repaired_ops)))
         if unresolved:
             reply += f"\nМатериалы нужно выбрать из базы: слотов — {len(unresolved)}."
         return summarize({"reply": reply, "spec": accepted,
