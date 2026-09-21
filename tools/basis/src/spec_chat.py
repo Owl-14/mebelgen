@@ -340,11 +340,25 @@ _OAI_PRESETS = {
 
 
 def _json_object(text: str) -> dict[str, Any]:
-    start, end = text.find("{"), text.rfind("}")
-    if start < 0 or end < start:
-        return {}
-    value = json.loads(text[start:end + 1])
-    return value if isinstance(value, dict) else {}
+    """Первый полноценный JSON-объект из ответа модели.
+
+    Провайдеры присылают его то в markdown-обёртке, то двумя объектами подряд
+    (GigaChat), и жадный разбор «от первой { до последней }» падал с
+    «Extra data»: живое ТЗ отклонялось как сбой сети. Берём первый объект,
+    который действительно разбирается.
+    """
+    decoder = json.JSONDecoder()
+    position = text.find("{")
+    while position >= 0:
+        try:
+            value, _ = decoder.raw_decode(text[position:])
+        except ValueError:
+            position = text.find("{", position + 1)
+            continue
+        if isinstance(value, dict):
+            return value
+        position = text.find("{", position + 1)
+    return {}
 
 
 def _provider_result(data: dict[str, Any], request: Any, *, usage: Any = None,
@@ -487,8 +501,7 @@ class OpenAICompatProvider:
             kw["extra_body"] = self.extra
         r = self.client.chat.completions.create(**kw)
         out = r.choices[0].message.content or "{}"
-        c1, c2 = out.find("{"), out.rfind("}")
-        data = json.loads(out[c1:c2 + 1]) if c1 >= 0 else {}
+        data = _json_object(out)
         usage = getattr(r, "usage", None)
         result = _provider_result(data, request, usage=usage, model=model)
         result["raw_text"] = out                      # для AI-журнала; chat_edit не отдаёт наружу
@@ -548,7 +561,7 @@ class GeminiChatProvider:
         cand = (body.get("candidates") or [{}])[0]
         text = "".join(p.get("text", "") for p in
                        (cand.get("content") or {}).get("parts") or [])
-        data = json.loads(text or "{}")
+        data = _json_object(text)
         result = _provider_result(data, request)
         result["usage"] = self._usage(body)
         result["raw_text"] = text
@@ -715,8 +728,7 @@ class GigaChatProvider:
         r.raise_for_status()
         body = r.json()
         text = body["choices"][0]["message"]["content"]
-        c1, c2 = text.find("{"), text.rfind("}")        # вычленить JSON из ответа
-        data = json.loads(text[c1:c2 + 1]) if c1 >= 0 else {}
+        data = _json_object(text)                        # вычленить JSON из ответа
         usage = body.get("usage") or {}
         result = _provider_result(data, request)
         result["usage"] = {"model": model, "total": usage.get("total_tokens"),

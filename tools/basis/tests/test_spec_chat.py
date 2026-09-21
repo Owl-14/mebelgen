@@ -522,6 +522,18 @@ def test_tz_intake_repair_failure_keeps_the_honest_refusal(monkeypatch):
     assert "провайдер молчит" in capture["repair_failed"]
 
 
+def test_provider_answer_with_two_json_objects_is_parsed(monkeypatch):
+    """GigaChat присылает два объекта подряд — раньше это считалось сбоем сети."""
+    import src.spec_chat as sc
+
+    assert sc._json_object('```json\n{"reply": "ок", "spec": {"a": 1}}\n```') == {
+        "reply": "ок", "spec": {"a": 1},
+    }
+    assert sc._json_object('{"reply": "первый"} {"reply": "второй"}') == {"reply": "первый"}
+    assert sc._json_object("мусор без json") == {}
+    assert sc._json_object('текст {битый: } {"reply": "целый"}') == {"reply": "целый"}
+
+
 def test_chat_edit_captures_raw_response_for_journal(monkeypatch):
     """Сырой ответ модели уходит в AI-журнал, но не в ответ браузеру."""
     import src.spec_chat as sc
