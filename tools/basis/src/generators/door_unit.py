@@ -20,7 +20,7 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
                      t_top=c.T_top)
 
     # полки: явные уровни имеют приоритет; счётчик shelves — раскладка равномерно
-    levels = section.get("shelf_levels")
+    levels = section.get("shelf_levels") or None     # пустой список = уровни не заданы
     if levels is None and section.get("shelves"):
         levels = shelf_levels(c.Hleg + c.T, c.H - c.T_top, section["shelves"], c.T)
     if levels:

@@ -437,6 +437,192 @@ def test_photo_tz_usage_counts_vision_and_build_calls(monkeypatch):
                           "completion": 12, "total": 42}
 
 
+def test_created_spec_is_normalized_before_the_production_gate(monkeypatch):
+    """ТЗ распознано верно, но LLM промахнулась в контракте — изделие всё равно собирается."""
+    import copy
+    import src.spec_chat as sc
+
+    candidate = copy.deepcopy(SPEC)
+    candidate["project_name"] = "Стол из ТЗ"
+    candidate["dimensions"] = {**SPEC["dimensions"], "width": "1400 мм"}
+    candidate["materials"] = {**SPEC["materials"], "edge_band_material": "ПВХ"}
+
+    class Provider:
+        def chat(self, *args, **kwargs):
+            return {"reply": "Собрал по ТЗ", "spec": candidate}
+
+    monkeypatch.setattr(sc, "get_chat_provider", lambda name=None: Provider())
+    capture: dict = {}
+    result = sc.chat_edit({}, "Собери ParamSpec по этому ТЗ", images=[{
+        "mime": "image/png", "data": "QUJD",
+    }], journal=capture)
+
+    assert result["spec"] is not None and result["created"] is True
+    assert result["spec"]["dimensions"]["width"] == 1400
+    assert "edge_band_material" not in result["spec"]["materials"]
+    assert capture["normalization"] and "Поправлено под контракт" in result["reply"]
+
+
+def test_tz_intake_repairs_the_candidate_once_by_gate_errors(monkeypatch):
+    """Кандидат красный по гейту → один повтор с ошибками → изделие принято."""
+    import copy
+    import src.spec_chat as sc
+
+    broken = copy.deepcopy(SPEC)
+    broken["project_name"] = "Стол из ТЗ"
+    broken["dimensions"] = {**SPEC["dimensions"], "width": 20}      # меньше контрактного минимума
+    calls: list[str] = []
+
+    class Provider:
+        model = "fake"
+
+        def chat(self, spec, message, *args, **kwargs):
+            calls.append(message)
+            if len(calls) == 1:
+                return {"reply": "Собрал по ТЗ", "spec": broken}
+            assert "check_errors" in (args[1] if len(args) > 1 else kwargs.get("context") or {})
+            return {"reply": "Чиню", "operations": [{
+                "op": "SetDimension", "dimension": "width", "value": 1400,
+            }]}
+
+    monkeypatch.setattr(sc, "get_chat_provider", lambda name=None: Provider())
+    capture: dict = {}
+    result = sc.chat_edit({}, "Собери ParamSpec по ТЗ", images=[{
+        "mime": "image/png", "data": "QUJD",
+    }], journal=capture)
+
+    assert len(calls) == 2, "ремонт вызывается ровно один раз"
+    assert result["spec"] is not None and result["spec"]["dimensions"]["width"] == 1400
+    assert capture["repair_errors"] and capture["repair_operations"] == ["SetDimension"]
+    assert "Исправлено по ошибкам проверок" in result["reply"]
+
+
+def test_tz_intake_repair_failure_keeps_the_honest_refusal(monkeypatch):
+    import copy
+    import src.spec_chat as sc
+
+    broken = copy.deepcopy(SPEC)
+    broken["dimensions"] = {**SPEC["dimensions"], "width": 20}
+
+    class Provider:
+        model = "fake"
+
+        def chat(self, spec, message, *args, **kwargs):
+            if "Исправь" in message:
+                raise RuntimeError("провайдер молчит")
+            return {"reply": "Собрал", "spec": broken}
+
+    monkeypatch.setattr(sc, "get_chat_provider", lambda name=None: Provider())
+    capture: dict = {}
+    result = sc.chat_edit({}, "Собери ParamSpec по ТЗ", images=[{
+        "mime": "image/png", "data": "QUJD",
+    }], journal=capture)
+
+    assert result["spec"] is None and result["code"] == "production_gate_rejected"
+    assert "провайдер молчит" in capture["repair_failed"]
+
+
+def test_overloaded_provider_is_retried_before_the_spare_one(monkeypatch):
+    """429 у GLM держится секунды: повтор ему же лучше, чем слабый резерв."""
+    import copy
+    import src.spec_chat as sc
+
+    candidate = copy.deepcopy(SPEC)
+    candidate["project_name"] = "Собрано повтором"
+    attempts: list[str] = []
+
+    class Flaky:
+        model = "glm-4.5-flash"
+
+        def chat(self, *args, **kwargs):
+            attempts.append("main")
+            if len(attempts) == 1:
+                raise RuntimeError("Error code: 429 - 该模型当前访问量过大")
+            return {"reply": "Собрал", "spec": candidate}
+
+    def _provider(name=None):
+        assert name != "gigachat", "резерв не должен дёргаться, пока основной ожил"
+        return Flaky()
+
+    monkeypatch.setenv("SPEC_CHAT_RETRY_PAUSE_S", "0")
+    monkeypatch.setenv("SPEC_CHAT_FALLBACK", "gigachat")
+    monkeypatch.setattr(sc, "get_chat_provider", _provider)
+    capture: dict = {}
+    result = sc.chat_edit({}, "Собери ParamSpec по ТЗ", images=[{
+        "mime": "image/png", "data": "QUJD",
+    }], journal=capture)
+
+    assert result["spec"]["project_name"] == "Собрано повтором"
+    assert attempts == ["main", "main"]
+    assert capture["retried_same_provider"] == capture["provider"]   # тот же, не резерв
+
+
+def test_overloaded_provider_falls_back_to_the_spare_one(monkeypatch):
+    """Основной лежит и после повтора — берём резервного, чтобы не отдавать отказ."""
+    import copy
+    import src.spec_chat as sc
+
+    candidate = copy.deepcopy(SPEC)
+    candidate["project_name"] = "Собрано резервом"
+
+    class Overloaded:
+        model = "glm-4.5-flash"
+        status_code = 429
+
+        def chat(self, *args, **kwargs):
+            raise RuntimeError("Error code: 429 - 该模型当前访问量过大")
+
+    class Spare:
+        model = "GigaChat"
+
+        def chat(self, *args, **kwargs):
+            return {"reply": "Собрал", "spec": candidate}
+
+    monkeypatch.setenv("SPEC_CHAT_FALLBACK", "gigachat")
+    monkeypatch.setattr(sc, "get_chat_provider",
+                        lambda name=None: Spare() if name == "gigachat" else Overloaded())
+    capture: dict = {}
+    result = sc.chat_edit({}, "Собери ParamSpec по ТЗ", images=[{
+        "mime": "image/png", "data": "QUJD",
+    }], journal=capture)
+
+    assert result["spec"]["project_name"] == "Собрано резервом"
+    assert capture["provider"] == "gigachat" and capture["model"] == "GigaChat"
+    assert "429" in capture["fallback_from"] or "RuntimeError" in capture["fallback_from"]
+
+
+def test_broken_request_is_not_retried_on_the_spare_provider(monkeypatch):
+    """Неверный ключ или кривой ответ — не повод дёргать второго провайдера."""
+    import src.spec_chat as sc
+
+    tried: list[str] = []
+
+    class Broken:
+        model = "glm-4.5-flash"
+
+        def chat(self, *args, **kwargs):
+            tried.append("main")
+            raise ValueError("invalid api key")
+
+    monkeypatch.setenv("SPEC_CHAT_FALLBACK", "gigachat")
+    monkeypatch.setattr(sc, "get_chat_provider", lambda name=None: Broken())
+    result = sc.chat_edit(SPEC, "сделай глубину 600")
+
+    assert result["code"] == "ai_provider_failed" and tried == ["main"]
+
+
+def test_provider_answer_with_two_json_objects_is_parsed(monkeypatch):
+    """GigaChat присылает два объекта подряд — раньше это считалось сбоем сети."""
+    import src.spec_chat as sc
+
+    assert sc._json_object('```json\n{"reply": "ок", "spec": {"a": 1}}\n```') == {
+        "reply": "ок", "spec": {"a": 1},
+    }
+    assert sc._json_object('{"reply": "первый"} {"reply": "второй"}') == {"reply": "первый"}
+    assert sc._json_object("мусор без json") == {}
+    assert sc._json_object('текст {битый: } {"reply": "целый"}') == {"reply": "целый"}
+
+
 def test_chat_edit_captures_raw_response_for_journal(monkeypatch):
     """Сырой ответ модели уходит в AI-журнал, но не в ответ браузеру."""
     import src.spec_chat as sc

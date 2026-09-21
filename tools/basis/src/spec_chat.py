@@ -340,11 +340,25 @@ _OAI_PRESETS = {
 
 
 def _json_object(text: str) -> dict[str, Any]:
-    start, end = text.find("{"), text.rfind("}")
-    if start < 0 or end < start:
-        return {}
-    value = json.loads(text[start:end + 1])
-    return value if isinstance(value, dict) else {}
+    """Первый полноценный JSON-объект из ответа модели.
+
+    Провайдеры присылают его то в markdown-обёртке, то двумя объектами подряд
+    (GigaChat), и жадный разбор «от первой { до последней }» падал с
+    «Extra data»: живое ТЗ отклонялось как сбой сети. Берём первый объект,
+    который действительно разбирается.
+    """
+    decoder = json.JSONDecoder()
+    position = text.find("{")
+    while position >= 0:
+        try:
+            value, _ = decoder.raw_decode(text[position:])
+        except ValueError:
+            position = text.find("{", position + 1)
+            continue
+        if isinstance(value, dict):
+            return value
+        position = text.find("{", position + 1)
+    return {}
 
 
 def _provider_result(data: dict[str, Any], request: Any, *, usage: Any = None,
@@ -487,8 +501,7 @@ class OpenAICompatProvider:
             kw["extra_body"] = self.extra
         r = self.client.chat.completions.create(**kw)
         out = r.choices[0].message.content or "{}"
-        c1, c2 = out.find("{"), out.rfind("}")
-        data = json.loads(out[c1:c2 + 1]) if c1 >= 0 else {}
+        data = _json_object(out)
         usage = getattr(r, "usage", None)
         result = _provider_result(data, request, usage=usage, model=model)
         result["raw_text"] = out                      # для AI-журнала; chat_edit не отдаёт наружу
@@ -548,7 +561,7 @@ class GeminiChatProvider:
         cand = (body.get("candidates") or [{}])[0]
         text = "".join(p.get("text", "") for p in
                        (cand.get("content") or {}).get("parts") or [])
-        data = json.loads(text or "{}")
+        data = _json_object(text)
         result = _provider_result(data, request)
         result["usage"] = self._usage(body)
         result["raw_text"] = text
@@ -715,8 +728,7 @@ class GigaChatProvider:
         r.raise_for_status()
         body = r.json()
         text = body["choices"][0]["message"]["content"]
-        c1, c2 = text.find("{"), text.rfind("}")        # вычленить JSON из ответа
-        data = json.loads(text[c1:c2 + 1]) if c1 >= 0 else {}
+        data = _json_object(text)                        # вычленить JSON из ответа
         usage = body.get("usage") or {}
         result = _provider_result(data, request)
         result["usage"] = {"model": model, "total": usage.get("total_tokens"),
@@ -998,6 +1010,125 @@ def _drawer_facts(spec: dict[str, Any]) -> list[dict[str, Any]]:
     return facts
 
 
+def _repair_created_spec(
+    provider: Any,
+    candidate: dict[str, Any],
+    decision: Any,
+    history: list[dict[str, str]] | None,
+    context: dict[str, Any] | None,
+    capture: dict[str, Any],
+) -> tuple[Any, dict[str, Any]] | None:
+    """Один повтор приёмки ТЗ: вернуть модели ошибки гейта и применить её правку.
+
+    Модель отвечает типизированными операциями (узел repair), их применяет тот
+    же детерминированный reducer, что и обычные правки чата, — геометрию она
+    по-прежнему не считает. Повтор ровно один: если и он не помог, изделие
+    честно отклоняется, а обе попытки видно в AI-журнале.
+    """
+    from .edit_operations import apply_edit_operations
+    from .paramspec_normalize import normalize_candidate
+    from .production_gate import evaluate_production_gate
+
+    errors = [f"{issue.code}: {issue.detail}" for issue in decision.report.errors[:8]]
+    repair_context = dict(context or {})
+    repair_context["check_errors"] = errors
+    capture["repair_errors"] = errors
+    try:
+        answer = provider.chat(copy.deepcopy(candidate),
+                               "Исправь изделие по ошибкам проверок.",
+                               history, repair_context)
+    except Exception as error:  # noqa: BLE001 - ремонт не обязан удаться
+        capture["repair_failed"] = f"{type(error).__name__}: {error}"
+        return None
+    if not isinstance(answer, dict):
+        return None
+    raw = answer.pop("raw_text", None)
+    if raw:
+        capture["raw_response"] = (capture.get("raw_response") or "") + "\n--- ремонт ---\n" + raw
+    operations = answer.get("operations")
+    if not isinstance(operations, list) or not operations:
+        capture["repair_operations"] = []
+        return None
+    try:
+        normalized_operations = _normalize_provider_operations(operations, candidate)
+        if _contains_llm_coordinates(normalized_operations):
+            capture["repair_failed"] = "llm_coordinates_forbidden"
+            return None
+        applied = apply_edit_operations(candidate, normalized_operations, context)
+    except Exception as error:  # noqa: BLE001 - кривой ремонт не ломает приёмку
+        capture["repair_failed"] = f"{type(error).__name__}: {error}"
+        return None
+    capture["repair_operations"] = [str(item.get("op")) for item in normalized_operations
+                                    if isinstance(item, dict)]
+    repaired = normalize_candidate(applied["spec"]).spec
+    return evaluate_production_gate(repaired, unresolved_materials_are_errors=False), repaired
+
+
+# Перегрузка провайдера — не вина ТЗ: 429 и таймауты стоит повторить на резерве.
+_TRANSIENT_MARKERS = ("429", "rate limit", "ratelimit", "too many requests", "timeout",
+                      "timed out", "502", "503", "504", "overload", "перегруж",
+                      "访问量过大", "temporarily unavailable")
+
+
+def _is_transient(error: BaseException) -> bool:
+    status = getattr(error, "status_code", None) or getattr(
+        getattr(error, "response", None), "status_code", None)
+    if isinstance(status, int) and (status == 429 or status >= 500):
+        return True
+    text = f"{type(error).__name__}: {error}".lower()
+    return any(marker in text for marker in _TRANSIENT_MARKERS)
+
+
+def fallback_provider_names(current: str) -> list[str]:
+    """Кого пробовать вместо перегруженного: SPEC_CHAT_FALLBACK или ключи из .env."""
+    configured = [item.strip().lower() for item in
+                  os.environ.get("SPEC_CHAT_FALLBACK", "").split(",") if item.strip()]
+    if configured:
+        return [name for name in configured if name != current]
+    return [entry["id"] for entry in available_providers()["providers"]
+            if entry["id"] not in (current, "mock")]
+
+
+def _chat_with_fallback(provider: Any, name: str, capture: dict[str, Any],
+                        *args: Any, **kwargs: Any) -> tuple[Any, Any]:
+    """Спросить сборщика, а при его перегрузке — резервного провайдера.
+
+    Клиент не должен видеть «сервис недоступен», пока в .env есть живой ключ.
+    Обе попытки видно в AI-журнале: fallback_from и подменённый provider.
+    """
+    try:
+        return provider, provider.chat(*args, **kwargs)
+    except Exception as error:
+        if not _is_transient(error):
+            raise
+        # Сначала тот же провайдер: 429 у него держится секунды, а резерв обычно
+        # слабее как сборщик — уходить на него сразу значит менять задержку на
+        # заведомо худший результат.
+        import time as _time
+
+        _time.sleep(float(os.environ.get("SPEC_CHAT_RETRY_PAUSE_S", "3")))
+        try:
+            answer = provider.chat(*args, **kwargs)
+        except Exception as repeat_error:
+            if not _is_transient(repeat_error):
+                raise
+            capture["retry_failed"] = f"{type(repeat_error).__name__}"
+        else:
+            capture["retried_same_provider"] = name
+            return provider, answer
+        for spare_name in fallback_provider_names(name):
+            try:
+                spare = get_chat_provider(spare_name)
+                answer = spare.chat(*args, **kwargs)
+            except Exception:
+                continue
+            capture["fallback_from"] = f"{name}: {type(error).__name__}"
+            capture["provider"] = spare_name
+            capture["model"] = str(getattr(spare, "model", spare_name))
+            return spare, answer
+        raise
+
+
 def chat_edit(spec: dict[str, Any], message: str,
               history: list[dict[str, str]] | None = None,
               context: dict[str, Any] | None = None,
@@ -1089,19 +1220,24 @@ def chat_edit(spec: dict[str, Any], message: str,
                     aug = (("Создай новый ParamSpec по этому ТЗ. " + message).strip()
                            + "\n\nРаспознано с фото ТЗ (используй как факты, ничего не додумывай "
                              "сверх):\n" + desc)
-                    res = build.chat(provider_spec, aug, history, context)
+                    build, res = _chat_with_fallback(build, build_name, capture,
+                                                     provider_spec, aug, history, context)
                 else:                                 # распознать не вышло — фото напрямую
-                    res = build.chat(provider_spec, message, history, context, images=images)
+                    build, res = _chat_with_fallback(build, build_name, capture, provider_spec,
+                                                     message, history, context, images=images)
                 if isinstance(res, dict):
                     res["usage"] = _merge_usage(getattr(vis, "last_usage", None),
                                                 res.get("usage"))
             elif images:
-                res = build.chat(provider_spec, message, history, context, images=images)
+                build, res = _chat_with_fallback(build, build_name, capture, provider_spec,
+                                                 message, history, context, images=images)
             else:
                 try:
-                    res = build.chat(provider_spec, message, history, context)
+                    build, res = _chat_with_fallback(build, build_name, capture,
+                                                     provider_spec, message, history, context)
                 except TypeError:
-                    res = build.chat(provider_spec, message, history)
+                    build, res = _chat_with_fallback(build, build_name, capture,
+                                                     provider_spec, message, history)
             if isinstance(res, dict):
                 capture["raw_response"] = res.pop("raw_text", None)
             provider_usage = res.get("usage") if isinstance(res, dict) else None
@@ -1172,16 +1308,57 @@ def chat_edit(spec: dict[str, Any], message: str,
                     "usage": usage, "trace": trace})
         if _coordinate_overrides(legacy_spec):
             return _coordinate_refusal(usage, trace)
+        # Синонимы секций, габариты строкой и лишние поля правим детерминированно:
+        # иначе гейт отклоняет верно распознанное ТЗ из-за мелкой неточности LLM.
+        from .paramspec_normalize import normalize_candidate
         from .production_gate import evaluate_production_gate
 
-        decision = evaluate_production_gate(legacy_spec)
+        normalized = normalize_candidate(legacy_spec)
+        legacy_spec = normalized.spec
+        if normalized.notes:
+            capture["normalization"] = normalized.notes
+
+        # Приёмка ТЗ: артикул материала подбирает проектировщик в Studio, поэтому
+        # нерешённый слот — предупреждение. Экспорт в производство по-прежнему
+        # идёт через строгий гейт и красную спеку наружу не выпустит.
+        decision = evaluate_production_gate(legacy_spec,
+                                            unresolved_materials_are_errors=False)
+        repaired_ops: list[str] = []
         if not decision.report.ok:
-            return _production_gate_refusal(decision, usage, trace=trace)
+            attempt = _repair_created_spec(build, legacy_spec, decision, history,
+                                           context, capture)
+            if attempt is not None:
+                repaired_decision, repaired_spec = attempt
+                if repaired_decision.report.ok:
+                    decision, legacy_spec = repaired_decision, repaired_spec
+                    repaired_ops = capture.get("repair_operations") or []
+        if not decision.report.ok:
+            refusal = _production_gate_refusal(decision, usage, trace=trace)
+            refusal["normalization"] = normalized.notes
+            return refusal
         accepted = decision.accepted_spec
         assert accepted is not None
-        return summarize({"reply": res.get("reply", "Создано."), "spec": accepted,
+        unresolved = [issue.detail for issue in decision.report.warnings
+                      if issue.code == "materials.unresolved"]
+        if unresolved:
+            warnings = accepted.get("warnings")
+            if not isinstance(warnings, list):
+                warnings = []
+                accepted["warnings"] = warnings
+            warnings.append("Материалы не выбраны из производственной базы — "
+                            "уточнить в Studio до экспорта в производство.")
+        reply = res.get("reply", "Создано.")
+        if normalized.notes:
+            reply += "\nПоправлено под контракт: " + "; ".join(normalized.notes[:5])
+        if repaired_ops:
+            reply += ("\nИсправлено по ошибкам проверок: "
+                      + ", ".join(dict.fromkeys(repaired_ops)))
+        if unresolved:
+            reply += f"\nМатериалы нужно выбрать из базы: слотов — {len(unresolved)}."
+        return summarize({"reply": reply, "spec": accepted,
                 "changes": ["новое изделие с нуля"], "created": True,
                 "operations": [], "resolved_operations": [], "usage": usage,
+                "normalization": normalized.notes,
                 "check_report": decision.report.to_dict(), "trace": trace})
     if node == "part_edit":
         if legacy_spec is not None:
