@@ -75,12 +75,19 @@ def facade_x_span(i: int, bounds: list[tuple[float, float]], W: float, T: float,
     return left, right
 
 
-def partitions(bounds, H, T, Hleg, mat, z1, z2) -> list[dict[str, Any]]:
+def partitions(bounds, H, T, Hleg, mat, z1, z2, t_top: float | None = None) -> list[dict[str, Any]]:
+    """Вертикальные перегородки между колонками.
+
+    Верх — под крышкой: при толстой столешнице (50 мм при плите 25) её низ
+    ниже, чем H−T, и перегородка обязана останавливаться там же, иначе она
+    входит в крышку (пересечение ровно на разницу толщин).
+    """
+    top = H - float(t_top or T)
     out = []
     for i in range(len(bounds) - 1):
         px = bounds[i][1]
         out.append(panel(f"Перегородка {i + 1}", "vertical_partition", "vertical",
-                         (px, px + T), (Hleg + T, H - T), (z1, z2), thickness=T, material=mat))
+                         (px, px + T), (Hleg + T, top), (z1, z2), thickness=T, material=mat))
     return out
 
 
