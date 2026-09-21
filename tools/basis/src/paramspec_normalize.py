@@ -169,6 +169,34 @@ def _fix_shelves_in_drawer_column(spec: dict[str, Any], notes: list[str]) -> Non
                          "не строятся — заявление убрано")
 
 
+SINGLE_COLUMN_ARCHETYPES = {"drawer_unit", "door_unit"}
+
+
+def _fix_single_column_sections(spec: dict[str, Any], notes: list[str]) -> None:
+    """Тумба и однодверная секция строятся одной колонкой.
+
+    Модель иногда описывает ТЗ двумя секциями («ящик снизу, полки сверху»).
+    Генератор берёт только первую, а проверка полноты считает заявленное во
+    всех — изделие отклоняется целиком. Оставляем первую секцию, а потерянное
+    записываем в warnings: проектировщик увидит это в Studio и достроит.
+    """
+    sections = spec.get("sections")
+    if (spec.get("archetype") not in SINGLE_COLUMN_ARCHETYPES
+            or not isinstance(sections, list) or len(sections) < 2):
+        return
+    extra = sections[1:]
+    spec["sections"] = sections[:1]
+    kinds = ", ".join(str(item.get("kind")) for item in extra if isinstance(item, dict))
+    notes.append(f"секции сверх первой ({kinds}) убраны: {spec['archetype']} "
+                 "собирается одной колонкой")
+    warnings = spec.get("warnings")
+    if not isinstance(warnings, list):
+        warnings = []
+        spec["warnings"] = warnings
+    warnings.append(f"В ТЗ были дополнительные секции ({kinds}) — изделие собрано "
+                    "одной колонкой, достроить в Studio.")
+
+
 def _delete_path(spec: dict[str, Any], path: list[str]) -> bool:
     node: Any = spec
     for part in path[:-1]:
@@ -226,6 +254,7 @@ def normalize_candidate(candidate: Any) -> NormalizationResult:
     _fix_archetype(spec, notes)
     _fix_sections(spec, notes)
     _fix_shelves_in_drawer_column(spec, notes)
+    _fix_single_column_sections(spec, notes)
     spec = _fix_numbers(spec, notes)
 
     for _ in range(MAX_PASSES):

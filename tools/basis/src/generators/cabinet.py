@@ -57,7 +57,10 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
         sid = sec.get("id", f"col{idx}")
         kind = sec["kind"]
         names: list[str] = []
-        levels = sec.get("shelf_levels")
+        # пустой shelf_levels = уровни не заданы (так его считает и проверка
+        # полноты): раньше секция с «shelf_levels»: [] и shelves: 2 молча
+        # оставалась без полок, а гейт потом отклонял изделие
+        levels = sec.get("shelf_levels") or None
         if levels is None and sec.get("shelves"):
             levels = shelf_levels(yb, yt, sec["shelves"], c.T)
         levels = levels or []
