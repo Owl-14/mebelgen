@@ -70,6 +70,25 @@ def test_valid_spec_is_untouched():
     assert result.notes == [] and result.spec == BASE and not result.changed
 
 
+def test_null_fields_are_dropped_so_contract_defaults_apply():
+    """GLM на чертеже шкафа пишет «legs»: null и «facade_reveal»: null — движок падал."""
+    from src.generators.registry import generate_from_paramspec
+
+    candidate = json.loads(json.dumps(BASE))
+    candidate["legs"] = None
+    candidate["facade_reveal"] = None
+    candidate["sections"] = [{"kind": "door", "id": "1", "door": 2,
+                              "shelf_levels": [None, "300"]}]
+
+    result = normalize_candidate(candidate)
+
+    assert "legs" not in result.spec and "facade_reveal" not in result.spec
+    assert result.spec["sections"][0]["shelf_levels"] == [300]
+    assert validate_paramspec(result.spec) == []
+    assert generate_from_paramspec(result.spec)["panels"]
+    assert any("пустые поля убраны" in note for note in result.notes)
+
+
 def test_tz_intake_keeps_unresolved_materials_as_a_warning():
     """Приёмка ТЗ: артикул из базы подбирает проектировщик, а не нейросеть."""
     from src.production_gate import evaluate_production_gate

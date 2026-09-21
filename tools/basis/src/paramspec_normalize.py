@@ -51,6 +51,7 @@ _NUMERIC_FIELDS = {
     "board_thickness", "edge_band_thickness", "back_thickness", "top_thickness",
     "facade_thickness", "drawers", "shelves", "door", "count",
     "apron_height", "screen_height", "screen_thickness",
+    "shelf_levels", "drawer_heights", "width_share", "box_height", "box_depth",
 }
 _NUMBER_RE = re.compile(r"-?\d+(?:[.,]\d+)?")
 
@@ -89,12 +90,35 @@ def _fix_numbers(node: Any, notes: list[str], path: str = "") -> Any:
     if isinstance(node, list):
         return [_fix_numbers(item, notes, f"{path}{index}.")
                 for index, item in enumerate(node)]
-    key = path[:-1].rsplit(".", 1)[-1]
+    parts = path[:-1].split(".")
+    # для элементов массива (shelf_levels.0) числовым считаем имя самого массива
+    key = parts[-2] if len(parts) > 1 and parts[-1].isdigit() else parts[-1]
     if key in _NUMERIC_FIELDS and isinstance(node, str):
         number = _as_number(node)
         if number is not None:
             notes.append(f"{path[:-1]}: «{node}» → {number}")
             return number
+    return node
+
+
+def _drop_nulls(node: Any, dropped: list[str], path: str = "") -> Any:
+    """Убрать «поле»: null и пустые элементы списков.
+
+    Неизвестное нейросеть пишет как null («legs»: null, «facade_reveal»: null),
+    а движок ждёт контрактный дефолт и падает на None. Пустое значение — это
+    отсутствие значения, поэтому поле удаляем и дефолт применяется сам.
+    """
+    if isinstance(node, dict):
+        result = {}
+        for key, value in node.items():
+            if value is None:
+                dropped.append(f"{path}{key}")
+                continue
+            result[key] = _drop_nulls(value, dropped, f"{path}{key}.")
+        return result
+    if isinstance(node, list):
+        return [_drop_nulls(item, dropped, f"{path}{index}.")
+                for index, item in enumerate(node) if item is not None]
     return node
 
 
@@ -175,7 +199,11 @@ def normalize_candidate(candidate: Any) -> NormalizationResult:
         return NormalizationResult(spec=candidate, notes=[])
 
     notes: list[str] = []
-    spec = copy.deepcopy(candidate)
+    dropped: list[str] = []
+    spec = _drop_nulls(copy.deepcopy(candidate), dropped)
+    if dropped:
+        notes.append("пустые поля убраны (действуют дефолты): " + ", ".join(dropped[:8])
+                     + (f" и ещё {len(dropped) - 8}" if len(dropped) > 8 else ""))
     _fix_archetype(spec, notes)
     _fix_sections(spec, notes)
     spec = _fix_numbers(spec, notes)
