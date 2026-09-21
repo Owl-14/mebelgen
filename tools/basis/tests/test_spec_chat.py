@@ -522,6 +522,60 @@ def test_tz_intake_repair_failure_keeps_the_honest_refusal(monkeypatch):
     assert "провайдер молчит" in capture["repair_failed"]
 
 
+def test_overloaded_provider_falls_back_to_the_spare_one(monkeypatch):
+    """GLM отвечает 429 — клиент получает изделие с резервного провайдера, а не отказ."""
+    import copy
+    import src.spec_chat as sc
+
+    candidate = copy.deepcopy(SPEC)
+    candidate["project_name"] = "Собрано резервом"
+
+    class Overloaded:
+        model = "glm-4.5-flash"
+        status_code = 429
+
+        def chat(self, *args, **kwargs):
+            raise RuntimeError("Error code: 429 - 该模型当前访问量过大")
+
+    class Spare:
+        model = "GigaChat"
+
+        def chat(self, *args, **kwargs):
+            return {"reply": "Собрал", "spec": candidate}
+
+    monkeypatch.setenv("SPEC_CHAT_FALLBACK", "gigachat")
+    monkeypatch.setattr(sc, "get_chat_provider",
+                        lambda name=None: Spare() if name == "gigachat" else Overloaded())
+    capture: dict = {}
+    result = sc.chat_edit({}, "Собери ParamSpec по ТЗ", images=[{
+        "mime": "image/png", "data": "QUJD",
+    }], journal=capture)
+
+    assert result["spec"]["project_name"] == "Собрано резервом"
+    assert capture["provider"] == "gigachat" and capture["model"] == "GigaChat"
+    assert "429" in capture["fallback_from"] or "RuntimeError" in capture["fallback_from"]
+
+
+def test_broken_request_is_not_retried_on_the_spare_provider(monkeypatch):
+    """Неверный ключ или кривой ответ — не повод дёргать второго провайдера."""
+    import src.spec_chat as sc
+
+    tried: list[str] = []
+
+    class Broken:
+        model = "glm-4.5-flash"
+
+        def chat(self, *args, **kwargs):
+            tried.append("main")
+            raise ValueError("invalid api key")
+
+    monkeypatch.setenv("SPEC_CHAT_FALLBACK", "gigachat")
+    monkeypatch.setattr(sc, "get_chat_provider", lambda name=None: Broken())
+    result = sc.chat_edit(SPEC, "сделай глубину 600")
+
+    assert result["code"] == "ai_provider_failed" and tried == ["main"]
+
+
 def test_provider_answer_with_two_json_objects_is_parsed(monkeypatch):
     """GigaChat присылает два объекта подряд — раньше это считалось сбоем сети."""
     import src.spec_chat as sc

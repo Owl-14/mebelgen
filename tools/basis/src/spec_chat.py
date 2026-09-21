@@ -1064,6 +1064,56 @@ def _repair_created_spec(
     return evaluate_production_gate(repaired, unresolved_materials_are_errors=False), repaired
 
 
+# Перегрузка провайдера — не вина ТЗ: 429 и таймауты стоит повторить на резерве.
+_TRANSIENT_MARKERS = ("429", "rate limit", "ratelimit", "too many requests", "timeout",
+                      "timed out", "502", "503", "504", "overload", "перегруж",
+                      "访问量过大", "temporarily unavailable")
+
+
+def _is_transient(error: BaseException) -> bool:
+    status = getattr(error, "status_code", None) or getattr(
+        getattr(error, "response", None), "status_code", None)
+    if isinstance(status, int) and (status == 429 or status >= 500):
+        return True
+    text = f"{type(error).__name__}: {error}".lower()
+    return any(marker in text for marker in _TRANSIENT_MARKERS)
+
+
+def fallback_provider_names(current: str) -> list[str]:
+    """Кого пробовать вместо перегруженного: SPEC_CHAT_FALLBACK или ключи из .env."""
+    configured = [item.strip().lower() for item in
+                  os.environ.get("SPEC_CHAT_FALLBACK", "").split(",") if item.strip()]
+    if configured:
+        return [name for name in configured if name != current]
+    return [entry["id"] for entry in available_providers()["providers"]
+            if entry["id"] not in (current, "mock")]
+
+
+def _chat_with_fallback(provider: Any, name: str, capture: dict[str, Any],
+                        *args: Any, **kwargs: Any) -> tuple[Any, Any]:
+    """Спросить сборщика, а при его перегрузке — резервного провайдера.
+
+    Клиент не должен видеть «сервис недоступен», пока в .env есть живой ключ.
+    Обе попытки видно в AI-журнале: fallback_from и подменённый provider.
+    """
+    try:
+        return provider, provider.chat(*args, **kwargs)
+    except Exception as error:
+        if not _is_transient(error):
+            raise
+        for spare_name in fallback_provider_names(name):
+            try:
+                spare = get_chat_provider(spare_name)
+                answer = spare.chat(*args, **kwargs)
+            except Exception:
+                continue
+            capture["fallback_from"] = f"{name}: {type(error).__name__}"
+            capture["provider"] = spare_name
+            capture["model"] = str(getattr(spare, "model", spare_name))
+            return spare, answer
+        raise
+
+
 def chat_edit(spec: dict[str, Any], message: str,
               history: list[dict[str, str]] | None = None,
               context: dict[str, Any] | None = None,
@@ -1155,19 +1205,24 @@ def chat_edit(spec: dict[str, Any], message: str,
                     aug = (("Создай новый ParamSpec по этому ТЗ. " + message).strip()
                            + "\n\nРаспознано с фото ТЗ (используй как факты, ничего не додумывай "
                              "сверх):\n" + desc)
-                    res = build.chat(provider_spec, aug, history, context)
+                    build, res = _chat_with_fallback(build, build_name, capture,
+                                                     provider_spec, aug, history, context)
                 else:                                 # распознать не вышло — фото напрямую
-                    res = build.chat(provider_spec, message, history, context, images=images)
+                    build, res = _chat_with_fallback(build, build_name, capture, provider_spec,
+                                                     message, history, context, images=images)
                 if isinstance(res, dict):
                     res["usage"] = _merge_usage(getattr(vis, "last_usage", None),
                                                 res.get("usage"))
             elif images:
-                res = build.chat(provider_spec, message, history, context, images=images)
+                build, res = _chat_with_fallback(build, build_name, capture, provider_spec,
+                                                 message, history, context, images=images)
             else:
                 try:
-                    res = build.chat(provider_spec, message, history, context)
+                    build, res = _chat_with_fallback(build, build_name, capture,
+                                                     provider_spec, message, history, context)
                 except TypeError:
-                    res = build.chat(provider_spec, message, history)
+                    build, res = _chat_with_fallback(build, build_name, capture,
+                                                     provider_spec, message, history)
             if isinstance(res, dict):
                 capture["raw_response"] = res.pop("raw_text", None)
             provider_usage = res.get("usage") if isinstance(res, dict) else None
