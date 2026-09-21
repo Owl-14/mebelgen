@@ -150,6 +150,25 @@ def _fix_sections(spec: dict[str, Any], notes: list[str]) -> None:
             section["kind"] = mapped
 
 
+def _fix_shelves_in_drawer_column(spec: dict[str, Any], notes: list[str]) -> None:
+    """Колонка ящиков — это стек ящиков; полок движок там не строит.
+
+    Модель регулярно пишет в такую секцию shelves, приняв за количество фразу
+    ТЗ вроде «внутренние полки 25 мм» (там речь о толщине). Проверка полноты
+    потом честно ругается «заявлено 2, построено 0» и ТЗ отклоняется целиком.
+    """
+    for index, section in enumerate(spec.get("sections") or []):
+        if not isinstance(section, dict) or section.get("kind") != "drawers":
+            continue
+        if not section.get("drawers") or section.get("shelf_levels"):
+            continue
+        declared = section.get("shelves")
+        if isinstance(declared, (int, float)) and declared > 0:
+            section.pop("shelves")
+            notes.append(f"sections.{index}: полки ({int(declared)}) в колонке ящиков "
+                         "не строятся — заявление убрано")
+
+
 def _delete_path(spec: dict[str, Any], path: list[str]) -> bool:
     node: Any = spec
     for part in path[:-1]:
@@ -206,6 +225,7 @@ def normalize_candidate(candidate: Any) -> NormalizationResult:
                      + (f" и ещё {len(dropped) - 8}" if len(dropped) > 8 else ""))
     _fix_archetype(spec, notes)
     _fix_sections(spec, notes)
+    _fix_shelves_in_drawer_column(spec, notes)
     spec = _fix_numbers(spec, notes)
 
     for _ in range(MAX_PASSES):

@@ -89,6 +89,37 @@ def test_null_fields_are_dropped_so_contract_defaults_apply():
     assert any("пустые поля убраны" in note for note in result.notes)
 
 
+def test_shelves_declared_inside_a_drawer_column_are_dropped():
+    """ТЗ «тумба подкатная»: модель приняла «внутренние полки 25 мм» за две полки."""
+    from src.completeness_check import check_completeness
+    from src.generators.registry import generate_from_paramspec
+
+    candidate = json.loads(json.dumps(BASE))
+    candidate["archetype"] = candidate["furniture_type"] = "cabinet"
+    candidate["dimensions"] = {"width": 400, "depth": 450, "height": 580, "tolerance": 5}
+    candidate["sections"] = [{"kind": "drawers", "drawers": 1, "shelves": 2}]
+
+    result = normalize_candidate(candidate)
+
+    assert "shelves" not in result.spec["sections"][0]
+    assert any("в колонке ящиков" in note for note in result.notes)
+    project = generate_from_paramspec(result.spec)
+    assert not [error for error in check_completeness(project, result.spec)
+                if "полки" in error]
+
+
+def test_shelf_levels_in_a_drawer_column_are_kept():
+    """Явные уровни полок — осознанное решение проектировщика, их не трогаем."""
+    candidate = json.loads(json.dumps(BASE))
+    candidate["sections"] = [{"kind": "drawers", "drawers": 2, "shelves": 1,
+                              "shelf_levels": [900]}]
+
+    result = normalize_candidate(candidate)
+
+    assert result.spec["sections"][0]["shelf_levels"] == [900]
+    assert result.spec["sections"][0]["shelves"] == 1
+
+
 def test_tz_intake_keeps_unresolved_materials_as_a_warning():
     """Приёмка ТЗ: артикул из базы подбирает проектировщик, а не нейросеть."""
     from src.production_gate import evaluate_production_gate
