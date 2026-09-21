@@ -70,6 +70,24 @@ def test_valid_spec_is_untouched():
     assert result.notes == [] and result.spec == BASE and not result.changed
 
 
+def test_tz_intake_keeps_unresolved_materials_as_a_warning():
+    """Приёмка ТЗ: артикул из базы подбирает проектировщик, а не нейросеть."""
+    from src.production_gate import evaluate_production_gate
+
+    candidate = json.loads(json.dumps(BASE))
+    candidate["materials"] = {**candidate["materials"], "board_article": "",
+                              "facade_article": "", "color": "неизвестный декор",
+                              "color_code": ""}
+
+    strict = evaluate_production_gate(candidate)
+    intake = evaluate_production_gate(candidate, unresolved_materials_are_errors=False)
+
+    assert [i for i in strict.report.errors if i.code == "materials.unresolved"], \
+        "строгий гейт обязан требовать позицию из производственной базы"
+    assert not [i for i in intake.report.errors if i.code == "materials.unresolved"]
+    assert [i for i in intake.report.warnings if i.code == "materials.unresolved"]
+
+
 def test_garbage_input_is_returned_as_is():
     assert normalize_candidate("не спека").spec == "не спека"
     assert normalize_candidate(None).notes == []

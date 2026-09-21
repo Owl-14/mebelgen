@@ -1182,16 +1182,31 @@ def chat_edit(spec: dict[str, Any], message: str,
         if normalized.notes:
             capture["normalization"] = normalized.notes
 
-        decision = evaluate_production_gate(legacy_spec)
+        # Приёмка ТЗ: артикул материала подбирает проектировщик в Studio, поэтому
+        # нерешённый слот — предупреждение. Экспорт в производство по-прежнему
+        # идёт через строгий гейт и красную спеку наружу не выпустит.
+        decision = evaluate_production_gate(legacy_spec,
+                                            unresolved_materials_are_errors=False)
         if not decision.report.ok:
             refusal = _production_gate_refusal(decision, usage, trace=trace)
             refusal["normalization"] = normalized.notes
             return refusal
         accepted = decision.accepted_spec
         assert accepted is not None
+        unresolved = [issue.detail for issue in decision.report.warnings
+                      if issue.code == "materials.unresolved"]
+        if unresolved:
+            warnings = accepted.get("warnings")
+            if not isinstance(warnings, list):
+                warnings = []
+                accepted["warnings"] = warnings
+            warnings.append("Материалы не выбраны из производственной базы — "
+                            "уточнить в Studio до экспорта в производство.")
         reply = res.get("reply", "Создано.")
         if normalized.notes:
             reply += "\nПоправлено под контракт: " + "; ".join(normalized.notes[:5])
+        if unresolved:
+            reply += f"\nМатериалы нужно выбрать из базы: слотов — {len(unresolved)}."
         return summarize({"reply": reply, "spec": accepted,
                 "changes": ["новое изделие с нуля"], "created": True,
                 "operations": [], "resolved_operations": [], "usage": usage,
