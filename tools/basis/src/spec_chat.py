@@ -1101,6 +1101,21 @@ def _chat_with_fallback(provider: Any, name: str, capture: dict[str, Any],
     except Exception as error:
         if not _is_transient(error):
             raise
+        # Сначала тот же провайдер: 429 у него держится секунды, а резерв обычно
+        # слабее как сборщик — уходить на него сразу значит менять задержку на
+        # заведомо худший результат.
+        import time as _time
+
+        _time.sleep(float(os.environ.get("SPEC_CHAT_RETRY_PAUSE_S", "3")))
+        try:
+            answer = provider.chat(*args, **kwargs)
+        except Exception as repeat_error:
+            if not _is_transient(repeat_error):
+                raise
+            capture["retry_failed"] = f"{type(repeat_error).__name__}"
+        else:
+            capture["retried_same_provider"] = name
+            return provider, answer
         for spare_name in fallback_provider_names(name):
             try:
                 spare = get_chat_provider(spare_name)

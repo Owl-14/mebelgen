@@ -522,8 +522,43 @@ def test_tz_intake_repair_failure_keeps_the_honest_refusal(monkeypatch):
     assert "провайдер молчит" in capture["repair_failed"]
 
 
+def test_overloaded_provider_is_retried_before_the_spare_one(monkeypatch):
+    """429 у GLM держится секунды: повтор ему же лучше, чем слабый резерв."""
+    import copy
+    import src.spec_chat as sc
+
+    candidate = copy.deepcopy(SPEC)
+    candidate["project_name"] = "Собрано повтором"
+    attempts: list[str] = []
+
+    class Flaky:
+        model = "glm-4.5-flash"
+
+        def chat(self, *args, **kwargs):
+            attempts.append("main")
+            if len(attempts) == 1:
+                raise RuntimeError("Error code: 429 - 该模型当前访问量过大")
+            return {"reply": "Собрал", "spec": candidate}
+
+    def _provider(name=None):
+        assert name != "gigachat", "резерв не должен дёргаться, пока основной ожил"
+        return Flaky()
+
+    monkeypatch.setenv("SPEC_CHAT_RETRY_PAUSE_S", "0")
+    monkeypatch.setenv("SPEC_CHAT_FALLBACK", "gigachat")
+    monkeypatch.setattr(sc, "get_chat_provider", _provider)
+    capture: dict = {}
+    result = sc.chat_edit({}, "Собери ParamSpec по ТЗ", images=[{
+        "mime": "image/png", "data": "QUJD",
+    }], journal=capture)
+
+    assert result["spec"]["project_name"] == "Собрано повтором"
+    assert attempts == ["main", "main"]
+    assert capture["retried_same_provider"] == capture["provider"]   # тот же, не резерв
+
+
 def test_overloaded_provider_falls_back_to_the_spare_one(monkeypatch):
-    """GLM отвечает 429 — клиент получает изделие с резервного провайдера, а не отказ."""
+    """Основной лежит и после повтора — берём резервного, чтобы не отдавать отказ."""
     import copy
     import src.spec_chat as sc
 
