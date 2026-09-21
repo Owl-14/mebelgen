@@ -437,6 +437,32 @@ def test_photo_tz_usage_counts_vision_and_build_calls(monkeypatch):
                           "completion": 12, "total": 42}
 
 
+def test_created_spec_is_normalized_before_the_production_gate(monkeypatch):
+    """ТЗ распознано верно, но LLM промахнулась в контракте — изделие всё равно собирается."""
+    import copy
+    import src.spec_chat as sc
+
+    candidate = copy.deepcopy(SPEC)
+    candidate["project_name"] = "Стол из ТЗ"
+    candidate["dimensions"] = {**SPEC["dimensions"], "width": "1400 мм"}
+    candidate["materials"] = {**SPEC["materials"], "edge_band_material": "ПВХ"}
+
+    class Provider:
+        def chat(self, *args, **kwargs):
+            return {"reply": "Собрал по ТЗ", "spec": candidate}
+
+    monkeypatch.setattr(sc, "get_chat_provider", lambda name=None: Provider())
+    capture: dict = {}
+    result = sc.chat_edit({}, "Собери ParamSpec по этому ТЗ", images=[{
+        "mime": "image/png", "data": "QUJD",
+    }], journal=capture)
+
+    assert result["spec"] is not None and result["created"] is True
+    assert result["spec"]["dimensions"]["width"] == 1400
+    assert "edge_band_material" not in result["spec"]["materials"]
+    assert capture["normalization"] and "Поправлено под контракт" in result["reply"]
+
+
 def test_chat_edit_captures_raw_response_for_journal(monkeypatch):
     """Сырой ответ модели уходит в AI-журнал, но не в ответ браузеру."""
     import src.spec_chat as sc

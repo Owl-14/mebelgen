@@ -1172,16 +1172,30 @@ def chat_edit(spec: dict[str, Any], message: str,
                     "usage": usage, "trace": trace})
         if _coordinate_overrides(legacy_spec):
             return _coordinate_refusal(usage, trace)
+        # Синонимы секций, габариты строкой и лишние поля правим детерминированно:
+        # иначе гейт отклоняет верно распознанное ТЗ из-за мелкой неточности LLM.
+        from .paramspec_normalize import normalize_candidate
         from .production_gate import evaluate_production_gate
+
+        normalized = normalize_candidate(legacy_spec)
+        legacy_spec = normalized.spec
+        if normalized.notes:
+            capture["normalization"] = normalized.notes
 
         decision = evaluate_production_gate(legacy_spec)
         if not decision.report.ok:
-            return _production_gate_refusal(decision, usage, trace=trace)
+            refusal = _production_gate_refusal(decision, usage, trace=trace)
+            refusal["normalization"] = normalized.notes
+            return refusal
         accepted = decision.accepted_spec
         assert accepted is not None
-        return summarize({"reply": res.get("reply", "Создано."), "spec": accepted,
+        reply = res.get("reply", "Создано.")
+        if normalized.notes:
+            reply += "\nПоправлено под контракт: " + "; ".join(normalized.notes[:5])
+        return summarize({"reply": reply, "spec": accepted,
                 "changes": ["новое изделие с нуля"], "created": True,
                 "operations": [], "resolved_operations": [], "usage": usage,
+                "normalization": normalized.notes,
                 "check_report": decision.report.to_dict(), "trace": trace})
     if node == "part_edit":
         if legacy_spec is not None:
