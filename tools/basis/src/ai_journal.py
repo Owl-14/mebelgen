@@ -398,6 +398,34 @@ class AIJournal:
             ],
         }
 
+    def new_error_types(self, since: str) -> list[dict[str, Any]]:
+        """Отпечатки ошибок, впервые появившиеся после since (для алерта «новая ошибка»)."""
+        with closing(self.connect()) as connection:
+            rows = connection.execute(
+                "SELECT fingerprint, error_code, error_class, node, COUNT(*) AS count, "
+                "MIN(created_at) AS first_at FROM ai_calls "
+                "WHERE outcome = 'error' AND fingerprint != '' GROUP BY fingerprint "
+                "HAVING MIN(created_at) > ? ORDER BY first_at", (since,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def count_errors(self, codes: Iterable[str], since: str) -> int:
+        codes = list(codes)
+        if not codes:
+            return 0
+        marks = ", ".join("?" for _ in codes)
+        with closing(self.connect()) as connection:
+            row = connection.execute(
+                f"SELECT COUNT(*) FROM ai_calls WHERE error_code IN ({marks}) "
+                "AND created_at > ?", (*codes, since),
+            ).fetchone()
+        return int(row[0] or 0)
+
+    def mark_export(self, until: str) -> None:
+        """Сдвинуть отметку «выгружено до» — после того как архив реально доставлен."""
+        with closing(self.connect()) as connection:
+            self._set_state(connection, "last_export_at", until)
+
     def export_zip(
         self,
         destination: str | Path,

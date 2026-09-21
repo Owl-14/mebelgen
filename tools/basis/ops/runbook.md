@@ -1,6 +1,7 @@
 # Runbook studio.akeda.ru (AKD-264 / MEB-106)
 
-Сервер **80.66.89.3**, SSH `root` с ключом `bazis_deploy`. Раскладка:
+Сервер **144.31.50.188** (serv.host, MSK-R7-2, с 19.09.2026; старый 80.66.89.3
+удалён за неоплату), SSH `root` только по ключу `bazis_deploy`. Раскладка:
 `/opt/bazis/basis` — приложение (копия tools/basis, НЕ git), `/opt/bazis/venv`,
 `/opt/bazis/out` — артефакты и журнал токенов, `/opt/bazis/backups`.
 Сервисы — `bazis.service` (клиентская Studio) и `bazis-admin.service`
@@ -63,6 +64,15 @@ sudo -u bazis /opt/bazis/venv/bin/python main.py ai-journal export --db /opt/baz
 `export` без `--since` отдаёт всё новое с прошлой выгрузки (`--all` — вся база,
 `--no-mark` — не сдвигать отметку). В ZIP: `tz.jsonl`, `errors.jsonl`,
 `pairs.jsonl`, `images/`, `manifest.json`.
+
+## Telegram-бот мониторинга
+`bazis-bot.service` (`main.py bot`, юнит в `ops/`) пишет в группу «Сервер» и
+отвечает только там. В `.env`: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALERT_CHAT_ID`
+(ID группы — команда `/chatid`), при блокировке Telegram — `TELEGRAM_PROXY`.
+Команды: `/help`, `/limits`, `/stats`, `/errors`, `/export` (только админы
+группы). Алерты: Studio не отвечает, бюджет токенов 80/95%, баланс нейросети
+< 20/5% от максимума, серия сбоев провайдера, новый тип ошибки; по понедельникам
+сводка. Состояние — `/opt/bazis/out/bot_state.json`; логи — `journalctl -u bazis-bot`.
 
 ## Ключи и лимиты
 `.env` на сервере (руками, в git не попадает): ключи ИИ-провайдеров + лимиты
