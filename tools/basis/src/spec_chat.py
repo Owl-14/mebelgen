@@ -490,7 +490,9 @@ class OpenAICompatProvider:
         c1, c2 = out.find("{"), out.rfind("}")
         data = json.loads(out[c1:c2 + 1]) if c1 >= 0 else {}
         usage = getattr(r, "usage", None)
-        return _provider_result(data, request, usage=usage, model=model)
+        result = _provider_result(data, request, usage=usage, model=model)
+        result["raw_text"] = out                      # для AI-журнала; chat_edit не отдаёт наружу
+        return result
 
 
 # обратная совместимость: SPEC_CHAT_PROVIDER=openai
@@ -549,6 +551,7 @@ class GeminiChatProvider:
         data = json.loads(text or "{}")
         result = _provider_result(data, request)
         result["usage"] = self._usage(body)
+        result["raw_text"] = text
         return result
 
     def _usage(self, body: dict[str, Any]) -> dict[str, Any]:
@@ -719,6 +722,7 @@ class GigaChatProvider:
         result["usage"] = {"model": model, "total": usage.get("total_tokens"),
                            "prompt": usage.get("prompt_tokens"),
                            "completion": usage.get("completion_tokens")}
+        result["raw_text"] = text
         return result
 
 
@@ -998,8 +1002,12 @@ def chat_edit(spec: dict[str, Any], message: str,
               history: list[dict[str, str]] | None = None,
               context: dict[str, Any] | None = None,
               images: list[dict[str, str]] | None = None,
-              provider: str | None = None) -> dict[str, Any]:
+              provider: str | None = None,
+              journal: dict[str, Any] | None = None) -> dict[str, Any]:
     """Команда словами → атомарный operation patch + совместимый Studio-ответ.
+
+    journal — необязательный dict, который заполняется для AI-журнала: провайдер,
+    модель, узел, версия промпта, сырой ответ модели, факты с фото, исключение.
 
     Гарантии: LLM-операции типизированы, имеют target/preconditions и применяются
     copy-on-write; новая спека проходит validate_paramspec, иначе spec=None.
@@ -1016,8 +1024,10 @@ def chat_edit(spec: dict[str, Any], message: str,
         }):
             return payload
 
+    capture = journal if isinstance(journal, dict) else {}
     request_policy = evaluate_request_policy(message)
     if not request_policy["allowed"]:
+        capture["node"] = "request_policy"
         reply = "Запрос отклонён политикой безопасности. Сформулируйте мебельную правку без инструкций по раскрытию или обходу системных правил."
         return summarize({
             "reply": reply, "error": reply, "code": request_policy["code"],
@@ -1052,6 +1062,8 @@ def chat_edit(spec: dict[str, Any], message: str,
         "gen_ai.request.model": model_name,
         "langsmith.span.kind": "llm",
     }
+    capture.update(provider=build_name, model=model_name, node=routed_node,
+                   prompt_version=prompt_meta["prompt_version"])
     # Конвейер «глаза+мозг» (AKD-211): если пришло фото, а сборщик — не тот
     # провайдер, что назначен на зрение (VISION_EXTRACT_PROVIDER, обычно GigaChat),
     # то этап 1 — GigaChat распознаёт факты с фото ТЗ текстом, этап 2 — сборщик
@@ -1072,6 +1084,7 @@ def chat_edit(spec: dict[str, Any], message: str,
                     "langsmith.span.kind": "llm",
                 }):
                     desc = vis.vision_extract(images) if hasattr(vis, "vision_extract") else ""
+                capture["vision_facts"] = desc
                 if desc.strip():
                     aug = (("Создай новый ParamSpec по этому ТЗ. " + message).strip()
                            + "\n\nРаспознано с фото ТЗ (используй как факты, ничего не додумывай "
@@ -1089,6 +1102,8 @@ def chat_edit(spec: dict[str, Any], message: str,
                     res = build.chat(provider_spec, message, history, context)
                 except TypeError:
                     res = build.chat(provider_spec, message, history)
+            if isinstance(res, dict):
+                capture["raw_response"] = res.pop("raw_text", None)
             provider_usage = res.get("usage") if isinstance(res, dict) else None
             if isinstance(provider_usage, dict):
                 plan_span.set_attributes({
@@ -1099,6 +1114,7 @@ def chat_edit(spec: dict[str, Any], message: str,
                     "gen_ai.usage.total_tokens": provider_usage.get("total"),
                 })
     except Exception as e:                            # сеть/ключ/парсинг — в чат, не 500
+        capture["exception"] = f"{type(e).__name__}: {e}"
         error_message = f"Сервис AI не ответил: {e}"
         node = classify_intent(message, spec, context, has_images=bool(images))
         request = build_prompt_request(node, message=message, spec=spec,

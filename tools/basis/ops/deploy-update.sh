@@ -2,7 +2,7 @@
 # Обновление кода демо с дев-машины (запускать из tools/basis).
 # НЕ трогает на сервере: paramspecs/ (изделия посетителей), .env, /opt/bazis/out.
 set -euo pipefail
-HOST=root@80.66.89.3
+HOST="${BAZIS_DEPLOY_HOST:-root@144.31.50.188}"
 KEY="${BAZIS_DEPLOY_KEY:-$HOME/.ssh/bazis_deploy}"
 SHA=$(git rev-parse --short HEAD)
 META_DIR=$(mktemp -d)
@@ -24,9 +24,12 @@ ssh -i "$KEY" "$HOST" 'set -eu
   cd /opt/bazis/basis
   tar xzf /tmp/basis_update.tgz
   chown -R bazis:bazis .
+  cp ops/bazis-bot.service /etc/systemd/system/bazis-bot.service
+  systemctl daemon-reload
   systemctl restart bazis
+  systemctl enable --now bazis-bot >/dev/null 2>&1 && systemctl restart bazis-bot
   sleep 3
-  systemctl is-active bazis
+  systemctl is-active bazis bazis-bot
   curl -s http://127.0.0.1:8765/version'
 echo
 echo "deployed $SHA"
