@@ -47,7 +47,7 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     # перегородки — конструктив: всегда до фронта корпуса (AKD-192);
     # interior_z_front утапливает только наполнение (полки)
     panels += partitions(bounds, c.H, c.T, c.Hleg, c.mat,
-                         spec.get("carcass_z_front", 0), iz2)
+                         spec.get("carcass_z_front", 0), iz2, t_top=c.T_top)
 
     drawers_meta: list[dict[str, Any]] = []
     sections_meta: list[dict[str, Any]] = []
