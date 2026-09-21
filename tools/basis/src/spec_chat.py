@@ -368,6 +368,20 @@ def _provider_result(data: dict[str, Any], request: Any, *, usage: Any = None,
     return result
 
 
+def _merge_usage(first: Any, second: Any) -> Any:
+    """Сложить расход двух вызовов (зрение + сборка) — иначе счётчик и бюджет
+    видят только сборку. Модель берётся из второго (сборщика)."""
+    if not isinstance(first, dict):
+        return second
+    if not isinstance(second, dict):
+        return first
+    merged = dict(second)
+    for key in ("prompt", "completion", "total"):
+        values = [v for v in (first.get(key), second.get(key)) if isinstance(v, (int, float))]
+        merged[key] = sum(values) if values else None
+    return merged
+
+
 class OpenAICompatProvider:
     """Любой OpenAI-совместимый чат (OpenAI, Kimi/Moonshot, GLM/Zhipu, DeepSeek).
 
@@ -402,20 +416,30 @@ class OpenAICompatProvider:
         self.extra = p.get("extra") or {}             # extra_body (напр. thinking off)
 
     def balance(self) -> dict[str, Any] | None:
-        """Денежный баланс аккаунта (Moonshot-стиль GET /users/me/balance).
-        Не у всех сервисов есть — тогда None."""
+        """Денежный баланс аккаунта: Kimi/Moonshot — GET /users/me/balance,
+        DeepSeek — GET /user/balance. У GLM/OpenAI такого API нет — None."""
         import requests
-        try:
-            base = str(self.client.base_url).rstrip("/")
-            r = requests.get(f"{base}/users/me/balance",
-                             headers={"Authorization": f"Bearer {self.client.api_key}"},
-                             timeout=15)
-            if r.ok:
-                d = r.json().get("data") or {}
-                if "available_balance" in d:
-                    return {"value": d["available_balance"], "unit": "¥"}
-        except Exception:
-            pass
+        base = str(self.client.base_url).rstrip("/")
+        headers = {"Authorization": f"Bearer {self.client.api_key}"}
+        for path in ("/users/me/balance", "/user/balance"):
+            try:
+                r = requests.get(f"{base}{path}", headers=headers, timeout=15)
+                body = r.json() if r.ok else None
+            except Exception:
+                continue
+            if not isinstance(body, dict):
+                continue
+            d = body.get("data") or {}
+            if isinstance(d, dict) and "available_balance" in d:
+                return {"value": d["available_balance"], "unit": "¥"}
+            infos = body.get("balance_infos") or []
+            if infos and isinstance(infos[0], dict) and "total_balance" in infos[0]:
+                currency = str(infos[0].get("currency") or "")
+                try:
+                    value: Any = float(infos[0]["total_balance"])
+                except (TypeError, ValueError):
+                    value = infos[0]["total_balance"]
+                return {"value": value, "unit": {"CNY": "¥", "USD": "$"}.get(currency, currency)}
         return None
 
     def vision_extract(self, images: list[dict[str, str]]) -> str:
@@ -428,6 +452,11 @@ class OpenAICompatProvider:
         r = self.client.chat.completions.create(
             model=self.vision_model, temperature=0.1,
             messages=[{"role": "user", "content": content}])
+        usage = getattr(r, "usage", None)
+        self.last_usage = {"model": self.vision_model,
+                           "total": getattr(usage, "total_tokens", None),
+                           "prompt": getattr(usage, "prompt_tokens", None),
+                           "completion": getattr(usage, "completion_tokens", None)}
         text = r.choices[0].message.content or ""
         return str(_json_object(text).get("reply") or text)
 
@@ -513,11 +542,20 @@ class GeminiChatProvider:
             raise RuntimeError("Лимит бесплатного тарифа Gemini исчерпан — "
                                "попробуйте через минуту (или завтра)")
         r.raise_for_status()
-        cand = (r.json().get("candidates") or [{}])[0]
+        body = r.json()
+        cand = (body.get("candidates") or [{}])[0]
         text = "".join(p.get("text", "") for p in
                        (cand.get("content") or {}).get("parts") or [])
         data = json.loads(text or "{}")
-        return _provider_result(data, request)
+        result = _provider_result(data, request)
+        result["usage"] = self._usage(body)
+        return result
+
+    def _usage(self, body: dict[str, Any]) -> dict[str, Any]:
+        meta = body.get("usageMetadata") or {}
+        return {"model": self.model, "total": meta.get("totalTokenCount"),
+                "prompt": meta.get("promptTokenCount"),
+                "completion": meta.get("candidatesTokenCount")}
 
     def vision_extract(self, images: list[dict[str, str]]) -> str:
         import requests
@@ -539,7 +577,9 @@ class GeminiChatProvider:
             json=payload, timeout=120,
         )
         response.raise_for_status()
-        candidate = (response.json().get("candidates") or [{}])[0]
+        body = response.json()
+        self.last_usage = self._usage(body)
+        candidate = (body.get("candidates") or [{}])[0]
         text = "".join(part.get("text", "") for part in
                        (candidate.get("content") or {}).get("parts") or [])
         return str(_json_object(text).get("reply") or text)
@@ -637,7 +677,12 @@ class GigaChatProvider:
                                               "attachments": att}]},
                           timeout=120, verify=self.verify)
         r.raise_for_status()
-        text = r.json()["choices"][0]["message"]["content"]
+        body = r.json()
+        usage = body.get("usage") or {}
+        self.last_usage = {"model": self.vision_model, "total": usage.get("total_tokens"),
+                           "prompt": usage.get("prompt_tokens"),
+                           "completion": usage.get("completion_tokens")}
+        text = body["choices"][0]["message"]["content"]
         return str(_json_object(text).get("reply") or text)
 
     def chat(self, spec: dict[str, Any], message: str,
@@ -1034,6 +1079,9 @@ def chat_edit(spec: dict[str, Any], message: str,
                     res = build.chat(provider_spec, aug, history, context)
                 else:                                 # распознать не вышло — фото напрямую
                     res = build.chat(provider_spec, message, history, context, images=images)
+                if isinstance(res, dict):
+                    res["usage"] = _merge_usage(getattr(vis, "last_usage", None),
+                                                res.get("usage"))
             elif images:
                 res = build.chat(provider_spec, message, history, context, images=images)
             else:

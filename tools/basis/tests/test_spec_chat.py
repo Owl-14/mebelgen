@@ -406,6 +406,67 @@ def test_gemini_provider_parses_response(monkeypatch):
     ]
 
 
+def test_photo_tz_usage_counts_vision_and_build_calls(monkeypatch):
+    """Расход фото-ТЗ = распознавание + сборка; Gemini отдаёт usageMetadata."""
+    import src.spec_chat as sc
+
+    calls = {"n": 0}
+    metas = [{"promptTokenCount": 10, "candidatesTokenCount": 5, "totalTokenCount": 15},
+             {"promptTokenCount": 20, "candidatesTokenCount": 7, "totalTokenCount": 27}]
+
+    class _Resp:
+        status_code = 200
+        def __init__(self, meta): self.meta = meta
+        def raise_for_status(self): pass
+        def json(self):
+            return {"usageMetadata": self.meta, "candidates": [{"content": {"parts": [
+                {"text": json.dumps({"reply": "Готово.", "spec": SPEC})}]}}]}
+
+    def _post(url, params=None, json=None, timeout=None):
+        calls["n"] += 1
+        return _Resp(metas[calls["n"] - 1])
+
+    monkeypatch.setattr(sc, "get_chat_provider", lambda name=None: sc.GeminiChatProvider())
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    import requests
+    monkeypatch.setattr(requests, "post", _post)
+
+    r = chat_edit(SPEC, "по фото", images=[{"mime": "image/png", "data": "QUJD"}])
+    assert calls["n"] == 2
+    assert r["usage"] == {"model": "gemini-2.0-flash", "prompt": 30,
+                          "completion": 12, "total": 42}
+
+
+def test_deepseek_balance_uses_its_own_endpoint(monkeypatch):
+    """У DeepSeek баланс в GET /user/balance (не Moonshot-овский /users/me/balance)."""
+    import requests
+    import src.spec_chat as sc
+
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_BASE_URL", raising=False)
+    urls = []
+
+    class _Resp:
+        def __init__(self, ok, body): self.ok, self.body = ok, body
+        def json(self): return self.body
+
+    def _get(url, headers=None, timeout=None):
+        urls.append(url)
+        if url.endswith("/user/balance"):
+            return _Resp(True, {"is_available": True, "balance_infos": [
+                {"currency": "CNY", "total_balance": "110.50",
+                 "granted_balance": "10.00", "topped_up_balance": "100.50"}]})
+        return _Resp(False, None)
+
+    monkeypatch.setattr(requests, "get", _get)
+    assert sc.token_balance("deepseek") == {
+        "provider": "openai_compat", "kind": "money",
+        "items": [{"label": "Баланс аккаунта", "value": 110.5, "unit": "¥"}],
+    }
+    assert urls[-1] == "https://api.deepseek.com/user/balance"
+
+
 def test_prompt_keeps_geometry_rules():
     """MEB-144: prompt emits semantic bindings and forbids LLM coordinates."""
     text = "\n".join(
