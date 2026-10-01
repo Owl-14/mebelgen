@@ -1334,6 +1334,9 @@ def chat_edit(spec: dict[str, Any], message: str,
                     "langsmith.span.kind": "llm",
                 }):
                     desc = vis.vision_extract(images) if hasattr(vis, "vision_extract") else ""
+                from .tz_clarify import clean_facts
+
+                desc = clean_facts(desc)
                 capture["vision_facts"] = desc
                 if desc.strip():
                     aug = (("Создай новый ParamSpec по этому ТЗ. " + message).strip()

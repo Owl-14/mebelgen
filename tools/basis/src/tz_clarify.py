@@ -41,6 +41,29 @@ _MAX_WIDTH = 3000
 _MAX_HEIGHT = 2800
 
 
+def clean_facts(text: str) -> str:
+    """Факты vision-узла → простой текст строками.
+
+    Модели (GigaChat) иногда присылают факты как ```json {"reply": "...\\n..."}```:
+    без разбора строки «Колонки…», «Габариты…» не видны ни правилам, ни сборщику.
+    """
+    import json
+
+    raw = str(text or "").strip()
+    body = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.I).strip()
+    if body.startswith("{"):
+        try:
+            data = json.loads(body)
+        except ValueError:                       # оборванный JSON — берём текст reply как есть
+            m = re.search(r'"reply"\s*:\s*"(.*?)"?\s*}?\s*$', body, re.S)
+            data = {"reply": m.group(1) if m else ""}
+        if isinstance(data, dict) and isinstance(data.get("reply"), str) and data["reply"].strip():
+            body = data["reply"]
+    if "\\n" in body and "\n" not in body:
+        body = body.replace("\\n", "\n")
+    return body.strip()
+
+
 def _fact_line(facts: str, label: str) -> str:
     m = re.search(rf"^\s*{label}[^:\n]*:\s*(.+)$", facts or "", re.IGNORECASE | re.MULTILINE)
     return m.group(1).strip() if m else ""
@@ -92,7 +115,15 @@ def _columns_patch(spec: dict[str, Any], counts: list[int]) -> dict[str, Any]:
             "sections": [{"kind": "drawers", "drawers": n} for n in counts]}
 
 
-def _layout_question(spec: dict[str, Any], facts: str) -> dict[str, Any] | None:
+def _small_image(image: dict[str, Any] | None) -> bool:
+    img = image or {}
+    side = max(int(img.get("width") or 0), int(img.get("height") or 0))
+    return bool((img.get("bytes") and int(img["bytes"]) < SMALL_IMAGE_BYTES)
+                or (side and side < SMALL_IMAGE_SIDE))
+
+
+def _layout_question(spec: dict[str, Any], facts: str,
+                     image: dict[str, Any] | None = None) -> dict[str, Any] | None:
     drawers = _drawer_sections(spec)
     total = sum(int(s.get("drawers") or 0) for s in drawers)
     if not total:
@@ -108,9 +139,15 @@ def _layout_question(spec: dict[str, Any], facts: str) -> dict[str, Any] | None:
         reasons.append(f"в ТЗ модулей: {modules}, а колонок с ящиками: {len(current)}")
     if len(current) == 1 and total >= 5 and width >= 1000:
         reasons.append(f"{total} ящиков одной стопкой при ширине {_fmt(width)} мм — необычно")
+    keep_current = not reasons
+    if not reasons and _small_image(image):
+        # мелкая картинка: модель могла не разглядеть второй модуль (комод 3+3 → «3 ящика»)
+        reasons.append("картинка ТЗ мелкая — раскладку ящиков могли прочитать неверно")
     if not reasons:
         return None
     variants: list[list[int]] = [current]
+    if len(current) == 1 and width >= 1000:
+        variants.append([total, total])            # два одинаковых модуля рядом
     if from_facts and sum(from_facts) == total:
         variants.append(from_facts)
     if total % 2 == 0:
@@ -128,8 +165,12 @@ def _layout_question(spec: dict[str, Any], facts: str) -> dict[str, Any] | None:
                  f"{len(v)} колонки: " + " + ".join(f"{n} ящ." for n in v))
         options.append({"value": "x".join(map(str, v)), "label": label,
                         "patch": _columns_patch(spec, v)})
-    suggested = "x".join(map(str, from_facts if from_facts and sum(from_facts) == total
-                              else (seen[1] if len(seen) > 1 else seen[0])))
+    if keep_current:
+        suggested = "x".join(map(str, current))
+    elif from_facts and sum(from_facts) == total:
+        suggested = "x".join(map(str, from_facts))
+    else:
+        suggested = "x".join(map(str, next((v for v in seen[1:] if sum(v) == total), seen[0])))
     return {"id": "layout", "kind": "choice",
             "text": "Как расположены ящики? Колонки — слева направо, в колонке ящики сверху вниз.",
             "options": options, "suggested": suggested, "reasons": reasons}
@@ -201,11 +242,12 @@ def _multi_product_question(spec: dict[str, Any], facts: str) -> dict[str, Any] 
 def questions_for(spec: dict[str, Any], facts: str = "",
                   image: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     """Вопросы по кандидату из ТЗ; пустой список — собирать без уточнений."""
+    facts = clean_facts(facts)
     found: list[dict[str, Any]] = []
     multi = _multi_product_question(spec, facts)
     if multi:
         found.append(multi)
-    layout = _layout_question(spec, facts)
+    layout = _layout_question(spec, facts, image)
     if layout:
         found.append(layout)
     plaus = _plausibility_questions(spec)
@@ -243,6 +285,18 @@ def _parse_dims(value: Any) -> tuple[Any, Any, Any] | None:
     return tuple(nums[:3]) if len(nums) >= 3 else None  # type: ignore[return-value]
 
 
+def _parse_columns(value: Any) -> list[int] | None:
+    """«3+3», «3х3», «2 по 3», «3, 3» → ящиков по колонкам; иначе None."""
+    text = str(value or "").lower()
+    m = re.fullmatch(r"\s*(\d+)\s*(?:колонк\w*|модул\w*)?\s*по\s*(\d+)\s*(?:ящ\w*)?\s*", text)
+    if m:
+        return [int(m.group(2))] * int(m.group(1))
+    if re.fullmatch(r"[\d\s+x×х,;]+", text):
+        nums = [int(n) for n in re.findall(r"\d+", text) if int(n) > 0]
+        return nums or None
+    return None
+
+
 def apply_answers(draft: dict[str, Any], questions: list[dict[str, Any]],
                   answers: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
     """Накладывает ответы на черновик. Возвращает (spec, свободные ответы текстом).
@@ -262,6 +316,9 @@ def apply_answers(draft: dict[str, Any], questions: list[dict[str, Any]],
         if option and isinstance(option.get("patch"), dict):
             for key, val in option["patch"].items():
                 spec[key] = copy.deepcopy(val)
+        elif qid == "layout" and _parse_columns(value):
+            for key, val in _columns_patch(spec, _parse_columns(value) or []).items():
+                spec[key] = val
         elif kind == "dims":
             parsed = _parse_dims(value)
             if parsed:

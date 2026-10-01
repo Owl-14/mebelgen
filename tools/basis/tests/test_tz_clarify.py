@@ -120,3 +120,32 @@ def test_answered_clarification_builds_a_product_that_passes_the_gate():
     assert spec["archetype"] == "cabinet"
     assert spec["dimensions"]["width"] == 1600
     assert [s["drawers"] for s in spec["sections"]] == [3, 3]
+
+
+# GigaChat присылает факты в JSON-обёртке с экранированными переносами строк
+GIGACHAT_KOMOD = ('```json\n{"reply": "Тип изделия: Камода в спальню\nИзделий на листе: 1\n'
+                  'Модулей (корпусов): 1 (1500)\nВнешние габариты Ш×Г×В: 1500×400×1100\n'
+                  'Колонки слева направо: Колонка 1 (1500): 3 ящика"}\n```')
+
+
+def test_wrapped_facts_are_unwrapped():
+    from src.tz_clarify import clean_facts
+
+    text = clean_facts(GIGACHAT_KOMOD)
+    assert text.startswith("Тип изделия: Камода") and "\nКолонки слева направо" in text
+
+
+def test_small_image_asks_layout_even_for_one_short_stack():
+    draft = {**KOMOD_DRAFT, "sections": [{"kind": "drawers", "drawers": 3}]}
+    qs = questions_for(draft, GIGACHAT_KOMOD, KOMOD_IMAGE)
+    layout = next(q for q in qs if q["id"] == "layout")
+    assert layout["suggested"] == "3"                     # не навязываем, но предлагаем 3+3
+    assert "3x3" in {o["value"] for o in layout["options"]}
+
+
+def test_own_layout_answer_is_parsed_without_llm():
+    draft = {**KOMOD_DRAFT, "sections": [{"kind": "drawers", "drawers": 3}]}
+    qs = questions_for(draft, GIGACHAT_KOMOD, KOMOD_IMAGE)
+    spec, free = apply_answers(draft, qs, {"layout": "2 по 3"})
+    assert free == [] and spec["archetype"] == "cabinet"
+    assert [s["drawers"] for s in spec["sections"]] == [3, 3]
