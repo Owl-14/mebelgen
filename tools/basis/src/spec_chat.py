@@ -1129,6 +1129,125 @@ def _chat_with_fallback(provider: Any, name: str, capture: dict[str, Any],
         raise
 
 
+def _accept_created(legacy_spec: dict[str, Any], *, reply: str, usage: Any,
+                    trace: dict[str, Any], build: Any,
+                    history: list[dict[str, str]] | None,
+                    context: dict[str, Any] | None,
+                    capture: dict[str, Any]) -> dict[str, Any]:
+    """Кандидат нового изделия → нормализация → уточнения ТЗ → гейт.
+
+    context["tz_import"] — импорт ТЗ: при неясностях вместо изделия возвращаются
+    вопросы проектировщику (code=clarification_needed, draft — черновик).
+    context["tz_clarification"] = {questions, answers} — ответы уже получены:
+    они накладываются на кандидата поверх ответа нейросети.
+    """
+    from .paramspec_normalize import normalize_candidate
+    from .production_gate import evaluate_production_gate
+    from .tz_clarify import apply_answers, questions_for
+
+    ctx = context or {}
+    # Синонимы секций, габариты строкой и лишние поля правим детерминированно:
+    # иначе гейт отклоняет верно распознанное ТЗ из-за мелкой неточности LLM.
+    normalized = normalize_candidate(legacy_spec)
+    legacy_spec = normalized.spec
+    if normalized.notes:
+        capture["normalization"] = normalized.notes
+
+    clarification = ctx.get("tz_clarification")
+    if isinstance(clarification, dict):
+        legacy_spec, _free = apply_answers(legacy_spec, list(clarification.get("questions") or []),
+                                           dict(clarification.get("answers") or {}))
+        capture["clarification"] = clarification
+    elif ctx.get("tz_import"):
+        facts = str(capture.get("vision_facts") or ctx.get("tz_facts") or "")
+        questions = questions_for(legacy_spec, facts, ctx.get("tz_image"))
+        if questions:
+            capture["questions"] = questions
+            return {"reply": reply + "\nНужно уточнить: " + str(len(questions))
+                    + " вопр. — ответь, и я соберу изделие.",
+                    "code": "clarification_needed", "questions": questions,
+                    "facts": facts, "draft": legacy_spec, "spec": None,
+                    "changes": [], "operations": [], "resolved_operations": [],
+                    "usage": usage, "normalization": normalized.notes, "trace": trace}
+
+    # Приёмка ТЗ: артикул материала подбирает проектировщик в Studio, поэтому
+    # нерешённый слот — предупреждение. Экспорт в производство по-прежнему
+    # идёт через строгий гейт и красную спеку наружу не выпустит.
+    decision = evaluate_production_gate(legacy_spec,
+                                        unresolved_materials_are_errors=False)
+    repaired_ops: list[str] = []
+    if not decision.report.ok and build is not None:
+        attempt = _repair_created_spec(build, legacy_spec, decision, history,
+                                       context, capture)
+        if attempt is not None:
+            repaired_decision, repaired_spec = attempt
+            if repaired_decision.report.ok:
+                decision, legacy_spec = repaired_decision, repaired_spec
+                repaired_ops = capture.get("repair_operations") or []
+    if not decision.report.ok:
+        refusal = _production_gate_refusal(decision, usage, trace=trace)
+        refusal["normalization"] = normalized.notes
+        return refusal
+    accepted = decision.accepted_spec
+    assert accepted is not None
+    unresolved = [issue.detail for issue in decision.report.warnings
+                  if issue.code == "materials.unresolved"]
+    if unresolved:
+        warnings = accepted.get("warnings")
+        if not isinstance(warnings, list):
+            warnings = []
+            accepted["warnings"] = warnings
+        warnings.append("Материалы не выбраны из производственной базы — "
+                        "уточнить в Studio до экспорта в производство.")
+    if normalized.notes:
+        reply += "\nПоправлено под контракт: " + "; ".join(normalized.notes[:5])
+    if repaired_ops:
+        reply += ("\nИсправлено по ошибкам проверок: "
+                  + ", ".join(dict.fromkeys(repaired_ops)))
+    if unresolved:
+        reply += f"\nМатериалы нужно выбрать из базы: слотов — {len(unresolved)}."
+    return {"reply": reply, "spec": accepted,
+            "changes": ["новое изделие с нуля"], "created": True,
+            "operations": [], "resolved_operations": [], "usage": usage,
+            "normalization": normalized.notes,
+            "check_report": decision.report.to_dict(), "trace": trace}
+
+
+def create_from_clarification(clarification: dict[str, Any],
+                              provider: str | None = None,
+                              journal: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Ответы проектировщика на вопросы импорта ТЗ → изделие.
+
+    clarification = {facts, draft, questions, answers}. Ответы-варианты и числа
+    накладываются на черновик без нейросети; если есть свободный текст, изделие
+    пересобирается нейросетью по фактам + «Уточнениям проектировщика», а
+    варианты накладываются поверх её ответа. Вопросы повторно не задаются.
+    """
+    from .tz_clarify import apply_answers
+
+    capture = journal if isinstance(journal, dict) else {}
+    facts = str(clarification.get("facts") or "")
+    draft = clarification.get("draft")
+    questions = list(clarification.get("questions") or [])
+    answers = dict(clarification.get("answers") or {})
+    if not isinstance(draft, dict):
+        reply = "Нет черновика изделия — загрузи ТЗ заново."
+        return {"reply": reply, "error": reply, "code": "clarification_invalid",
+                "spec": None, "changes": []}
+    capture["vision_facts"] = facts
+    context = {"tz_clarification": {"questions": questions, "answers": answers}}
+    _spec, free = apply_answers(draft, questions, answers)
+    if free:
+        message = ("Создай новый ParamSpec по этому ТЗ.\n\nРаспознано с фото ТЗ:\n" + facts
+                   + "\n\nУточнения проектировщика:\n- " + "\n- ".join(free))
+        return chat_edit({}, message, context=context, provider=provider, journal=capture)
+    capture.update(provider="rules", model="tz_clarify", node="create_paramspec")
+    return _accept_created(copy.deepcopy(draft), reply="Собрал по твоим ответам.",
+                           usage=None, trace={"prompts": [], "router": {
+                               "kind": "deterministic", "node": "tz_clarify"}},
+                           build=None, history=None, context=context, capture=capture)
+
+
 def chat_edit(spec: dict[str, Any], message: str,
               history: list[dict[str, str]] | None = None,
               context: dict[str, Any] | None = None,
@@ -1308,58 +1427,10 @@ def chat_edit(spec: dict[str, Any], message: str,
                     "usage": usage, "trace": trace})
         if _coordinate_overrides(legacy_spec):
             return _coordinate_refusal(usage, trace)
-        # Синонимы секций, габариты строкой и лишние поля правим детерминированно:
-        # иначе гейт отклоняет верно распознанное ТЗ из-за мелкой неточности LLM.
-        from .paramspec_normalize import normalize_candidate
-        from .production_gate import evaluate_production_gate
-
-        normalized = normalize_candidate(legacy_spec)
-        legacy_spec = normalized.spec
-        if normalized.notes:
-            capture["normalization"] = normalized.notes
-
-        # Приёмка ТЗ: артикул материала подбирает проектировщик в Studio, поэтому
-        # нерешённый слот — предупреждение. Экспорт в производство по-прежнему
-        # идёт через строгий гейт и красную спеку наружу не выпустит.
-        decision = evaluate_production_gate(legacy_spec,
-                                            unresolved_materials_are_errors=False)
-        repaired_ops: list[str] = []
-        if not decision.report.ok:
-            attempt = _repair_created_spec(build, legacy_spec, decision, history,
-                                           context, capture)
-            if attempt is not None:
-                repaired_decision, repaired_spec = attempt
-                if repaired_decision.report.ok:
-                    decision, legacy_spec = repaired_decision, repaired_spec
-                    repaired_ops = capture.get("repair_operations") or []
-        if not decision.report.ok:
-            refusal = _production_gate_refusal(decision, usage, trace=trace)
-            refusal["normalization"] = normalized.notes
-            return refusal
-        accepted = decision.accepted_spec
-        assert accepted is not None
-        unresolved = [issue.detail for issue in decision.report.warnings
-                      if issue.code == "materials.unresolved"]
-        if unresolved:
-            warnings = accepted.get("warnings")
-            if not isinstance(warnings, list):
-                warnings = []
-                accepted["warnings"] = warnings
-            warnings.append("Материалы не выбраны из производственной базы — "
-                            "уточнить в Studio до экспорта в производство.")
-        reply = res.get("reply", "Создано.")
-        if normalized.notes:
-            reply += "\nПоправлено под контракт: " + "; ".join(normalized.notes[:5])
-        if repaired_ops:
-            reply += ("\nИсправлено по ошибкам проверок: "
-                      + ", ".join(dict.fromkeys(repaired_ops)))
-        if unresolved:
-            reply += f"\nМатериалы нужно выбрать из базы: слотов — {len(unresolved)}."
-        return summarize({"reply": reply, "spec": accepted,
-                "changes": ["новое изделие с нуля"], "created": True,
-                "operations": [], "resolved_operations": [], "usage": usage,
-                "normalization": normalized.notes,
-                "check_report": decision.report.to_dict(), "trace": trace})
+        return summarize(_accept_created(
+            legacy_spec, reply=str(res.get("reply") or "Создано."), usage=usage,
+            trace=trace, build=build, history=history, context=context,
+            capture=capture))
     if node == "part_edit":
         if legacy_spec is not None:
             reply = "Правка отклонена — узел детали принимает только типизированные операции."

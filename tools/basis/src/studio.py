@@ -373,6 +373,42 @@ def _thumb_svg_cached(spec_dir: Path, fname: str) -> bytes | None:
 
 # ------------------------------------------------------------------ каталог проектов (D1)
 
+def _image_info(data_b64: str) -> dict[str, int]:
+    """Размер картинки ТЗ (байты, пиксели): по мелкой картинке спрашиваем габариты."""
+    try:
+        raw = base64.b64decode(data_b64 or "", validate=False)
+    except (ValueError, TypeError):
+        return {}
+    info = {"bytes": len(raw)}
+    size = _image_size(raw)
+    if size:
+        info["width"], info["height"] = size
+    return info
+
+
+def _image_size(raw: bytes) -> tuple[int, int] | None:
+    """Ширина×высота PNG/JPEG по заголовку — без Pillow (на сервере его нет)."""
+    if raw[:8] == b"\x89PNG\r\n\x1a\n" and len(raw) >= 24:
+        return int.from_bytes(raw[16:20], "big"), int.from_bytes(raw[20:24], "big")
+    if raw[:2] != b"\xff\xd8":
+        return None
+    i = 2
+    while i + 9 < len(raw):
+        if raw[i] != 0xFF:
+            i += 1
+            continue
+        marker = raw[i + 1]
+        if marker in (0xD8, 0x01) or 0xD0 <= marker <= 0xD7:
+            i += 2
+            continue
+        length = int.from_bytes(raw[i + 2:i + 4], "big")
+        # SOF0..SOF15, кроме DHT/JPG/DAC: высота и ширина в кадре
+        if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):
+            return int.from_bytes(raw[i + 7:i + 9], "big"), int.from_bytes(raw[i + 5:i + 7], "big")
+        i += 2 + length
+    return None
+
+
 def _slugify(name: str) -> str:
     import re
     s = re.sub(r"[^\w\-]+", "_", name.lower().strip()).strip("_")
@@ -2344,22 +2380,48 @@ def make_handler(st: _Studio):
                     res: dict[str, Any] = {}
                     started = _time.perf_counter()
                     try:
-                        from .spec_chat import chat_edit
-                        ext = name.rsplit(".", 1)[-1].lower()
-                        mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
-                                "webp": "image/webp", "gif": "image/gif"}.get(ext, "image/png")
-                        self._journal_tz_images(auth, call_id, [{
-                            "mime": mime, "name": name, "data": str(body.get("data", "")),
-                        }], "import_tz")
-                        # пустой базовый спек — иначе модель якорится на текущее
-                        # изделие и копирует его секции вместо чистой сборки по ТЗ
-                        res = chat_edit({},
-                                        "Собери ParamSpec ТОЛЬКО по этому ТЗ (фото/скан): "
-                                        "определи тип изделия, габариты, секции, материал по "
-                                        "изображению. НЕ бери ничего из других изделий. created=true.",
-                                        images=[{"mime": mime, "data": str(body.get("data", ""))}],
-                                        provider=body.get("provider") or None,
-                                        journal=capture)
+                        from .spec_chat import chat_edit, create_from_clarification
+                        clarification = body.get("clarification")
+                        if isinstance(clarification, dict):
+                            # ответы проектировщика на вопросы — картинку не читаем повторно
+                            res = create_from_clarification(
+                                clarification, provider=body.get("provider") or None,
+                                journal=capture)
+                        else:
+                            ext = name.rsplit(".", 1)[-1].lower()
+                            mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+                                    "webp": "image/webp", "gif": "image/gif"}.get(ext, "image/png")
+                            data = str(body.get("data", ""))
+                            self._journal_tz_images(auth, call_id, [{
+                                "mime": mime, "name": name, "data": data,
+                            }], "import_tz")
+                            # пустой базовый спек — иначе модель якорится на текущее
+                            # изделие и копирует его секции вместо чистой сборки по ТЗ
+                            res = chat_edit({},
+                                            "Собери ParamSpec ТОЛЬКО по этому ТЗ (фото/скан): "
+                                            "определи тип изделия, габариты, секции, материал по "
+                                            "изображению. НЕ бери ничего из других изделий. created=true.",
+                                            context={"tz_import": True,
+                                                     "tz_image": _image_info(data)},
+                                            images=[{"mime": mime, "data": data}],
+                                            provider=body.get("provider") or None,
+                                            journal=capture)
+                        if isinstance(res, dict) and res.get("code") == "clarification_needed":
+                            st.guard.add_tokens(int(((res.get("usage") or {}).get("total")) or 0))
+                            self._journal_ai_call(
+                                auth, "import_tz", spec_path, call_id=call_id, result=res,
+                                capture=capture, message=name, before_spec=None,
+                                image_count=0 if isinstance(clarification, dict) else 1,
+                                started=started, error_code="clarification_needed",
+                            )
+                            self._json({"ok": False, "clarify": True,
+                                        "code": "clarification_needed",
+                                        "reply": res.get("reply"),
+                                        "questions": res.get("questions") or [],
+                                        "facts": res.get("facts") or "",
+                                        "draft": res.get("draft"),
+                                        "usage": res.get("usage")})
+                            return
                         _trace_engineering_result(
                             res.get("spec") if isinstance(res, dict) else None
                         )
@@ -3886,9 +3948,23 @@ PAGE = r"""<!DOCTYPE html>
   #toastHistory li+li{border-top:1px solid #e7eaf0}
   #toastHistory li[data-tone="error"]{color:#8b302c;background:#fff7f6}
   @media (prefers-reduced-motion:reduce){#toast{transition:none}}
-  #shareDialog,#catArchiveDialog{width:min(470px,calc(100vw - 32px));padding:0;border:1px solid #cfd5dd;
+  #shareDialog,#catArchiveDialog,#tzClarifyDialog{width:min(470px,calc(100vw - 32px));padding:0;border:1px solid #cfd5dd;
     border-radius:8px;background:#fff;color:var(--ink);box-shadow:0 24px 70px rgba(20,31,44,.24)}
-  #shareDialog::backdrop,#catArchiveDialog::backdrop{background:rgba(30,39,50,.42)}
+  #tzClarifyDialog{width:min(560px,calc(100vw - 32px))}
+  #shareDialog::backdrop,#catArchiveDialog::backdrop,#tzClarifyDialog::backdrop{background:rgba(30,39,50,.42)}
+  #tzClarifyForm{margin:0}
+  #tzClarifyList{display:grid;gap:12px;max-height:min(60vh,520px);overflow:auto;margin:0 0 4px}
+  .tzq{padding:10px 11px;border:1px solid #e1e5eb;border-radius:6px;background:#fbfcfd}
+  .tzq-text{margin:0 0 4px;padding:0;font-size:12px;line-height:17px;font-weight:600;color:var(--ink);
+    text-transform:none;letter-spacing:0}
+  .tzq-why{margin:0 0 8px;color:#7a6440;font-size:10.5px;line-height:14px}
+  .tzq-opt{display:flex;align-items:flex-start;gap:7px;padding:4px 0;font-size:11.5px;line-height:16px;cursor:pointer}
+  .tzq-opt input{margin-top:2px}
+  .tzq-own{display:flex;gap:6px;align-items:center;margin-top:4px}
+  .tzq-own input[type=text],.tzq textarea{flex:1;min-width:0;height:30px;padding:5px 8px;border:1px solid #ccd3dc;
+    border-radius:5px;font:inherit;font-size:11.5px}
+  .tzq textarea{width:100%;height:58px;resize:vertical;box-sizing:border-box}
+  .tzq-own input:focus-visible,.tzq textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
   #catArchiveForm{margin:0}
   .share-dialog-head{padding:17px 18px 12px;border-bottom:1px solid #e2e6ea}
   .share-dialog-head span{display:block;margin-bottom:3px;color:#647080;font-size:9.5px;
@@ -4761,6 +4837,22 @@ PAGE = r"""<!DOCTYPE html>
           <a id="shareOpen" href="#" target="_blank" rel="noopener">Открыть просмотр</a></div>
       </div>
     </div>
+  </dialog>
+  <dialog id="tzClarifyDialog" aria-labelledby="tzClarifyTitle">
+    <form id="tzClarifyForm" method="dialog">
+      <div class="share-dialog-head"><span>Импорт ТЗ</span>
+        <h2 id="tzClarifyTitle">Уточни, пожалуйста</h2></div>
+      <div class="share-dialog-body">
+        <p id="tzClarifyLead">В ТЗ есть неясности. Отмечен вариант, который предлагаю я.</p>
+        <div id="tzClarifyList"></div>
+        <p id="tzClarifyError" role="alert"></p>
+        <div class="share-dialog-actions">
+          <button id="tzClarifyCancel" type="button">Отмена</button>
+          <button id="tzClarifyDefaults" type="button">Как предлагаешь</button>
+          <button id="tzClarifySubmit" class="primary" type="submit">Собрать</button>
+        </div>
+      </div>
+    </form>
   </dialog>
   <dialog id="catArchiveDialog" aria-labelledby="catArchiveDialogTitle">
     <form id="catArchiveForm" method="dialog">
@@ -5965,22 +6057,87 @@ function importTzFile(f){
   rd.onload=async()=>{
     const s=String(rd.result), b64=s.slice(s.indexOf(',')+1);
     try{
-      const r=await fetch('/api/import-tz',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({name:f.name,data:b64,provider:CHAT_PROVIDER,
-          project_file:activeProjectFile()})});
-      const p=await r.json();
+      const p=await postImportTz({name:f.name,data:b64});
       done();
-      if(p.ok){adoptSpec(p); toast('✅ ТЗ распознано → '+(p.spec&&p.spec.project_name||p.file));}
-      else{
-        const ref=p.trace_id?' · trace '+p.trace_id:'';
-        const code=p.error_code||p.code;
-        toast('❌ Не удалось распознать ТЗ: '+(p.error||'нет ответа нейросети')+
-          (code?' ['+code+']':'')+ref,true);
-      }
+      handleImportTz(p,f.name);
     }catch(e){done(); toast('❌ Ошибка распознавания: '+e.message,true);}
   };
   rd.readAsDataURL(f);
 }
+async function postImportTz(body){
+  const r=await fetch('/api/import-tz',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({...body,provider:CHAT_PROVIDER,project_file:activeProjectFile()})});
+  return r.json();
+}
+function handleImportTz(p,name){
+  if(p.ok){adoptSpec(p); toast('✅ ТЗ распознано → '+(p.spec&&p.spec.project_name||p.file));return;}
+  if(p.clarify&&Array.isArray(p.questions)&&p.questions.length){openTzClarify(p,name);return;}
+  const ref=p.trace_id?' · trace '+p.trace_id:'';
+  const code=p.error_code||p.code;
+  toast('❌ Не удалось распознать ТЗ: '+(p.error||'нет ответа нейросети')+
+    (code?' ['+code+']':'')+ref,true);
+}
+// уточнения проектировщику по ТЗ: варианты + свой ответ, одной карточкой
+let TZ_CLARIFY=null;
+function tzQuestionHtml(q,i){
+  const e=catalogEscape, name='tzq_'+i, sug=String(q.suggested??'');
+  const why=(q.reasons||[]).length?'<p class="tzq-why">'+e(q.reasons.join('; '))+'</p>':'';
+  let body='';
+  if(q.kind==='text'){
+    body=(q.options||[]).map(o=>'<label class="tzq-opt"><input type="radio" name="'+name+'" value="'+e(o.value)+
+      '" checked> '+e(o.label)+'</label>').join('')+
+      '<textarea data-own="'+name+'" placeholder="Или опиши, что собрать: тип, размеры, что внутри"></textarea>';
+  }else{
+    const opts=(q.options||[]).map(o=>'<label class="tzq-opt"><input type="radio" name="'+name+'" value="'+e(o.value)+'"'+
+      (String(o.value)===sug?' checked':'')+'> '+e(o.label)+'</label>').join('');
+    const ph=q.kind==='dims'?'Ш×Г×В, например 1600×300×800':(q.kind==='number'?'своё значение, мм':'свой вариант');
+    const hasSug=(q.options||[]).some(o=>String(o.value)===sug);
+    body=opts+'<div class="tzq-own"><label class="tzq-opt"><input type="radio" name="'+name+'" value="__own"'+
+      (hasSug?'':' checked')+'> Другое:</label><input type="text" data-own="'+name+'" placeholder="'+e(ph)+'"'+
+      (hasSug?'':' value="'+e(sug)+'"')+'></div>';
+  }
+  return '<fieldset class="tzq" style="margin:0"><legend class="tzq-text">'+e(q.text)+'</legend>'+why+body+'</fieldset>';
+}
+function openTzClarify(p,name){
+  TZ_CLARIFY={facts:p.facts||'',draft:p.draft,questions:p.questions,name};
+  $('tzClarifyList').innerHTML=p.questions.map(tzQuestionHtml).join('');
+  $('tzClarifyError').textContent='';
+  const own=$('tzClarifyList').querySelectorAll('[data-own]');
+  own.forEach(inp=>inp.addEventListener('input',()=>{       // ввод своего значения выбирает «Другое»
+    const r=$('tzClarifyList').querySelector('input[name="'+inp.dataset.own+'"][value="__own"]');
+    if(r) r.checked=true;
+  }));
+  const d=$('tzClarifyDialog'); if(d.showModal) d.showModal(); else d.setAttribute('open','');
+}
+function closeTzClarify(){const d=$('tzClarifyDialog'); d.close?d.close():d.removeAttribute('open');}
+function tzCollectAnswers(useDefaults){
+  const answers={};
+  TZ_CLARIFY.questions.forEach((q,i)=>{
+    const name='tzq_'+i, list=$('tzClarifyList');
+    const own=list.querySelector('[data-own="'+name+'"]');
+    if(useDefaults){answers[q.id]=q.suggested??''; return;}
+    const picked=list.querySelector('input[name="'+name+'"]:checked');
+    if(q.kind==='text'){answers[q.id]=(own&&own.value.trim())||(picked?picked.value:''); return;}
+    answers[q.id]=picked&&picked.value!=='__own'?picked.value:(own?own.value.trim():'');
+  });
+  return answers;
+}
+async function submitTzClarify(useDefaults){
+  if(!TZ_CLARIFY||TZ_BUSY) return;
+  const answers=tzCollectAnswers(useDefaults), c=TZ_CLARIFY;
+  TZ_BUSY=true; $('tzClarifySubmit').disabled=true; $('tzClarifyDefaults').disabled=true;
+  $('tzClarifyError').textContent='⏳ Собираю изделие…';
+  try{
+    const p=await postImportTz({name:c.name,clarification:{facts:c.facts,draft:c.draft,
+      questions:c.questions,answers}});
+    closeTzClarify(); TZ_CLARIFY=null;
+    handleImportTz(p,c.name);
+  }catch(e){$('tzClarifyError').textContent='Ошибка: '+e.message;}
+  finally{TZ_BUSY=false; $('tzClarifySubmit').disabled=false; $('tzClarifyDefaults').disabled=false;}
+}
+$('tzClarifyForm').addEventListener('submit',e=>{e.preventDefault(); submitTzClarify(false);});
+$('tzClarifyDefaults').onclick=()=>submitTzClarify(true);
+$('tzClarifyCancel').onclick=()=>{closeTzClarify(); TZ_CLARIFY=null; toast('Импорт ТЗ отменён');};
 $('esUpload').onclick=()=>$('esFile').click();
 $('esFile').onchange=e=>{importTzFile(e.target.files[0]); e.target.value='';};
 $('projSel').onchange=async e=>{
