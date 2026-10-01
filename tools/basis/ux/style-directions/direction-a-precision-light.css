@@ -1,0 +1,24 @@
+/* MEB-094 review-only override. Never import from production Studio. */
+html[data-meb094-direction="a"]{
+  --ink:#15191e;--mut:#515b66;--line:#c7cdd4;--bg:#eef1f4;--card:#ffffff;
+  --accent:#1f5faf;--ok:#167142;--warn:#8a5a00;--bad:#a62f36;
+}
+html[data-meb094-direction="a"] body{background:#eef1f4;color:var(--ink)}
+html[data-meb094-direction="a"] #side,
+html[data-meb094-direction="a"] #rightside{background:#fff;border-color:#b9c1ca}
+html[data-meb094-direction="a"] #main{background:#e8edf1}
+html[data-meb094-direction="a"] button,
+html[data-meb094-direction="a"] input,
+html[data-meb094-direction="a"] select,
+html[data-meb094-direction="a"] textarea{border-color:#b8c1cb;border-radius:3px}
+html[data-meb094-direction="a"] button:hover:not(:disabled){border-color:#6f8296;background:#f0f5fa}
+html[data-meb094-direction="a"] button:focus-visible,
+html[data-meb094-direction="a"] input:focus-visible,
+html[data-meb094-direction="a"] select:focus-visible,
+html[data-meb094-direction="a"] textarea:focus-visible{outline:2px solid #1f5faf;outline-offset:1px}
+html[data-meb094-direction="a"] #tabs button[aria-selected="true"],
+html[data-meb094-direction="a"] #rightPanelTabs button[aria-selected="true"]{color:#1f5faf;border-bottom-color:#1f5faf}
+html[data-meb094-direction="a"] #rightRail{background:#e5eaf0;border-color:#b9c1ca}
+html[data-meb094-direction="a"] #viewportStatus{background:#f9fafb;border-color:#b9c1ca}
+html[data-meb094-direction="a"] #hud{background:#fff;border-color:#b9c1ca;box-shadow:0 1px 2px rgba(21,25,30,.08)}
+html[data-meb094-direction="a"] .primary{background:#1f5faf!important;border-color:#1f5faf!important;color:#fff!important}

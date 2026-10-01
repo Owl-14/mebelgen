@@ -1,0 +1,24 @@
+/* MEB-094 review-only override. Never import from production Studio. */
+html[data-meb094-direction="b"]{
+  --ink:#211f1a;--mut:#5f5a50;--line:#d0cbc0;--bg:#f2efe8;--card:#fffefa;
+  --accent:#8a4b16;--ok:#356a3e;--warn:#7a5200;--bad:#9a3038;
+}
+html[data-meb094-direction="b"] body{background:#f2efe8;color:var(--ink)}
+html[data-meb094-direction="b"] #side,
+html[data-meb094-direction="b"] #rightside{background:#fffefa;border-color:#c8c0b2}
+html[data-meb094-direction="b"] #main{background:#ebe6dc}
+html[data-meb094-direction="b"] button,
+html[data-meb094-direction="b"] input,
+html[data-meb094-direction="b"] select,
+html[data-meb094-direction="b"] textarea{border-color:#bdb4a5;border-radius:5px;background:#fffefa}
+html[data-meb094-direction="b"] button:hover:not(:disabled){border-color:#8a6b4e;background:#f8efe5;color:#6f3c12}
+html[data-meb094-direction="b"] button:focus-visible,
+html[data-meb094-direction="b"] input:focus-visible,
+html[data-meb094-direction="b"] select:focus-visible,
+html[data-meb094-direction="b"] textarea:focus-visible{outline:2px solid #8a4b16;outline-offset:1px}
+html[data-meb094-direction="b"] #tabs button[aria-selected="true"],
+html[data-meb094-direction="b"] #rightPanelTabs button[aria-selected="true"]{color:#8a4b16;border-bottom-color:#8a4b16}
+html[data-meb094-direction="b"] #rightRail{background:#e8e1d5;border-color:#c8c0b2}
+html[data-meb094-direction="b"] #viewportStatus{background:#fffaf1;border-color:#c8c0b2}
+html[data-meb094-direction="b"] #hud{background:#fffefa;border-color:#c8c0b2;box-shadow:0 1px 3px rgba(47,36,24,.10)}
+html[data-meb094-direction="b"] .primary{background:#8a4b16!important;border-color:#8a4b16!important;color:#fff!important}
