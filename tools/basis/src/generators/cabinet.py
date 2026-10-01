@@ -53,6 +53,7 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     sections_meta: list[dict[str, Any]] = []
     rods_meta: list[dict[str, Any]] = []
 
+    n_drawer_cols = sum(1 for s in sections if s.get("kind") == "drawers")
     for idx, (sec, (cx1, cx2)) in enumerate(zip(sections, bounds), start=1):
         sid = sec.get("id", f"col{idx}")
         kind = sec["kind"]
@@ -84,8 +85,11 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
             # короб ящика не должен доходить до задника (передний край = D − T_back)
             # и до крышки: верхний накладной фасад перекрывает её торец (MEB-166)
             sec_dr = {**sec, "back_limit": inner_depth, "top_limit": yt}
+            # несколько колонок ящиков: без префикса имена «Фасад ящик 1…» в
+            # колонках совпадут, и консистентность заблокирует экспорт
+            prefix = sec.get("prefix") or (f"Секция {idx} " if n_drawer_cols > 1 else "")
             ps, dm, topy = drawer_stack(cx1, cx2, fb, heights, gd, sec_dr, c.T, c.mat, sid,
-                                        sec.get("prefix", ""), facade_bounds=fspan)
+                                        prefix, facade_bounds=fspan)
             # нижний фасад перекрывает торец дна (как дверь): если фасад
             # начинается ровно с верха дна, открытый угол дна — брак
             bot_f = min((q for q in ps if q.get("type") == "drawer_front"),
