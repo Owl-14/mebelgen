@@ -78,6 +78,24 @@ def _normalize_spec(spec: dict[str, Any]) -> dict[str, Any]:
     return spec
 
 
+_SINGLE_COLUMN = ("drawer_unit", "door_unit")
+
+
+def _promote_multi_column(spec: dict[str, Any]) -> dict[str, Any]:
+    """drawer_unit/door_unit строят одну колонку и берут только sections[0].
+
+    Несколько секций («3 ящика слева и 3 справа») — это колонки cabinet:
+    собираем как cabinet и пишем warning, а не теряем секции молча.
+    """
+    secs = spec.get("sections")
+    if spec.get("archetype") not in _SINGLE_COLUMN or not isinstance(secs, list) or len(secs) < 2:
+        return spec
+    warning = (f"{spec['archetype']} строит одну колонку, а секций {len(secs)} — "
+               f"собрано как cabinet (колонки слева направо)")
+    warns = [w for w in (spec.get("warnings") or []) if w != warning]
+    return {**spec, "archetype": "cabinet", "warnings": [*warns, warning]}
+
+
 def generate_from_paramspec(spec: dict[str, Any]) -> dict[str, Any]:
     # Дозаполнить материалы/фурнитуру детерминированной политикой (AKD-76):
     # из одного ТЗ должна собираться полная модель, без пропусков.
@@ -93,7 +111,7 @@ def generate_from_paramspec(spec: dict[str, Any]) -> dict[str, Any]:
         }),
         "revision.hash": hash_payload(spec),
     }) as trace_span:
-        spec = apply_material_policy(_normalize_spec(spec))
+        spec = apply_material_policy(_promote_multi_column(_normalize_spec(spec)))
         project = get_generator(spec["archetype"])(spec)
         # конструкция задника (AKD-137): overlay = накладной поверх торцов.
         # Для composite задник накладывается поблочно (внутри generate каждого
