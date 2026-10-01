@@ -221,8 +221,17 @@ def _skipped_steps(after: str) -> list[CheckStep]:
     return [CheckStep(name=name, skipped=True) for name in _CHECK_ORDER[index + 1:]]
 
 
-def evaluate_production_gate(candidate: Any) -> GateDecision:
-    """Run the complete production contour in its canonical order."""
+def evaluate_production_gate(
+    candidate: Any, *, unresolved_materials_are_errors: bool = True
+) -> GateDecision:
+    """Run the complete production contour in its canonical order.
+
+    ``unresolved_materials_are_errors=False`` — режим приёмки ТЗ: артикул из
+    производственной базы подбирает проектировщик уже в Studio, поэтому
+    нерешённый слот материала здесь предупреждение, а не отказ. Геометрия,
+    схема, присадки и полнота остаются жёсткими: красная модель красной и
+    остаётся, а экспорт в производство идёт через обычный строгий гейт.
+    """
 
     from jsonschema import Draft202012Validator
 
@@ -446,6 +455,7 @@ def evaluate_production_gate(candidate: Any) -> GateDecision:
                         "materials",
                         "materials.unresolved",
                         f"Не выбрана производственная позиция для слота {slot}.",
+                        severity="error" if unresolved_materials_are_errors else "warning",
                     )
                 )
     except Exception as error:

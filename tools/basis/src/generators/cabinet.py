@@ -47,7 +47,7 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     # перегородки — конструктив: всегда до фронта корпуса (AKD-192);
     # interior_z_front утапливает только наполнение (полки)
     panels += partitions(bounds, c.H, c.T, c.Hleg, c.mat,
-                         spec.get("carcass_z_front", 0), iz2)
+                         spec.get("carcass_z_front", 0), iz2, t_top=c.T_top)
 
     drawers_meta: list[dict[str, Any]] = []
     sections_meta: list[dict[str, Any]] = []
@@ -57,7 +57,10 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
         sid = sec.get("id", f"col{idx}")
         kind = sec["kind"]
         names: list[str] = []
-        levels = sec.get("shelf_levels")
+        # пустой shelf_levels = уровни не заданы (так его считает и проверка
+        # полноты): раньше секция с «shelf_levels»: [] и shelves: 2 молча
+        # оставалась без полок, а гейт потом отклонял изделие
+        levels = sec.get("shelf_levels") or None
         if levels is None and sec.get("shelves"):
             levels = shelf_levels(yb, yt, sec["shelves"], c.T)
         levels = levels or []

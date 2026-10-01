@@ -35,8 +35,16 @@ def apply_material_policy(spec: dict[str, Any]) -> dict[str, Any]:
     """Дозаполнить materials/hardware/legs ParamSpec детерминированными дефолтами.
     Не изменяет исходный dict (работает на копии). Возвращает дополненный spec."""
     spec = copy.deepcopy(spec)
-    m = spec.setdefault("materials", {})
-    w = spec.setdefault("warnings", [])
+    # ТЗ от нейросети приходит с «materials»: null / «warnings»: null — setdefault
+    # такие поля не чинит и вся генерация падала на w.append.
+    m = spec.get("materials")
+    if not isinstance(m, dict):
+        m = {}
+        spec["materials"] = m
+    w = spec.get("warnings")
+    if not isinstance(w, list):
+        w = []
+        spec["warnings"] = w
     arch = str(spec.get("archetype", ""))
     dim = spec.get("dimensions", {}) or {}
     sections = spec.get("sections", []) or []
@@ -72,7 +80,10 @@ def apply_material_policy(spec: dict[str, Any]) -> dict[str, Any]:
         w.append("Цвет/декор в ТЗ не указан — принят дефолт «Белый» (ЛДСП), подтвердить с заказчиком.")
 
     # --- Фурнитура ---
-    hw = spec.setdefault("hardware", {})
+    hw = spec.get("hardware")
+    if not isinstance(hw, dict):
+        hw = {}
+        spec["hardware"] = hw
     h = hw.get("handles") or {}
     if facades and not (h.get("count") or 0) and "push" not in feats and "без ручек" not in feats:
         n_fac = (n_drawers + n_doors) or 1

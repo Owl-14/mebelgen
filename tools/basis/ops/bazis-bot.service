@@ -1,0 +1,26 @@
+# Telegram-бот мониторинга Akeda Studio (/etc/systemd/system/bazis-bot.service).
+# Токен и ID группы — в /opt/bazis/basis/.env (TELEGRAM_BOT_TOKEN, TELEGRAM_ALERT_CHAT_ID).
+[Unit]
+Description=Akeda Studio Telegram monitor bot
+After=network-online.target bazis.service
+Wants=network-online.target
+
+[Service]
+User=bazis
+WorkingDirectory=/opt/bazis/basis
+Environment=AI_JOURNAL_DB=/opt/bazis/data/ai_journal.sqlite3
+Environment=STUDIO_OUT_DIR=/opt/bazis/out
+Environment=BOT_HEALTH_URL=http://127.0.0.1:8765/healthz
+ExecStart=/opt/bazis/venv/bin/python main.py bot
+Restart=always
+RestartSec=10
+# бот не должен отъедать ресурсы у Studio
+MemoryMax=300M
+CPUQuota=50%
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

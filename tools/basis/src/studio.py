@@ -1143,6 +1143,10 @@ class _Studio:
         )
         self.reviews = StudioReviewStore(review_root)
         self.guard = _ChatGuard(self.out_dir)
+        from .ai_journal import AIJournal
+
+        # ТЗ, ответы нейросетей и ошибки — база для починки и дообучения
+        self.journal = AIJournal.for_studio(self.out_dir, identity_db)
         self._cancelled_chat_operations: dict[str, float] = {}
         self._cancelled_chat_lock = threading.RLock()
         self.started = _time.time()               # /healthz, /version (AKD-264)
@@ -1582,6 +1586,55 @@ def make_handler(st: _Studio):
                 target_type="studio_project",
                 target_id=spec_path.name,
                 metadata=metadata or {},
+            )
+
+        @staticmethod
+        def _journal_actor(auth: dict[str, Any] | None) -> tuple[str, str]:
+            context = (auth or {}).get("context") or {}
+            return (str((context.get("organization") or {}).get("id") or ""),
+                    str((context.get("user") or {}).get("id") or ""))
+
+        def _journal_tz_images(
+            self,
+            auth: dict[str, Any] | None,
+            call_id: str,
+            images: list[dict[str, Any]],
+            source: str,
+        ) -> None:
+            if not images:
+                return
+            organization_id, actor_user_id = self._journal_actor(auth)
+            st.journal.save_tz_images(call_id, images, source=source,
+                                      organization_id=organization_id,
+                                      actor_user_id=actor_user_id)
+
+        def _journal_ai_call(
+            self,
+            auth: dict[str, Any] | None,
+            workflow: str,
+            spec_path: Path,
+            *,
+            call_id: str,
+            result: Any,
+            capture: dict[str, Any],
+            message: str,
+            before_spec: Any,
+            image_count: int,
+            started: float,
+            error_code: str | None = None,
+            exception: BaseException | None = None,
+        ) -> None:
+            from .telemetry import current_trace_id
+
+            organization_id, actor_user_id = self._journal_actor(auth)
+            st.journal.record_call(
+                call_id=call_id, workflow=workflow,
+                result=result if isinstance(result, dict) else {}, capture=capture,
+                organization_id=organization_id, actor_user_id=actor_user_id,
+                project_file=spec_path.name, message=message, before_spec=before_spec,
+                image_count=image_count, trace_id=current_trace_id(),
+                latency_ms=int((_time.perf_counter() - started) * 1000),
+                error_code=error_code, exception=exception,
             )
 
         def _body(self) -> dict[str, Any]:
@@ -2219,9 +2272,21 @@ def make_handler(st: _Studio):
                     history = (st.workspaces.ai_messages(auth, spec_path)
                                if auth is not None else body.get("history") or [])
                     from .spec_chat import chat_edit
+                    import uuid as _uuid
 
+                    images = [image for image in body.get("images") or []
+                              if isinstance(image, dict)]
+                    call_id = str(_uuid.uuid4())
+                    capture: dict[str, Any] = {}
+                    self._journal_tz_images(auth, call_id, images, "chat_photo")
+                    started = _time.perf_counter()
                     res = chat_edit(spec, message, history, ctx,
-                                    body.get("images") or None, provider)
+                                    body.get("images") or None, provider, journal=capture)
+                    self._journal_ai_call(
+                        auth, "chat", spec_path, call_id=call_id, result=res,
+                        capture=capture, message=message, before_spec=spec,
+                        image_count=len(images), started=started,
+                    )
                     _trace_engineering_result(
                         res.get("spec") if isinstance(res, dict) else None
                     )
@@ -2271,12 +2336,21 @@ def make_handler(st: _Studio):
                     from .spec_chat import token_balance
                     self._json(token_balance(body.get("provider") or None))
                 elif path == "/api/import-tz":   # drag&drop ТЗ (D4) → провайдер чата
+                    import uuid as _uuid
+
+                    name = str(body.get("name", "tz.png"))
+                    call_id = str(_uuid.uuid4())
+                    capture: dict[str, Any] = {}
+                    res: dict[str, Any] = {}
+                    started = _time.perf_counter()
                     try:
                         from .spec_chat import chat_edit
-                        name = str(body.get("name", "tz.png"))
                         ext = name.rsplit(".", 1)[-1].lower()
                         mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
                                 "webp": "image/webp", "gif": "image/gif"}.get(ext, "image/png")
+                        self._journal_tz_images(auth, call_id, [{
+                            "mime": mime, "name": name, "data": str(body.get("data", "")),
+                        }], "import_tz")
                         # пустой базовый спек — иначе модель якорится на текущее
                         # изделие и копирует его секции вместо чистой сборки по ТЗ
                         res = chat_edit({},
@@ -2284,7 +2358,8 @@ def make_handler(st: _Studio):
                                         "определи тип изделия, габариты, секции, материал по "
                                         "изображению. НЕ бери ничего из других изделий. created=true.",
                                         images=[{"mime": mime, "data": str(body.get("data", ""))}],
-                                        provider=body.get("provider") or None)
+                                        provider=body.get("provider") or None,
+                                        journal=capture)
                         _trace_engineering_result(
                             res.get("spec") if isinstance(res, dict) else None
                         )
@@ -2325,6 +2400,11 @@ def make_handler(st: _Studio):
                                 payload["check_report"] = res["check_report"]
                             if isinstance(res.get("usage"), dict):
                                 payload["usage"] = res["usage"]
+                            self._journal_ai_call(
+                                auth, "import_tz", spec_path, call_id=call_id, result=res,
+                                capture=capture, message=name, before_spec=None,
+                                image_count=1, started=started, error_code=error_code,
+                            )
                             self._json(payload, status)
                             return
                         if isinstance(current_spec, dict) and current_spec.get("draft"):
@@ -2353,6 +2433,11 @@ def make_handler(st: _Studio):
                             persist_span.set_attributes({"revision.persisted": True,
                                                          "check.outcome": "pass"})
                         st.workspaces.set_current(auth, out)
+                        self._journal_ai_call(
+                            auth, "import_tz", spec_path, call_id=call_id, result=res,
+                            capture=capture, message=name, before_spec=None,
+                            image_count=1, started=started,
+                        )
                         self._json({"ok": True, "spec": new_spec, "file": out.name,
                                     "usage": res.get("usage")})
                     except Exception as error:
@@ -2369,6 +2454,12 @@ def make_handler(st: _Studio):
                             error_code,
                             trace_id or "unavailable",
                             type(error).__name__,
+                        )
+                        self._journal_ai_call(
+                            auth, "import_tz", spec_path, call_id=call_id, result=res,
+                            capture=capture, message=name, before_spec=None,
+                            image_count=1, started=started, error_code=error_code,
+                            exception=error,
                         )
                         self._json({
                             "ok": False,

@@ -418,6 +418,33 @@ def test_authenticated_studio_scopes_catalog_and_renders_profile(tmp_path: Path)
         assert "private-provider" not in provider_error["error"]
         assert len(provider_error["trace_id"]) == 32
 
+        # AI-журнал рядом с identity DB: каждый вызов и фото ТЗ — в базе компании
+        from contextlib import closing
+        from src.ai_journal import AIJournal
+
+        journal = AIJournal(tmp_path / "ai_journal.sqlite3")
+        with closing(journal.connect()) as connection:
+            calls = connection.execute(
+                "SELECT * FROM ai_calls ORDER BY created_at"
+            ).fetchall()
+            intake = connection.execute("SELECT * FROM tz_intake").fetchall()
+        assert [(call["workflow"], call["error_code"]) for call in calls] == [
+            ("chat", ""),
+            ("chat", ""),
+            ("import_tz", "create_paramspec_missing"),
+            ("import_tz", "ai_provider_failed"),
+        ]
+        assert {call["organization_id"] for call in calls} == {constanta["organization"]["id"]}
+        assert calls[0]["message"] == "Сделай шире"
+        assert json.loads(calls[0]["after_spec"])["project_name"] == "Тумба Константы после правки"
+        assert [(item["source"], item["bytes"]) for item in intake] == [
+            ("import_tz", 3), ("import_tz", 3),
+        ]
+        assert {item["call_id"] for item in intake} == {
+            call["id"] for call in calls if call["workflow"] == "import_tz"
+        }
+        assert all((tmp_path / "ai_journal_files" / item["file"]).is_file() for item in intake)
+
         status, _headers, history_body = browser.request(
             "POST", "/api/chat-history", {"project_file": "product.json"}, csrf=True
         )
