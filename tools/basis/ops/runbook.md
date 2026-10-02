@@ -19,6 +19,22 @@
 а для не-черновиков строит viewer payload. Ошибка останавливает выкладку до
 рестарта; проверка работает read-only и не мигрирует пользовательские файлы.
 
+## Зависимости распознавания ТЗ
+PDF-ТЗ читает `pypdfium2` + `Pillow` (requirements.txt), сверку габарита с числами
+чертежа — RapidOCR (requirements-server.txt, необязательно). opencv-python из его
+зависимостей требует libGL, которого на сервере нет, поэтому после установки:
+
+```bash
+V=$(/opt/bazis/venv/bin/pip show opencv-python | grep ^Version | cut -d' ' -f2)
+/opt/bazis/venv/bin/pip uninstall -y opencv-python
+/opt/bazis/venv/bin/pip install "opencv-python-headless==$V"
+```
+
+Без OCR импорт работает, просто без сверки размеров. Картинки ТЗ читает GLM
+(`glm-4.6v-flash`, бесплатно): `VISION_EXTRACT_PROVIDER=glm` в .env; GigaChat убран.
+Сравнение моделей на эталонах: `python qa/tz_bench.py --tz-dir /opt/bazis/tz-test/set
+--providers glm -n 2`.
+
 ## Проверить состояние
 - `curl https://studio.akeda.ru/healthz` — `{"ok":true,...}`;
 - `curl https://studio.akeda.ru/version` — какой SHA развёрнут, public-режим;
