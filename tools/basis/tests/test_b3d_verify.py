@@ -29,9 +29,9 @@ def test_cfrn_has_fastener_bodies():
     assert len(objs) >= 3                                # шкант/чашка/шток (система 32)
     d = json.loads(z.read("file.json"))
     mats = [m["name"] for m in d["table"]["materials"]]
-    assert any("Эксцентрик" in m for m in mats)
+    assert any("Стяжка эксцентриковая" in m for m in mats)
     assert any("Шкант" in m for m in mats)
-    assert not any("Конфирмат" in m for m in mats)       # AKD-202: конфирматов нет
+    assert not any("конфирмат" in m.lower() for m in mats)   # AKD-202: конфирматов нет
     # triangleData — int-индексы в table.triangles (формат эталона)
     f5 = [o for o in d["table"]["objects"] if o.get("objType") == 5 and o.get("holes")]
     assert f5 and all(isinstance(o["triangleData"], int) for o in f5)
