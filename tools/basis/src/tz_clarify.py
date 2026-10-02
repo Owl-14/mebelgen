@@ -221,6 +221,35 @@ def _dims_question(spec: dict[str, Any], facts: str,
             "hint": arch}
 
 
+_TWO_SECTIONS = re.compile(r"(дв[еу]|2)\s+секци|раздел\w*\s+по\s+вертикали|перегородк", re.I)
+
+
+def _door_sections_question(spec: dict[str, Any], facts: str) -> dict[str, Any] | None:
+    """Одна секция с двумя дверями или две секции за перегородкой?
+
+    ТЗ komi 46: «2 распашные двери… Шкаф содержит две секции, разделён по
+    вертикали» — модель собирала одну колонку на две двери, без перегородки.
+    """
+    secs = [s for s in spec.get("sections") or [] if isinstance(s, dict)]
+    if len(secs) != 1 or secs[0].get("kind") != "door" or int(secs[0].get("door") or 0) < 2:
+        return None
+    columns = len(_fact_columns(facts))
+    if columns < 2 and not _TWO_SECTIONS.search(facts or ""):
+        return None
+    sec = secs[0]
+    split = {key: value for key, value in sec.items() if key not in ("door", "id")}
+    two = {"archetype": "cabinet",
+           "sections": [{**split, "door": 1}, {**split, "door": 1}]}
+    return {"id": "door_sections", "kind": "choice",
+            "text": "Шкаф с двумя дверями: одна секция или две, разделённые перегородкой?",
+            "options": [{"value": "two", "label": "Две секции за перегородкой, по двери на каждую",
+                         "patch": two},
+                        {"value": "one", "label": "Одна секция, две двери без перегородки",
+                         "patch": {"archetype": spec.get("archetype"), "sections": [sec]}}],
+            "suggested": "two",
+            "reasons": ["в ТЗ две секции/колонки, а собрана одна секция на две двери"]}
+
+
 def _plausibility_questions(spec: dict[str, Any]) -> list[dict[str, Any]]:
     w, d, h = _dims(spec)
     arch = str(spec.get("archetype") or "")
@@ -276,6 +305,9 @@ def questions_for(spec: dict[str, Any], facts: str = "",
     layout = _layout_question(spec, facts, image)
     if layout:
         found.append(layout)
+    door_sections = _door_sections_question(spec, facts)
+    if door_sections:
+        found.append(door_sections)
     plaus = _plausibility_questions(spec)
     dims = _dims_question(spec, facts, image, numbers)
     if dims:

@@ -149,6 +149,9 @@ def main() -> int:
                     code = result.get("code") or "ok"
                     tokens = ((result.get("usage") or {}).get("total")) or 0
                     row["questions"] = [q["id"] for q in result.get("questions") or []]
+                    candidate = result.get("spec") or result.get("draft") or {}
+                    row["candidate"] = {key: candidate.get(key) for key in
+                                        ("archetype", "dimensions", "sections")}
                     if expect:
                         row["misses"] = score(result.get("spec") or result.get("draft"), expect)
                         row["misses_after_defaults"] = (

@@ -172,3 +172,22 @@ def test_dimension_not_on_the_drawing_is_asked():
     ok = {**draft, "dimensions": {"width": 1600, "depth": 300, "height": 800}}
     assert questions_for(ok, NEW_FORMAT_FACTS, big, numbers=[300, 780, 800, 1600]) == []
     assert questions_for(ok, NEW_FORMAT_FACTS, big, numbers=[]) == []
+
+
+def test_two_doors_in_one_section_are_asked_when_tz_says_two_sections():
+    """komi 46: «Шкаф содержит две секции, разделён по вертикали» — а собрана одна."""
+    draft = {"schemaVersion": "paramspec-v1", "project_name": "Шкаф 46", "archetype": "door_unit",
+             "dimensions": {"width": 1000, "depth": 400, "height": 1800},
+             "materials": {"board_thickness": 16},
+             "sections": [{"kind": "door", "door": 2, "shelves": 4}]}
+    text = "Текст ТЗ из PDF:\n2 распашные двери, 4 полки. Шкаф содержит две секции, разделен по вертикали"
+    qs = questions_for(draft, text, {"bytes": 400_000, "width": 2000, "height": 1414})
+    q = next(q for q in qs if q["id"] == "door_sections")
+    spec, free = apply_answers(draft, qs, {"door_sections": q["suggested"]})
+    assert free == [] and spec["archetype"] == "cabinet"
+    assert spec["sections"] == [{"kind": "door", "shelves": 4, "door": 1},
+                                {"kind": "door", "shelves": 4, "door": 1}]
+    # без упоминания секций — не спрашиваем
+    assert not [q for q in questions_for(draft, "2 распашные двери, 4 полки",
+                                         {"bytes": 400_000, "width": 2000, "height": 1414})
+                if q["id"] == "door_sections"]
