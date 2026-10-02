@@ -141,3 +141,35 @@ def test_tz_intake_keeps_unresolved_materials_as_a_warning():
 def test_garbage_input_is_returned_as_is():
     assert normalize_candidate("не спека").spec == "не спека"
     assert normalize_candidate(None).notes == []
+
+
+def test_multi_section_drawer_unit_becomes_cabinet_not_truncated():
+    """Комод 3+3: раньше вторая колонка отрезалась — изделие молча становилось стопкой."""
+    from src.paramspec_normalize import normalize_candidate
+
+    spec = {"schemaVersion": "paramspec-v1", "project_name": "Комод", "archetype": "drawer_unit",
+            "dimensions": {"width": 1600, "depth": 400, "height": 800},
+            "materials": {"board_thickness": 16},
+            "sections": [{"kind": "drawers", "drawers": 3}, {"kind": "drawers", "drawers": 3}]}
+    result = normalize_candidate(spec)
+    assert result.spec["archetype"] == "cabinet" and len(result.spec["sections"]) == 2
+
+
+def test_missing_archetype_is_inferred_and_zero_optional_number_dropped():
+    """Бенч ТЗ: модель не написала archetype / поставила length_mm: 0 — схема отвергала всё."""
+    from src.paramspec import parse_paramspec
+    from src.paramspec_normalize import normalize_candidate
+
+    spec = {"schemaVersion": "paramspec-v1", "project_name": "Тумба подкатная",
+            "dimensions": {"width": 400, "depth": 450, "height": 580},
+            "materials": {"board_thickness": 16},
+            "sections": [{"kind": "drawers", "drawers": 3}],
+            "hardware": {"drawer_guides": {"type": "шариковые", "length_mm": 0}}}
+    result = normalize_candidate(spec)
+    assert result.spec["archetype"] == "drawer_unit"
+    assert "length_mm" not in result.spec["hardware"]["drawer_guides"]
+    parse_paramspec(result.spec)
+
+    cabinet = normalize_candidate({**spec, "project_name": "Шкаф для документов",
+                                   "sections": [{"kind": "door", "door": 1, "shelves": 4}] * 2})
+    assert cabinet.spec["archetype"] == "cabinet"

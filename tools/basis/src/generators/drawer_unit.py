@@ -6,6 +6,7 @@ from typing import Any
 
 from .base import read_carcass
 from .corpus import carcass_calc
+from .columns import fit_drawer_heights
 from .helpers import build_project, carcass, facade_band, panel
 
 
@@ -23,10 +24,12 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     _fb = section.get("front_bottom")                             # низ нижнего фасада (Y-координата)
     fb = _fb if isinstance(_fb, (int, float)) and not isinstance(_fb, bool) else band_bottom
     heights = section.get("drawer_heights")
+    fitted = False
     if heights:
         # контракт ParamSpec (AKD-259): drawer_heights в ТЗ/UI перечисляются
         # СВЕРХУ ВНИЗ; стек строится снизу вверх → разворачиваем
         heights = [float(h) for h in heights][::-1]
+        heights, fitted = fit_drawer_heights(heights, fb, section.get("front_top", band_top), gd)
     else:
         top = section.get("front_top", band_top)
         h = (top - fb - (n - 1) * gd) / n
@@ -144,4 +147,8 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     cc = carcass_calc(c)
     cc["drawer_heights"] = heights
     cc["drawer_box"] = f"{round((c.W - 2 * c.T) - 2 * guide_gap - 2 * c.T, 2)}×{box_depth}×{box_h}"
-    return build_project(spec, panels, sections=sections_meta, drawers=drawers_meta, carcass_calc=cc)
+    project = build_project(spec, panels, sections=sections_meta, drawers=drawers_meta, carcass_calc=cc)
+    if section.get("drawer_heights") and fitted:
+        project["warnings"] = [*project.get("warnings", []),
+                               "Высоты ящиков не помещались в корпус с зазорами — уменьшены пропорционально"]
+    return project

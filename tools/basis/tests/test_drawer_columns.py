@@ -88,3 +88,17 @@ def test_single_section_drawer_unit_is_untouched():
     assert not any("собрано как cabinet" in w for w in project.get("warnings") or [])
     assert len(_fronts(project)) == 6
     assert "Фасад ящик 1" in {p["name"] for p in project["panels"]}
+
+
+@pytest.mark.parametrize("archetype,sections", [
+    ("drawer_unit", [{"kind": "drawers", "drawers": 3, "drawer_heights": [193, 193, 193]}]),
+    ("cabinet", [{"kind": "drawers", "drawers": 3, "drawer_heights": [193, 193, 193]},
+                 {"kind": "drawers", "drawers": 3, "drawer_heights": [193, 193, 193]}]),
+])
+def test_drawer_heights_from_the_model_are_fitted_into_the_carcass(archetype, sections):
+    """ТЗ 72 из PDF: модель поделила 580 на 3 (193) без зазоров — фасад вылезал на 4 мм."""
+    spec = {**_komod(archetype, sections), "dimensions": {"width": 800, "depth": 450, "height": 580}}
+    decision = evaluate_production_gate(spec)
+    assert decision.report.ok, [issue.detail for issue in decision.report.errors]
+    assert max(p["placement"]["y2"] for p in _fronts(decision.project)) <= 580
+    assert any("уменьшены пропорционально" in w for w in decision.project.get("warnings") or [])

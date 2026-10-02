@@ -22,6 +22,7 @@ from typing import Any
 from .paramspec import _ARCHETYPE_TAGS, _SECTION_TAGS, parse_paramspec
 
 MAX_PASSES = 12
+_REQUIRED_NUMBERS = {"width", "depth", "height", "board_thickness"}
 
 # Синонимы типа изделия: модели пишут по-русски или обиходным словом.
 ARCHETYPE_ALIASES = {
@@ -170,20 +171,29 @@ def _fix_shelves_in_drawer_column(spec: dict[str, Any], notes: list[str]) -> Non
 
 
 SINGLE_COLUMN_ARCHETYPES = {"drawer_unit", "door_unit"}
+# Уже не бывает колонки корпусной мебели (ящик с направляющими не встанет)
+MIN_COLUMN_WIDTH = 300
 
 
 def _fix_single_column_sections(spec: dict[str, Any], notes: list[str]) -> None:
     """Тумба и однодверная секция строятся одной колонкой.
 
-    Модель иногда описывает ТЗ двумя секциями («ящик снизу, полки сверху»).
-    Генератор берёт только первую, а проверка полноты считает заявленное во
-    всех — изделие отклоняется целиком. Оставляем первую секцию, а потерянное
-    записываем в warnings: проектировщик увидит это в Studio и достроит.
+    Несколько секций у drawer_unit/door_unit — это колонки слева направо
+    («3 ящика слева и 3 справа»): собираем как cabinet, а не отрезаем лишнее —
+    иначе комод 2×3 молча превращается в одну стопку (так было до 01.10.2026).
     """
     sections = spec.get("sections")
     if (spec.get("archetype") not in SINGLE_COLUMN_ARCHETYPES
             or not isinstance(sections, list) or len(sections) < 2):
         return
+    width = (spec.get("dimensions") or {}).get("width")
+    if isinstance(width, (int, float)) and width / len(sections) >= MIN_COLUMN_WIDTH:
+        notes.append(f"archetype: {spec['archetype']} с {len(sections)} секциями → cabinet "
+                     "(секции — колонки слева направо)")
+        spec["archetype"] = "cabinet"
+        return
+    # узкая тумба (400 на две «секции» = 200 на колонку) — модель описала ярусы
+    # одной колонки как секции; колонку такой ширины не собрать, берём первую
     extra = sections[1:]
     spec["sections"] = sections[:1]
     kinds = ", ".join(str(item.get("kind")) for item in extra if isinstance(item, dict))
@@ -195,6 +205,37 @@ def _fix_single_column_sections(spec: dict[str, Any], notes: list[str]) -> None:
         spec["warnings"] = warnings
     warnings.append(f"В ТЗ были дополнительные секции ({kinds}) — изделие собрано "
                     "одной колонкой, достроить в Studio.")
+
+
+def _infer_archetype(spec: dict[str, Any], notes: list[str]) -> None:
+    """Модель иногда не пишет archetype вовсе — схема отвергает весь кандидат.
+
+    Выводим из furniture_type/project_name (синонимы) или из секций: одна
+    колонка ящиков — drawer_unit, одна дверная — door_unit, несколько — cabinet.
+    """
+    if isinstance(spec.get("archetype"), str) and spec["archetype"] in _ARCHETYPE_TAGS:
+        return
+    for field_name in ("furniture_type", "project_name"):
+        words = re.findall(r"[a-zа-яё_]+", str(spec.get(field_name) or "").lower())
+        for word in words:
+            mapped = ARCHETYPE_ALIASES.get(word)
+            if mapped and mapped not in ("corpus",):
+                spec["archetype"] = mapped
+                notes.append(f"archetype не указан → {mapped} (по «{word}»)")
+                return
+    sections = [item for item in spec.get("sections") or [] if isinstance(item, dict)]
+    if len(sections) >= 2:
+        mapped = "cabinet"
+    elif sections and sections[0].get("kind") == "drawers":
+        mapped = "drawer_unit"
+    elif sections and sections[0].get("kind") == "door":
+        mapped = "door_unit"
+    elif sections:
+        mapped = "shelving"
+    else:
+        mapped = "corpus"
+    spec["archetype"] = mapped
+    notes.append(f"archetype не указан → {mapped} (по секциям)")
 
 
 def _delete_path(spec: dict[str, Any], path: list[str]) -> bool:
@@ -217,8 +258,13 @@ def _delete_path(spec: dict[str, Any], path: list[str]) -> bool:
     return False
 
 
+# Необязательные числа, которые модель ставит нулём («длина не указана» → 0):
+# контракт требует > 0, удаляем поле — действует дефолт движка.
+_DROPPABLE_ERROR_TYPES = {"extra_forbidden", "greater_than", "greater_than_equal"}
+
+
 def _extra_paths(spec: dict[str, Any]) -> list[list[str]]:
-    """Пути полей, которых нет в контракте (pydantic extra_forbidden)."""
+    """Пути полей, которых нет в контракте (extra_forbidden) или с нулём вместо > 0."""
     try:
         parse_paramspec(spec)
     except Exception as error:  # noqa: BLE001 - ValidationError и всё, что не распарсилось
@@ -227,8 +273,11 @@ def _extra_paths(spec: dict[str, Any]) -> list[list[str]]:
             return []
         paths: list[list[str]] = []
         for detail in details(include_url=False):
-            if detail.get("type") != "extra_forbidden":
+            if detail.get("type") not in _DROPPABLE_ERROR_TYPES:
                 continue
+            if detail.get("type") != "extra_forbidden" and (
+                    detail["loc"][-1:] and detail["loc"][-1] in _REQUIRED_NUMBERS):
+                continue                         # габарит/толщина обязательны — пусть решает гейт
             loc = [str(part) for part in detail["loc"] if part != "root"]
             if loc and loc[0] in _ARCHETYPE_TAGS:
                 loc.pop(0)
@@ -252,6 +301,7 @@ def normalize_candidate(candidate: Any) -> NormalizationResult:
         notes.append("пустые поля убраны (действуют дефолты): " + ", ".join(dropped[:8])
                      + (f" и ещё {len(dropped) - 8}" if len(dropped) > 8 else ""))
     _fix_archetype(spec, notes)
+    _infer_archetype(spec, notes)
     _fix_sections(spec, notes)
     _fix_shelves_in_drawer_column(spec, notes)
     _fix_single_column_sections(spec, notes)
@@ -264,7 +314,7 @@ def normalize_candidate(candidate: Any) -> NormalizationResult:
         removed = False
         for path in paths:
             if _delete_path(spec, path):
-                notes.append("удалено поле не из контракта: " + ".".join(path))
+                notes.append("удалено поле не из контракта или с нулём: " + ".".join(path))
                 removed = True
         if not removed:
             break

@@ -75,8 +75,37 @@ def test_kitchen_wall_asks_which_product_and_flags_sizes():
 def test_columns_from_structured_facts_mismatch_is_asked():
     draft = {**KOMOD_DRAFT, "dimensions": {"width": 1600, "depth": 300, "height": 800}}
     qs = questions_for(draft, NEW_FORMAT_FACTS, {"bytes": 300_000, "width": 2000, "height": 1400})
-    assert _ids(qs) == ["layout"]
-    assert qs[0]["suggested"] == "3x3"
+    assert _ids(qs) == ["structure"]                  # колонки из фактов → общий вопрос
+    spec, free = apply_answers(draft, qs, {"structure": qs[0]["suggested"]})
+    assert free == [] and spec["archetype"] == "cabinet"
+    assert spec["sections"] == [{"kind": "drawers", "drawers": 3}, {"kind": "drawers", "drawers": 3}]
+
+
+def test_lost_door_column_is_restored_from_facts():
+    """Бенч komi 46: vision видит 2 колонки «дверь + 4 полки», сборщик собрал одну."""
+    facts = ("Тип изделия: Шкаф\nВнешние габариты Ш×Г×В: 1000x400x1800\n"
+             "Колонки слева направо: Колонка 1 (ширина): дверь, за ней 4 полки; "
+             "Колонка 2 (ширина): дверь, за ней 4 полки\nНеясно: нет")
+    draft = {"schemaVersion": "paramspec-v1", "project_name": "Шкаф 46", "archetype": "door_unit",
+             "dimensions": {"width": 1000, "depth": 400, "height": 1800},
+             "materials": {"board_thickness": 16},
+             "sections": [{"kind": "door", "door": 1, "shelves": 4, "door_swing": "left"}]}
+    qs = questions_for(draft, facts, {"bytes": 400_000, "width": 2000, "height": 1414},
+                       numbers=[16, 338, 339, 400, 1000, 1800])
+    assert _ids(qs) == ["structure"]
+    spec, _free = apply_answers(draft, qs, {"structure": "facts"})
+    assert spec["archetype"] == "cabinet"
+    assert spec["sections"] == [{"kind": "door", "door": 1, "shelves": 4},
+                                {"kind": "door", "door": 1, "shelves": 4}]
+
+
+def test_column_text_parsing():
+    from src.tz_clarify import section_from_column
+
+    assert section_from_column("3 ящика") == {"kind": "drawers", "drawers": 3}
+    assert section_from_column("дверь, за ней 4 полки") == {"kind": "door", "door": 1, "shelves": 4}
+    assert section_from_column("открытая, 2 полки") == {"kind": "open", "shelves": 2}
+    assert section_from_column("ящик, под ним дверь") is None      # смешанное — решает модель
 
 
 def test_clear_tz_has_no_questions():
