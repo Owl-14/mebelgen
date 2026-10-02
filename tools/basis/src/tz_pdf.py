@@ -74,6 +74,10 @@ def read_pdf(data: bytes) -> dict[str, Any]:
                                "data": base64.b64encode(buffer.getvalue()).decode()})
             finally:
                 page.close()
-        return {"text": clean_text("\n".join(texts)), "pages": len(pdf), "images": images}
+        raw = "\n".join(texts)
+        from .tz_ocr import numbers_in_text
+
+        return {"text": clean_text(raw), "pages": len(pdf), "images": images,
+                "numbers": sorted(set(numbers_in_text(raw)))}
     finally:
         pdf.close()

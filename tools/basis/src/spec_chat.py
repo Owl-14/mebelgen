@@ -1079,7 +1079,7 @@ def _accept_created(legacy_spec: dict[str, Any], *, reply: str, usage: Any,
         facts = str(capture.get("vision_facts") or ctx.get("tz_facts") or "")
         if ctx.get("tz_text"):             # повторная сборка по свободному ответу увидит текст PDF
             facts += _tz_text_block(ctx)
-        questions = questions_for(legacy_spec, facts, ctx.get("tz_image"))
+        questions = questions_for(legacy_spec, facts, ctx.get("tz_image"), ctx.get("tz_numbers"))
         if exact_dims:                     # габарит взят из текста PDF — не переспрашиваем
             questions = [q for q in questions
                          if q["id"] not in ("dims", "depth", "width", "height")]

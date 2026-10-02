@@ -2404,10 +2404,14 @@ def make_handler(st: _Studio):
                                 pdf = read_pdf(base64.b64decode(data))
                                 images = pdf["images"]
                                 context["tz_text"] = pdf["text"]
+                                context["tz_numbers"] = pdf["numbers"]
                                 context["tz_image"] = _image_info(images[0]["data"]) if images else {}
                             else:
+                                from .tz_ocr import drawing_numbers
                                 images = [{"mime": mime, "data": data}]
                                 context["tz_image"] = _image_info(data)
+                                # подписанные числа чертежа — сверка габарита (None: OCR нет)
+                                context["tz_numbers"] = drawing_numbers(data)
                             # пустой базовый спек — иначе модель якорится на текущее
                             # изделие и копирует его секции вместо чистой сборки по ТЗ
                             res = chat_edit({},

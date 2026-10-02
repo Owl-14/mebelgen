@@ -178,11 +178,31 @@ def _layout_question(spec: dict[str, Any], facts: str,
             "options": options, "suggested": suggested, "reasons": reasons}
 
 
+# OCR находит на чертеже меньше трёх чисел — сверять не с чем (мелкая картинка)
+MIN_OCR_NUMBERS = 3
+OCR_TOLERANCE_MM = 5
+
+
+def _not_on_drawing(spec: dict[str, Any], numbers: list[int] | None) -> list[str]:
+    """Габариты кандидата, которых нет среди подписанных на чертеже чисел."""
+    if not numbers or len(numbers) < MIN_OCR_NUMBERS:
+        return []
+    missing = []
+    for label, value in zip(("ширина", "глубина", "высота"), _dims(spec)):
+        if value and not any(abs(value - n) <= OCR_TOLERANCE_MM for n in numbers):
+            missing.append(f"{label} {_fmt(value)}")
+    return missing
+
+
 def _dims_question(spec: dict[str, Any], facts: str,
-                   image: dict[str, Any] | None) -> dict[str, Any] | None:
+                   image: dict[str, Any] | None,
+                   numbers: list[int] | None = None) -> dict[str, Any] | None:
     w, d, h = _dims(spec)
     arch = str(spec.get("archetype") or "")
     reasons = []
+    missing = _not_on_drawing(spec, numbers)
+    if missing:
+        reasons.append("на чертеже нет таких чисел: " + ", ".join(missing))
     if _not_given(_fact_line(facts, "Внешние габариты")) and facts:
         reasons.append("габариты на чертеже не подписаны")
     img = image or {}
@@ -242,8 +262,12 @@ def _multi_product_question(spec: dict[str, Any], facts: str) -> dict[str, Any] 
 
 
 def questions_for(spec: dict[str, Any], facts: str = "",
-                  image: dict[str, Any] | None = None) -> list[dict[str, Any]]:
-    """Вопросы по кандидату из ТЗ; пустой список — собирать без уточнений."""
+                  image: dict[str, Any] | None = None,
+                  numbers: list[int] | None = None) -> list[dict[str, Any]]:
+    """Вопросы по кандидату из ТЗ; пустой список — собирать без уточнений.
+
+    numbers — подписанные числа с чертежа (OCR / текст PDF) для сверки габарита.
+    """
     facts = clean_facts(facts)
     found: list[dict[str, Any]] = []
     multi = _multi_product_question(spec, facts)
@@ -253,7 +277,7 @@ def questions_for(spec: dict[str, Any], facts: str = "",
     if layout:
         found.append(layout)
     plaus = _plausibility_questions(spec)
-    dims = _dims_question(spec, facts, image)
+    dims = _dims_question(spec, facts, image, numbers)
     if dims:
         # общий вопрос о габаритах поглощает точечные о глубине/ширине/высоте
         dims["reasons"] += [r for q in plaus for r in q["reasons"]]

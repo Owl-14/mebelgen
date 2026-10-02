@@ -157,3 +157,18 @@ def test_echoed_capability_schema_is_not_a_fact():
     raw = ('Тип изделия: Шкаф\nНеясно: нет\n\n'
            '{"type":"object","additionalProperties":false,"required":["reply"]}')
     assert clean_facts(raw) == "Тип изделия: Шкаф\nНеясно: нет"
+
+
+def test_dimension_not_on_the_drawing_is_asked():
+    """Модель прочитала 1500, а на чертеже подписаны 1600/780/300/800 (OCR)."""
+    draft = {**KOMOD_DRAFT, "archetype": "cabinet",
+             "dimensions": {"width": 1500, "depth": 300, "height": 800},
+             "sections": [{"kind": "drawers", "drawers": 3}, {"kind": "drawers", "drawers": 3}]}
+    big = {"bytes": 300_000, "width": 2000, "height": 1400}
+    qs = questions_for(draft, NEW_FORMAT_FACTS, big, numbers=[30, 40, 250, 300, 780, 800, 1600])
+    dims = next(q for q in qs if q["id"] == "dims")
+    assert any("ширина 1500" in r for r in dims["reasons"])
+    # всё подписано — вопроса нет; OCR ничего не нашёл — не сверяем
+    ok = {**draft, "dimensions": {"width": 1600, "depth": 300, "height": 800}}
+    assert questions_for(ok, NEW_FORMAT_FACTS, big, numbers=[300, 780, 800, 1600]) == []
+    assert questions_for(ok, NEW_FORMAT_FACTS, big, numbers=[]) == []

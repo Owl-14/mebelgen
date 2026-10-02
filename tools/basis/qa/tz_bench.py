@@ -134,6 +134,11 @@ def main() -> int:
 
                     pdf = read_pdf(source.read_bytes())
                     images, context["tz_text"] = pdf["images"], pdf["text"]
+                    context["tz_numbers"] = pdf["numbers"]
+                elif images:
+                    from src.tz_ocr import drawing_numbers
+
+                    context["tz_numbers"] = drawing_numbers(images[0]["data"])
                 message = PROMPT if images else (
                     "Собери ParamSpec по этому ТЗ. " + source.read_text(encoding="utf-8")[:4000])
                 context["tz_image"] = _image_info(images[0]["data"]) if images else {}
