@@ -149,3 +149,11 @@ def test_own_layout_answer_is_parsed_without_llm():
     spec, free = apply_answers(draft, qs, {"layout": "2 по 3"})
     assert free == [] and spec["archetype"] == "cabinet"
     assert [s["drawers"] for s in spec["sections"]] == [3, 3]
+
+
+def test_echoed_capability_schema_is_not_a_fact():
+    from src.tz_clarify import clean_facts
+
+    raw = ('Тип изделия: Шкаф\nНеясно: нет\n\n'
+           '{"type":"object","additionalProperties":false,"required":["reply"]}')
+    assert clean_facts(raw) == "Тип изделия: Шкаф\nНеясно: нет"

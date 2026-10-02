@@ -61,6 +61,8 @@ def clean_facts(text: str) -> str:
             body = data["reply"]
     if "\\n" in body and "\n" not in body:
         body = body.replace("\\n", "\n")
+    # модель иногда дописывает в ответ схему из промпта — это не факты ТЗ
+    body = re.sub(r'\n*\{"type"\s*:\s*"object".*$', "", body, flags=re.S)
     return body.strip()
 
 
