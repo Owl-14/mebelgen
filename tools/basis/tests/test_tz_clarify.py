@@ -149,3 +149,45 @@ def test_own_layout_answer_is_parsed_without_llm():
     spec, free = apply_answers(draft, qs, {"layout": "2 по 3"})
     assert free == [] and spec["archetype"] == "cabinet"
     assert [s["drawers"] for s in spec["sections"]] == [3, 3]
+
+
+def test_echoed_capability_schema_is_not_a_fact():
+    from src.tz_clarify import clean_facts
+
+    raw = ('Тип изделия: Шкаф\nНеясно: нет\n\n'
+           '{"type":"object","additionalProperties":false,"required":["reply"]}')
+    assert clean_facts(raw) == "Тип изделия: Шкаф\nНеясно: нет"
+
+
+def test_dimension_not_on_the_drawing_is_asked():
+    """Модель прочитала 1500, а на чертеже подписаны 1600/780/300/800 (OCR)."""
+    draft = {**KOMOD_DRAFT, "archetype": "cabinet",
+             "dimensions": {"width": 1500, "depth": 300, "height": 800},
+             "sections": [{"kind": "drawers", "drawers": 3}, {"kind": "drawers", "drawers": 3}]}
+    big = {"bytes": 300_000, "width": 2000, "height": 1400}
+    qs = questions_for(draft, NEW_FORMAT_FACTS, big, numbers=[30, 40, 250, 300, 780, 800, 1600])
+    dims = next(q for q in qs if q["id"] == "dims")
+    assert any("ширина 1500" in r for r in dims["reasons"])
+    # всё подписано — вопроса нет; OCR ничего не нашёл — не сверяем
+    ok = {**draft, "dimensions": {"width": 1600, "depth": 300, "height": 800}}
+    assert questions_for(ok, NEW_FORMAT_FACTS, big, numbers=[300, 780, 800, 1600]) == []
+    assert questions_for(ok, NEW_FORMAT_FACTS, big, numbers=[]) == []
+
+
+def test_two_doors_in_one_section_are_asked_when_tz_says_two_sections():
+    """komi 46: «Шкаф содержит две секции, разделён по вертикали» — а собрана одна."""
+    draft = {"schemaVersion": "paramspec-v1", "project_name": "Шкаф 46", "archetype": "door_unit",
+             "dimensions": {"width": 1000, "depth": 400, "height": 1800},
+             "materials": {"board_thickness": 16},
+             "sections": [{"kind": "door", "door": 2, "shelves": 4}]}
+    text = "Текст ТЗ из PDF:\n2 распашные двери, 4 полки. Шкаф содержит две секции, разделен по вертикали"
+    qs = questions_for(draft, text, {"bytes": 400_000, "width": 2000, "height": 1414})
+    q = next(q for q in qs if q["id"] == "door_sections")
+    spec, free = apply_answers(draft, qs, {"door_sections": q["suggested"]})
+    assert free == [] and spec["archetype"] == "cabinet"
+    assert spec["sections"] == [{"kind": "door", "shelves": 4, "door": 1},
+                                {"kind": "door", "shelves": 4, "door": 1}]
+    # без упоминания секций — не спрашиваем
+    assert not [q for q in questions_for(draft, "2 распашные двери, 4 полки",
+                                         {"bytes": 400_000, "width": 2000, "height": 1414})
+                if q["id"] == "door_sections"]

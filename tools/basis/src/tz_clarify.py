@@ -61,6 +61,8 @@ def clean_facts(text: str) -> str:
             body = data["reply"]
     if "\\n" in body and "\n" not in body:
         body = body.replace("\\n", "\n")
+    # модель иногда дописывает в ответ схему из промпта — это не факты ТЗ
+    body = re.sub(r'\n*\{"type"\s*:\s*"object".*$', "", body, flags=re.S)
     return body.strip()
 
 
@@ -176,11 +178,31 @@ def _layout_question(spec: dict[str, Any], facts: str,
             "options": options, "suggested": suggested, "reasons": reasons}
 
 
+# OCR находит на чертеже меньше трёх чисел — сверять не с чем (мелкая картинка)
+MIN_OCR_NUMBERS = 3
+OCR_TOLERANCE_MM = 5
+
+
+def _not_on_drawing(spec: dict[str, Any], numbers: list[int] | None) -> list[str]:
+    """Габариты кандидата, которых нет среди подписанных на чертеже чисел."""
+    if not numbers or len(numbers) < MIN_OCR_NUMBERS:
+        return []
+    missing = []
+    for label, value in zip(("ширина", "глубина", "высота"), _dims(spec)):
+        if value and not any(abs(value - n) <= OCR_TOLERANCE_MM for n in numbers):
+            missing.append(f"{label} {_fmt(value)}")
+    return missing
+
+
 def _dims_question(spec: dict[str, Any], facts: str,
-                   image: dict[str, Any] | None) -> dict[str, Any] | None:
+                   image: dict[str, Any] | None,
+                   numbers: list[int] | None = None) -> dict[str, Any] | None:
     w, d, h = _dims(spec)
     arch = str(spec.get("archetype") or "")
     reasons = []
+    missing = _not_on_drawing(spec, numbers)
+    if missing:
+        reasons.append("на чертеже нет таких чисел: " + ", ".join(missing))
     if _not_given(_fact_line(facts, "Внешние габариты")) and facts:
         reasons.append("габариты на чертеже не подписаны")
     img = image or {}
@@ -197,6 +219,35 @@ def _dims_question(spec: dict[str, Any], facts: str,
             "options": [{"value": f"{_fmt(w)}x{_fmt(d)}x{_fmt(h)}", "label": "Верно"}],
             "suggested": f"{_fmt(w)}x{_fmt(d)}x{_fmt(h)}", "reasons": reasons,
             "hint": arch}
+
+
+_TWO_SECTIONS = re.compile(r"(дв[еу]|2)\s+секци|раздел\w*\s+по\s+вертикали|перегородк", re.I)
+
+
+def _door_sections_question(spec: dict[str, Any], facts: str) -> dict[str, Any] | None:
+    """Одна секция с двумя дверями или две секции за перегородкой?
+
+    ТЗ komi 46: «2 распашные двери… Шкаф содержит две секции, разделён по
+    вертикали» — модель собирала одну колонку на две двери, без перегородки.
+    """
+    secs = [s for s in spec.get("sections") or [] if isinstance(s, dict)]
+    if len(secs) != 1 or secs[0].get("kind") != "door" or int(secs[0].get("door") or 0) < 2:
+        return None
+    columns = len(_fact_columns(facts))
+    if columns < 2 and not _TWO_SECTIONS.search(facts or ""):
+        return None
+    sec = secs[0]
+    split = {key: value for key, value in sec.items() if key not in ("door", "id")}
+    two = {"archetype": "cabinet",
+           "sections": [{**split, "door": 1}, {**split, "door": 1}]}
+    return {"id": "door_sections", "kind": "choice",
+            "text": "Шкаф с двумя дверями: одна секция или две, разделённые перегородкой?",
+            "options": [{"value": "two", "label": "Две секции за перегородкой, по двери на каждую",
+                         "patch": two},
+                        {"value": "one", "label": "Одна секция, две двери без перегородки",
+                         "patch": {"archetype": spec.get("archetype"), "sections": [sec]}}],
+            "suggested": "two",
+            "reasons": ["в ТЗ две секции/колонки, а собрана одна секция на две двери"]}
 
 
 def _plausibility_questions(spec: dict[str, Any]) -> list[dict[str, Any]]:
@@ -240,8 +291,12 @@ def _multi_product_question(spec: dict[str, Any], facts: str) -> dict[str, Any] 
 
 
 def questions_for(spec: dict[str, Any], facts: str = "",
-                  image: dict[str, Any] | None = None) -> list[dict[str, Any]]:
-    """Вопросы по кандидату из ТЗ; пустой список — собирать без уточнений."""
+                  image: dict[str, Any] | None = None,
+                  numbers: list[int] | None = None) -> list[dict[str, Any]]:
+    """Вопросы по кандидату из ТЗ; пустой список — собирать без уточнений.
+
+    numbers — подписанные числа с чертежа (OCR / текст PDF) для сверки габарита.
+    """
     facts = clean_facts(facts)
     found: list[dict[str, Any]] = []
     multi = _multi_product_question(spec, facts)
@@ -250,8 +305,11 @@ def questions_for(spec: dict[str, Any], facts: str = "",
     layout = _layout_question(spec, facts, image)
     if layout:
         found.append(layout)
+    door_sections = _door_sections_question(spec, facts)
+    if door_sections:
+        found.append(door_sections)
     plaus = _plausibility_questions(spec)
-    dims = _dims_question(spec, facts, image)
+    dims = _dims_question(spec, facts, image, numbers)
     if dims:
         # общий вопрос о габаритах поглощает точечные о глубине/ширине/высоте
         dims["reasons"] += [r for q in plaus for r in q["reasons"]]

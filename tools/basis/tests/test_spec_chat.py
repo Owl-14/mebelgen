@@ -541,11 +541,11 @@ def test_overloaded_provider_is_retried_before_the_spare_one(monkeypatch):
             return {"reply": "Собрал", "spec": candidate}
 
     def _provider(name=None):
-        assert name != "gigachat", "резерв не должен дёргаться, пока основной ожил"
+        assert name != "deepseek", "резерв не должен дёргаться, пока основной ожил"
         return Flaky()
 
     monkeypatch.setenv("SPEC_CHAT_RETRY_PAUSE_S", "0")
-    monkeypatch.setenv("SPEC_CHAT_FALLBACK", "gigachat")
+    monkeypatch.setenv("SPEC_CHAT_FALLBACK", "deepseek")
     monkeypatch.setattr(sc, "get_chat_provider", _provider)
     capture: dict = {}
     result = sc.chat_edit({}, "Собери ParamSpec по ТЗ", images=[{
@@ -573,21 +573,21 @@ def test_overloaded_provider_falls_back_to_the_spare_one(monkeypatch):
             raise RuntimeError("Error code: 429 - 该模型当前访问量过大")
 
     class Spare:
-        model = "GigaChat"
+        model = "deepseek-chat"
 
         def chat(self, *args, **kwargs):
             return {"reply": "Собрал", "spec": candidate}
 
-    monkeypatch.setenv("SPEC_CHAT_FALLBACK", "gigachat")
+    monkeypatch.setenv("SPEC_CHAT_FALLBACK", "deepseek")
     monkeypatch.setattr(sc, "get_chat_provider",
-                        lambda name=None: Spare() if name == "gigachat" else Overloaded())
+                        lambda name=None: Spare() if name == "deepseek" else Overloaded())
     capture: dict = {}
     result = sc.chat_edit({}, "Собери ParamSpec по ТЗ", images=[{
         "mime": "image/png", "data": "QUJD",
     }], journal=capture)
 
     assert result["spec"]["project_name"] == "Собрано резервом"
-    assert capture["provider"] == "gigachat" and capture["model"] == "GigaChat"
+    assert capture["provider"] == "deepseek" and capture["model"] == "deepseek-chat"
     assert "429" in capture["fallback_from"] or "RuntimeError" in capture["fallback_from"]
 
 
@@ -604,7 +604,7 @@ def test_broken_request_is_not_retried_on_the_spare_provider(monkeypatch):
             tried.append("main")
             raise ValueError("invalid api key")
 
-    monkeypatch.setenv("SPEC_CHAT_FALLBACK", "gigachat")
+    monkeypatch.setenv("SPEC_CHAT_FALLBACK", "deepseek")
     monkeypatch.setattr(sc, "get_chat_provider", lambda name=None: Broken())
     result = sc.chat_edit(SPEC, "сделай глубину 600")
 
@@ -765,30 +765,57 @@ def test_provider_coordinate_override_is_structurally_refused(monkeypatch):
     assert result["reason"]["code"] == "llm_coordinates_forbidden"
 
 
-def test_gigachat_provider(monkeypatch):
-    """AKD-203: GigaChat — обмен ключа на токен + JSON-ответ (сеть замокана)."""
+
+
+def test_vision_is_retried_on_overload_and_old_gigachat_setting_is_ignored(monkeypatch):
+    """Бесплатная glm-4.6v-flash на пике отвечает 429 — ждём её, а не берём другое «зрение».
+
+    GigaChat убран из цепочки: VISION_EXTRACT_PROVIDER=gigachat в старом .env не
+    должен ронять импорт — картинку читает сам сборщик.
+    """
+    import copy
     import src.spec_chat as sc
 
-    class _R:
-        def __init__(self, j): self._j = j
-        status_code = 200
-        def raise_for_status(self): pass
-        def json(self): return self._j
+    candidate = copy.deepcopy(SPEC)
+    calls: list[str] = []
+    asked: list[str] = []
 
-    def _post(url, **kw):
-        if "oauth" in url:
-            assert kw["headers"]["Authorization"].startswith("Basic ")
-            return _R({"access_token": "tok123", "expires_at": 9999999999000})
-        assert kw["headers"]["Authorization"] == "Bearer tok123"
-        return _R({"choices": [{"message": {"content":
-            'Готово. {"reply":"Ширина 900.","spec":'
-            + json.dumps({**SPEC, "dimensions": {**SPEC["dimensions"], "width": 900}})
-            + '}'}}]})
+    class Glm:
+        model = "glm-4.5-flash"
+        vision_model = "glm-4.6v-flash"
 
-    monkeypatch.setenv("GIGACHAT_AUTH_KEY", "YXBwOnNlY3JldA==")
-    monkeypatch.setattr(sc, "get_chat_provider", lambda name=None: sc.GigaChatProvider())
-    import requests
-    monkeypatch.setattr(requests, "post", _post)
+        def vision_extract(self, images):
+            calls.append("vision")
+            if len(calls) == 1:
+                raise RuntimeError("Error code: 429 - 该模型当前访问量过大")
+            return "Тип изделия: шкаф\nВнешние габариты Ш×Г×В: 600×400×2000"
 
-    r = chat_edit(SPEC, "сделай ширину 900")
-    assert r["spec"] and r["spec"]["dimensions"]["width"] == 900
+        def chat(self, *args, **kwargs):
+            return {"reply": "Собрал", "spec": candidate}
+
+    def _provider(name=None):
+        asked.append(str(name))
+        return Glm()
+
+    monkeypatch.setenv("SPEC_CHAT_PROVIDER", "glm")
+    monkeypatch.setenv("VISION_EXTRACT_PROVIDER", "gigachat")
+    monkeypatch.setenv("VISION_RETRY_PAUSE_S", "0")
+    monkeypatch.setattr(sc, "get_chat_provider", _provider)
+    capture: dict = {}
+    result = sc.chat_edit({}, "Собери ParamSpec по ТЗ", images=[{
+        "mime": "image/png", "data": "QUJD"}], journal=capture)
+
+    assert calls == ["vision", "vision"] and capture["vision_retries"] == 1
+    assert "gigachat" not in asked
+    assert result.get("spec") or result.get("code") == "clarification_needed"
+
+
+def test_gigachat_is_not_a_provider_anymore(monkeypatch):
+    import src.spec_chat as sc
+
+    monkeypatch.delenv("SPEC_CHAT_PROVIDER", raising=False)
+    monkeypatch.delenv("PARAMSPEC_PROVIDER", raising=False)
+    monkeypatch.setenv("GIGACHAT_AUTH_KEY", "x")
+    monkeypatch.setenv("GLM_API_KEY", "y")
+    assert sc.resolve_provider_name() == "glm"
+    assert "gigachat" not in {p["id"] for p in sc.available_providers()["providers"]}

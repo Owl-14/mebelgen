@@ -55,6 +55,8 @@ def _cases(tz_dir: Path) -> list[tuple[str, list[dict[str, str]] | None, dict | 
         data = base64.b64encode(image.read_bytes()).decode()
         mime = "image/png" if image.suffix == ".png" else "image/jpeg"
         cases.append((image.stem[:38], [{"mime": mime, "data": data}], _expect(image), image))
+    for pdf in sorted(tz_dir.glob("*.pdf")):
+        cases.append((pdf.stem[:38] + " [pdf]", None, _expect(pdf), pdf))
     for text_file in sorted(tz_dir.glob("*.txt")):
         cases.append((text_file.stem[:38], None, _expect(text_file), text_file))
     return cases
@@ -100,7 +102,7 @@ def _with_defaults(result: dict) -> dict | None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tz-dir", required=True, help="каталог с ТЗ (png/jpg/txt)")
-    parser.add_argument("--providers", required=True, help="через запятую: glm,kimi,gigachat")
+    parser.add_argument("--providers", required=True, help="через запятую: glm,kimi,deepseek")
     parser.add_argument("-n", "--repeats", type=int, default=3, help="прогонов на каждый ТЗ")
     parser.add_argument("--vision", help="кто читает картинку (VISION_EXTRACT_PROVIDER); "
                                          "по умолчанию — из .env")
@@ -126,10 +128,20 @@ def main() -> int:
             for attempt in range(args.repeats):
                 started = time.time()
                 journal: dict = {}
+                context: dict = {"tz_import": True}
+                if source.suffix == ".pdf":            # как Studio: текст PDF + страницы картинкой
+                    from src.tz_pdf import read_pdf
+
+                    pdf = read_pdf(source.read_bytes())
+                    images, context["tz_text"] = pdf["images"], pdf["text"]
+                    context["tz_numbers"] = pdf["numbers"]
+                elif images:
+                    from src.tz_ocr import drawing_numbers
+
+                    context["tz_numbers"] = drawing_numbers(images[0]["data"])
                 message = PROMPT if images else (
                     "Собери ParamSpec по этому ТЗ. " + source.read_text(encoding="utf-8")[:4000])
-                context = {"tz_import": True,
-                           "tz_image": _image_info(images[0]["data"]) if images else {}}
+                context["tz_image"] = _image_info(images[0]["data"]) if images else {}
                 row: dict = {"provider": provider, "tz": name, "attempt": attempt + 1}
                 try:
                     result = chat_edit({}, message, images=images, provider=provider,
@@ -137,6 +149,9 @@ def main() -> int:
                     code = result.get("code") or "ok"
                     tokens = ((result.get("usage") or {}).get("total")) or 0
                     row["questions"] = [q["id"] for q in result.get("questions") or []]
+                    candidate = result.get("spec") or result.get("draft") or {}
+                    row["candidate"] = {key: candidate.get(key) for key in
+                                        ("archetype", "dimensions", "sections")}
                     if expect:
                         row["misses"] = score(result.get("spec") or result.get("draft"), expect)
                         row["misses_after_defaults"] = (

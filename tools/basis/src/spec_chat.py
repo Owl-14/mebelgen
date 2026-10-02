@@ -330,9 +330,11 @@ _OAI_PRESETS = {
                  "model": "moonshot-v1-8k", "vision": "moonshot-v1-8k-vision-preview",
                  "json_mode": True},
     # glm-4.5-flash — thinking-модель: без отключения размышлений «думает»
-    # минутами на больших промптах (extra_body поддержан OpenAI SDK)
+    # минутами на больших промптах (extra_body поддержан OpenAI SDK).
+    # glm-4.6v-flash — бесплатная vision-модель Zhipu: на ТЗ komi читает
+    # раскладку и габариты верно, в отличие от GigaChat (glm-4.5v — платная).
     "glm":      {"base": "https://open.bigmodel.cn/api/paas/v4", "key": "GLM_API_KEY",
-                 "model": "glm-4.5-flash", "vision": "glm-4.5v", "json_mode": False,
+                 "model": "glm-4.5-flash", "vision": "glm-4.6v-flash", "json_mode": False,
                  "extra": {"thinking": {"type": "disabled"}}},
     "deepseek": {"base": "https://api.deepseek.com", "key": "DEEPSEEK_API_KEY",
                  "model": "deepseek-chat", "vision": "deepseek-chat", "json_mode": True},
@@ -601,157 +603,19 @@ class GeminiChatProvider:
         return str(_json_object(text).get("reply") or text)
 
 
-class GigaChatProvider:
-    """Сбер GigaChat (AKD-203): работает с российских серверов (в отличие от
-    Gemini). Ключ авторизации (Base64 Client:Secret) — env GIGACHAT_AUTH_KEY;
-    обмен на OAuth-токен (~30 мин, кэшируем). Модель — GIGACHAT_MODEL
-    (GigaChat / GigaChat-Pro / GigaChat-Max). Фото ТЗ — загрузка файла +
-    attachments (нужна vision-модель, напр. GigaChat-Max).
-
-    SSL: сертификаты Сбера выпущены Минцифры РФ — если корневой не установлен
-    в системе, GIGACHAT_VERIFY=0 отключает проверку (демо; для прод — поставить
-    корневой сертификат Russian Trusted CA)."""
-
-    OAUTH = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
-    BASE = "https://gigachat.devices.sberbank.ru/api/v1"
-
-    def __init__(self) -> None:
-        self.auth_key = os.environ.get("GIGACHAT_AUTH_KEY")
-        if not self.auth_key:
-            raise ValueError("Нет GIGACHAT_AUTH_KEY для SPEC_CHAT_PROVIDER=gigachat")
-        self.scope = os.environ.get("GIGACHAT_SCOPE", "GIGACHAT_API_PERS")
-        self.model = os.environ.get("GIGACHAT_MODEL", "GigaChat")   # текст (900k free)
-        self.vision_model = os.environ.get("GIGACHAT_VISION_MODEL", "GigaChat-Max")
-        # verify: False — отключить; иначе путь к CA-бандлу с корневым Минцифры
-        # (requests при verify=True берёт certifi и не видит системное хранилище)
-        _v = os.environ.get("GIGACHAT_VERIFY", "0")
-        if _v in ("0", "false", "no"):
-            self.verify: Any = False
-        else:
-            self.verify = (os.environ.get("GIGACHAT_CA")
-                           or os.environ.get("REQUESTS_CA_BUNDLE") or True)
-        self._token = None
-        self._exp = 0.0
-
-    def balance(self) -> list[dict[str, Any]]:
-        """Остаток бесплатных токенов по моделям: [{usage, value}] (для счётчика)."""
-        import requests
-        r = requests.get(f"{self.BASE}/balance",
-                         headers={"Authorization": f"Bearer {self._access_token()}"},
-                         timeout=20, verify=self.verify)
-        r.raise_for_status()
-        return r.json().get("balance", [])
-
-    def _now(self) -> float:
-        import time
-        return time.time()
-
-    def _access_token(self) -> str:
-        import uuid
-        import requests
-        if self._token and self._now() < self._exp - 60:
-            return self._token
-        if not self.verify:
-            import urllib3
-            urllib3.disable_warnings()
-        r = requests.post(self.OAUTH, headers={
-            "Authorization": f"Basic {self.auth_key}",
-            "RqUID": str(uuid.uuid4()),
-            "Content-Type": "application/x-www-form-urlencoded",
-        }, data={"scope": self.scope}, timeout=30, verify=self.verify)
-        r.raise_for_status()
-        d = r.json()
-        self._token = d["access_token"]
-        self._exp = float(d.get("expires_at", 0)) / 1000 or (self._now() + 1500)
-        return self._token
-
-    def _upload_images(self, images: list[dict[str, str]]) -> list[str]:
-        import base64
-        import requests
-        ids: list[str] = []
-        for im in images:
-            raw = base64.b64decode(im.get("data", ""))
-            r = requests.post(f"{self.BASE}/files",
-                              headers={"Authorization": f"Bearer {self._access_token()}"},
-                              files={"file": ("tz.png", raw, im.get("mime", "image/png"))},
-                              data={"purpose": "general"}, timeout=60, verify=self.verify)
-            r.raise_for_status()
-            ids.append(r.json().get("id"))
-        return ids
-
-    def vision_extract(self, images: list[dict[str, str]]) -> str:
-        """Этап 1 конвейера (AKD-211): распознать фото ТЗ и выписать факты
-        ПРОСТЫМ ТЕКСТОМ (не JSON). Дальше по этим фактам собирает другая модель."""
-        import requests
-        att = self._upload_images(images)
-        request = build_prompt_request("vision_facts")
-        r = requests.post(f"{self.BASE}/chat/completions",
-                          headers={"Authorization": f"Bearer {self._access_token()}",
-                                   "Content-Type": "application/json"},
-                          json={"model": self.vision_model, "temperature": 0.1,
-                                "messages": [{"role": "user", "content": request.system,
-                                              "attachments": att}]},
-                          timeout=120, verify=self.verify)
-        r.raise_for_status()
-        body = r.json()
-        usage = body.get("usage") or {}
-        self.last_usage = {"model": self.vision_model, "total": usage.get("total_tokens"),
-                           "prompt": usage.get("prompt_tokens"),
-                           "completion": usage.get("completion_tokens")}
-        text = body["choices"][0]["message"]["content"]
-        return str(_json_object(text).get("reply") or text)
-
-    def chat(self, spec: dict[str, Any], message: str,
-             history: list[dict[str, str]] | None = None,
-             context: dict[str, Any] | None = None,
-             images: list[dict[str, str]] | None = None) -> dict[str, Any]:
-        import requests
-        request = build_chat_prompt_request(
-            spec, message, history, context, has_images=bool(images)
-        )
-        msgs: list[dict[str, Any]] = [{"role": "system", "content": request.system}]
-        for h in request.history:
-            msgs.append({"role": h.get("role", "user"), "content": h.get("text", "")})
-        user_msg: dict[str, Any] = {"role": "user", "content": request.user}
-        model = self.model
-        if images:                                       # фото ТЗ — vision-модель
-            user_msg["attachments"] = self._upload_images(images)
-            model = self.vision_model
-        msgs.append(user_msg)
-        r = requests.post(f"{self.BASE}/chat/completions",
-                          headers={"Authorization": f"Bearer {self._access_token()}",
-                                   "Content-Type": "application/json"},
-                          json={"model": model, "messages": msgs, "temperature": 0.1},
-                          timeout=120, verify=self.verify)
-        if r.status_code == 429:
-            raise RuntimeError("Лимит GigaChat исчерпан — попробуйте позже")
-        r.raise_for_status()
-        body = r.json()
-        text = body["choices"][0]["message"]["content"]
-        data = _json_object(text)                        # вычленить JSON из ответа
-        usage = body.get("usage") or {}
-        result = _provider_result(data, request)
-        result["usage"] = {"model": model, "total": usage.get("total_tokens"),
-                           "prompt": usage.get("prompt_tokens"),
-                           "completion": usage.get("completion_tokens")}
-        result["raw_text"] = text
-        return result
-
-
 def resolve_provider_name(name: str | None = None) -> str:
     """Имя провайдера, которое реально будет использовано (для конвейера AKD-211)."""
     return (name or os.environ.get("SPEC_CHAT_PROVIDER")
             or os.environ.get("PARAMSPEC_PROVIDER")
-            # авто по наличию ключа; gigachat работает с РФ-серверов (Gemini — нет)
-            or ("gigachat" if os.environ.get("GIGACHAT_AUTH_KEY")
+            # авто по наличию ключа: GLM работает с РФ-серверов и бесплатно читает
+            # картинки (glm-4.6v-flash); GigaChat убран — путал размеры и раскладку
+            or ("glm" if os.environ.get("GLM_API_KEY")
                 else "gemini" if os.environ.get("GEMINI_API_KEY")
                 else "openai" if os.environ.get("OPENAI_API_KEY") else "mock")).lower()
 
 
 def get_chat_provider(name: str | None = None) -> Any:
     name = resolve_provider_name(name)
-    if name == "gigachat":
-        return GigaChatProvider()
     if name == "gemini":
         return GeminiChatProvider()
     if name in ("openai", "kimi", "glm", "deepseek"):   # OpenAI-совместимые (AKD-209)
@@ -759,7 +623,7 @@ def get_chat_provider(name: str | None = None) -> Any:
     if name == "mock":
         return MockChatProvider()
     raise ValueError(f"Неизвестный SPEC_CHAT_PROVIDER={name!r} "
-                     "(mock|openai|kimi|glm|deepseek|gemini|gigachat)")
+                     "(mock|openai|kimi|glm|deepseek|gemini)")
 
 
 # ------------------------------------------------------------------ вход
@@ -1129,6 +993,58 @@ def _chat_with_fallback(provider: Any, name: str, capture: dict[str, Any],
         raise
 
 
+def _tz_text_block(context: dict[str, Any] | None) -> str:
+    """Текстовый слой PDF-ТЗ для сборщика: точнее любого распознавания картинки."""
+    text = str((context or {}).get("tz_text") or "").strip()
+    if not text:
+        return ""
+    return ("\n\nТекст ТЗ из PDF (точные значения — важнее распознанного с картинки):\n"
+            + text[:3000])
+
+
+def _apply_text_dims(spec: dict[str, Any], ctx: dict[str, Any],
+                     capture: dict[str, Any]) -> bool:
+    """Габарит из текста PDF («Размер, мм: 1000±10х400±10х1800±10») ставится в
+    изделие без нейросети. True — габарит точный, вопрос о нём не нужен."""
+    from .tz_pdf import dims_from_text
+
+    dims = dims_from_text(str(ctx.get("tz_text") or ""))
+    if not dims:
+        return False
+    current = spec.setdefault("dimensions", {})
+    exact = dict(zip(("width", "depth", "height"), dims))
+    before = "×".join(str(current.get(key, "?")) for key in exact)
+    if any(current.get(key) != value for key, value in exact.items()):
+        note = (f"Габарит взят из текста ТЗ: {'×'.join(map(str, dims))} "
+                f"(нейросеть прочитала {before})")
+        spec.setdefault("warnings", []).append(note)
+        capture["text_dims"] = note
+    current.update(exact)
+    return True
+
+
+def _vision_with_retry(vis: Any, images: list[dict[str, str]],
+                       capture: dict[str, Any]) -> str:
+    """Факты с фото ТЗ; бесплатная vision-модель на пике отвечает 429 — ждём.
+
+    Резервного «зрения» нет намеренно: слабая модель вместо перегруженной
+    выдумывает раскладку и размеры, а это хуже честной ошибки «повтори позже».
+    """
+    import time as _time
+
+    attempts = max(1, int(os.environ.get("VISION_RETRY_ATTEMPTS", "3")))
+    pause = float(os.environ.get("VISION_RETRY_PAUSE_S", "5"))
+    for attempt in range(1, attempts + 1):
+        try:
+            return vis.vision_extract(images)
+        except Exception as error:
+            if not _is_transient(error) or attempt == attempts:
+                raise
+            capture["vision_retries"] = attempt
+            _time.sleep(pause * attempt)
+    return ""
+
+
 def _accept_created(legacy_spec: dict[str, Any], *, reply: str, usage: Any,
                     trace: dict[str, Any], build: Any,
                     history: list[dict[str, str]] | None,
@@ -1153,6 +1069,7 @@ def _accept_created(legacy_spec: dict[str, Any], *, reply: str, usage: Any,
     if normalized.notes:
         capture["normalization"] = normalized.notes
 
+    exact_dims = _apply_text_dims(legacy_spec, ctx, capture)
     clarification = ctx.get("tz_clarification")
     if isinstance(clarification, dict):
         legacy_spec, _free = apply_answers(legacy_spec, list(clarification.get("questions") or []),
@@ -1160,7 +1077,12 @@ def _accept_created(legacy_spec: dict[str, Any], *, reply: str, usage: Any,
         capture["clarification"] = clarification
     elif ctx.get("tz_import"):
         facts = str(capture.get("vision_facts") or ctx.get("tz_facts") or "")
-        questions = questions_for(legacy_spec, facts, ctx.get("tz_image"))
+        if ctx.get("tz_text"):             # повторная сборка по свободному ответу увидит текст PDF
+            facts += _tz_text_block(ctx)
+        questions = questions_for(legacy_spec, facts, ctx.get("tz_image"), ctx.get("tz_numbers"))
+        if exact_dims:                     # габарит взят из текста PDF — не переспрашиваем
+            questions = [q for q in questions
+                         if q["id"] not in ("dims", "depth", "width", "height")]
         if questions:
             capture["questions"] = questions
             return {"reply": reply + "\nНужно уточнить: " + str(len(questions))
@@ -1314,11 +1236,12 @@ def chat_edit(spec: dict[str, Any], message: str,
     }
     capture.update(provider=build_name, model=model_name, node=routed_node,
                    prompt_version=prompt_meta["prompt_version"])
-    # Конвейер «глаза+мозг» (AKD-211): если пришло фото, а сборщик — не тот
-    # провайдер, что назначен на зрение (VISION_EXTRACT_PROVIDER, обычно GigaChat),
-    # то этап 1 — GigaChat распознаёт факты с фото ТЗ текстом, этап 2 — сборщик
-    # (GLM) собирает изделие уже по этим фактам, без картинки.
+    # Конвейер «глаза+мозг» (AKD-211): этап 1 — vision-модель выписывает факты с
+    # фото ТЗ текстом (VISION_EXTRACT_PROVIDER, по умолчанию сам сборщик: у GLM
+    # это glm-4.6v-flash), этап 2 — сборщик собирает изделие по этим фактам.
     extract_name = (os.environ.get("VISION_EXTRACT_PROVIDER") or build_name).lower()
+    if extract_name not in _PROVIDER_META and extract_name != "mock":
+        extract_name = build_name             # убранный провайдер (gigachat) в старом .env
     vision_trace = build_prompt_request("vision_facts").trace if images else None
     two_stage = False
     try:
@@ -1333,13 +1256,14 @@ def chat_edit(spec: dict[str, Any], message: str,
                     "prompt.version": (vision_trace or {}).get("prompt_version"),
                     "langsmith.span.kind": "llm",
                 }):
-                    desc = vis.vision_extract(images) if hasattr(vis, "vision_extract") else ""
+                    desc = _vision_with_retry(vis, images, capture)
                 from .tz_clarify import clean_facts
 
                 desc = clean_facts(desc)
                 capture["vision_facts"] = desc
                 if desc.strip():
                     aug = (("Создай новый ParamSpec по этому ТЗ. " + message).strip()
+                           + _tz_text_block(context)
                            + "\n\nРаспознано с фото ТЗ (используй как факты, ничего не додумывай "
                              "сверх):\n" + desc)
                     build, res = _chat_with_fallback(build, build_name, capture,
@@ -1521,7 +1445,6 @@ def chat_edit(spec: dict[str, Any], message: str,
 
 
 _PROVIDER_META = {          # id → (человекочитаемое имя, env-ключ наличия)
-    "gigachat": ("GigaChat (Сбер)", "GIGACHAT_AUTH_KEY"),
     "kimi": ("Kimi (Moonshot)", "KIMI_API_KEY"),
     "glm": ("GLM (Zhipu)", "GLM_API_KEY"),
     "deepseek": ("DeepSeek", "DEEPSEEK_API_KEY"),
@@ -1545,18 +1468,13 @@ def available_providers() -> dict[str, Any]:
 
 def token_balance(provider: str | None = None) -> dict[str, Any]:
     """Лимиты/баланс выбранного провайдера для счётчика (AKD-210):
-    GigaChat — бесплатные токены по моделям; Kimi/OpenAI-совместимые — денежный
-    баланс аккаунта (¥/$). Пусто — если провайдер без баланса."""
+    Kimi/OpenAI-совместимые — денежный баланс аккаунта (¥/$). Пусто — если
+    провайдер без баланса."""
     try:
         p = get_chat_provider(provider)
     except Exception as e:
         return {"error": str(e)}
     try:
-        if isinstance(p, GigaChatProvider):
-            bal = p.balance()                         # [{usage, value}]
-            items = [{"label": b.get("usage"), "value": b.get("value"), "unit": "ток."}
-                     for b in bal]
-            return {"provider": "gigachat", "kind": "tokens", "items": items}
         if isinstance(p, OpenAICompatProvider):
             b = p.balance()                           # {value, unit} | None
             if b:

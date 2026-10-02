@@ -2390,20 +2390,35 @@ def make_handler(st: _Studio):
                         else:
                             ext = name.rsplit(".", 1)[-1].lower()
                             mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
-                                    "webp": "image/webp", "gif": "image/gif"}.get(ext, "image/png")
+                                    "webp": "image/webp", "gif": "image/gif",
+                                    "pdf": "application/pdf"}.get(ext, "image/png")
                             data = str(body.get("data", ""))
                             self._journal_tz_images(auth, call_id, [{
                                 "mime": mime, "name": name, "data": data,
                             }], "import_tz")
+                            context: dict[str, Any] = {"tz_import": True}
+                            if mime == "application/pdf":
+                                # текстовый слой — точные размеры и материалы,
+                                # страницы картинкой — раскладка для vision-модели
+                                from .tz_pdf import read_pdf
+                                pdf = read_pdf(base64.b64decode(data))
+                                images = pdf["images"]
+                                context["tz_text"] = pdf["text"]
+                                context["tz_numbers"] = pdf["numbers"]
+                                context["tz_image"] = _image_info(images[0]["data"]) if images else {}
+                            else:
+                                from .tz_ocr import drawing_numbers
+                                images = [{"mime": mime, "data": data}]
+                                context["tz_image"] = _image_info(data)
+                                # подписанные числа чертежа — сверка габарита (None: OCR нет)
+                                context["tz_numbers"] = drawing_numbers(data)
                             # пустой базовый спек — иначе модель якорится на текущее
                             # изделие и копирует его секции вместо чистой сборки по ТЗ
                             res = chat_edit({},
                                             "Собери ParamSpec ТОЛЬКО по этому ТЗ (фото/скан): "
                                             "определи тип изделия, габариты, секции, материал по "
                                             "изображению. НЕ бери ничего из других изделий. created=true.",
-                                            context={"tz_import": True,
-                                                     "tz_image": _image_info(data)},
-                                            images=[{"mime": mime, "data": data}],
+                                            context=context, images=images,
                                             provider=body.get("provider") or None,
                                             journal=capture)
                         if isinstance(res, dict) and res.get("code") == "clarification_needed":
@@ -4721,7 +4736,7 @@ PAGE = r"""<!DOCTYPE html>
       <div class="es-title">Новое изделие</div>
       <div class="es-hint">Перетащите сюда фото ТЗ &mdash;<br>или опишите изделие в командной строке ниже</div>
       <button id="esUpload" class="primary">Загрузить фото ТЗ</button>
-      <input type="file" id="esFile" accept="image/*" style="display:none">
+      <input type="file" id="esFile" accept="image/*,application/pdf,.pdf" style="display:none">
     </div>
   </div>
 
@@ -6044,7 +6059,7 @@ function showEmpty(on){
 let TZ_BUSY=false;
 function importTzFile(f){
   if(!f||TZ_BUSY||modelMutationLocked()) return;
-  if(!/\.(png|jpe?g|webp|gif)$/i.test(f.name)){toast('Нужно изображение ТЗ (png/jpg/webp)',true);return;}
+  if(!/\.(png|jpe?g|webp|gif|pdf)$/i.test(f.name)){toast('Нужно ТЗ картинкой или PDF (png/jpg/webp/pdf)',true);return;}
   TZ_BUSY=true;
   const btn=$('esUpload'), btnTxt=btn.textContent;
   btn.disabled=true; btn.textContent='⏳ Распознаю…';

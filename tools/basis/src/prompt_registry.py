@@ -31,7 +31,7 @@ MAX_PANELS = 40
 
 _PROMPTS: dict[str, tuple[str, str]] = {
     "intent_routing": ("furniture.intent-routing", "1.0.0"),
-    "vision_facts": ("furniture.vision-facts", "1.1.0"),
+    "vision_facts": ("furniture.vision-facts", "1.2.0"),
     "create_paramspec": ("furniture.create-paramspec", "1.1.0"),
     "edit_operations": ("furniture.edit-operations", "1.2.0"),
     "part_edit": ("furniture.part-edit", "1.0.0"),
