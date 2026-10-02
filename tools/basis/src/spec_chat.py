@@ -993,6 +993,36 @@ def _chat_with_fallback(provider: Any, name: str, capture: dict[str, Any],
         raise
 
 
+def _tz_text_block(context: dict[str, Any] | None) -> str:
+    """Текстовый слой PDF-ТЗ для сборщика: точнее любого распознавания картинки."""
+    text = str((context or {}).get("tz_text") or "").strip()
+    if not text:
+        return ""
+    return ("\n\nТекст ТЗ из PDF (точные значения — важнее распознанного с картинки):\n"
+            + text[:3000])
+
+
+def _apply_text_dims(spec: dict[str, Any], ctx: dict[str, Any],
+                     capture: dict[str, Any]) -> bool:
+    """Габарит из текста PDF («Размер, мм: 1000±10х400±10х1800±10») ставится в
+    изделие без нейросети. True — габарит точный, вопрос о нём не нужен."""
+    from .tz_pdf import dims_from_text
+
+    dims = dims_from_text(str(ctx.get("tz_text") or ""))
+    if not dims:
+        return False
+    current = spec.setdefault("dimensions", {})
+    exact = dict(zip(("width", "depth", "height"), dims))
+    before = "×".join(str(current.get(key, "?")) for key in exact)
+    if any(current.get(key) != value for key, value in exact.items()):
+        note = (f"Габарит взят из текста ТЗ: {'×'.join(map(str, dims))} "
+                f"(нейросеть прочитала {before})")
+        spec.setdefault("warnings", []).append(note)
+        capture["text_dims"] = note
+    current.update(exact)
+    return True
+
+
 def _vision_with_retry(vis: Any, images: list[dict[str, str]],
                        capture: dict[str, Any]) -> str:
     """Факты с фото ТЗ; бесплатная vision-модель на пике отвечает 429 — ждём.
@@ -1039,6 +1069,7 @@ def _accept_created(legacy_spec: dict[str, Any], *, reply: str, usage: Any,
     if normalized.notes:
         capture["normalization"] = normalized.notes
 
+    exact_dims = _apply_text_dims(legacy_spec, ctx, capture)
     clarification = ctx.get("tz_clarification")
     if isinstance(clarification, dict):
         legacy_spec, _free = apply_answers(legacy_spec, list(clarification.get("questions") or []),
@@ -1046,7 +1077,12 @@ def _accept_created(legacy_spec: dict[str, Any], *, reply: str, usage: Any,
         capture["clarification"] = clarification
     elif ctx.get("tz_import"):
         facts = str(capture.get("vision_facts") or ctx.get("tz_facts") or "")
+        if ctx.get("tz_text"):             # повторная сборка по свободному ответу увидит текст PDF
+            facts += _tz_text_block(ctx)
         questions = questions_for(legacy_spec, facts, ctx.get("tz_image"))
+        if exact_dims:                     # габарит взят из текста PDF — не переспрашиваем
+            questions = [q for q in questions
+                         if q["id"] not in ("dims", "depth", "width", "height")]
         if questions:
             capture["questions"] = questions
             return {"reply": reply + "\nНужно уточнить: " + str(len(questions))
@@ -1227,6 +1263,7 @@ def chat_edit(spec: dict[str, Any], message: str,
                 capture["vision_facts"] = desc
                 if desc.strip():
                     aug = (("Создай новый ParamSpec по этому ТЗ. " + message).strip()
+                           + _tz_text_block(context)
                            + "\n\nРаспознано с фото ТЗ (используй как факты, ничего не додумывай "
                              "сверх):\n" + desc)
                     build, res = _chat_with_fallback(build, build_name, capture,
