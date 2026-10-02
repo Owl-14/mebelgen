@@ -64,11 +64,12 @@ LLM меняет только ParamSpec (координаты считает г�
 текстам ошибок проверок до зелёных бейджей (до 3 итераций).
 
 Провайдеры (`src/spec_chat.py`, селектор в UI): `mock` (rule-based, офлайн),
-`gigachat` (текст+vision, работает из РФ), OpenAI-совместимые `glm` / `kimi` /
-`deepseek` / `openai`, `gemini`. Выбор по умолчанию — `SPEC_CHAT_PROVIDER`,
-активируются наличием ключа (см. таблицу env ниже). Конвейер фото ТЗ:
-vision-провайдер (`VISION_EXTRACT_PROVIDER`, напр. gigachat) выписывает факты →
-сборщик (напр. glm) строит ParamSpec. Фото — 📎 / Ctrl+V / drag&drop.
+OpenAI-совместимые `glm` / `kimi` / `deepseek` / `openai`, `gemini`. Выбор по
+умолчанию — `SPEC_CHAT_PROVIDER`, активируются наличием ключа (см. таблицу env
+ниже). Конвейер фото ТЗ: vision-модель выписывает факты (у `glm` — бесплатная
+`glm-4.6v-flash`, при 429 повтор с паузой) → сборщик строит ParamSpec. GigaChat
+убран (окт. 2026): путал габариты и выдумывал раскладку, резервом тоже не годится.
+Фото — 📎 / Ctrl+V / drag&drop.
 
 **Декоры и материалы из производственной базы**: поле «Из базы» в Studio ищет
 по ≈960 листовым позициям (`materials/baza_materiala.json`) со свотчами цвета;
@@ -225,10 +226,9 @@ CFRN→B3D всегда используйте `build-b3d` с ParamSpec или p
 | Переменная | Описание |
 |---|---|
 | `BAZIS_API_KEY` | ключ БАЗИС-Облака (для `build-b3d`, `cloud`, раскрой) — ПЛАТНЫЕ операции |
-| `SPEC_CHAT_PROVIDER` | провайдер чата Studio по умолчанию: `mock`\|`gigachat`\|`glm`\|`kimi`\|`deepseek`\|`openai`\|`gemini` |
-| `VISION_EXTRACT_PROVIDER` | кто читает фото ТЗ в конвейере (напр. `gigachat`), сборку делает SPEC_CHAT_PROVIDER |
-| `GIGACHAT_AUTH_KEY` | GigaChat (Сбер): текст+vision, работает из РФ (+`GIGACHAT_SCOPE/MODEL/VISION_MODEL/VERIFY/CA`) |
-| `GLM_API_KEY` | GLM/Zhipu `glm-4.5-flash` (бесплатный, thinking отключён) |
+| `SPEC_CHAT_PROVIDER` | провайдер чата Studio по умолчанию: `mock`\|`glm`\|`kimi`\|`deepseek`\|`openai`\|`gemini` |
+| `VISION_EXTRACT_PROVIDER` | кто читает фото ТЗ (по умолчанию сам SPEC_CHAT_PROVIDER); `VISION_RETRY_ATTEMPTS`/`VISION_RETRY_PAUSE_S` — повторы при 429 |
+| `GLM_API_KEY` | GLM/Zhipu: сборка `glm-4.5-flash` (thinking отключён), фото ТЗ `glm-4.6v-flash` — обе бесплатные |
 | `KIMI_API_KEY` | Kimi/Moonshot (платный) |
 | `DEEPSEEK_API_KEY` | DeepSeek |
 | `OPENAI_API_KEY` | OpenAI `gpt-4o` (чат и `convert`) |

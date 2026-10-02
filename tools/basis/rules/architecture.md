@@ -61,7 +61,7 @@ ParamSpec; координаты всегда считает детерминир
 | `cutting_ledger.py`, `cutting_operator_trust.py`, `cutting_preflight.py`, `material_link_contract.py` | approval-digest canonical ledger/operator boundary, общий offline/live preflight и строгий article/sheet/post-audit material-link contract |
 | `webviewer.py` | `viewer_payload` + `SCENE_JS` (общий three.js-движок: панели, присадки, метизы, анимация открывания, ракурсы `setView`, снапшоты) |
 | `studio.py` | Studio: HTTP-сервер, страница редактора, каталог изделий (+SVG-аксонометрия карточек `/thumb/`), версии, экспорт-центр (rules/studio.md) |
-| `spec_chat.py` | ИИ-чат: провайдеры (mock/gigachat/glm/kimi/deepseek/openai/gemini), конвейер фото-ТЗ vision→сборка, анти-инъекция; обычные правки принимаются только как типизированные операции |
+| `spec_chat.py` | ИИ-чат: провайдеры (mock/glm/kimi/deepseek/openai/gemini), конвейер фото-ТЗ vision→сборка, анти-инъекция; обычные правки принимаются только как типизированные операции |
 | `edit_operations.py` | Pydantic discriminated union AI-операций + атомарный reducer в ParamSpec v1; проверяет target/preconditions и не вычисляет геометрию |
 | `techview.py`, `sheet_layout.py` | чертёж SVG (фронт+бок+деталировка), аллокатор выносок |
 | `nesting.py` | bin-packing раскрой (KERF=4) |

@@ -100,7 +100,7 @@ def _with_defaults(result: dict) -> dict | None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tz-dir", required=True, help="каталог с ТЗ (png/jpg/txt)")
-    parser.add_argument("--providers", required=True, help="через запятую: glm,kimi,gigachat")
+    parser.add_argument("--providers", required=True, help="через запятую: glm,kimi,deepseek")
     parser.add_argument("-n", "--repeats", type=int, default=3, help="прогонов на каждый ТЗ")
     parser.add_argument("--vision", help="кто читает картинку (VISION_EXTRACT_PROVIDER); "
                                          "по умолчанию — из .env")
