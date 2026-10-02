@@ -1353,7 +1353,19 @@ def chat_edit(spec: dict[str, Any], message: str,
                     "changes": [], "operations": [], "resolved_operations": [],
                     "usage": usage, "trace": trace})
         if _coordinate_overrides(legacy_spec):
-            return _coordinate_refusal(usage, trace)
+            # Новое изделие из ТЗ: координаты от модели не применяем, но и не
+            # отказываем во всём импорте — геометрию считает движок по секциям.
+            dropped = len(_coordinate_overrides(legacy_spec))
+            legacy_spec = {**legacy_spec, "overrides": [
+                item for item in legacy_spec.get("overrides") or []
+                if isinstance(item, dict) and not ("placement" in item or "move" in item
+                                                   or item.get("action") == "add")]}
+            if not legacy_spec["overrides"]:
+                legacy_spec.pop("overrides")
+            legacy_spec.setdefault("warnings", []).append(
+                f"Нейросеть прислала координаты деталей ({dropped}) — не применены, "
+                "геометрию считает движок")
+            capture["dropped_coordinate_overrides"] = dropped
         return summarize(_accept_created(
             legacy_spec, reply=str(res.get("reply") or "Создано."), usage=usage,
             trace=trace, build=build, history=history, context=context,

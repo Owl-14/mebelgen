@@ -819,3 +819,26 @@ def test_gigachat_is_not_a_provider_anymore(monkeypatch):
     monkeypatch.setenv("GLM_API_KEY", "y")
     assert sc.resolve_provider_name() == "glm"
     assert "gigachat" not in {p["id"] for p in sc.available_providers()["providers"]}
+
+
+def test_coordinates_in_a_new_product_from_tz_are_dropped_not_fatal(monkeypatch):
+    """Бенч ТЗ 72: модель добавила overrides с placement — импорт падал целиком."""
+    import copy
+    import src.spec_chat as sc
+
+    candidate = copy.deepcopy(SPEC)
+    candidate["overrides"] = [{"panel": "LLM shelf", "action": "add", "type": "shelf",
+                               "placement": {"x1": 0, "x2": 1, "y1": 0, "y2": 1, "z1": 0, "z2": 1}}]
+
+    class Builder:
+        model = "glm-4.5-flash"
+
+        def chat(self, *_args, **_kwargs):
+            return {"reply": "Собрал", "spec": candidate}
+
+    monkeypatch.setattr(sc, "get_chat_provider", lambda _name=None: Builder())
+    capture: dict = {}
+    result = sc.chat_edit({}, "Собери ParamSpec по ТЗ: шкаф", journal=capture)
+    assert result.get("spec") is not None, result.get("reply")
+    assert "overrides" not in result["spec"]
+    assert capture["dropped_coordinate_overrides"] == 1

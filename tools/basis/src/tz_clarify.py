@@ -97,6 +97,89 @@ def _fact_columns(facts: str) -> list[int]:
     return out
 
 
+def _column_parts(facts: str) -> list[str]:
+    line = _fact_line(facts, "Колонки")
+    if _not_given(line):
+        return []
+    return [p.strip(" ;,.:()") for p in re.split(r"колонка\s*\d+\s*(?:\([^)]*\))?\s*:?", line, flags=re.I)
+            if p.strip(" ;,.:()")]
+
+
+def _count(pattern: str, text: str) -> int:
+    m = re.search(rf"(\d+)\s*{pattern}", text, re.I)
+    return int(m.group(1)) if m else 0
+
+
+def section_from_column(text: str) -> dict[str, Any] | None:
+    """«дверь, за ней 4 полки» → секция ParamSpec; смешанное/непонятное → None.
+
+    Детерминированная сборка структуры из фактов (MEB-164): сборщик-LLM
+    теряет колонки, а факты vision-узла их уже перечисляют.
+    """
+    t = text.lower()
+    has_door, has_drawer = "двер" in t, "ящик" in t
+    shelves = _count(r"полк", t)
+    if has_drawer and not has_door:
+        n = _count(r"ящик", t)
+        return {"kind": "drawers", "drawers": n} if n else None
+    if has_door and not has_drawer:
+        return {"kind": "door", "door": min(2, _count(r"двер", t) or 1), "shelves": shelves}
+    if not has_door and not has_drawer and re.search(r"открыт|ниш|без фасад|полк", t):
+        return {"kind": "open", "shelves": shelves}
+    return None
+
+
+def _fact_column_sections(facts: str) -> list[dict[str, Any]] | None:
+    parts = _column_parts(facts)
+    sections = [section_from_column(p) for p in parts]
+    if not sections or any(s is None for s in sections):
+        return None
+    return sections  # type: ignore[return-value]
+
+
+def _shape(section: dict[str, Any]) -> tuple:
+    kind = section.get("kind")
+    if kind == "drawers":
+        return (kind, int(section.get("drawers") or 0))
+    if kind == "door":
+        return (kind, int(section.get("door") or 1), int(section.get("shelves") or 0))
+    return ("open", int(section.get("shelves") or 0))
+
+
+def _structure_question(spec: dict[str, Any], facts: str) -> dict[str, Any] | None:
+    """Колонки из фактов ТЗ не совпадают с секциями изделия — предложить «как в ТЗ»."""
+    wanted = _fact_column_sections(facts)
+    if not wanted or len(wanted) < 2:
+        return None
+    current = [s for s in spec.get("sections") or [] if isinstance(s, dict)]
+    if [_shape(s) for s in current] == [_shape(s) for s in wanted]:
+        return None
+    archetype = spec.get("archetype")
+    if archetype not in ("cabinet", "wardrobe"):
+        archetype = "cabinet"
+    label = "; ".join(_column_label(s) for s in wanted)
+    have = "; ".join(_column_label(s) for s in current) or "без секций"
+    return {"id": "structure", "kind": "choice",
+            "text": "Как устроено изделие по колонкам слева направо?",
+            "options": [{"value": "facts", "label": f"Как в ТЗ: {label}",
+                         "patch": {"archetype": archetype, "sections": wanted}},
+                        {"value": "keep", "label": f"Как собрано: {have}",
+                         "patch": {"archetype": spec.get("archetype"), "sections": current}}],
+            "suggested": "facts",
+            "reasons": [f"в ТЗ колонок {len(wanted)}, собрано {len(current)}"
+                        if len(wanted) != len(current) else "состав колонок отличается от ТЗ"]}
+
+
+def _column_label(section: dict[str, Any]) -> str:
+    kind, *rest = _shape(section)
+    if kind == "drawers":
+        return f"{rest[0]} ящ."
+    if kind == "door":
+        doors = "дверь" if rest[0] == 1 else f"{rest[0]} двери"
+        return f"{doors} + {rest[1]} полки" if rest[1] else doors
+    return f"открытая, {rest[0]} полки" if rest[0] else "открытая"
+
+
 def _dims(spec: dict[str, Any]) -> tuple[float, float, float]:
     d = spec.get("dimensions") or {}
     return (float(d.get("width") or 0), float(d.get("depth") or 0), float(d.get("height") or 0))
@@ -302,12 +385,17 @@ def questions_for(spec: dict[str, Any], facts: str = "",
     multi = _multi_product_question(spec, facts)
     if multi:
         found.append(multi)
-    layout = _layout_question(spec, facts, image)
-    if layout:
-        found.append(layout)
-    door_sections = _door_sections_question(spec, facts)
-    if door_sections:
-        found.append(door_sections)
+    structure = _structure_question(spec, facts)
+    if structure:
+        # общий вопрос о колонках заменяет частные о ящиках и двухдверной секции
+        found.append(structure)
+    else:
+        layout = _layout_question(spec, facts, image)
+        if layout:
+            found.append(layout)
+        door_sections = _door_sections_question(spec, facts)
+        if door_sections:
+            found.append(door_sections)
     plaus = _plausibility_questions(spec)
     dims = _dims_question(spec, facts, image, numbers)
     if dims:

@@ -149,6 +149,11 @@ def main() -> int:
                     code = result.get("code") or "ok"
                     tokens = ((result.get("usage") or {}).get("total")) or 0
                     row["questions"] = [q["id"] for q in result.get("questions") or []]
+                    report = result.get("check_report") or {}
+                    row["errors"] = [str(issue.get("detail"))[:160]
+                                     for check in report.get("checks") or []
+                                     for issue in check.get("issues") or []
+                                     if issue.get("severity") != "warning"][:5]
                     candidate = result.get("spec") or result.get("draft") or {}
                     row["candidate"] = {key: candidate.get(key) for key in
                                         ("archetype", "dimensions", "sections")}

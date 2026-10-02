@@ -44,6 +44,22 @@ BOX_HEIGHT_MARGIN = 64.0
 BOX_DEPTH_CLEARANCE = 100.0
 
 
+def fit_drawer_heights(heights: list[float], bottom: float, top: float,
+                       gap: float) -> tuple[list[float], bool]:
+    """Высоты фасадов, вписанные в зону [bottom, top] с зазорами между ними.
+
+    Модель делит высоту корпуса поровну (580 / 3 = 193) и забывает про зазоры
+    и отступы — стек вылезает за габарит, гейт отклоняет изделие из ТЗ. Пропорции
+    сохраняем, лишнее ужимаем; True — высоты пришлось уменьшить.
+    """
+    available = top - bottom - (len(heights) - 1) * gap
+    total = sum(heights)
+    if total <= 0 or available <= 0 or total <= available + 0.01:
+        return heights, False
+    scale = available / total
+    return [round(h * scale, 2) for h in heights], True
+
+
 def std_guide_length(available: float) -> float:
     """Самая длинная стандартная направляющая, помещающаяся в available мм."""
     fitting = [length for length in GUIDE_LENGTHS if length <= available]
