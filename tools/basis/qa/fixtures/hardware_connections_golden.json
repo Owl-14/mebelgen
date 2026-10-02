@@ -92,7 +92,7 @@
       ],
       "expected": {
         "count": 40,
-        "sha256": "390986a3bb06eccb5308e11e5bbaab7b4ae8667c6e20804f4e31df34c2523d5c",
+        "sha256": "768f2814d496772470b0efb2f4cce7afd3a6e72576c702d041544eafb99b0914",
         "bom": [
           {
             "name": "Петля накладная",

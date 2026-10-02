@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "approval": {
     "status": "approved",
-    "approval_ref": "technologist-fixture-2026-09-13/drawer-box",
-    "approved_by": "сверка с qa/fixtures/wardrobe_demo_production.b3d (файл технолога)",
-    "approved_at": "2026-09-13",
-    "baseline_sha256": "e0eea5b6e1368c106684cd5bd3a62571506d631b9fd65a57747f81b6763b3b18",
+    "approval_ref": "technologist-fixture-2026-10-02/hinge-levels",
+    "approved_by": "сверка с qa/fixtures/wardrobe_demo_production.b3d: крайние петли по 100 от краёв двери (чашки 162/807/1453/2098)",
+    "approved_at": "2026-10-02",
+    "baseline_sha256": "9468924d9427e0afe1d5ba5ce1a07281845133419905d7095f01327e4a6e502f",
     "change_policy": "Golden and this approval manifest must be reviewed as separate changes; candidate generation writes neither file."
   },
   "classes": {

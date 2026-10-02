@@ -172,9 +172,13 @@ def apply_edge_policy(panels: list[dict[str, Any]], spec: dict[str, Any]) -> Non
             eb = {"top": vis, "bottom": vis, "left": vis, "right": vis}
         elif t in _NO_EDGE_TYPES:
             eb = {"top": 0, "bottom": 0, "left": 0, "right": 0}
-        elif t in ("drawer_side_left", "drawer_side_right", "drawer_back"):
-            # короб ящика: видны верхний, передний и задний торцы (эталон)
+        elif t in ("drawer_side_left", "drawer_side_right"):
+            # боковины короба: видны верхний, передний и задний торцы (эталон)
             eb = {"top": thin, "bottom": 0, "left": thin, "right": thin}
+        elif t == "drawer_back":
+            # задняя стенка стоит МЕЖДУ боковинами: её X-торцы скрыты в стыке,
+            # видны верх и низ (эталон технолога: 2 стороны, Elem 0 и 2)
+            eb = {"top": thin, "bottom": thin, "left": 0, "right": 0}
         elif orient in ("horizont", "horizontal"):
             # дно/крышка перекрывают боковины: перед + X-торцы видны, зад скрыт;
             # полки/цоколь прячут торцы в стыках — только перед
