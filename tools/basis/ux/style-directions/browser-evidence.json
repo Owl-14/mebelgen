@@ -1,0 +1,77 @@
+{
+  "base_sha": "bbe3b4bb43003b17dc45d6ec8967da0946963dca",
+  "source": "paramspecs/komi_72_tumba_podkatnaya.json",
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "capture": "real local Studio with Playwright-injected review CSS",
+  "directions": {
+    "a": {
+      "css": "direction-a-precision-light.css",
+      "css_sha256": "c969af64e9ac20dae4eec84db2f17972cb50ff01172f7969a145e31b92cb1c44",
+      "screenshot": "direction-a-1440x900.jpg",
+      "screenshot_sha256": "b530ca87e0e51124bca46f0eda4de81e5a38ff45c1282573b222305b1a374a10",
+      "applied": {
+        "direction": "a",
+        "accent": "#1f5faf",
+        "workspaceBackground": "rgb(232, 237, 241)"
+      },
+      "console_errors": [],
+      "console_warnings": [],
+      "page_errors": [],
+      "reduced_motion": {
+        "mediaMatches": true,
+        "maxAnimationMs": 0.01,
+        "maxTransitionMs": 0.01,
+        "offenders": []
+      }
+    },
+    "b": {
+      "css": "direction-b-warm-workshop.css",
+      "css_sha256": "e26697f5f6bb9153304427fa022d467ff304ee933c102db29482068c0f74436f",
+      "screenshot": "direction-b-1440x900.jpg",
+      "screenshot_sha256": "7994ec6f7b67bc00f1765da58e0298ac79426fe051335ba779e0cfed78e08072",
+      "applied": {
+        "direction": "b",
+        "accent": "#8a4b16",
+        "workspaceBackground": "rgb(235, 230, 220)"
+      },
+      "console_errors": [],
+      "console_warnings": [],
+      "page_errors": [],
+      "reduced_motion": {
+        "mediaMatches": true,
+        "maxAnimationMs": 0.01,
+        "maxTransitionMs": 0.01,
+        "offenders": []
+      }
+    },
+    "c": {
+      "css": "direction-c-blueprint.css",
+      "css_sha256": "ffee9fe953414733a912930d9169d610d61eed8c5dc602f7ce113b1ba919a7ac",
+      "screenshot": "direction-c-1440x900.jpg",
+      "screenshot_sha256": "f9ea864857969d3fd48c436f66de5276f8bc5ffaa03067a2ae8d7fa0aa8eb560",
+      "applied": {
+        "direction": "c",
+        "accent": "#0b5d78",
+        "workspaceBackground": "rgb(221, 232, 239)"
+      },
+      "console_errors": [],
+      "console_warnings": [],
+      "page_errors": [],
+      "reduced_motion": {
+        "mediaMatches": true,
+        "maxAnimationMs": 0.01,
+        "maxTransitionMs": 0.01,
+        "offenders": []
+      }
+    }
+  },
+  "baseline_sha256": "4b8394b972da300f2733c09a096771b6fabf1e69b5d39a29a3af1a9676010660",
+  "baseline_diagnostics": {
+    "console_errors": [],
+    "console_warnings": [],
+    "page_errors": []
+  }
+}
