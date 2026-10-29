@@ -36,3 +36,33 @@ def test_box_back_mode_contract_values_switch_the_drawer_back():
     assert inset == backs(None)                 # по умолчанию — между боковинами
     assert beyond != inset                      # накладная — за боковинами
     assert beyond == backs("outside")           # прежнее написание тоже работает
+
+
+def test_rules_use_roles_not_panel_names():
+    """Переименование деталей не меняет конструкцию и присадку (MEB-169)."""
+    from src.generators import generate_from_paramspec
+    from src.hardware import compute_drilling
+
+    spec = {"schemaVersion": "paramspec-v1", "project_name": "Шкаф", "archetype": "cabinet",
+            "dimensions": {"width": 1200, "depth": 600, "height": 2200},
+            "materials": {"board_thickness": 16},
+            "sections": [{"kind": "door", "door": 2, "shelves": 3,
+                          "door_names": ["Створка А", "Створка Б"]},
+                         {"kind": "drawers", "drawers": 3}]}
+    project = generate_from_paramspec(spec)
+    leaves = [p for p in project["panels"] if p.get("type") == "door_front"]
+    assert [p.get("swing") for p in leaves] == ["left", "right"]
+
+    from tests.drilling_snapshot import ROOT
+
+    technologist = json.loads((ROOT / "paramspecs" / "wardrobe_demo_technolog.json")
+                              .read_text(encoding="utf-8"))
+    tech_project = generate_from_paramspec(technologist)
+    assert [p["name"] for p in tech_project["panels"] if p.get("role") == "cover_shelf"] \
+        == ["Полка под нишей"]
+    project = tech_project                       # переименовываем шкаф с полкой-перекрытием
+
+    renamed = {**project, "panels": [{**p, "name": f"Деталь {i}"} for i, p in enumerate(project["panels"])]}
+    def signature(holes):
+        return sorted((h["purpose"], round(h["x"], 1), round(h["y"], 1), round(h["z"], 1)) for h in holes)
+    assert signature(compute_drilling(renamed)) == signature(compute_drilling(project))

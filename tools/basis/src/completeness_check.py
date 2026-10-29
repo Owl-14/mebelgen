@@ -54,7 +54,7 @@ def check_completeness(project: dict[str, Any],
         lv = s.get("shelf_levels")
         want += len(lv) if lv else (s.get("shelves") or 0)
     got = sum(1 for p in panels
-              if p.get("type") == "shelf" and "ниш" not in str(p["name"]).lower())
+              if p.get("type") == "shelf" and p.get("role") != "cover_shelf")
     if want and got < want:
         errors.append(f"полки: заявлено {want}, построено {got}")
 
