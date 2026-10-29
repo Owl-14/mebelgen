@@ -7,7 +7,7 @@ from typing import Any
 from .base import read_carcass
 from .corpus import carcass_calc
 from .columns import box_back_outside, fit_drawer_heights
-from .helpers import build_project, carcass, facade_band, panel
+from .helpers import COVER_SHELF, build_project, carcass, facade_band, panel
 
 
 def generate(spec: dict[str, Any]) -> dict[str, Any]:
@@ -133,7 +133,8 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
         sy1 = round(max(ny1 + g - c.T, box_top), 2)
         panels.append(panel("Полка под нишей", "shelf", "horizont", (c.T, c.W - c.T), (sy1, sy1 + c.T),
                             (section.get("niche_z_front", 0), c.D - c.T_back),
-                            thickness=c.T, material=c.mat, section_id="top_open", estimated=True))
+                            thickness=c.T, material=c.mat, section_id="top_open", estimated=True,
+                            role=COVER_SHELF))
         top_f = max((q for q in panels if q.get("type") == "drawer_front"),
                     key=lambda q: q["placement"]["y2"], default=None)
         if top_f is not None:

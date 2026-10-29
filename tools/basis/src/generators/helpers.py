@@ -13,6 +13,11 @@ def _r(v: float) -> float:
     return int(v) if v == int(v) else v
 
 
+# Роль полки-перекрытия над стопкой ящиков: это часть конструкции стека, а не
+# заявленная в ТЗ полка (проверка полноты и выравнивание уровней её отличают)
+COVER_SHELF = "cover_shelf"
+
+
 def panel(
     name: str,
     ptype: str,
@@ -28,6 +33,7 @@ def panel(
     section_id: str | None = None,
     shape: str | None = None,
     radius: float | None = None,
+    role: str | None = None,
 ) -> dict[str, Any]:
     x1, x2 = x
     y1, y2 = y
@@ -53,6 +59,10 @@ def panel(
         p["shape"] = shape
     if radius is not None:
         p["radius"] = _r(radius)
+    # роль детали — по ней решают правила (MEB-169); имя остаётся подписью.
+    # Пока роли нужны там, где тип неоднозначен: полка-перекрытие стека ящиков.
+    if role:
+        p["role"] = role
     return p
 
 

@@ -74,27 +74,17 @@ def door_hinge_side(p: dict[str, Any], model_w: float | None = None,
                     siblings: int = 1) -> str:
     """Сторона петель фасада двери: 'left'|'right'|'up'|'down' (AKD-223/224).
 
-    Приоритет: явный p['swing'] (sections[].door_swing) → имя («прав»/«лев»,
-    только для ДВУСТВОРКИ siblings>=2 — там имена парные и осмысленные) →
-    ПО ПОЛОЖЕНИЮ: дверь в правой половине изделия навешивается справа
-    (открывание наружу). Для одиночной двери имя игнорируется: шаблонное
-    «Дверь левая» в правой секции не должно вешать петли внутрь."""
+    Приоритет: явный p['swing'] (sections[].door_swing; створки пары генератор
+    помечает left/right сам) → ПО ПОЛОЖЕНИЮ: дверь в правой половине изделия
+    навешивается справа (открывание наружу). Имя двери не решает (MEB-169):
+    шаблонное «Дверь левая» в правой секции не должно вешать петли внутрь."""
     sw = str(p.get("swing") or "").lower()
     if sw in ("left", "right", "up", "down"):
         return sw
-    nm = str(p.get("name", "")).lower()
-    if siblings >= 2:
-        if "прав" in nm:
-            return "right"
-        if "лев" in nm:
-            return "left"
     pl = p.get("placement") or {}
     if model_w and pl:
         c = (pl.get("x1", 0) + pl.get("x2", 0)) / 2
         return "right" if c > model_w / 2 + 1 else "left"
-    # позиция неизвестна — падаем на имя, потом на left
-    if "прав" in nm:
-        return "right"
     return "left"
 
 
@@ -905,9 +895,9 @@ def _compute_drilling(project: dict[str, Any]) -> list[dict[str, Any]]:
             nm = str(p.get("name", "")).lower()
             sdp = door_hinge_side(p, _mw, _door_siblings(p, panels))
             for t in targets:
-                if t in ("right_door", "правая") and (sdp == "right" or "прав" in nm):
+                if t in ("right_door", "правая") and sdp == "right":
                     return True
-                if t in ("left_door", "левая") and (sdp == "left" or "лев" in nm):
+                if t in ("left_door", "левая") and sdp == "left":
                     return True
                 if t not in ("right_door", "left_door") and t in nm:
                     return True

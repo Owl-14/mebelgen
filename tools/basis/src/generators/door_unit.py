@@ -38,18 +38,20 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     if ndoor == 2:
         if inset:
             mid = (ix1 + ix2) / 2
-            panels.append(panel("Фасад левый", "door_front", "front",
-                                (ix1, mid - g / 2), (y1, y2), iz, thickness=c.T,
-                                material=c.mat, section_id="main", estimated=True))
-            panels.append(panel("Фасад правый", "door_front", "front",
-                                (mid + g / 2, ix2), (y1, y2), iz, thickness=c.T,
-                                material=c.mat, section_id="main", estimated=True))
+            panels.append({**panel("Фасад левый", "door_front", "front",
+                                   (ix1, mid - g / 2), (y1, y2), iz, thickness=c.T,
+                                   material=c.mat, section_id="main", estimated=True),
+                           "swing": "left"})
+            panels.append({**panel("Фасад правый", "door_front", "front",
+                                   (mid + g / 2, ix2), (y1, y2), iz, thickness=c.T,
+                                   material=c.mat, section_id="main", estimated=True),
+                           "swing": "right"})
         else:
             mid = c.W / 2
-            panels.append(overlay_door(c.W, c.H, c.T, c.Hleg, g, c.mat, "main", "Фасад левый",
-                                       x1=g, x2=mid - g / 2, y1=y1, y2=y2))
-            panels.append(overlay_door(c.W, c.H, c.T, c.Hleg, g, c.mat, "main", "Фасад правый",
-                                       x1=mid + g / 2, x2=c.W - g, y1=y1, y2=y2))
+            panels.append({**overlay_door(c.W, c.H, c.T, c.Hleg, g, c.mat, "main", "Фасад левый",
+                                          x1=g, x2=mid - g / 2, y1=y1, y2=y2), "swing": "left"})
+            panels.append({**overlay_door(c.W, c.H, c.T, c.Hleg, g, c.mat, "main", "Фасад правый",
+                                          x1=mid + g / 2, x2=c.W - g, y1=y1, y2=y2), "swing": "right"})
         doors_meta = [{"id": "door_1", "type": "распашная", "hinges": "накладные", "lock": False,
                        "dimensions": {"width": round(mid - g / 2 - g, 2), "height": y2 - y1},
                        "position": {"x": g, "y": y1, "z": 0}, "estimated": False},

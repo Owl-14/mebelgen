@@ -537,8 +537,13 @@ def _encode_catalog_hardware(project: dict[str, Any], materials: list[dict[str, 
         if t == "drawer_front":
             hx, hy = (pl["x1"] + pl["x2"]) / 2, pl["y2"] - off
         else:
-            nm = str(p.get("name", "")).lower()
-            hx = pl["x1"] + 40 if "прав" in nm else pl["x2"] - 40
+            # ручка — у кромки открывания, напротив петель: та же сторона, что у
+            # отверстий под её винты в hardware (раньше решало имя «прав…»)
+            from .hardware import _door_siblings, _model_width, door_hinge_side
+
+            panels_all = project.get("panels", [])
+            side = door_hinge_side(p, _model_width(panels_all), _door_siblings(p, panels_all))
+            hx = pl["x1"] + 40 if side == "right" else pl["x2"] - 40
             hy = (pl["y1"] + pl["y2"]) / 2
         children.append({"tableIndex": oi,
                          "matrix": _HW_ROT + [_r(hx), _r(hy), _r(zf), 1]})

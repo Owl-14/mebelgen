@@ -12,7 +12,7 @@ from .base import read_carcass
 from .corpus import carcass_calc
 from .columns import (column_bounds, door_in_column, drawer_facade_span, drawer_stack, facade_x_span,
                       fit_drawer_heights, partitions, rod_in_column, shelves_in_column)
-from .helpers import build_project, carcass, facade_band, panel, shelf_levels
+from .helpers import COVER_SHELF, build_project, carcass, facade_band, panel, shelf_levels
 
 
 def generate(spec: dict[str, Any]) -> dict[str, Any]:
@@ -122,7 +122,7 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
                 sy1 = round(max(topy + g - c.T, box_top), 2)
                 sh = panel("Полка под нишей", "shelf", "horizont", (cx1, cx2), (sy1, sy1 + c.T),
                            (sec.get("niche_z_front", 0), iz2), thickness=c.T, material=c.mat,
-                           section_id=sid, estimated=True)
+                           section_id=sid, estimated=True, role=COVER_SHELF)
                 sh["fixed"] = True      # стационарная: стяжки, не съёмные эксцентрики (AKD-287)
                 panels.append(sh)
                 names.append(sh["name"])
@@ -155,8 +155,12 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
                 if nd == 2:
                     names = dn or [f"Дверь левая {sid}", f"Дверь правая {sid}"]
                     mid = (fx1 + fx2) / 2
-                    panels.append(door_in_column(fx1, mid - g / 2, dy1, dy2, c.T, c.mat, sid, names[0], z_mode=z_mode))
-                    panels.append(door_in_column(mid + g / 2, fx2, dy1, dy2, c.T, c.mat, sid, names[1], z_mode=z_mode))
+                    # створки пары навешиваются наружу — сторона задаётся явно, а не именем
+                    for (dx1, dx2), name, swing in (((fx1, mid - g / 2), names[0], "left"),
+                                                    ((mid + g / 2, fx2), names[1], "right")):
+                        leaf = door_in_column(dx1, dx2, dy1, dy2, c.T, c.mat, sid, name, z_mode=z_mode)
+                        leaf["swing"] = swing
+                        panels.append(leaf)
                 else:
                     one = sec.get("door_name") if isinstance(sec.get("door_name"), str) else f"Дверь {sid}"
                     dpanel = door_in_column(fx1, fx2, dy1, dy2, c.T, c.mat, sid, one, z_mode=z_mode)
@@ -189,10 +193,10 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
     # структурного уровня (перекрытие стека) на ≤25 мм, приводится к нему —
     # перепад в пару сантиметров между соседними секциями бьёт по глазам
     anchors = [p["placement"]["y1"] for p in panels
-               if p["type"] == "shelf" and p["name"] == "Полка под нишей"]
+               if p.get("role") == COVER_SHELF]
     if anchors:
         for p in panels:
-            if p["type"] != "shelf" or p["name"] == "Полка под нишей":
+            if p["type"] != "shelf" or p.get("role") == COVER_SHELF:
                 continue
             pl = p["placement"]
             near = next((a for a in anchors if 0 < abs(pl["y1"] - a) <= 25), None)

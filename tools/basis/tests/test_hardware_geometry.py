@@ -289,7 +289,9 @@ def test_sides_over_top_scheme():
     from src.hardware import door_hinge_side
     fake = {"name": "Дверь левая", "placement": {"x1": 600, "x2": 990}}
     assert door_hinge_side(fake, 1000, siblings=1) == "right"
-    assert door_hinge_side(fake, 1000, siblings=2) == "left"   # двустворка — по имени
+    # двустворка: имя не решает (MEB-169) — сторону створки генератор задаёт явно
+    assert door_hinge_side(fake, 1000, siblings=2) == "right"
+    assert door_hinge_side({**fake, "swing": "left"}, 1000, siblings=2) == "left"
 
 
 def test_top_thickness_and_texture():
