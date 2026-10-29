@@ -405,7 +405,7 @@ class OpenAICompatProvider:
     расход токенов для счётчика. JSON вытаскиваем лениво — часть сервисов не
     поддерживает response_format."""
 
-    def __init__(self, preset: str = "openai") -> None:
+    def __init__(self, preset: str = "openai", tier: int = 0) -> None:
         p = _OAI_PRESETS.get(preset, _OAI_PRESETS["openai"])
         api_key = os.environ.get("LLM_API_KEY") or os.environ.get(p["key"])
         if not api_key:
@@ -425,8 +425,16 @@ class OpenAICompatProvider:
             retries = 1
         self.client = OpenAI(api_key=api_key, timeout=timeout, max_retries=retries,
                              **({"base_url": base} if base else {}))
-        self.model = os.environ.get("LLM_MODEL", p["model"])
-        self.vision_model = os.environ.get("LLM_VISION_MODEL", p["vision"])
+        # Ступени моделей «дешёвая → сильная» через запятую: LLM_MODEL=glm-4.5-flash,glm-4.7.
+        # При 429/5xx запрос сразу уходит на следующую ступень; tier>0 — начать
+        # выше (повтор импорта ТЗ, который бесплатная модель провалила).
+        self.models = _model_list(os.environ.get("LLM_MODEL", p["model"]))
+        self.vision_models = _model_list(os.environ.get("LLM_VISION_MODEL", p["vision"]))
+        self.edit_models = _model_list(os.environ.get("LLM_EDIT_MODEL", "")) or self.models
+        self.tier = max(0, int(tier))
+        self.model = self._ladder(self.models)[0]
+        self.vision_model = self._ladder(self.vision_models)[0]
+        self.tier_events: list[str] = []
         self.json_mode = os.environ.get("LLM_JSON_MODE",
                                         "1" if p["json_mode"] else "0") not in ("0", "false", "no")
         self.extra = p.get("extra") or {}             # extra_body (напр. thinking off)
@@ -458,6 +466,24 @@ class OpenAICompatProvider:
                 return {"value": value, "unit": {"CNY": "¥", "USD": "$"}.get(currency, currency)}
         return None
 
+    def _ladder(self, models: list[str]) -> list[str]:
+        return models[min(self.tier, len(models) - 1):] or models
+
+    def can_escalate(self) -> bool:
+        return any(len(m) > self.tier + 1 for m in (self.models, self.vision_models))
+
+    def _create(self, models: list[str], **kw: Any) -> tuple[Any, str]:
+        """Запрос по ступеням: перегрузка/сбой сервиса — следующая модель."""
+        ladder = self._ladder(models)
+        for index, model in enumerate(ladder):
+            try:
+                return self.client.chat.completions.create(model=model, **kw), model
+            except Exception as error:
+                if index == len(ladder) - 1 or not _is_transient(error):
+                    raise
+                self.tier_events.append(f"{model}: {type(error).__name__} → {ladder[index + 1]}")
+        raise RuntimeError("пустой список моделей")
+
     def vision_extract(self, images: list[dict[str, str]]) -> str:
         """Этап 1 конвейера (AKD-211): факты с фото ТЗ простым текстом."""
         request = build_prompt_request("vision_facts")
@@ -465,11 +491,11 @@ class OpenAICompatProvider:
         for im in images:
             content.append({"type": "image_url", "image_url":
                             {"url": f"data:{im.get('mime','image/png')};base64,{im.get('data','')}"}})
-        r = self.client.chat.completions.create(
-            model=self.vision_model, temperature=0.1,
-            messages=[{"role": "user", "content": content}])
+        r, used = self._create(self.vision_models, temperature=0.1,
+                               messages=[{"role": "user", "content": content}])
+        self.vision_model = used
         usage = getattr(r, "usage", None)
-        self.last_usage = {"model": self.vision_model,
+        self.last_usage = {"model": used,
                            "total": getattr(usage, "total_tokens", None),
                            "prompt": getattr(usage, "prompt_tokens", None),
                            "completion": getattr(usage, "completion_tokens", None)}
@@ -495,19 +521,27 @@ class OpenAICompatProvider:
             msgs.append({"role": "user", "content": content})
         else:
             msgs.append({"role": "user", "content": text})
-        model = self.vision_model if images else self.model
-        kw: dict[str, Any] = {"model": model, "temperature": 0.1, "messages": msgs}
+        # правки изделия (понять, что хочет проектировщик) — своя, обычно более
+        # сильная ступень LLM_EDIT_MODEL; создание по ТЗ — LLM_MODEL
+        ladder = (self.vision_models if images
+                  else self.models if request.node == "create_paramspec" else self.edit_models)
+        kw: dict[str, Any] = {"temperature": 0.1, "messages": msgs}
         if self.json_mode and not images:
             kw["response_format"] = {"type": "json_object"}
         if self.extra:
             kw["extra_body"] = self.extra
-        r = self.client.chat.completions.create(**kw)
+        r, model = self._create(ladder, **kw)
+        self.model = model
         out = r.choices[0].message.content or "{}"
         data = _json_object(out)
         usage = getattr(r, "usage", None)
         result = _provider_result(data, request, usage=usage, model=model)
         result["raw_text"] = out                      # для AI-журнала; chat_edit не отдаёт наружу
         return result
+
+
+def _model_list(value: str) -> list[str]:
+    return [item.strip() for item in str(value or "").split(",") if item.strip()]
 
 
 # обратная совместимость: SPEC_CHAT_PROVIDER=openai
@@ -614,12 +648,12 @@ def resolve_provider_name(name: str | None = None) -> str:
                 else "openai" if os.environ.get("OPENAI_API_KEY") else "mock")).lower()
 
 
-def get_chat_provider(name: str | None = None) -> Any:
+def get_chat_provider(name: str | None = None, tier: int = 0) -> Any:
     name = resolve_provider_name(name)
     if name == "gemini":
         return GeminiChatProvider()
     if name in ("openai", "kimi", "glm", "deepseek"):   # OpenAI-совместимые (AKD-209)
-        return OpenAICompatProvider(name)
+        return OpenAICompatProvider(name, tier=tier)
     if name == "mock":
         return MockChatProvider()
     raise ValueError(f"Неизвестный SPEC_CHAT_PROVIDER={name!r} "
@@ -1170,12 +1204,56 @@ def create_from_clarification(clarification: dict[str, Any],
                            build=None, history=None, context=context, capture=capture)
 
 
+def _provider_at(name: str, tier: int) -> Any:
+    """Провайдер со ступени tier (0 — самая дешёвая). Подменённые в тестах
+    фабрики без параметра tier тоже принимаем."""
+    if not tier:
+        return get_chat_provider(name)
+    try:
+        return get_chat_provider(name, tier=tier)
+    except TypeError:
+        return get_chat_provider(name)
+
+
+# Ответы, после которых импорт ТЗ стоит повторить на следующей (платной) ступени:
+# бесплатная модель не справилась, а не ТЗ плохое.
+_ESCALATE_CODES = {"production_gate_rejected", "create_paramspec_missing",
+                   "invalid_provider_response", "ai_provider_failed"}
+
+
 def chat_edit(spec: dict[str, Any], message: str,
               history: list[dict[str, str]] | None = None,
               context: dict[str, Any] | None = None,
               images: list[dict[str, str]] | None = None,
               provider: str | None = None,
               journal: dict[str, Any] | None = None) -> dict[str, Any]:
+    """chat_edit со ступенями моделей: провал дешёвой ступени на импорте ТЗ —
+    один повтор целиком на следующей (LLM_MODEL/LLM_VISION_MODEL через запятую)."""
+    result = _chat_edit_once(spec, message, history, context, images, provider, journal)
+    ctx = context or {}
+    if (not isinstance(result, dict) or result.get("code") not in _ESCALATE_CODES
+            or not ctx.get("tz_import") or ctx.get("model_tier")):
+        return result
+    try:
+        probe = _provider_at(resolve_provider_name(provider), 0)   # есть ли куда подняться
+    except Exception:
+        return result
+    if not getattr(probe, "can_escalate", lambda: False)():
+        return result
+    capture = journal if isinstance(journal, dict) else {}
+    first = f"{capture.get('model') or ''}: {result.get('code')}"
+    retry = _chat_edit_once(spec, message, history, {**ctx, "model_tier": 1}, images,
+                            provider, capture)
+    capture["escalated_from"] = first
+    return retry
+
+
+def _chat_edit_once(spec: dict[str, Any], message: str,
+                    history: list[dict[str, str]] | None = None,
+                    context: dict[str, Any] | None = None,
+                    images: list[dict[str, str]] | None = None,
+                    provider: str | None = None,
+                    journal: dict[str, Any] | None = None) -> dict[str, Any]:
     """Команда словами → атомарный operation patch + совместимый Studio-ответ.
 
     journal — необязательный dict, который заполняется для AI-журнала: провайдер,
@@ -1223,7 +1301,7 @@ def chat_edit(spec: dict[str, Any], message: str,
         "operation.types": [routed_node],
         "prompt.version": prompt_meta["prompt_version"],
     }):
-        build = get_chat_provider(build_name)
+        build = _provider_at(build_name, int((context or {}).get("model_tier") or 0))
     provider_spec = copy.deepcopy(spec)
     model_name = str(getattr(build, "model", "mock"))
     base_trace = {
@@ -1246,7 +1324,8 @@ def chat_edit(spec: dict[str, Any], message: str,
     two_stage = False
     try:
         with span("operations.plan", base_trace) as plan_span:
-            vis = get_chat_provider(extract_name) if images else None
+            vis = (_provider_at(extract_name, int((context or {}).get("model_tier") or 0))
+                   if images else None)
             two_stage = bool(images and hasattr(vis, "vision_extract"))
             if two_stage:
                 with span("vision.extract", {
@@ -1286,6 +1365,11 @@ def chat_edit(spec: dict[str, Any], message: str,
                                                      provider_spec, message, history)
             if isinstance(res, dict):
                 capture["raw_response"] = res.pop("raw_text", None)
+            # какая ступень реально ответила и были ли переходы по перегрузке
+            capture["model"] = str(getattr(build, "model", capture.get("model") or ""))
+            events = [*getattr(vis, "tier_events", []), *getattr(build, "tier_events", [])]
+            if events:
+                capture["tier_events"] = list(dict.fromkeys(events))
             provider_usage = res.get("usage") if isinstance(res, dict) else None
             if isinstance(provider_usage, dict):
                 plan_span.set_attributes({
