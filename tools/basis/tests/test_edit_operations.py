@@ -37,7 +37,7 @@ def test_edit_operation_is_discriminated_union_with_all_first_slice_variants():
     assert tags == {
         "SetDimension", "SetMaterial", "ChangeArchetype", "AddSection",
         "DuplicateModel",
-        "UpdateSection", "DeleteSection", "AddShelf", "AddPanel", "MovePanel", "MovePart",
+        "UpdateSection", "DeleteSection", "MoveSection", "SetLegs", "AddShelf", "AddPanel", "MovePanel", "MovePart",
         "ResizePart", "DeletePart", "QueryModel", "DiagnoseModel",
     }
 
@@ -290,3 +290,30 @@ def test_target_id_must_match_typed_operation_payload():
             "preconditions": _equals("materials.color", SPEC["materials"]["color"]),
             "field": "facade_color", "value": "Белый",
         }])
+
+
+def test_move_section_legs_and_shelf_at_height():
+    """Бенч правок: «правую секцию первой», «ножки 100 мм», «полка на высоте 1700»."""
+    from src.production_gate import evaluate_production_gate
+    from src.spec_chat import _normalize_provider_operations
+
+    cabinet = {"schemaVersion": "paramspec-v1", "project_name": "Шкаф", "archetype": "cabinet",
+               "dimensions": {"width": 1200, "depth": 600, "height": 2200},
+               "materials": {"board_thickness": 16},
+               "sections": [{"kind": "door", "door": 1, "shelves": 3},
+                            {"kind": "drawers", "drawers": 3}]}
+
+    def apply(spec, ops):
+        result = apply_edit_operations(spec, _normalize_provider_operations(ops, spec), None)["spec"]
+        assert evaluate_production_gate(result, unresolved_materials_are_errors=False).report.ok
+        return result
+
+    moved = apply(cabinet, [{"op": "MoveSection", "target_id": "sections.1", "position": 0}])
+    assert [s["kind"] for s in moved["sections"]] == ["drawers", "door"]
+
+    legs = apply(cabinet, [{"op": "SetLegs", "height_mm": 100, "adjustable": True}])
+    assert legs["legs"]["height"] == 100 and legs["legs"]["adjustable"] is True
+
+    shelf = apply(cabinet, [{"op": "AddPanel", "target_id": "part:Полка 1700", "panel_type": "shelf",
+                             "section_id": "sections.0", "at_height_mm": 1700}])
+    assert [o["placement"]["y1"] for o in shelf["overrides"]] == [1700]

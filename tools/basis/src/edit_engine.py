@@ -116,6 +116,11 @@ def _resolve_section_id(project: Mapping[str, Any], requested: Any,
                         target: Mapping[str, Any] | None) -> str:
     section_id = str(requested or target and target.get("section_id") or "").strip()
     ids = _section_ids(project)
+    # модель ссылается на секцию как в ParamSpec: «sections.0» / «section:1» / «0» —
+    # переводим в id колонки, который присвоил генератор (col1, drawer_stack…)
+    index_ref = section_id.removeprefix("sections.").removeprefix("section:")
+    if section_id not in ids and index_ref.isdigit() and int(index_ref) < len(ids):
+        section_id = ids[int(index_ref)]
     if not section_id:
         if target is not None:
             sections = [section for section in project.get("sections", [])
@@ -310,6 +315,8 @@ def _shelf_placement(project: Mapping[str, Any], operation: Mapping[str, Any],
                                   section_id=section_id, exclude=target)
     elif operation.get("middle") is True:
         low, high = bounds["y1"], bounds["y2"]
+    elif operation.get("at_height_mm") is not None:
+        low = high = 0.0                        # абсолютная высота — ставится ниже
     elif target is None:
         raise _Refusal("placement_binding_required",
                        "Для новой полки укажите between, above, below или middle",
@@ -318,7 +325,14 @@ def _shelf_placement(project: Mapping[str, Any], operation: Mapping[str, Any],
         low = placement["y1"]
         high = placement["y2"]
 
-    if pair is not None or operation.get("above") is not None \
+    if operation.get("at_height_mm") is not None:
+        placement["y1"] = float(operation["at_height_mm"])
+        placement["y2"] = placement["y1"] + thickness
+        if not (bounds["y1"] - _TOL <= placement["y1"] and placement["y2"] <= bounds["y2"] + _TOL):
+            raise _Refusal("height_out_of_section",
+                           f"Высота {operation['at_height_mm']:g} мм вне секции "
+                           f"({bounds['y1']:g}…{bounds['y2']:g})", field="at_height_mm")
+    elif pair is not None or operation.get("above") is not None \
             or operation.get("below") is not None or operation.get("middle") is True:
         if high - low < thickness - _TOL:
             raise _Refusal("anchor_gap_too_small", "Между привязками не помещается полка")
