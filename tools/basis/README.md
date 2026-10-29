@@ -228,6 +228,7 @@ CFRN→B3D всегда используйте `build-b3d` с ParamSpec или p
 | `BAZIS_API_KEY` | ключ БАЗИС-Облака (для `build-b3d`, `cloud`, раскрой) — ПЛАТНЫЕ операции |
 | `SPEC_CHAT_PROVIDER` | провайдер чата Studio по умолчанию: `mock`\|`glm`\|`kimi`\|`deepseek`\|`openai`\|`gemini` |
 | `VISION_EXTRACT_PROVIDER` | кто читает фото ТЗ (по умолчанию сам SPEC_CHAT_PROVIDER); `VISION_RETRY_ATTEMPTS`/`VISION_RETRY_PAUSE_S` — повторы при 429 |
+| `LLM_MODEL` / `LLM_VISION_MODEL` / `LLM_EDIT_MODEL` | ступени моделей через запятую, дешёвая → сильная: `glm-4.5-flash,glm-4.7`, `glm-4.6v-flash,glm-4.6v`. 429/5xx — сразу следующая ступень; провал импорта ТЗ (гейт, пустой ответ) — один повтор всего импорта на ступени 1. `LLM_EDIT_MODEL` — для правок в чате (по умолчанию как `LLM_MODEL`). `LLM_BASE_URL` — Z.ai: `https://api.z.ai/api/paas/v4` |
 | `GLM_API_KEY` | GLM/Zhipu: сборка `glm-4.5-flash` (thinking отключён), фото ТЗ `glm-4.6v-flash` — обе бесплатные |
 | `KIMI_API_KEY` | Kimi/Moonshot (платный) |
 | `DEEPSEEK_API_KEY` | DeepSeek |

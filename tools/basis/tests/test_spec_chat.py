@@ -842,3 +842,64 @@ def test_coordinates_in_a_new_product_from_tz_are_dropped_not_fatal(monkeypatch)
     assert result.get("spec") is not None, result.get("reply")
     assert "overrides" not in result["spec"]
     assert capture["dropped_coordinate_overrides"] == 1
+
+
+def test_model_ladder_falls_to_the_paid_model_on_overload(monkeypatch):
+    """Бесплатная ступень перегружена (429) — тот же запрос сразу уходит на платную."""
+    import src.spec_chat as sc
+
+    calls: list[str] = []
+
+    class _Resp:
+        def __init__(self, model):
+            self.choices = [type("C", (), {"message": type("M", (), {"content": '{"reply": "ок"}'})()})()]
+            self.usage = None
+
+    class _Completions:
+        def create(self, model, **_kw):
+            calls.append(model)
+            if model == "glm-4.6v-flash":
+                raise RuntimeError("Error code: 429 - The service may be temporarily overloaded")
+            return _Resp(model)
+
+    monkeypatch.setenv("GLM_API_KEY", "k")
+    monkeypatch.setenv("LLM_VISION_MODEL", "glm-4.6v-flash,glm-4.6v")
+    provider = sc.OpenAICompatProvider("glm")
+    provider.client = type("Cl", (), {"chat": type("Ch", (), {"completions": _Completions()})()})()
+    provider.vision_extract([{"mime": "image/png", "data": "QUJD"}])
+    assert calls == ["glm-4.6v-flash", "glm-4.6v"]
+    assert provider.vision_model == "glm-4.6v" and provider.tier_events
+
+
+def test_failed_free_import_is_retried_once_on_the_paid_tier(monkeypatch):
+    """Бесплатная модель выдала негодное изделие (гейт отклонил) — повтор на ступени 1."""
+    import copy
+    import src.spec_chat as sc
+
+    good = copy.deepcopy(SPEC)
+    tiers: list[int] = []
+
+    class Builder:
+        def __init__(self, tier):
+            self.tier = tier
+            self.model = ["glm-4.5-flash", "glm-4.7"][tier]
+
+        def can_escalate(self):
+            return self.tier == 0
+
+        def chat(self, *_args, **_kwargs):
+            if self.tier == 0:
+                return {"reply": "Собрал", "spec": None}
+            return {"reply": "Собрал", "spec": good}
+
+    def factory(name=None, tier=0):
+        tiers.append(tier)
+        return Builder(tier)
+
+    monkeypatch.setattr(sc, "get_chat_provider", factory)
+    capture: dict = {}
+    result = sc.chat_edit({}, "Собери ParamSpec по ТЗ: шкаф", context={"tz_import": True},
+                          journal=capture)
+    assert result.get("spec") is not None, result.get("reply")
+    assert 1 in tiers and capture["escalated_from"].endswith("create_paramspec_missing")
+    assert capture["model"] == "glm-4.7"
