@@ -477,7 +477,15 @@ class OpenAICompatProvider:
         ladder = self._ladder(models)
         for index, model in enumerate(ladder):
             try:
-                return self.client.chat.completions.create(model=model, **kw), model
+                try:
+                    return self.client.chat.completions.create(model=model, **kw), model
+                except Exception as error:
+                    # glm-5.x «думает всегда» и отвергает thinking: disabled (код 1210) —
+                    # повторяем тот же запрос без этого флага
+                    if "extra_body" not in kw or not _thinking_always_on(error):
+                        raise
+                    plain = {key: value for key, value in kw.items() if key != "extra_body"}
+                    return self.client.chat.completions.create(model=model, **plain), model
             except Exception as error:
                 if index == len(ladder) - 1 or not _is_transient(error):
                     raise
@@ -538,6 +546,11 @@ class OpenAICompatProvider:
         result = _provider_result(data, request, usage=usage, model=model)
         result["raw_text"] = out                      # для AI-журнала; chat_edit не отдаёт наружу
         return result
+
+
+def _thinking_always_on(error: BaseException) -> bool:
+    text = str(error).lower()
+    return "1210" in text or "always engages in thinking" in text
 
 
 def _model_list(value: str) -> list[str]:
@@ -777,6 +790,12 @@ def _normalize_provider_operations(
             elif op_name == "DuplicateModel":
                 item["target_id"] = "model"
                 item["preconditions"] = [{"kind": "target_exists", "target_id": "model"}]
+            elif op_name == "SetLegs":
+                item["target_id"] = "legs"
+                item["preconditions"] = [{"kind": "target_exists", "target_id": "model"}]
+            elif op_name == "MoveSection" and item.get("target_id"):
+                item.setdefault("preconditions", [{"kind": "target_exists",
+                                                   "target_id": str(item["target_id"])}])
             elif op_name == "AddSection" and isinstance(item.get("section"), dict):
                 section = item["section"]
                 target_id = str(item.get("target_id") or "")

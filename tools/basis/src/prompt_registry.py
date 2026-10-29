@@ -32,8 +32,8 @@ MAX_PANELS = 40
 _PROMPTS: dict[str, tuple[str, str]] = {
     "intent_routing": ("furniture.intent-routing", "1.0.0"),
     "vision_facts": ("furniture.vision-facts", "1.2.0"),
-    "create_paramspec": ("furniture.create-paramspec", "1.1.0"),
-    "edit_operations": ("furniture.edit-operations", "1.2.0"),
+    "create_paramspec": ("furniture.create-paramspec", "1.2.0"),
+    "edit_operations": ("furniture.edit-operations", "1.3.0"),
     "part_edit": ("furniture.part-edit", "1.0.0"),
     "diagnosis": ("furniture.diagnosis", "1.0.0"),
     "repair": ("furniture.repair", "1.0.0"),
@@ -149,7 +149,7 @@ def capability_schema(node: str) -> dict[str, Any]:
         # stale value_equals conditions from rejecting otherwise valid edits.
         inferred_targets = {
             "SetDimension", "SetMaterial", "ChangeArchetype", "DuplicateModel",
-            "AddSection", "QueryModel", "DiagnoseModel",
+            "AddSection", "QueryModel", "DiagnoseModel", "SetLegs",
         }
         for definition_name, definition in definitions.items():
             if not isinstance(definition, dict):
@@ -179,6 +179,8 @@ def capability_schema(node: str) -> dict[str, Any]:
             "AddSection": "add an internal compartment inside the current model",
             "SetDimension": "change an overall furniture dimension",
             "UpdateSection": "change an existing internal compartment",
+            "MoveSection": "reorder columns: move a section to a new left-to-right position",
+            "SetLegs": "set legs/feet of the whole product (height, type, adjustable)",
             "AddPanel": "add one shelf or vertical partition",
             "MovePanel": "move one shelf or vertical partition",
         }

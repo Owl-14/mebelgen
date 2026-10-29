@@ -177,6 +177,27 @@ class DeleteSection(_EditOperation):
     op: Literal["DeleteSection"]
 
 
+class MoveSection(_EditOperation):
+    """Переставить колонку: «поставь правую секцию первой» → position=0."""
+    op: Literal["MoveSection"]
+    position: int = Field(ge=0)
+
+
+class SetLegs(_EditOperation):
+    """Ножки/опоры изделия: «добавь регулируемые ножки 100 мм»."""
+    op: Literal["SetLegs"]
+    height_mm: float | None = Field(default=None, ge=0, le=300)
+    type: str | None = None
+    adjustable: bool | None = None
+    count: int | None = Field(default=None, ge=0, le=12)
+
+    @model_validator(mode="after")
+    def target_is_legs(self) -> "SetLegs":
+        if self.target_id != "legs":
+            raise ValueError("target_id must be 'legs'")
+        return self
+
+
 class AddShelf(_EditOperation):
     op: Literal["AddShelf"]
     level: float | None = None
@@ -192,6 +213,8 @@ class _SemanticPanelOperation(_EditOperation):
     above: str | None = None
     below: str | None = None
     middle: bool | None = None
+    # «полка на высоте 1700» — низ полки в мм от пола, без привязки к соседям
+    at_height_mm: float | None = Field(default=None, ge=0, le=5000)
     align_front: bool | None = None
     align_back: bool | None = None
     delta_mm: float = 0
@@ -247,7 +270,7 @@ class DiagnoseModel(_EditOperation):
 EditOperation: TypeAlias = Annotated[
     SetDimension | SetMaterial | ChangeArchetype | DuplicateModel
     | AddSection | UpdateSection
-    | DeleteSection | AddShelf | AddPanel | MovePanel
+    | DeleteSection | MoveSection | SetLegs | AddShelf | AddPanel | MovePanel
     | MovePart | ResizePart | DeletePart
     | QueryModel | DiagnoseModel,
     Field(discriminator="op"),
@@ -493,6 +516,25 @@ def apply_edit_operations(spec: dict[str, Any], operations: Any,
                 section = operation.section.model_dump(mode="json", exclude_none=True, exclude_unset=True)
                 position = len(sections) if operation.position is None else min(operation.position, len(sections))
                 sections.insert(position, section)
+            elif isinstance(operation, SetLegs):
+                legs = dict(working.get("legs") or {})
+                if operation.height_mm is not None:
+                    legs["height"] = (int(operation.height_mm)
+                                      if float(operation.height_mm).is_integer() else operation.height_mm)
+                for field_name in ("type", "adjustable", "count"):
+                    value = getattr(operation, field_name)
+                    if value is not None:
+                        legs[field_name] = value
+                if legs.get("height") and not legs.get("type"):
+                    legs["type"] = "регулируемые опоры" if legs.get("adjustable") else "опоры"
+                working["legs"] = legs
+            elif isinstance(operation, MoveSection):
+                section_index = _section_index(working, operation.target_id)
+                if section_index is None:
+                    raise EditApplicationError(f"section target {operation.target_id!r} is missing")
+                sections = working.get("sections") or []
+                section = sections.pop(section_index)
+                sections.insert(min(operation.position, len(sections)), section)
             elif isinstance(operation, (UpdateSection, DeleteSection, AddShelf)):
                 section_index = _section_index(working, operation.target_id)
                 if section_index is None:
