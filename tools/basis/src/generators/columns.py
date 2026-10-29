@@ -60,6 +60,11 @@ def fit_drawer_heights(heights: list[float], bottom: float, top: float,
     return [round(h * scale, 2) for h in heights], True
 
 
+def box_back_outside(mode: object) -> bool:
+    """Задняя стенка короба накладная (за боковинами)? beyond/outside — да."""
+    return str(mode or "").lower() in ("beyond", "outside")
+
+
 def std_guide_length(available: float) -> float:
     """Самая длинная стандартная направляющая, помещающаяся в available мм."""
     fitting = [length for length in GUIDE_LENGTHS if length <= available]
@@ -180,10 +185,10 @@ def drawer_stack(cx1, cx2, fb, heights, gap, p, T, mat, sid, prefix, facade_boun
         box_h = min(box_h, round(top_limit - top_side_y1, 2))
     box_h = max(box_h, 8.0)                              # короб всегда положительной высоты
     bottom_mode = p.get("box_bottom_mode", "between")   # between | under
-    # задняя стенка: inside (эталон технолога — между боковинами у заднего
-    # торца, дно до неё) | outside (накладная за боковинами, AKD-181)
-    back_mode = p.get("box_back_mode", "inside")
-    back_outside = back_mode == "outside"
+    # задняя стенка: inset (эталон технолога — между боковинами у заднего
+    # торца, дно до неё) | beyond (накладная за боковинами, AKD-181).
+    # Контракт ParamSpec — beyond|inset; inside|outside — прежнее написание.
+    back_outside = box_back_outside(p.get("box_back_mode"))
     # короб (с задней стенкой) не должен заходить в задник корпуса
     if back_limit is not None and box_z1 + box_depth + (box_back if back_outside else 0) > back_limit:
         box_depth = max(50, back_limit - box_z1 - (box_back if back_outside else 0))

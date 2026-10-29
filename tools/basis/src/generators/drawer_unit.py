@@ -6,7 +6,7 @@ from typing import Any
 
 from .base import read_carcass
 from .corpus import carcass_calc
-from .columns import fit_drawer_heights
+from .columns import box_back_outside, fit_drawer_heights
 from .helpers import build_project, carcass, facade_band, panel
 
 
@@ -40,7 +40,7 @@ def generate(spec: dict[str, Any]) -> dict[str, Any]:
                           std_guide_length)
     guide_gap = section.get("guide_gap", GUIDE_GAP)
     box_z1 = section.get("box_z1", 0)                             # короб прижат к фасаду (z=0)
-    back_outside = section.get("box_back_mode", "inside") == "outside"
+    back_outside = box_back_outside(section.get("box_back_mode"))
     # глубина до задника: тонкий задник по умолчанию накладной (за корпусом)
     inner_depth = c.D if (c.T_back <= 6 and spec.get("back_mount") != "inset") else c.D - c.T_back
     box_depth = section.get("box_depth", std_guide_length(inner_depth - box_z1 - BOX_DEPTH_CLEARANCE))
